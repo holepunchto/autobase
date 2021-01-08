@@ -214,7 +214,8 @@ module.exports = class Autobase {
       }
 
       let indexNode = await getIndexHead()
-      if (inputNode.lte(indexNode)) {
+
+      if (inputNode.lte(indexNode) && inputNode.clock.size === indexNode.clock.size) {
         break
       }
 
@@ -332,7 +333,7 @@ function intoObj (links) {
   return links
 }
 
-function debugOutputNode(outputNode) {
+function debugIndexNode(outputNode) {
   if (!outputNode) return null
   return {
     value: outputNode.node.value.toString('utf8'),

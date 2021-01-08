@@ -152,6 +152,51 @@ test('does not over-truncate', async t => {
   t.end()
 })
 
+test('can cut out a writer', async t => {
+   const store = new Corestore(ram)
+  const output = new Omega(ram)
+  const writerA = toPromises(store.get({ name: 'writer-a' }))
+  const writerB = toPromises(store.get({ name: 'writer-b' }))
+  const writerC = toPromises(store.get({ name: 'writer-c' }))
+
+  const base = new Autobase([writerA, writerB, writerC])
+  await base.ready()
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(writerA, `a${i}`, await base.latest(writerA))
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(writerB, `b${i}`, await base.latest(writerB))
+  }
+  for (let i = 0; i < 5; i++) {
+    await base.append(writerC, `c${i}`, await base.latest(writerC))
+  }
+
+  {
+    const result = await base.rebase(output)
+    const indexed = await indexedValues(output)
+    t.same(indexed.map(v => v.value), ['a0', 'b1', 'b0', 'c4', 'c3', 'c2', 'c1', 'c0'])
+    t.same(result.added, 8)
+    t.same(result.removed, 0)
+    t.same(output.length, 8)
+  }
+
+  // Cut out writer B. Should truncate 3
+  const base2 = new Autobase([writerA, writerC])
+
+  {
+    const result = await base2.rebase(output)
+    const indexed = await indexedValues(output)
+    t.same(indexed.map(v => v.value), ['a0', 'c4', 'c3', 'c2', 'c1', 'c0'])
+    t.same(result.added, 2) // a0 and c4 are reindexed
+    t.same(result.removed, 4) // a0 and c4 are both popped and reindexed
+    t.same(output.length, 6)
+  }
+
+  t.end()
+})
+
 async function causalValues(base) {
   const buf = []
   for await (const outputNode of base.createCausalStream()) {
