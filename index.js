@@ -49,7 +49,8 @@ module.exports = class Autobase {
 
   async latest (inputs) {
     await this.ready()
-    inputs = Array.isArray(inputs) ? inputs : [inputs]
+    if (!inputs) inputs = []
+    else inputs = Array.isArray(inputs) ? inputs : [inputs]
     inputs = new Set(inputs.map(i => i.key.toString('hex')))
 
     const heads = await this.heads()
@@ -129,14 +130,18 @@ module.exports = class Autobase {
     const buf = []
     const result = { added: 0, removed: 0 }
     let alreadyIndexed = false
+    let truncation = 0
 
+    const getIndexLength = () => {
+      return index.length - truncation
+    }
     const getIndexHead = async () => {
-      if (index.length <= 0) return null
-      return OutputNode.decode(await index.get(index.length - 1))
+      const length = getIndexLength()
+      if (length <= 0) return null
+      return OutputNode.decode(await index.get(length - 1))
     }
 
     for await (const inputNode of this.createCausalStream(opts)) {
-
       if (!index.length) {
         result.added++
         buf.push(inputNode)
@@ -145,7 +150,7 @@ module.exports = class Autobase {
 
       let indexNode = await getIndexHead()
 
-      if (inputNode.lte(indexNode) && inputNode.clock.size === indexNode.clock.size) {
+      if (indexNode && inputNode.lte(indexNode) && inputNode.clock.size === indexNode.clock.size) {
         alreadyIndexed = true
         break
       }
@@ -154,7 +159,7 @@ module.exports = class Autobase {
       while (indexNode && indexNode.contains(inputNode) && !popped) {
         popped = indexNode.equals(inputNode)
         result.removed++
-        await index.truncate(index.length - 1)
+        truncation++
         indexNode = await getIndexHead()
       }
 
@@ -162,11 +167,13 @@ module.exports = class Autobase {
       buf.push(inputNode)
     }
 
-    if (!alreadyIndexed && index.length) {
-      result.removed += index.length
+    const leftover = getIndexLength()
+    if (!alreadyIndexed && leftover) {
+      result.removed += leftover
       await index.truncate(0)
+    } else if (truncation) {
+      await index.truncate(index.length - truncation)
     }
-
     while (buf.length) {
       await index.append(OutputNode.encode(buf.pop()))
     }

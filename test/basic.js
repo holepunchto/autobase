@@ -91,7 +91,6 @@ test('simple rebase', async t => {
   const writerC = toPromises(store.get({ name: 'writer-c' }))
 
   const base = new Autobase([writerA, writerB, writerC])
-  await base.ready()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -138,7 +137,6 @@ test('does not over-truncate', async t => {
   const writerC = toPromises(store.get({ name: 'writer-c' }))
 
   const base = new Autobase([writerA, writerB, writerC])
-  await base.ready()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -318,6 +316,41 @@ test('can cut out a writer, causal writes interleaved', async t => {
     t.same(result.added, 3)
     t.same(result.removed, 6)
     t.same(output.length, 3)
+  }
+
+  t.end()
+})
+
+test('many writers, no causal writes', async t => {
+  const NUM_WRITERS = 20
+  const NUM_APPENDS = 10
+
+  const store = new Corestore(ram)
+  const output = new Omega(ram)
+  const base = new Autobase()
+  const writers = []
+
+  for (let i = 1; i < NUM_WRITERS + 1; i++) {
+    const writer = toPromises(store.get({ name: `writer-${i}` }))
+    await base.addInput(writer)
+    writers.push(writer)
+    for (let j = 0; j < i; j++) {
+      await base.append(writer, `w${i}-${j}`, await base.latest())
+    }
+  }
+
+  {
+    await base.rebase(output)
+    const indexed = await indexedValues(output)
+    console.log(JSON.stringify(indexed.map(i => i.value)))
+    t.same(indexed.length, (NUM_WRITERS * (NUM_WRITERS + 1)) / 2)
+  }
+
+  for (let i = 0; i < NUM_APPENDS; i++) {
+    const writer = writers[Math.floor(writers.length / 2)]
+    await base.append(writer, `new entry ${i}`, await base.latest(writer))
+    const result = await base.rebase(output)
+    console.log('result:', result)
   }
 
   t.end()
