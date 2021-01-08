@@ -279,6 +279,50 @@ test('can cut out a writer, causal writes', async t => {
   t.end()
 })
 
+test('can cut out a writer, causal writes interleaved', async t => {
+  const store = new Corestore(ram)
+  const output = new Omega(ram)
+  const writerA = toPromises(store.get({ name: 'writer-a' }))
+  const writerB = toPromises(store.get({ name: 'writer-b' }))
+
+  const base = new Autobase([writerA, writerB])
+
+  for (let i = 0; i < 6; i++) {
+    if (i % 2) {
+      await base.append(writerA, `a${i}`, await base.latest([writerA, writerB]))
+    } else {
+      await base.append(writerB, `b${i}`, await base.latest([writerA, writerB]))
+    }
+  }
+
+  {
+    const result = await base.rebase(output)
+    const indexed = await indexedValues(output)
+    t.same(indexed.map(v => v.value), ['a5', 'b4', 'a3', 'b2', 'a1', 'b0'])
+    t.same(result.added, 6)
+    t.same(result.removed, 0)
+    t.same(output.length, 6)
+  }
+
+  const base2 = new Autobase([writerA])
+
+  {
+    const output = await causalValues(base2)
+    t.same(output.map(v => v.value), ['a5', 'a3', 'a1'])
+  }
+
+  {
+    const result = await base2.rebase(output)
+    const indexed = await indexedValues(output)
+    t.same(indexed.map(v => v.value), ['a5', 'a3', 'a1'])
+    t.same(result.added, 3)
+    t.same(result.removed, 6)
+    t.same(output.length, 3)
+  }
+
+  t.end()
+})
+
 async function causalValues(base) {
   const buf = []
   for await (const outputNode of base.createCausalStream()) {
