@@ -1,0 +1,13 @@
+syntax = "proto2";
+
+message InputNode {
+  optional bytes value = 1;
+  map<string, uint64> links = 2;
+}
+
+message OutputNode {
+  required InputNode node = 1;
+  required string key = 2;
+  required uint64 seq = 3;
+  map<string, uint64> clock = 4;
+}

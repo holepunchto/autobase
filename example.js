@@ -89,7 +89,7 @@ async function print (auto) {
     heads.add(data)
     seqs.set(data, seq)
 
-    const d = { seq, heads: [ ...heads ].map(h => seqs.get(h)), value: data.node.value }
+    const d = { seq, heads: [...heads].map(h => seqs.get(h)), value: data.node.value }
     console.log(d)
   }
 

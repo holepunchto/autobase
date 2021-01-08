@@ -1,227 +1,344 @@
 const streamx = require('streamx')
+const lock = require('mutexify/promise')
+const { toPromises } = require('hypercore-promisifier')
 
-module.exports = class Autobase {
-  constructor (corestore, writers = [], local = null) {
-    this.store = corestore
-    this.writers = null
-    this.local = null
+const {
+  InputNode: InputNodeSchema,
+  OutputNode: OutputNodeSchema
+} = require('./lib/messages')
 
-    this._localKey = local
-    this._writerKeys = writers
-    this._writersByKey = new Map()
+class InputNode {
+  constructor({ key, seq, value, links }) {
+    this.key = Buffer.isBuffer(key) ? key.toString('hex') : key
+    this.links = linksToMap(links)
+    this.seq = seq
+    this.value = value
   }
 
-  replicate (...opts) {
-    return this.store.replicate(...opts)
+  lt(other) {
+    return lt(this.links, other.links)
   }
 
-  ready () {
-    if (this.writers) return Promise.resolve()
-    return new Promise((resolve, reject) => {
-      this.store.ready((err) => {
-        if (err) return reject(err)
-        if (!this.local) this.local = this._localKey ? this.store.get(this._localKey) : this.store.default()
-        this.local.ready((err) => {
-          if (err) return reject(err)
-          if (this.writers) return resolve()
-          this.writers = this._writerKeys.map(k => this.store.get(k))
+  lte(other) {
+    return lte(this.links, other.links)
+  }
 
-          for (const w of this.writers) {
-            this._writersByKey.set(w.key.toString('hex'), w)
-          }
-          if (!this._writersByKey.has(this.local.key.toString('hex'))) {
-            this.writers.push(this.local)
-            this._writersByKey.set(this.local.key.toString('hex'), this.local)
-          }
-          resolve()
-        })
-      })
+  static encode(node) {
+    return InputNodeSchema.encode({
+      value: node.value,
+      links: intoObj(node.links)
     })
   }
 
-  setWriters (writers) {
-    this.writers = null
-    this._writerKeys = writers
-    this._writersByKey.clear()
+  static decode(raw) {
+    if (!raw) return null
+    try {
+      return new this(InputNodeSchema.decode(raw))
+    } catch (err) {
+      // Gracefully discard malformed messages.
+      return null
+    }
+  }
+}
+
+class OutputNode {
+  constructor ({ node, clock }) {
+    this.node = node
+    this.clock = linksToMap(clock)
   }
 
-  createCausalStream () {
+  lt (other) {
+    return lt(this.clock, other.clock)
+  }
+
+  lte (other) {
+    return lte(this.clock, other.clock)
+  }
+
+  equals (other) {
+    return this.node.key === other.node.key && this.node.seq === other.node.seq
+  }
+
+  contains (other) {
+    if (!this.clock.has(other.node.key)) return false
+    const seq = this.clock.get(other.node.key)
+    return seq >= other.node.seq
+  }
+
+  static encode (outputNode) {
+    if (outputNode.node.links) outputNode.node.links = intoObj(outputNode.node.links)
+    return OutputNodeSchema.encode({
+      node: outputNode.node,
+      key: outputNode.node.key,
+      seq: outputNode.node.seq,
+      clock: intoObj(outputNode.clock)
+    })
+  }
+
+  static decode (raw) {
+    if (!raw) return null
+    const decoded = OutputNodeSchema.decode(raw)
+    const node = new InputNode(decoded.node)
+    node.key = decoded.key
+    node.seq = decoded.seq
+    return new this({
+      clock: decoded.clock,
+      node
+    })
+  }
+}
+
+module.exports = class Autobase {
+  constructor(inputs = []) {
+    this.inputs = inputs.map(i => toPromises(i))
+    this._inputsByKey = new Map()
+    this._lock = lock()
+  }
+
+  async ready() {
+    await Promise.all(this.inputs.map(i => i.ready()))
+    this._inputsByKey = new Map(this.inputs.map(i => [i.key.toString('hex'), i]))
+  }
+
+  // Private Methods
+
+  async _getInputNode(input, seq) {
+    if (seq < 0) return null
+    try {
+      const block = await input.get(seq)
+      if (!block) return null
+      const node = InputNode.decode(block)
+      node.key = input.key.toString('hex')
+      node.seq = seq
+      return node
+    } catch (_) {
+      // Decoding errors should be discarded.
+      return null
+    }
+  }
+
+  // Public API
+
+  heads() {
+    return Promise.all(this.inputs.map(i => this._getInputNode(i, i.length - 1)))
+  }
+
+  async latest (inputs) {
+    inputs = Array.isArray(inputs) ? inputs: [inputs]
+    inputs = new Set(inputs.map(i => i.key.toString('hex')))
+
+    const heads = await this.heads()
+    const links = new Map()
+
+    for (const head of heads) {
+      if (!head) continue
+      if (inputs.size && !inputs.has(head.key)) continue
+      links.set(head.key, this._inputsByKey.get(head.key).length - 1)
+    }
+    return links
+  }
+
+  createCausalStream(opts = {}) {
     const self = this
     let heads = null
 
+    const nextNode = async (input, seq) => {
+      if (seq === 0) return null
+      return this._getInputNode(input, seq - 1)
+    }
+
     return new streamx.Readable({
-      open (cb) {
-        callbackify(self.heads(), function (err, h) {
-          if (err) return cb(err)
-          heads = h
-          cb(null)
-        })
+      open(cb) {
+        self.heads()
+          .then(h => { heads = h })
+          .then(() => cb(null), err => cb(err))
       },
-      read (cb) {
-        const forks = getForks(heads)
+      read(cb) {
+        const { forks, clock, smallest } = forkInfo(heads)
         if (!forks.length) {
           this.push(null)
           return cb(null)
         }
 
-        const sizes = forks.map(forkSize)
-        let smallest = 0
-        for (let i = 1; i < sizes.length; i++) {
-          if (sizes[i] === sizes[smallest] && Buffer.compare(forks[i].feed, forks[smallest].feed) < 0) {
-            smallest = i
-          } else if (sizes[i] < sizes[smallest]) {
-            smallest = i
-          }
-        }
+        const node = forks[smallest]
+        const forkIndex = heads.indexOf(node)
+        this.push(new OutputNode({ node, clock }))
 
-        const next = forks[smallest]
-        const i = heads.indexOf(next)
-        const clock = heads.map(h => (h && { feed: h.feed, length: h.seq + 1 })).filter(h => h)
-
-        this.push({ clock, node: next })
-
-        nextNode(self._writersByKey.get(next.feed.toString('hex')), next.seq, function (err, node) {
-          if (err) return cb(err)
-          if (node) heads[i] = node
-          else heads.splice(i, 1)
-          cb(null)
-        })
+        nextNode(self._inputsByKey.get(node.key), node.seq).then(next => {
+          if (next) heads[forkIndex] = next
+          else heads.splice(forkIndex, 1)
+          return cb(null)
+        }, err => cb(err))
       }
     })
   }
 
-  async append (value, links) {
-    if (!links) {
-      await this.heads()
-      links = {}
-      for (const w of this.writers) {
-        if (w.key.equals(this.local.key)) continue
-        links[w.key.toString('hex')] = w.length
-      }
+  async addInput(input) {
+    input = toPromises(input)
+    const release = await this._lock()
+    try {
+      await input.ready()
+      this.inputs.push(toPromises(input))
+      this._inputsByKey.set(input.key.toString('hex'), input)
+    } finally {
+      release()
+    }
+  }
+
+  async append(input, value, links) {
+    const release = await this._lock()
+    try {
+      return input.append(InputNode.encode({ value, links }))
+    } finally {
+      release()
+    }
+  }
+
+  async rebase (index, opts = {}) {
+    await index.ready()
+
+    // TODO: This should store buffered nodes in a temp file.
+    const buf = []
+    const result = { added: 0, removed: 0 }
+
+    const getIndexHead = async () => {
+      if (index.length <= 0) return null
+      return OutputNode.decode(await index.get(index.length - 1))
     }
 
-    return new Promise((resolve, reject) => {
-      this.local.append(JSON.stringify({ value, links }), err => {
-        if (err) return reject(err)
-        resolve()
-      })
-    })
-  }
-
-  async forks () {
-    return getForks(await this.heads())
-  }
-
-  async heads () {
-    await this.ready()
-
-    let missing = this.writers.length
-    if (!missing) return []
-
-    return new Promise((resolve, reject) => {
-      const heads = new Array(missing)
-      let error = null
-
-      for (let i = 0; i < this.writers.length; i++) {
-        head(this.writers[i], i, onhead)
+    for await (const inputNode of this.createCausalStream(opts)) {
+      if (!index.length) {
+        result.added++
+        buf.push(inputNode)
+        continue
       }
 
-      function onhead (err, node, index) {
-        if (err) error = err
-        else heads[index] = node
-        if (--missing) return
-        if (error) return reject(error)
-        resolve(heads)
+      let indexNode = await getIndexHead()
+      if (inputNode.lte(indexNode)) {
+        break
       }
-    })
+
+      let popped = false
+      while (indexNode && indexNode.contains(inputNode) && !popped) {
+        popped = indexNode.equals(inputNode)
+        result.removed++
+        await index.truncate(index.length - 1)
+        indexNode = await getIndexHead()
+      }
+
+      result.added++
+      buf.push(inputNode)
+    }
+
+    while (buf.length) {
+      await index.append(OutputNode.encode(buf.pop()))
+    }
+
+    return result
   }
 }
 
-function nextNode (w, seq, cb) {
-  if (seq === 0) return cb(null, null)
-  w.get(seq - 1, function (err, buf) {
-    if (err) return cb(err)
-    cb(null, new Node(seq - 1, w.key, buf))
-  })
-}
-
-function head (feed, index, cb) {
-  feed.update({ ifAvailable: true }, function () {
-    const len = feed.length
-    if (!len) return cb(null, null, index)
-    const seq = len - 1
-    feed.get(seq, function (err, block) {
-      if (err) return cb(err)
-      cb(null, new Node(seq, feed.key, block), index)
-    })
-  })
-}
-
-class Node {
-  constructor (seq, feed, buf) {
-    this.seq = seq
-    this.feed = feed
-    this.decoded = JSON.parse(buf)
-    this.value = this.decoded.value
-  }
-
-  link (key) {
-    if (key.equals(this.feed)) return this.seq + 1
-    return this.decoded.links[key.toString('hex')] || 0
-  }
-
-  links () {
-    return [[this.feed, this.seq + 1]].concat(Object.entries(this.decoded.links).map(bufEntry))
-  }
-}
-
-function bufEntry ([key, val]) {
-  return [Buffer.from(key, 'hex'), val]
-}
-
-function isFork (head, heads) {
+function isFork(head, heads) {
   if (!head) return false
+  if (!head.links.size) return true
   for (const other of heads) {
-    if (other && other !== head && lt(head.seq, head.feed, other)) return false
+    if (!other) continue
+    if (other && head.lt(other)) return false
   }
   return true
 }
 
-function lt (seq, feed, node) {
-  return seq < node.link(feed)
-}
-
-function getForks (heads) {
-  const forks = []
-
-  for (const head of heads) {
-    if (isFork(head, heads)) forks.push(head)
-  }
-
-  return forks
-}
-
-function callbackify (p, cb) {
-  p.then(cb.bind(null, null), cb)
-}
-
-function forkSize (node, i, heads) {
+function forkSize(node, i, heads) {
   const high = {}
 
   for (const head of heads) {
     if (head === node) continue
-    for (const [feed, length] of head.links()) {
-      const id = feed.toString('hex')
-      if (length > (high[id] || 0)) high[id] = length
+    for (const [key, length] of head.links) {
+      if (length > (high[key] || 0)) high[key] = length
     }
   }
 
   let s = 0
 
-  for (const [feed, length] of node.links()) {
-    const h = high[feed.toString('hex')] || 0
+  for (const [key, length] of node.links) {
+    const h = high[key] || 0
     if (length > h) s += length - h
   }
 
   return s
+}
+
+function forkInfo(heads) {
+  const forks = []
+  const clock = []
+
+  for (const head of heads) {
+    if (!head) continue
+    if (isFork(head, heads)) forks.push(head)
+    clock.push([head.key, head.seq])
+  }
+
+  const sizes = forks.map(forkSize)
+  let smallest = 0
+  for (let i = 1; i < sizes.length; i++) {
+    if (sizes[i] === sizes[smallest] && forks[i].key < forks[smallest].feed) {
+      smallest = i
+    } else if (sizes[i] < sizes[smallest]) {
+      smallest = i
+    }
+  }
+
+  return {
+    forks,
+    clock,
+    smallest
+  }
+}
+
+function lt(clock1, clock2) {
+  if (!clock2 || clock1 === clock2) return false
+  for (const [key, length] of clock1) {
+    if (!clock2.has(key)) return false
+    if (length >= clock2.get(key)) return false
+  }
+  return true
+}
+
+function lte(clock1, clock2) {
+  if (!clock2) return false
+  if (clock1 === clock2) return true
+  for (const [key, length] of clock1) {
+    if (!clock2.has(key)) return false
+    if (length > clock2.get(key)) return false
+  }
+  return true
+}
+
+function linksToMap (links) {
+  if (!links) return new Map()
+  if (links instanceof Map) return links
+  if (Array.isArray(links)) return new Map(links)
+  return new Map(Object.entries(links))
+}
+
+function intoObj (links) {
+  if (links instanceof Map || Array.isArray(links)) {
+    const obj = {}
+    for (let [key, value] of links) {
+      obj[key] = value
+    }
+    return obj
+  }
+  return links
+}
+
+function debugOutputNode(outputNode) {
+  if (!outputNode) return null
+  return {
+    value: outputNode.node.value.toString('utf8'),
+    key: outputNode.node.key,
+    seq: outputNode.node.seq,
+    links: outputNode.node.links,
+    clock: outputNode.clock
+  }
 }
