@@ -322,7 +322,7 @@ test('can cut out a writer, causal writes interleaved', async t => {
 })
 
 test('many writers, no causal writes', async t => {
-  const NUM_WRITERS = 20
+  const NUM_WRITERS = 30
   const NUM_APPENDS = 10
 
   const store = new Corestore(ram)
@@ -342,7 +342,6 @@ test('many writers, no causal writes', async t => {
   {
     await base.rebase(output)
     const indexed = await indexedValues(output)
-    console.log(JSON.stringify(indexed.map(i => i.value)))
     t.same(indexed.length, (NUM_WRITERS * (NUM_WRITERS + 1)) / 2)
   }
 
