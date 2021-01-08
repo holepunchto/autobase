@@ -2,91 +2,7 @@ const streamx = require('streamx')
 const lock = require('mutexify/promise')
 const { toPromises } = require('hypercore-promisifier')
 
-const {
-  InputNode: InputNodeSchema,
-  OutputNode: OutputNodeSchema
-} = require('./lib/messages')
-
-class InputNode {
-  constructor({ key, seq, value, links }) {
-    this.key = Buffer.isBuffer(key) ? key.toString('hex') : key
-    this.links = linksToMap(links)
-    this.seq = seq
-    this.value = value
-  }
-
-  lt(other) {
-    return lt(this.links, other.links)
-  }
-
-  lte(other) {
-    return lte(this.links, other.links)
-  }
-
-  static encode(node) {
-    return InputNodeSchema.encode({
-      value: node.value,
-      links: intoObj(node.links)
-    })
-  }
-
-  static decode(raw) {
-    if (!raw) return null
-    try {
-      return new this(InputNodeSchema.decode(raw))
-    } catch (err) {
-      // Gracefully discard malformed messages.
-      return null
-    }
-  }
-}
-
-class OutputNode {
-  constructor ({ node, clock }) {
-    this.node = node
-    this.clock = linksToMap(clock)
-  }
-
-  lt (other) {
-    return lt(this.clock, other.clock)
-  }
-
-  lte (other) {
-    return lte(this.clock, other.clock)
-  }
-
-  equals (other) {
-    return this.node.key === other.node.key && this.node.seq === other.node.seq
-  }
-
-  contains (other) {
-    if (!this.clock.has(other.node.key)) return false
-    const seq = this.clock.get(other.node.key)
-    return seq >= other.node.seq
-  }
-
-  static encode (outputNode) {
-    if (outputNode.node.links) outputNode.node.links = intoObj(outputNode.node.links)
-    return OutputNodeSchema.encode({
-      node: outputNode.node,
-      key: outputNode.node.key,
-      seq: outputNode.node.seq,
-      clock: intoObj(outputNode.clock)
-    })
-  }
-
-  static decode (raw) {
-    if (!raw) return null
-    const decoded = OutputNodeSchema.decode(raw)
-    const node = new InputNode(decoded.node)
-    node.key = decoded.key
-    node.seq = decoded.seq
-    return new this({
-      clock: decoded.clock,
-      node
-    })
-  }
-}
+const { InputNode, OutputNode } = require('./lib/nodes')
 
 module.exports = class Autobase {
   constructor(inputs = []) {
@@ -187,6 +103,7 @@ module.exports = class Autobase {
 
   async append(input, value, links) {
     const release = await this._lock()
+    links = linksToMap(links)
     try {
       return input.append(InputNode.encode({ value, links }))
     } finally {
@@ -241,10 +158,9 @@ module.exports = class Autobase {
 
 function isFork(head, heads) {
   if (!head) return false
-  if (!head.links.size) return true
   for (const other of heads) {
     if (!other) continue
-    if (other && head.lt(other)) return false
+    if (head.lte(other)) return false
   }
   return true
 }
@@ -296,43 +212,6 @@ function forkInfo(heads) {
   }
 }
 
-function lt(clock1, clock2) {
-  if (!clock2 || clock1 === clock2) return false
-  for (const [key, length] of clock1) {
-    if (!clock2.has(key)) return false
-    if (length >= clock2.get(key)) return false
-  }
-  return true
-}
-
-function lte(clock1, clock2) {
-  if (!clock2) return false
-  if (clock1 === clock2) return true
-  for (const [key, length] of clock1) {
-    if (!clock2.has(key)) return false
-    if (length > clock2.get(key)) return false
-  }
-  return true
-}
-
-function linksToMap (links) {
-  if (!links) return new Map()
-  if (links instanceof Map) return links
-  if (Array.isArray(links)) return new Map(links)
-  return new Map(Object.entries(links))
-}
-
-function intoObj (links) {
-  if (links instanceof Map || Array.isArray(links)) {
-    const obj = {}
-    for (let [key, value] of links) {
-      obj[key] = value
-    }
-    return obj
-  }
-  return links
-}
-
 function debugIndexNode(outputNode) {
   if (!outputNode) return null
   return {
@@ -342,4 +221,11 @@ function debugIndexNode(outputNode) {
     links: outputNode.node.links,
     clock: outputNode.clock
   }
+}
+
+function linksToMap (links) {
+  if (!links) return new Map()
+  if (links instanceof Map) return links
+  if (Array.isArray(links)) return new Map(links)
+  return new Map(Object.entries(links))
 }
