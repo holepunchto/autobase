@@ -175,7 +175,9 @@ module.exports = class Autobase {
       await index.truncate(index.length - truncation)
     }
     while (buf.length) {
-      await index.append(OutputNode.encode(buf.pop()))
+      const next = buf.pop()
+      if (opts.map) next.value = await opts.map(next)
+      await index.append(OutputNode.encode(next))
     }
 
     return result

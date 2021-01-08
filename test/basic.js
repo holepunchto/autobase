@@ -1,11 +1,15 @@
+const p = require('path')
 const test = require('tape')
 const Corestore = require('corestore')
 const Omega = require('omega')
+const Sandbox = require('module-sandbox')
 const ram = require('random-access-memory')
 const { toPromises } = require('hypercore-promisifier')
 
 const { OutputNode } = require('../lib/nodes')
 const Autobase = require('..')
+
+const UPPERCASE_MACHINE_PATH = p.join(__dirname, 'machines', 'uppercase.js')
 
 test('linearizes short branches on long branches', async t => {
   const store = new Corestore(ram)
@@ -355,6 +359,76 @@ test('many writers, no causal writes', async t => {
   t.end()
 })
 
+test('rebase with mapper', async t => {
+  const store = new Corestore(ram)
+  const output = new Omega(ram)
+  const writerA = toPromises(store.get({ name: 'writer-a' }))
+  const writerB = toPromises(store.get({ name: 'writer-b' }))
+  const writerC = toPromises(store.get({ name: 'writer-c' }))
+
+  const base = new Autobase([writerA, writerB, writerC])
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(writerA, `a${i}`, await base.latest(writerA))
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(writerB, `b${i}`, await base.latest(writerB))
+  }
+  for (let i = 0; i < 3; i++) {
+    await base.append(writerC, `c${i}`, await base.latest(writerC))
+  }
+
+  {
+    await base.rebase(output, {
+      map: function (indexNode) {
+        return Buffer.from(indexNode.node.value.toString('utf-8').toUpperCase(), 'utf-8')
+      }
+    })
+    const indexed = await indexedValues(output)
+    t.same(indexed.map(v => v.value), ['A0', 'B1', 'B0', 'C2', 'C1', 'C0'])
+  }
+
+  t.end()
+})
+
+test('rebase with mapping machine', async t => {
+  const store = new Corestore(ram)
+  const output = new Omega(ram)
+  const writerA = toPromises(store.get({ name: 'writer-a' }))
+  const writerB = toPromises(store.get({ name: 'writer-b' }))
+  const writerC = toPromises(store.get({ name: 'writer-c' }))
+
+  const machine = new Sandbox(UPPERCASE_MACHINE_PATH)
+  await machine.ready()
+
+  const base = new Autobase([writerA, writerB, writerC])
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(writerA, `a${i}`, await base.latest(writerA))
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(writerB, `b${i}`, await base.latest(writerB))
+  }
+  for (let i = 0; i < 3; i++) {
+    await base.append(writerC, `c${i}`, await base.latest(writerC))
+  }
+
+  {
+    await base.rebase(output, {
+      map: async (node) => {
+        const rsp = await machine.rpc.uppercase(node)
+        return Buffer.from(rsp, 'utf-8')
+      }
+    })
+    const indexed = await indexedValues(output)
+    t.same(indexed.map(v => v.value), ['A0', 'B1', 'B0', 'C2', 'C1', 'C0'])
+  }
+
+  t.end()
+})
+
 async function causalValues(base) {
   const buf = []
   for await (const outputNode of base.createCausalStream()) {
@@ -374,7 +448,7 @@ async function indexedValues(output) {
 
 function debugOutputNode(outputNode) {
   return {
-    value: outputNode.node.value.toString('utf8'),
+    value: (outputNode.value ?? outputNode.node.value).toString('utf8'),
     key: outputNode.node.key,
     seq: outputNode.node.seq,
     links: outputNode.node.links,
