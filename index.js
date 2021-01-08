@@ -9,11 +9,18 @@ module.exports = class Autobase {
     this.inputs = inputs.map(i => toPromises(i))
     this._inputsByKey = new Map()
     this._lock = lock()
+    this._readyProm = null
+  }
+
+  async _ready () {
+    await Promise.all(this.inputs.map(i => i.ready()))
+    this._inputsByKey = new Map(this.inputs.map(i => [i.key.toString('hex'), i]))
   }
 
   async ready() {
-    await Promise.all(this.inputs.map(i => i.ready()))
-    this._inputsByKey = new Map(this.inputs.map(i => [i.key.toString('hex'), i]))
+    if (this._readyProm) return this._readyProm
+    this._readyProm = this._ready()
+    return this._readyProm
   }
 
   // Private Methods
@@ -35,12 +42,14 @@ module.exports = class Autobase {
 
   // Public API
 
-  heads() {
+  async heads() {
+    await this.ready()
     return Promise.all(this.inputs.map(i => this._getInputNode(i, i.length - 1)))
   }
 
   async latest (inputs) {
-    inputs = Array.isArray(inputs) ? inputs: [inputs]
+    await this.ready()
+    inputs = Array.isArray(inputs) ? inputs : [inputs]
     inputs = new Set(inputs.map(i => i.key.toString('hex')))
 
     const heads = await this.heads()
@@ -92,9 +101,10 @@ module.exports = class Autobase {
   async addInput(input) {
     input = toPromises(input)
     const release = await this._lock()
+    await this.ready()
     try {
       await input.ready()
-      this.inputs.push(toPromises(input))
+      this.inputs.push(input)
       this._inputsByKey.set(input.key.toString('hex'), input)
     } finally {
       release()
@@ -103,6 +113,7 @@ module.exports = class Autobase {
 
   async append(input, value, links) {
     const release = await this._lock()
+    await this.ready()
     links = linksToMap(links)
     try {
       return input.append(InputNode.encode({ value, links }))
@@ -112,11 +123,12 @@ module.exports = class Autobase {
   }
 
   async rebase (index, opts = {}) {
-    await index.ready()
+    await Promise.all([this.ready(), index.ready()])
 
     // TODO: This should store buffered nodes in a temp file.
     const buf = []
     const result = { added: 0, removed: 0 }
+    let alreadyIndexed = false
 
     const getIndexHead = async () => {
       if (index.length <= 0) return null
@@ -124,6 +136,7 @@ module.exports = class Autobase {
     }
 
     for await (const inputNode of this.createCausalStream(opts)) {
+
       if (!index.length) {
         result.added++
         buf.push(inputNode)
@@ -133,6 +146,7 @@ module.exports = class Autobase {
       let indexNode = await getIndexHead()
 
       if (inputNode.lte(indexNode) && inputNode.clock.size === indexNode.clock.size) {
+        alreadyIndexed = true
         break
       }
 
@@ -146,6 +160,11 @@ module.exports = class Autobase {
 
       result.added++
       buf.push(inputNode)
+    }
+
+    if (!alreadyIndexed && index.length) {
+      result.removed += index.length
+      await index.truncate(0)
     }
 
     while (buf.length) {
