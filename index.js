@@ -2,7 +2,7 @@ const streamx = require('streamx')
 const lock = require('mutexify/promise')
 const { toPromises } = require('hypercore-promisifier')
 
-const { InputNode, OutputNode } = require('./lib/nodes')
+const { InputNode, IndexNode } = require('./lib/nodes')
 
 module.exports = class Autobase {
   constructor(inputs = []) {
@@ -88,7 +88,7 @@ module.exports = class Autobase {
 
         const node = forks[smallest]
         const forkIndex = heads.indexOf(node)
-        this.push(new OutputNode({ node, clock }))
+        this.push(new IndexNode({ node, clock }))
 
         nextNode(self._inputsByKey.get(node.key), node.seq).then(next => {
           if (next) heads[forkIndex] = next
@@ -138,7 +138,7 @@ module.exports = class Autobase {
     const getIndexHead = async () => {
       const length = getIndexLength()
       if (length <= 0) return null
-      return OutputNode.decode(await index.get(length - 1))
+      return IndexNode.decode(await index.get(length - 1))
     }
 
     for await (const inputNode of this.createCausalStream(opts)) {
@@ -177,7 +177,7 @@ module.exports = class Autobase {
     while (buf.length) {
       const next = buf.pop()
       if (opts.map) next.value = await opts.map(next)
-      await index.append(OutputNode.encode(next))
+      await index.append(IndexNode.encode(next))
     }
 
     return result
@@ -240,14 +240,14 @@ function forkInfo(heads) {
   }
 }
 
-function debugIndexNode(outputNode) {
-  if (!outputNode) return null
+function debugIndexNode(indexNode) {
+  if (!indexNode) return null
   return {
-    value: outputNode.node.value.toString('utf8'),
-    key: outputNode.node.key,
-    seq: outputNode.node.seq,
-    links: outputNode.node.links,
-    clock: outputNode.clock
+    value: indexNode.node.value.toString('utf8'),
+    key: indexNode.node.key,
+    seq: indexNode.node.seq,
+    links: indexNode.node.links,
+    clock: indexNode.clock
   }
 }
 
