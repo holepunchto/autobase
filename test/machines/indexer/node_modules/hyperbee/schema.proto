@@ -1,0 +1,52 @@
+message YoloIndex {
+  message Level {
+    repeated uint64 keys = 1 [packed=true];
+    repeated uint64 children = 2 [packed=true];
+  }
+
+  repeated Level levels = 1;
+}
+
+message Header {
+  message Metadata {
+    optional bytes contentFeed = 1;
+    optional bytes userData = 2;
+  }
+
+  required string protocol = 1;
+  optional Metadata metadata = 2;
+}
+
+message Node {
+  required bytes index = 1;
+  required bytes key = 2;
+  optional bytes value = 3;
+}
+
+message Extension {
+  message Get {
+    optional uint64 version = 1;
+    optional bytes key = 2;
+  }
+
+  message Iterator {
+    optional uint64 version = 1;
+    optional bytes gte = 2;
+    optional bytes gt = 3;
+    optional bytes lte = 4;
+    optional bytes lt = 5;
+    optional uint64 limit = 6; // 0 means no limit here
+    optional bool reverse = 7;
+    repeated uint64 checkpoint = 8 [packed=true];
+  }
+
+  message Cache {
+    required uint64 start = 1;
+    required uint64 end = 2;
+    repeated uint64 blocks = 3 [packed=true];
+  }
+
+  optional Cache cache = 1;
+  optional Get get = 2;
+  optional Iterator iterator = 3;
+}
