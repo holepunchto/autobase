@@ -6,7 +6,7 @@ const Sandbox = require('module-sandbox')
 const ram = require('random-access-memory')
 const { toPromises } = require('hypercore-promisifier')
 
-const { OutputNode } = require('../lib/nodes')
+const { IndexNode } = require('../lib/nodes')
 const Autobase = require('..')
 
 const UPPERCASE_MACHINE_PATH = p.join(__dirname, 'machines', 'uppercase.js')
@@ -431,8 +431,8 @@ test('rebase with mapping machine', async t => {
 
 async function causalValues(base) {
   const buf = []
-  for await (const outputNode of base.createCausalStream()) {
-    buf.push(debugOutputNode(outputNode))
+  for await (const indexNode of base.createCausalStream()) {
+    buf.push(debugIndexNode(indexNode))
   }
   return buf
 }
@@ -440,18 +440,18 @@ async function causalValues(base) {
 async function indexedValues(output) {
   const buf = []
   for (let i = output.length - 1; i >= 0; i--) {
-    const outputNode = OutputNode.decode(await output.get(i))
-    buf.push(debugOutputNode(outputNode))
+    const indexNode = IndexNode.decode(await output.get(i))
+    buf.push(debugIndexNode(indexNode))
   }
   return buf
 }
 
-function debugOutputNode(outputNode) {
+function debugIndexNode(indexNode) {
   return {
-    value: (outputNode.value ?? outputNode.node.value).toString('utf8'),
-    key: outputNode.node.key,
-    seq: outputNode.node.seq,
-    links: outputNode.node.links,
-    clock: outputNode.clock
+    value: (indexNode.value ?? indexNode.node.value).toString('utf8'),
+    key: indexNode.node.key,
+    seq: indexNode.node.seq,
+    links: indexNode.node.links,
+    clock: indexNode.clock
   }
 }
