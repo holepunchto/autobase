@@ -10,7 +10,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "hyperbee": "0.0.18",
+    "hyperbee": "^1.0.0",
     "hypercore": "^9.7.0",
     "protocol-buffers-encodings": "^1.1.1"
   }

@@ -138,7 +138,9 @@ module.exports = class Autobase {
     const getIndexHead = async () => {
       const length = getIndexLength()
       if (length <= 0) return null
-      return IndexNode.decode(await index.get(length - 1))
+      const blk = await index.get(length - 1)
+      console.log('blk:', blk)
+      return IndexNode.decode(blk)
     }
 
     for await (const inputNode of this.createCausalStream(opts)) {
@@ -176,6 +178,7 @@ module.exports = class Autobase {
     }
     while (buf.length) {
       const next = buf.pop()
+      console.log('APPENDING:', next)
       let appending = opts.map ? [] : [next]
       if (opts.map) {
         const res = await opts.map(next)

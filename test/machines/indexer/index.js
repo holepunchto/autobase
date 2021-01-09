@@ -8,6 +8,8 @@ class MachineOmega {
     this._length = opts.length || 0
     this._byteLength = opts.byteLength || 0
     this._buf = []
+
+    this[Symbol.for('hypercore.promises')] = true
   }
 
   get length () {
@@ -18,32 +20,26 @@ class MachineOmega {
     return this._byteLength + bufLength(this._buf)
   }
 
-  ready (cb) {
-    return cb(null)
+  ready () {
+    return null
   }
 
-  get (idx, opts = {}, cb) {
-    if (idx < this._length) hostcalls.get(idx).then(blk => onget(null, blk), err => cb(err))
-
-    const bufIdx = idx - this._length
-    if (bufIdx >= this._buf.length) return cb(new Error('Block not available'))
-    return cb(null, this._buf[bufIdx])
-
-    function onget (block) {
-      if (!opts.valueEncoding) return cb(null, block)
-      try {
-        block = opts.valueEncoding.decode(block)
-      } catch (err) {
-        return cb(err)
-      }
-      return cb(null, block)
+  async get (idx, opts = {}) {
+    let blk = null
+    if (idx < this._length) {
+      blk = await hostcalls.get(idx)
+    } else {
+      const bufIdx = idx - this._length
+      if (bufIdx >= this._buf.length) throw new Error('Block not available')
+      blk = this._buf[bufIdx]
     }
+    if (opts.valueEncoding) return opts.valueEncoding.decode(blk)
+    return blk
   }
 
-  append (blocks, cb) {
+  append (blocks) {
     if (Array.isArray(blocks)) this._buf.push(...blocks)
     else this._buf.push(blocks)
-    return cb(null)
   }
 
   commit () {
@@ -54,7 +50,9 @@ class MachineOmega {
     return tmp
   }
 
-  cancel (prom) {}
+  update () {}
+  cancel () {}
+  registerExtension () {}
 }
 
 async function index (omegaOpts, indexNode) {
@@ -64,12 +62,15 @@ async function index (omegaOpts, indexNode) {
     valueEncoding: 'utf-8'
   })
 
-  const { type, key: dbKey, value: dbValue } = Op.decode(indexNode.node.value)
+  const val = indexNode.node.value
+  const buf = Buffer.from(val.buffer, val.byteOffset, val.byteLength)
+
+  const { type, key: dbKey, value: dbValue } = Op.decode(buf)
 
   const b = db.batch()
   switch (type) {
     case Op.Type.Put:
-      await b.put(['by-writer', indexNode.key, indexNode.seq].join('!'), dbValue)
+      await b.put(['by-writer', indexNode.node.key, indexNode.node.seq].join('!'), dbValue)
       await b.put(['by-key', dbKey].join('!'), dbValue)
       break
     case Op.Type.Del:
@@ -79,6 +80,7 @@ async function index (omegaOpts, indexNode) {
       // Gracefully ignore unsupported op types.
       break
   }
+
   await b.flush()
 
   return core.commit()
