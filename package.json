@@ -4,7 +4,7 @@
   "description": "WIP - nothing to see here",
   "main": "index.js",
   "scripts": {
-    "test": "tape test/*.js",
+    "test": "standard && tape test/*.js",
     "build": "protocol-buffers -o lib/messages.js schema.proto"
   },
   "dependencies": {

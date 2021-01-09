@@ -429,7 +429,7 @@ test('rebase with mapping machine', async t => {
   t.end()
 })
 
-async function causalValues(base) {
+async function causalValues (base) {
   const buf = []
   for await (const indexNode of base.createCausalStream()) {
     buf.push(debugIndexNode(indexNode))
@@ -437,7 +437,7 @@ async function causalValues(base) {
   return buf
 }
 
-async function indexedValues(output) {
+async function indexedValues (output) {
   const buf = []
   for (let i = output.length - 1; i >= 0; i--) {
     const indexNode = IndexNode.decode(await output.get(i))
@@ -446,7 +446,7 @@ async function indexedValues(output) {
   return buf
 }
 
-function debugIndexNode(indexNode) {
+function debugIndexNode (indexNode) {
   return {
     value: (indexNode.value ?? indexNode.node.value).toString('utf8'),
     key: indexNode.node.key,
