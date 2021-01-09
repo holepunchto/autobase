@@ -5,7 +5,7 @@ const { toPromises } = require('hypercore-promisifier')
 const { InputNode, IndexNode } = require('./lib/nodes')
 
 module.exports = class Autobase {
-  constructor(inputs = []) {
+  constructor (inputs = []) {
     this.inputs = inputs.map(i => toPromises(i))
     this._inputsByKey = new Map()
     this._lock = lock()
@@ -17,7 +17,7 @@ module.exports = class Autobase {
     this._inputsByKey = new Map(this.inputs.map(i => [i.key.toString('hex'), i]))
   }
 
-  async ready() {
+  async ready () {
     if (this._readyProm) return this._readyProm
     this._readyProm = this._ready()
     return this._readyProm
@@ -25,7 +25,7 @@ module.exports = class Autobase {
 
   // Private Methods
 
-  async _getInputNode(input, seq) {
+  async _getInputNode (input, seq) {
     if (seq < 0) return null
     try {
       const block = await input.get(seq)
@@ -42,7 +42,7 @@ module.exports = class Autobase {
 
   // Public API
 
-  async heads() {
+  async heads () {
     await this.ready()
     return Promise.all(this.inputs.map(i => this._getInputNode(i, i.length - 1)))
   }
@@ -64,7 +64,7 @@ module.exports = class Autobase {
     return links
   }
 
-  createCausalStream(opts = {}) {
+  createCausalStream (opts = {}) {
     const self = this
     let heads = null
 
@@ -74,12 +74,12 @@ module.exports = class Autobase {
     }
 
     return new streamx.Readable({
-      open(cb) {
+      open (cb) {
         self.heads()
           .then(h => { heads = h })
           .then(() => cb(null), err => cb(err))
       },
-      read(cb) {
+      read (cb) {
         const { forks, clock, smallest } = forkInfo(heads)
         if (!forks.length) {
           this.push(null)
@@ -99,7 +99,7 @@ module.exports = class Autobase {
     })
   }
 
-  async addInput(input) {
+  async addInput (input) {
     input = toPromises(input)
     const release = await this._lock()
     await this.ready()
@@ -112,7 +112,7 @@ module.exports = class Autobase {
     }
   }
 
-  async append(input, value, links) {
+  async append (input, value, links) {
     const release = await this._lock()
     await this.ready()
     links = linksToMap(links)
@@ -184,7 +184,7 @@ module.exports = class Autobase {
   }
 }
 
-function isFork(head, heads) {
+function isFork (head, heads) {
   if (!head) return false
   for (const other of heads) {
     if (!other) continue
@@ -193,7 +193,7 @@ function isFork(head, heads) {
   return true
 }
 
-function forkSize(node, i, heads) {
+function forkSize (node, i, heads) {
   const high = {}
 
   for (const head of heads) {
@@ -213,7 +213,7 @@ function forkSize(node, i, heads) {
   return s
 }
 
-function forkInfo(heads) {
+function forkInfo (heads) {
   const forks = []
   const clock = []
 
@@ -237,17 +237,6 @@ function forkInfo(heads) {
     forks,
     clock,
     smallest
-  }
-}
-
-function debugIndexNode(indexNode) {
-  if (!indexNode) return null
-  return {
-    value: indexNode.node.value.toString('utf8'),
-    key: indexNode.node.key,
-    seq: indexNode.node.seq,
-    links: indexNode.node.links,
-    clock: indexNode.clock
   }
 }
 
