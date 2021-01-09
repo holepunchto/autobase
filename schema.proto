@@ -9,6 +9,8 @@ message IndexNode {
   map<string, uint64> clock = 1;
   required string key = 2;
   required uint64 seq = 3;
-  optional InputNode node = 4;
-  optional bytes value = 5;
+  required uint32 batch = 4 [default = 1];
+
+  optional InputNode node = 5;
+  optional bytes value = 6;
 }

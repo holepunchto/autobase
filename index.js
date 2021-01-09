@@ -159,7 +159,7 @@ module.exports = class Autobase {
       while (indexNode && indexNode.contains(inputNode) && !popped) {
         popped = indexNode.equals(inputNode)
         result.removed++
-        truncation++
+        truncation += indexNode.batch
         indexNode = await getIndexHead()
       }
 
@@ -176,8 +176,14 @@ module.exports = class Autobase {
     }
     while (buf.length) {
       const next = buf.pop()
-      if (opts.map) next.value = await opts.map(next)
-      await index.append(IndexNode.encode(next))
+      let appending = opts.map ? [] : [next]
+      if (opts.map) {
+        const res = await opts.map(next)
+        if (Array.isArray(res)) appending.push(...res)
+        else appending.push(res)
+        appending = appending.map(v => ({ ...next, value: v }))
+      }
+      await index.append(appending.map(IndexNode.encode))
     }
 
     return result
