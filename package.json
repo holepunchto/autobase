@@ -34,7 +34,8 @@
   "homepage": "https://github.com/mafintosh/autobase",
   "standard": {
     "ignore": [
-      "lib/messages.js"
+      "lib/messages.js",
+      "test/machines/indexer"
     ]
   }
 }
