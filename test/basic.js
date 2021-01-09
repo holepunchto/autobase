@@ -387,3 +387,44 @@ test('rebase with mapper', async t => {
 
   t.end()
 })
+
+test('double-rebasing is a no-op', async t => {
+  const store = new Corestore(ram)
+  const output = new Omega(ram)
+  const writerA = toPromises(store.get({ name: 'writer-a' }))
+  const writerB = toPromises(store.get({ name: 'writer-b' }))
+  const writerC = toPromises(store.get({ name: 'writer-c' }))
+
+  const base = new Autobase([writerA, writerB, writerC])
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(writerA, `a${i}`, await base.latest(writerA))
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(writerB, `b${i}`, await base.latest(writerB))
+  }
+  for (let i = 0; i < 3; i++) {
+    await base.append(writerC, `c${i}`, await base.latest(writerC))
+  }
+
+  {
+    const result = await base.rebase(output)
+    const indexed = await indexedValues(output)
+    t.same(indexed.map(v => v.value), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
+    t.same(result.added, 6)
+    t.same(result.removed, 0)
+    t.same(output.length, 6)
+  }
+
+  {
+    const result = await base.rebase(output)
+    const indexed = await indexedValues(output)
+    t.same(indexed.map(v => v.value), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
+    t.same(result.added, 0)
+    t.same(result.removed, 0)
+    t.same(output.length, 6)
+  }
+
+  t.end()
+})
