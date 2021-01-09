@@ -110,7 +110,7 @@ test('rebase with multi-value batches', async t => {
   t.end()
 })
 
-test.only('hyperbee indexer example', async t => {
+test('hyperbee indexer example', async t => {
   const store = new Corestore(ram)
   const output = new Omega(ram)
   const writerA = toPromises(store.get({ name: 'writer-a' }))
