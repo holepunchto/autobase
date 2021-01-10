@@ -1,5 +1,13 @@
 syntax = "proto2";
 
+message Header {
+  message Metadata {
+    optional bytes userData = 1;
+  }
+  required string protocol = 1;
+  optional Metadata metadata = 2;
+}
+
 message InputNode {
   map<string, uint64> links = 1;
   optional bytes value = 2;

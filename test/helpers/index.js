@@ -10,7 +10,7 @@ async function causalValues (base) {
 
 async function indexedValues (output) {
   const buf = []
-  for (let i = output.length - 1; i >= 0; i--) {
+  for (let i = output.length - 1; i > 0; i--) {
     const indexNode = IndexNode.decode(await output.get(i))
     buf.push(debugIndexNode(indexNode))
   }
