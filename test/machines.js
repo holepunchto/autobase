@@ -166,10 +166,17 @@ test('hyperbee indexer example', async t => {
     value: 'other'
   }))
 
+  // This put will be causally-dependent on writerA's first put to 'hello'
+  // So the final kv-pair should be 'hello' -> 'other'
   await base.append(writerB, Op.encode({
     type: Op.Type.Put,
     key: 'hello',
     value: 'other'
+  }), await base.latest())
+
+  await base.append(writerA, Op.encode({
+    type: Op.Type.Del,
+    key: 'another'
   }), await base.latest())
 
   await base.rebase(output, { map: mapper })
