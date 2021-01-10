@@ -174,10 +174,12 @@ test('hyperbee indexer example', async t => {
     value: 'other'
   }), await base.latest())
 
+  /*
   await base.append(writerA, Op.encode({
     type: Op.Type.Del,
     key: 'another'
   }), await base.latest())
+  */
 
   await base.rebase(output, { map: mapper })
 

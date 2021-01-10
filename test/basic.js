@@ -109,7 +109,7 @@ test('simple rebase', async t => {
     t.same(indexed.map(v => v.value), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
     t.same(result.added, 6)
     t.same(result.removed, 0)
-    t.same(output.length, 6)
+    t.same(output.length, 7)
   }
 
   // Add 3 more records to A -- should switch fork ordering
@@ -123,7 +123,7 @@ test('simple rebase', async t => {
     t.same(indexed.map(v => v.value), ['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0'])
     t.same(result.added, 9)
     t.same(result.removed, 6)
-    t.same(output.length, 9)
+    t.same(output.length, 10)
   }
 
   t.end()
@@ -155,7 +155,7 @@ test('does not over-truncate', async t => {
     t.same(indexed.map(v => v.value), ['a0', 'b1', 'b0', 'c4', 'c3', 'c2', 'c1', 'c0'])
     t.same(result.added, 8)
     t.same(result.removed, 0)
-    t.same(output.length, 8)
+    t.same(output.length, 9)
   }
 
   // Add 3 more records to A -- should switch fork ordering (A after C)
@@ -169,7 +169,7 @@ test('does not over-truncate', async t => {
     t.same(indexed.map(v => v.value), ['b1', 'b0', 'a3', 'a2', 'a1', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0'])
     t.same(result.added, 6)
     t.same(result.removed, 3)
-    t.same(output.length, 11)
+    t.same(output.length, 12)
   }
 
   // Add 1 more record to B -- should not cause any reordering
@@ -181,7 +181,7 @@ test('does not over-truncate', async t => {
     t.same(indexed.map(v => v.value), ['b2', 'b1', 'b0', 'a3', 'a2', 'a1', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0'])
     t.same(result.added, 1)
     t.same(result.removed, 0)
-    t.same(output.length, 12)
+    t.same(output.length, 13)
   }
 
   t.end()
@@ -214,7 +214,7 @@ test('can cut out a writer', async t => {
     t.same(indexed.map(v => v.value), ['a0', 'b1', 'b0', 'c4', 'c3', 'c2', 'c1', 'c0'])
     t.same(result.added, 8)
     t.same(result.removed, 0)
-    t.same(output.length, 8)
+    t.same(output.length, 9)
   }
 
   // Cut out writer B. Should truncate 3
@@ -226,7 +226,7 @@ test('can cut out a writer', async t => {
     t.same(indexed.map(v => v.value), ['a0', 'c4', 'c3', 'c2', 'c1', 'c0'])
     t.same(result.added, 2) // a0 and c4 are reindexed
     t.same(result.removed, 4) // a0 and c4 are both popped and reindexed
-    t.same(output.length, 6)
+    t.same(output.length, 7)
   }
 
   t.end()
@@ -259,7 +259,7 @@ test('can cut out a writer, causal writes', async t => {
     t.same(indexed.map(v => v.value), ['b1', 'b0', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0'])
     t.same(result.added, 8)
     t.same(result.removed, 0)
-    t.same(output.length, 8)
+    t.same(output.length, 9)
   }
 
   // Cut out writer B. Should truncate 3
@@ -271,7 +271,7 @@ test('can cut out a writer, causal writes', async t => {
     t.same(indexed.map(v => v.value), ['a0', 'c4', 'c3', 'c2', 'c1', 'c0'])
     t.same(result.added, 1) // a0 is reindexed
     t.same(result.removed, 3) // a0, b1, and b0 are popped, a0 is reindexed
-    t.same(output.length, 6)
+    t.same(output.length, 7)
   }
 
   t.end()
@@ -299,7 +299,7 @@ test('can cut out a writer, causal writes interleaved', async t => {
     t.same(indexed.map(v => v.value), ['a5', 'b4', 'a3', 'b2', 'a1', 'b0'])
     t.same(result.added, 6)
     t.same(result.removed, 0)
-    t.same(output.length, 6)
+    t.same(output.length, 7)
   }
 
   const base2 = new Autobase([writerA])
@@ -315,7 +315,7 @@ test('can cut out a writer, causal writes interleaved', async t => {
     t.same(indexed.map(v => v.value), ['a5', 'a3', 'a1'])
     t.same(result.added, 3)
     t.same(result.removed, 6)
-    t.same(output.length, 3)
+    t.same(output.length, 4)
   }
 
   t.end()
@@ -414,7 +414,7 @@ test('double-rebasing is a no-op', async t => {
     t.same(indexed.map(v => v.value), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
     t.same(result.added, 6)
     t.same(result.removed, 0)
-    t.same(output.length, 6)
+    t.same(output.length, 7)
   }
 
   {
@@ -423,7 +423,7 @@ test('double-rebasing is a no-op', async t => {
     t.same(indexed.map(v => v.value), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
     t.same(result.added, 0)
     t.same(result.removed, 0)
-    t.same(output.length, 6)
+    t.same(output.length, 7)
   }
 
   t.end()

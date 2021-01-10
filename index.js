@@ -3,6 +3,10 @@ const lock = require('mutexify/promise')
 const { toPromises } = require('hypercore-promisifier')
 
 const { InputNode, IndexNode } = require('./lib/nodes')
+const { Header } = require('./lib/messages')
+
+const INPUT_TYPE = '@autobase/input'
+const INDEX_TYPE = '@autobase/output'
 
 module.exports = class Autobase {
   constructor (inputs = []) {
@@ -26,7 +30,7 @@ module.exports = class Autobase {
   // Private Methods
 
   async _getInputNode (input, seq) {
-    if (seq < 0) return null
+    if (seq < 1) return null
     try {
       const block = await input.get(seq)
       if (!block) return null
@@ -117,6 +121,11 @@ module.exports = class Autobase {
     await this.ready()
     links = linksToMap(links)
     try {
+      if (!input.length) {
+        await input.append(Header.encode({
+          protocol: INPUT_TYPE
+        }))
+      }
       return input.append(InputNode.encode({ value, links }))
     } finally {
       release()
@@ -137,9 +146,15 @@ module.exports = class Autobase {
     }
     const getIndexHead = async () => {
       const length = getIndexLength()
-      if (length <= 0) return null
+      if (length <= 1) return null
       const blk = await index.get(length - 1)
       return IndexNode.decode(blk)
+    }
+
+    if (!index.length) {
+      await index.append(Header.encode({
+        protocol: INDEX_TYPE
+      }))
     }
 
     for await (const inputNode of this.createCausalStream(opts)) {
@@ -169,9 +184,9 @@ module.exports = class Autobase {
     }
 
     const leftover = getIndexLength()
-    if (!alreadyIndexed && leftover) {
-      result.removed += leftover
-      await index.truncate(0)
+    if (!alreadyIndexed && leftover > 1) {
+      result.removed += leftover - 1
+      await index.truncate(1)
     } else if (truncation) {
       await index.truncate(index.length - truncation)
     }
