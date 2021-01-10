@@ -7,5 +7,5 @@ message Op {
   }
   required Type type = 1;
   required string key = 2;
-  required string value = 3;
+  optional string value = 3;
 }

@@ -6,11 +6,11 @@
 /* eslint-disable camelcase */
 
 // Remember to `npm install --save protocol-buffers-encodings`
-const encodings = require('protocol-buffers-encodings')
-const varint = encodings.varint
-const skip = encodings.skip
+var encodings = require('protocol-buffers-encodings')
+var varint = encodings.varint
+var skip = encodings.skip
 
-const Op = exports.Op = {
+var Op = exports.Op = {
   buffer: true,
   encodingLength: null,
   encode: null,
@@ -30,23 +30,24 @@ function defineOp () {
   Op.decode = decode
 
   function encodingLength (obj) {
-    let length = 0
+    var length = 0
     if (!defined(obj.type)) throw new Error("type is required")
     var len = encodings.enum.encodingLength(obj.type)
     length += 1 + len
     if (!defined(obj.key)) throw new Error("key is required")
     var len = encodings.string.encodingLength(obj.key)
     length += 1 + len
-    if (!defined(obj.value)) throw new Error("value is required")
-    var len = encodings.string.encodingLength(obj.value)
-    length += 1 + len
+    if (defined(obj.value)) {
+      var len = encodings.string.encodingLength(obj.value)
+      length += 1 + len
+    }
     return length
   }
 
   function encode (obj, buf, offset) {
     if (!offset) offset = 0
     if (!buf) buf = Buffer.allocUnsafe(encodingLength(obj))
-    const oldOffset = offset
+    var oldOffset = offset
     if (!defined(obj.type)) throw new Error("type is required")
     buf[offset++] = 8
     encodings.enum.encode(obj.type, buf, offset)
@@ -55,10 +56,11 @@ function defineOp () {
     buf[offset++] = 18
     encodings.string.encode(obj.key, buf, offset)
     offset += encodings.string.encode.bytes
-    if (!defined(obj.value)) throw new Error("value is required")
-    buf[offset++] = 26
-    encodings.string.encode(obj.value, buf, offset)
-    offset += encodings.string.encode.bytes
+    if (defined(obj.value)) {
+      buf[offset++] = 26
+      encodings.string.encode(obj.value, buf, offset)
+      offset += encodings.string.encode.bytes
+    }
     encode.bytes = offset - oldOffset
     return buf
   }
@@ -67,24 +69,23 @@ function defineOp () {
     if (!offset) offset = 0
     if (!end) end = buf.length
     if (!(end <= buf.length && offset <= buf.length)) throw new Error("Decoded message is not valid")
-    const oldOffset = offset
-    const obj = {
+    var oldOffset = offset
+    var obj = {
       type: 1,
       key: "",
       value: ""
     }
-    let found0 = false
-    let found1 = false
-    let found2 = false
+    var found0 = false
+    var found1 = false
     while (true) {
       if (end <= offset) {
-        if (!found0 || !found1 || !found2) throw new Error("Decoded message is not valid")
+        if (!found0 || !found1) throw new Error("Decoded message is not valid")
         decode.bytes = offset - oldOffset
         return obj
       }
-      const prefix = varint.decode(buf, offset)
+      var prefix = varint.decode(buf, offset)
       offset += varint.decode.bytes
-      const tag = prefix >> 3
+      var tag = prefix >> 3
       switch (tag) {
         case 1:
         obj.type = encodings.enum.decode(buf, offset)
@@ -99,7 +100,6 @@ function defineOp () {
         case 3:
         obj.value = encodings.string.decode(buf, offset)
         offset += encodings.string.decode.bytes
-        found2 = true
         break
         default:
         offset = skip(prefix & 7, buf, offset)
