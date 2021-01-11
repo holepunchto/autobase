@@ -5,7 +5,7 @@ const { toPromises } = require('hypercore-promisifier')
 const { InputNode, IndexNode } = require('./lib/nodes')
 const { Header } = require('./lib/messages')
 const Rebaser = require('./lib/rebaser')
-// const MemCore = require('./lib/memory-hypercore')
+const MemCore = require('./lib/memory-hypercore')
 
 const INPUT_TYPE = '@autobase/input'
 
@@ -130,6 +130,30 @@ module.exports = class Autobase {
       return input.append(InputNode.encode({ value, links }))
     } finally {
       release()
+    }
+  }
+
+  async remoteRebase (indexes, opts = {}) {
+    await Promise.all([this.ready(), ...indexes.map(i => i.ready())])
+
+    const rebasers = indexes.map(i => new Rebaser(new MemCore(i), opts))
+
+    let best = null
+    for await (const inputNode of this.createCausalStream(opts)) {
+      for (const rebaser of rebasers) {
+        if (!(await rebaser.update(inputNode))) continue
+        best = rebaser
+        break
+      }
+      if (best) break
+    }
+
+    await best.commit()
+
+    return {
+      index: best.index,
+      added: best.added,
+      removed: best.removed
     }
   }
 
