@@ -41,7 +41,7 @@ test('rebase with mapping machine', async t => {
   }
 
   {
-    await base.rebase(output, {
+    await base.localRebase(output, {
       map: async (node) => {
         const rsp = await machine.rpc.uppercase(node)
         return Buffer.from(rsp, 'utf-8')
@@ -83,7 +83,7 @@ test('rebase with multi-value batches', async t => {
   }
 
   {
-    await base.rebase(output, { map: mapper })
+    await base.localRebase(output, { map: mapper })
     const expected = []
     for (const val of ['a0', 'b1', 'b0', 'c2', 'c1', 'c0']) {
       expected.push(val + ':second', val + ':first')
@@ -98,7 +98,7 @@ test('rebase with multi-value batches', async t => {
   }
 
   {
-    await base.rebase(output, { map: mapper })
+    await base.localRebase(output, { map: mapper })
     const expected = []
     for (const val of ['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']) {
       expected.push(val + ':second', val + ':first')
@@ -181,7 +181,7 @@ test('hyperbee indexer example', async t => {
   }), await base.latest())
   */
 
-  await base.rebase(output, { map: mapper })
+  await base.localRebase(output, { map: mapper })
 
   console.log('\n ========== \n')
   console.log('All Hyperbee Nodes:\n')
