@@ -104,7 +104,7 @@ test('simple rebase', async t => {
   }
 
   {
-    const result = await base.rebase(output)
+    const result = await base.localRebase(output)
     const indexed = await indexedValues(output)
     t.same(indexed.map(v => v.value), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
     t.same(result.added, 6)
@@ -118,7 +118,7 @@ test('simple rebase', async t => {
   }
 
   {
-    const result = await base.rebase(output)
+    const result = await base.localRebase(output)
     const indexed = await indexedValues(output)
     t.same(indexed.map(v => v.value), ['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0'])
     t.same(result.added, 9)
@@ -150,7 +150,7 @@ test('does not over-truncate', async t => {
   }
 
   {
-    const result = await base.rebase(output)
+    const result = await base.localRebase(output)
     const indexed = await indexedValues(output)
     t.same(indexed.map(v => v.value), ['a0', 'b1', 'b0', 'c4', 'c3', 'c2', 'c1', 'c0'])
     t.same(result.added, 8)
@@ -164,7 +164,7 @@ test('does not over-truncate', async t => {
   }
 
   {
-    const result = await base.rebase(output)
+    const result = await base.localRebase(output)
     const indexed = await indexedValues(output)
     t.same(indexed.map(v => v.value), ['b1', 'b0', 'a3', 'a2', 'a1', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0'])
     t.same(result.added, 6)
@@ -176,7 +176,7 @@ test('does not over-truncate', async t => {
   await base.append(writerB, 'b2', await base.latest(writerB))
 
   {
-    const result = await base.rebase(output)
+    const result = await base.localRebase(output)
     const indexed = await indexedValues(output)
     t.same(indexed.map(v => v.value), ['b2', 'b1', 'b0', 'a3', 'a2', 'a1', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0'])
     t.same(result.added, 1)
@@ -209,7 +209,7 @@ test('can cut out a writer', async t => {
   }
 
   {
-    const result = await base.rebase(output)
+    const result = await base.localRebase(output)
     const indexed = await indexedValues(output)
     t.same(indexed.map(v => v.value), ['a0', 'b1', 'b0', 'c4', 'c3', 'c2', 'c1', 'c0'])
     t.same(result.added, 8)
@@ -221,7 +221,7 @@ test('can cut out a writer', async t => {
   const base2 = new Autobase([writerA, writerC])
 
   {
-    const result = await base2.rebase(output)
+    const result = await base2.localRebase(output)
     const indexed = await indexedValues(output)
     t.same(indexed.map(v => v.value), ['a0', 'c4', 'c3', 'c2', 'c1', 'c0'])
     t.same(result.added, 2) // a0 and c4 are reindexed
@@ -254,7 +254,7 @@ test('can cut out a writer, causal writes', async t => {
   }
 
   {
-    const result = await base.rebase(output)
+    const result = await base.localRebase(output)
     const indexed = await indexedValues(output)
     t.same(indexed.map(v => v.value), ['b1', 'b0', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0'])
     t.same(result.added, 8)
@@ -266,7 +266,7 @@ test('can cut out a writer, causal writes', async t => {
   const base2 = new Autobase([writerA, writerC])
 
   {
-    const result = await base2.rebase(output)
+    const result = await base2.localRebase(output)
     const indexed = await indexedValues(output)
     t.same(indexed.map(v => v.value), ['a0', 'c4', 'c3', 'c2', 'c1', 'c0'])
     t.same(result.added, 1) // a0 is reindexed
@@ -294,7 +294,7 @@ test('can cut out a writer, causal writes interleaved', async t => {
   }
 
   {
-    const result = await base.rebase(output)
+    const result = await base.localRebase(output)
     const indexed = await indexedValues(output)
     t.same(indexed.map(v => v.value), ['a5', 'b4', 'a3', 'b2', 'a1', 'b0'])
     t.same(result.added, 6)
@@ -310,7 +310,7 @@ test('can cut out a writer, causal writes interleaved', async t => {
   }
 
   {
-    const result = await base2.rebase(output)
+    const result = await base2.localRebase(output)
     const indexed = await indexedValues(output)
     t.same(indexed.map(v => v.value), ['a5', 'a3', 'a1'])
     t.same(result.added, 3)
@@ -340,7 +340,7 @@ test('many writers, no causal writes', async t => {
   }
 
   {
-    await base.rebase(output)
+    await base.localRebase(output)
     const indexed = await indexedValues(output)
     t.same(indexed.length, (NUM_WRITERS * (NUM_WRITERS + 1)) / 2)
   }
@@ -348,7 +348,7 @@ test('many writers, no causal writes', async t => {
   for (let i = 0; i < NUM_APPENDS; i++) {
     const writer = writers[Math.floor(writers.length / 2)]
     await base.append(writer, `new entry ${i}`, await base.latest(writer))
-    const result = await base.rebase(output)
+    const result = await base.localRebase(output)
     console.log('result:', result)
   }
 
@@ -376,7 +376,7 @@ test('rebase with mapper', async t => {
   }
 
   {
-    await base.rebase(output, {
+    await base.localRebase(output, {
       map: function (indexNode) {
         return Buffer.from(indexNode.node.value.toString('utf-8').toUpperCase(), 'utf-8')
       }
@@ -409,7 +409,7 @@ test('double-rebasing is a no-op', async t => {
   }
 
   {
-    const result = await base.rebase(output)
+    const result = await base.localRebase(output)
     const indexed = await indexedValues(output)
     t.same(indexed.map(v => v.value), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
     t.same(result.added, 6)
@@ -418,7 +418,7 @@ test('double-rebasing is a no-op', async t => {
   }
 
   {
-    const result = await base.rebase(output)
+    const result = await base.localRebase(output)
     const indexed = await indexedValues(output)
     t.same(indexed.map(v => v.value), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
     t.same(result.added, 0)

@@ -4,9 +4,10 @@ const { toPromises } = require('hypercore-promisifier')
 
 const { InputNode, IndexNode } = require('./lib/nodes')
 const { Header } = require('./lib/messages')
+const Rebaser = require('./lib/rebaser')
+// const MemCore = require('./lib/memory-hypercore')
 
 const INPUT_TYPE = '@autobase/input'
-const INDEX_TYPE = '@autobase/output'
 
 module.exports = class Autobase {
   constructor (inputs = []) {
@@ -132,77 +133,20 @@ module.exports = class Autobase {
     }
   }
 
-  async rebase (index, opts = {}) {
+  async localRebase (index, opts = {}) {
     await Promise.all([this.ready(), index.ready()])
 
-    // TODO: This should store buffered nodes in a temp file.
-    const buf = []
-    const result = { added: 0, removed: 0 }
-    let alreadyIndexed = false
-    let truncation = 0
-
-    const getIndexLength = () => {
-      return index.length - truncation
-    }
-    const getIndexHead = async () => {
-      const length = getIndexLength()
-      if (length <= 1) return null
-      const blk = await index.get(length - 1)
-      return IndexNode.decode(blk)
-    }
-
-    if (!index.length) {
-      await index.append(Header.encode({
-        protocol: INDEX_TYPE
-      }))
-    }
+    const rebaser = new Rebaser(index, opts)
 
     for await (const inputNode of this.createCausalStream(opts)) {
-      if (!index.length) {
-        result.added++
-        buf.push(inputNode)
-        continue
-      }
-
-      let indexNode = await getIndexHead()
-
-      if (indexNode && inputNode.lte(indexNode) && inputNode.clock.size === indexNode.clock.size) {
-        alreadyIndexed = true
-        break
-      }
-
-      let popped = false
-      while (indexNode && indexNode.contains(inputNode) && !popped) {
-        popped = indexNode.equals(inputNode)
-        result.removed++
-        truncation += indexNode.batch
-        indexNode = await getIndexHead()
-      }
-
-      result.added++
-      buf.push(inputNode)
+      if (await rebaser.update(inputNode)) break
     }
+    await rebaser.commit()
 
-    const leftover = getIndexLength()
-    if (!alreadyIndexed && leftover > 1) {
-      result.removed += leftover - 1
-      await index.truncate(1)
-    } else if (truncation) {
-      await index.truncate(index.length - truncation)
+    return {
+      added: rebaser.added,
+      removed: rebaser.removed
     }
-    while (buf.length) {
-      const next = buf.pop()
-      let appending = opts.map ? [] : [next]
-      if (opts.map) {
-        const res = await opts.map(next)
-        if (Array.isArray(res)) appending.push(...res)
-        else appending.push(res)
-        appending = appending.map(v => ({ ...next, value: v }))
-      }
-      await index.append(appending.map(IndexNode.encode))
-    }
-
-    return result
   }
 }
 
