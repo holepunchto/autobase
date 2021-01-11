@@ -428,3 +428,67 @@ test('double-rebasing is a no-op', async t => {
 
   t.end()
 })
+
+test('remote rebasing selects longest index', async t => {
+  const store = new Corestore(ram)
+  const writerA = toPromises(store.get({ name: 'writer-a' }))
+  const writerB = toPromises(store.get({ name: 'writer-b' }))
+  const writerC = toPromises(store.get({ name: 'writer-c' }))
+
+  const output1 = new Omega(ram)
+  const output2 = new Omega(ram)
+  const output3 = new Omega(ram)
+
+  const base = new Autobase([writerA, writerB, writerC])
+  await base.ready()
+
+  // Create three independent forks
+  for (let i = 0; i < 3; i++) {
+    await base.append(writerA, `a${i}`, await base.latest(writerA))
+  }
+  await base.localRebase(output1)
+
+  for (let i = 0; i < 2; i++) {
+    await base.append(writerB, `b${i}`, await base.latest(writerB))
+  }
+  await base.localRebase(output2)
+
+  for (let i = 0; i < 1; i++) {
+    await base.append(writerC, `c${i}`, await base.latest(writerC))
+  }
+  await base.localRebase(output3)
+
+  {
+    // Should not have to modify output3
+    const reader = await base.remoteRebase([output3])
+    t.same(reader.added, 0)
+    t.same(reader.removed, 0)
+    t.same(reader.index.length, 7)
+  }
+
+  {
+    // Should not have to add B and C
+    const reader = await base.remoteRebase([output1])
+    t.same(reader.added, 3)
+    t.same(reader.removed, 0)
+    t.same(reader.index.length, 7)
+  }
+
+  {
+    // Should select output2
+    const reader = await base.remoteRebase([output1, output2])
+    t.same(reader.added, 1)
+    t.same(reader.removed, 0)
+    t.same(reader.index.length, 7)
+  }
+
+  {
+    // Should select output3
+    const reader = await base.remoteRebase([output1, output2, output3])
+    t.same(reader.added, 0)
+    t.same(reader.removed, 0)
+    t.same(reader.index.length, 7)
+  }
+
+  t.end()
+})
