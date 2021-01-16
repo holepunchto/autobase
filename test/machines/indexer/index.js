@@ -39,7 +39,7 @@ class Reducer {
     hostcalls.registerExtension(name).catch(() => {})
     const ext = {
       ...handlers,
-      send: (msg, peer) => hostcalls.sendExtension(msg, peer).catch(() => {}),
+      send: (msg, peer) => hostcalls.sendExtension(name, msg, peer).catch(() => {}),
       destroy: () => {
         hostcalls.destroyExtension(name).catch(() => {})
         this._extensions.delete(name)
@@ -50,6 +50,7 @@ class Reducer {
   }
 
   onextension (name, message, peer) {
+    message = Buffer.from(message.buffer, message.byteOffset, message.byteLength)
     const ext = this._extensions.get(name)
     if (!ext || !ext.onmessage) return
     ext.onmessage(message, peer)

@@ -12,7 +12,7 @@
     "hyperbee": "^1.1.1",
     "hypercore-promisifier": "^1.0.3",
     "nanoresource-promise": "^2.0.0",
-    "omega": "mafintosh/omega#extensions",
+    "omega": "mafintosh/omega#peer-events",
     "protocol-buffers-encodings": "^1.1.1",
     "streamx": "^2.10.0"
   },
