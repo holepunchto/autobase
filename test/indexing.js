@@ -222,7 +222,7 @@ test('hyperbee indexer with extension', async t => {
   {
     const output2 = new Omega(ram, output1.key)
     const s1 = output2.replicate()
-    s1.pipe(new LatencyStream(50)).pipe(output1.replicate()).pipe(s1)
+    s1.pipe(new LatencyStream(15)).pipe(output1.replicate()).pipe(s1)
 
     // Now this "remote" Hyperbee should swarm
     const db = new Hyperbee(createReadProxy(output2), {
@@ -241,7 +241,7 @@ test('hyperbee indexer with extension', async t => {
   {
     const output2 = new Omega(ram, output1.key)
     const s1 = output2.replicate()
-    s1.pipe(new LatencyStream(50)).pipe(output1.replicate()).pipe(s1)
+    s1.pipe(new LatencyStream(15)).pipe(output1.replicate()).pipe(s1)
 
     // Now this "remote" Hyperbee should swarm
     const db = new Hyperbee(createReadProxy(output2), {
