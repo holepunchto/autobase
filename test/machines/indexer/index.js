@@ -34,12 +34,17 @@ class Reducer {
   }
 
   // TODO: What's the right way to do error handling in these extension methods?
-  _registerExtension (name, handlers) {
+  _registerExtension (name, handlers = {}) {
     if (this._extensions.has(name)) throw new Error('An extension with that name already exists.')
     hostcalls.registerExtension(name).catch(() => {})
     const ext = {
-      ...handlers,
-      send: (msg, peer) => hostcalls.sendExtension(name, msg, peer).catch(() => {}),
+      handlers,
+      send: (msg, peer) => {
+        hostcalls.sendExtension(name, msg, peer).catch(() => {})
+      },
+      broadcast: (msg) => {
+        hostcalls.broadcastExtension(name, msg).catch(() => {})
+      },
       destroy: () => {
         hostcalls.destroyExtension(name).catch(() => {})
         this._extensions.delete(name)
@@ -52,8 +57,8 @@ class Reducer {
   onextension (name, message, peer) {
     message = Buffer.from(message.buffer, message.byteOffset, message.byteLength)
     const ext = this._extensions.get(name)
-    if (!ext || !ext.onmessage) return
-    ext.onmessage(message, peer)
+    if (!ext || !ext.handlers.onmessage) return
+    ext.handlers.onmessage(message, peer)
   }
 
   onpeeradd (id) {

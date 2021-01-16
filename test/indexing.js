@@ -1,10 +1,11 @@
 const p = require('path')
 const test = require('tape')
+const ram = require('random-access-memory')
 const Corestore = require('corestore')
 const Omega = require('omega')
 const Sandbox = require('module-sandbox')
 const Hyperbee = require('hyperbee')
-const ram = require('random-access-memory')
+const LatencyStream = require('latency-stream')
 const { toPromises } = require('hypercore-promisifier')
 const { NanoresourcePromise: Nanoresource } = require('nanoresource-promise/emitter')
 
@@ -24,8 +25,10 @@ class ReducerMachine extends Nanoresource {
     })
     this.extensions = new Map()
     this.peers = new Map()
+    this.peersById = new Map()
     this.ready = this.open.bind(this)
 
+    this._peerCount = 0
     this._listeners = new Map([
       ['peer-add', this.onpeeradd.bind(this)],
       ['peer-remove', this.onpeerremove.bind(this)]
@@ -48,14 +51,17 @@ class ReducerMachine extends Nanoresource {
   // Output Listeners
 
   onpeeradd (peer) {
+    this._peerCount++
     const id = this._generatePeerId(peer)
     this.peers.set(peer, id)
+    this.peersById.set(id, peer)
     this.machine.rpc.onpeeradd(id)
   }
 
   onpeerremove (peer) {
     const id = this._generatePeerId(peer)
     this.peers.delete(peer)
+    this.peersById.delete(id)
     this.machine.rpc.onpeerremove(id)
   }
 
@@ -63,7 +69,7 @@ class ReducerMachine extends Nanoresource {
 
   _generatePeerId (peer) {
     // TODO: Need to have a unique identifier per peer.
-    return 1
+    return this._peerCount
   }
 
   _generateHostcalls () {
@@ -82,9 +88,16 @@ class ReducerMachine extends Nanoresource {
       }))
     }
     const sendExtension = (_, name, msg, peer) => {
+      msg = Buffer.from(msg.buffer, msg.byteOffset, msg.byteLength)
       const ext = this.extensions.get(name)
       if (!ext) return
-      return ext.send(msg, peer)
+      return ext.send(msg, this.peersById.get(peer))
+    }
+    const broadcastExtension = (_, name, msg) => {
+      msg = Buffer.from(msg.buffer, msg.byteOffset, msg.byteLength)
+      const ext = this.extensions.get(name)
+      if (!ext) return
+      return ext.broadcast(msg)
     }
     const destroyExtension = (_, name) => {
       const ext = this.extensions.get(name)
@@ -96,6 +109,7 @@ class ReducerMachine extends Nanoresource {
       get,
       registerExtension,
       sendExtension,
+      broadcastExtension,
       destroyExtension
     }
   }
@@ -170,7 +184,7 @@ test('hyperbee indexer example', async t => {
   t.end()
 })
 
-test.only('hyperbee indexer with extension', async t => {
+test('hyperbee indexer with extension', async t => {
   const store = new Corestore(ram)
   const output1 = new Omega(ram)
   const writerA = toPromises(store.get({ name: 'writer-a' }))
@@ -189,11 +203,14 @@ test.only('hyperbee indexer with extension', async t => {
     value: 'other'
   }))
 
-  await base.append(writerB, Op.encode({
-    type: Op.Type.Put,
-    key: 'hello',
-    value: 'other'
-  }), await base.latest())
+  // Let's fill up the Hyperbee with many messages
+  for (let i = 0; i < 100; i++) {
+    await base.append(writerB, Op.encode({
+      type: Op.Type.Put,
+      key: `${i}-hello`,
+      value: `${i}-other`
+    }), await base.latest())
+  }
 
   const reducer = new ReducerMachine(output1, p.join(INDEXER_MACHINE_DIR, 'index.js'))
   await reducer.ready()
@@ -201,21 +218,44 @@ test.only('hyperbee indexer with extension', async t => {
     map: reducer.reduce.bind(reducer)
   })
 
-  // Now let's create a new reader, swarming with the previous output.
-  const output2 = new Omega(ram, output1.key)
-  const s1 = output1.replicate()
-  s1.pipe(output2.replicate()).pipe(s1)
+  // This reader will simulate request latency, and will not have the extension enabled.
+  {
+    const output2 = new Omega(ram, output1.key)
+    const s1 = output2.replicate()
+    s1.pipe(new LatencyStream(50)).pipe(output1.replicate()).pipe(s1)
 
-  // Now this "remote" Hyperbee should swarm
-  const db = new Hyperbee(createReadProxy(output2), {
-    keyEncoding: 'utf-8',
-    readonly: true
-  })
-  await db.ready()
+    // Now this "remote" Hyperbee should swarm
+    const db = new Hyperbee(createReadProxy(output2), {
+      keyEncoding: 'utf-8',
+      readonly: true,
+      extension: false
+    })
+    await db.ready()
 
-  for await (const { key, value } of db.createReadStream()) {
-    console.log(`${key} -> ${value}`)
+    console.time('no-extension')
+    await drain(db.createReadStream())
+    console.timeEnd('no-extension')
   }
+
+  // This reader will simulate request latency, and will have the extension enabled.
+  {
+    const output2 = new Omega(ram, output1.key)
+    const s1 = output2.replicate()
+    s1.pipe(new LatencyStream(50)).pipe(output1.replicate()).pipe(s1)
+
+    // Now this "remote" Hyperbee should swarm
+    const db = new Hyperbee(createReadProxy(output2), {
+      keyEncoding: 'utf-8',
+      readonly: true
+    })
+    await db.ready()
+
+    console.time('with-extension')
+    await drain(db.createReadStream())
+    console.timeEnd('with-extension')
+  }
+
+  console.log()
 
   await reducer.close()
   t.end()
@@ -233,5 +273,12 @@ function createReadProxy (output) {
         return val
       }
     }
+  })
+}
+
+async function drain (stream) {
+  return new Promise(resolve => {
+    stream.on('data', () => { })
+    stream.on('end', resolve)
   })
 }
