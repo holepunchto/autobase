@@ -148,6 +148,7 @@ module.exports = class Autobase {
       if (best) break
     }
 
+    if (!best) best = rebasers[0]
     await best.commit()
 
     return {
