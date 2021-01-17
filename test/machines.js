@@ -1,10 +1,8 @@
 const p = require('path')
 const test = require('tape')
-const Corestore = require('corestore')
 const Omega = require('omega')
 const Sandbox = require('module-sandbox')
 const ram = require('random-access-memory')
-const { toPromises } = require('hypercore-promisifier')
 
 const { indexedValues } = require('./helpers')
 const Autobase = require('..')
@@ -13,11 +11,10 @@ const UPPERCASE_MACHINE_PATH = p.join(__dirname, 'machines', 'uppercase.js')
 const DOUBLER_MACHINE_PATH = p.join(__dirname, 'machines', 'doubler.js')
 
 test('rebase with mapping machine', async t => {
-  const store = new Corestore(ram)
   const output = new Omega(ram)
-  const writerA = toPromises(store.get({ name: 'writer-a' }))
-  const writerB = toPromises(store.get({ name: 'writer-b' }))
-  const writerC = toPromises(store.get({ name: 'writer-c' }))
+  const writerA = new Omega(ram)
+  const writerB = new Omega(ram)
+  const writerC = new Omega(ram)
 
   const machine = new Sandbox(UPPERCASE_MACHINE_PATH)
   await machine.ready()
@@ -50,11 +47,10 @@ test('rebase with mapping machine', async t => {
 })
 
 test('rebase with multi-value batches', async t => {
-  const store = new Corestore(ram)
   const output = new Omega(ram)
-  const writerA = toPromises(store.get({ name: 'writer-a' }))
-  const writerB = toPromises(store.get({ name: 'writer-b' }))
-  const writerC = toPromises(store.get({ name: 'writer-c' }))
+  const writerA = new Omega(ram)
+  const writerB = new Omega(ram)
+  const writerC = new Omega(ram)
 
   const machine = new Sandbox(DOUBLER_MACHINE_PATH)
   await machine.ready()

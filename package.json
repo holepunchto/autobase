@@ -12,12 +12,11 @@
     "hyperbee": "^1.1.1",
     "hypercore-promisifier": "^1.0.3",
     "nanoresource-promise": "^2.0.0",
-    "omega": "mafintosh/omega#peer-events",
+    "omega": "mafintosh/omega",
     "protocol-buffers-encodings": "^1.1.1",
     "streamx": "^2.10.0"
   },
   "devDependencies": {
-    "corestore": "^6.0.0-beta2",
     "latency-stream": "^1.0.0",
     "module-sandbox": "^0.3.4",
     "protocol-buffers": "^4.2.0",

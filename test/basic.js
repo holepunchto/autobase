@@ -1,17 +1,14 @@
 const test = require('tape')
-const Corestore = require('corestore')
 const Omega = require('omega')
 const ram = require('random-access-memory')
-const { toPromises } = require('hypercore-promisifier')
 
 const { causalValues, indexedValues } = require('./helpers')
 const Autobase = require('..')
 
 test('linearizes short branches on long branches', async t => {
-  const store = new Corestore(ram)
-  const writerA = toPromises(store.get({ name: 'writer-a' }))
-  const writerB = toPromises(store.get({ name: 'writer-b' }))
-  const writerC = toPromises(store.get({ name: 'writer-c' }))
+  const writerA = new Omega(ram)
+  const writerB = new Omega(ram)
+  const writerC = new Omega(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
   await base.ready()
@@ -46,10 +43,9 @@ test('linearizes short branches on long branches', async t => {
 })
 
 test('causal writes', async t => {
-  const store = new Corestore(ram)
-  const writerA = toPromises(store.get({ name: 'writer-a' }))
-  const writerB = toPromises(store.get({ name: 'writer-b' }))
-  const writerC = toPromises(store.get({ name: 'writer-c' }))
+  const writerA = new Omega(ram)
+  const writerB = new Omega(ram)
+  const writerC = new Omega(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
   await base.ready()
@@ -84,11 +80,10 @@ test('causal writes', async t => {
 })
 
 test('simple rebase', async t => {
-  const store = new Corestore(ram)
   const output = new Omega(ram)
-  const writerA = toPromises(store.get({ name: 'writer-a' }))
-  const writerB = toPromises(store.get({ name: 'writer-b' }))
-  const writerC = toPromises(store.get({ name: 'writer-c' }))
+  const writerA = new Omega(ram)
+  const writerB = new Omega(ram)
+  const writerC = new Omega(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
 
@@ -130,11 +125,10 @@ test('simple rebase', async t => {
 })
 
 test('does not over-truncate', async t => {
-  const store = new Corestore(ram)
   const output = new Omega(ram)
-  const writerA = toPromises(store.get({ name: 'writer-a' }))
-  const writerB = toPromises(store.get({ name: 'writer-b' }))
-  const writerC = toPromises(store.get({ name: 'writer-c' }))
+  const writerA = new Omega(ram)
+  const writerB = new Omega(ram)
+  const writerC = new Omega(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
 
@@ -188,11 +182,10 @@ test('does not over-truncate', async t => {
 })
 
 test('can cut out a writer', async t => {
-  const store = new Corestore(ram)
   const output = new Omega(ram)
-  const writerA = toPromises(store.get({ name: 'writer-a' }))
-  const writerB = toPromises(store.get({ name: 'writer-b' }))
-  const writerC = toPromises(store.get({ name: 'writer-c' }))
+  const writerA = new Omega(ram)
+  const writerB = new Omega(ram)
+  const writerC = new Omega(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
   await base.ready()
@@ -233,11 +226,10 @@ test('can cut out a writer', async t => {
 })
 
 test('can cut out a writer, causal writes', async t => {
-  const store = new Corestore(ram)
   const output = new Omega(ram)
-  const writerA = toPromises(store.get({ name: 'writer-a' }))
-  const writerB = toPromises(store.get({ name: 'writer-b' }))
-  const writerC = toPromises(store.get({ name: 'writer-c' }))
+  const writerA = new Omega(ram)
+  const writerB = new Omega(ram)
+  const writerC = new Omega(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
   await base.ready()
@@ -278,10 +270,9 @@ test('can cut out a writer, causal writes', async t => {
 })
 
 test('can cut out a writer, causal writes interleaved', async t => {
-  const store = new Corestore(ram)
   const output = new Omega(ram)
-  const writerA = toPromises(store.get({ name: 'writer-a' }))
-  const writerB = toPromises(store.get({ name: 'writer-b' }))
+  const writerA = new Omega(ram)
+  const writerB = new Omega(ram)
 
   const base = new Autobase([writerA, writerB])
 
@@ -325,13 +316,12 @@ test('many writers, no causal writes', async t => {
   const NUM_WRITERS = 30
   const NUM_APPENDS = 10
 
-  const store = new Corestore(ram)
   const output = new Omega(ram)
   const base = new Autobase()
   const writers = []
 
   for (let i = 1; i < NUM_WRITERS + 1; i++) {
-    const writer = toPromises(store.get({ name: `writer-${i}` }))
+    const writer = new Omega(ram)
     await base.addInput(writer)
     writers.push(writer)
     for (let j = 0; j < i; j++) {
@@ -356,11 +346,10 @@ test('many writers, no causal writes', async t => {
 })
 
 test('rebase with mapper', async t => {
-  const store = new Corestore(ram)
   const output = new Omega(ram)
-  const writerA = toPromises(store.get({ name: 'writer-a' }))
-  const writerB = toPromises(store.get({ name: 'writer-b' }))
-  const writerC = toPromises(store.get({ name: 'writer-c' }))
+  const writerA = new Omega(ram)
+  const writerB = new Omega(ram)
+  const writerC = new Omega(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
 
@@ -389,11 +378,10 @@ test('rebase with mapper', async t => {
 })
 
 test('double-rebasing is a no-op', async t => {
-  const store = new Corestore(ram)
   const output = new Omega(ram)
-  const writerA = toPromises(store.get({ name: 'writer-a' }))
-  const writerB = toPromises(store.get({ name: 'writer-b' }))
-  const writerC = toPromises(store.get({ name: 'writer-c' }))
+  const writerA = new Omega(ram)
+  const writerB = new Omega(ram)
+  const writerC = new Omega(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
 
@@ -430,10 +418,9 @@ test('double-rebasing is a no-op', async t => {
 })
 
 test('remote rebasing selects longest index', async t => {
-  const store = new Corestore(ram)
-  const writerA = toPromises(store.get({ name: 'writer-a' }))
-  const writerB = toPromises(store.get({ name: 'writer-b' }))
-  const writerC = toPromises(store.get({ name: 'writer-c' }))
+  const writerA = new Omega(ram)
+  const writerB = new Omega(ram)
+  const writerC = new Omega(ram)
 
   const output1 = new Omega(ram)
   const output2 = new Omega(ram)

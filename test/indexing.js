@@ -302,7 +302,7 @@ test('hyperbee indexer with remote rebasing', async t => {
 
   let nodes = null
 
-  // The reader will do a remote rebase from both outputs, and should choose outputB.
+  // The reader will do a remote rebase from both outputs, and should choose outputB, which is up-to-date.
   {
     const outputs = [outputA, outputB].map(o => new MemCore(o))
     const opts = await Promise.all(outputs.map(async o => {
@@ -323,7 +323,7 @@ test('hyperbee indexer with remote rebasing', async t => {
     nodes = await collect(db.createReadStream())
   }
 
-  // The reader will do a remote rebase from both outputs, and should choose outputB.
+  // The reader will do a remote rebase from only outputA, and should create a large MemCore.
   {
     const outputs = [outputA].map(o => new MemCore(o))
     const opts = await Promise.all(outputs.map(async o => {
