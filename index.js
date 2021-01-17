@@ -178,6 +178,24 @@ module.exports = class Autobase {
       removed: rebaser.removed
     }
   }
+
+  // TODO: Better place to put this?
+  static unwrap (output) {
+    return new Proxy(output, {
+      get (target, prop) {
+        if (prop !== 'get') return target[prop]
+        return async (idx, opts) => {
+          const block = await target.get(idx, {
+            ...opts,
+            valueEncoding: null
+          })
+          let val = IndexNode.decode(block).value
+          if (opts.valueEncoding) val = opts.valueEncoding.decode(val)
+          return val
+        }
+      }
+    })
+  }
 }
 
 function isFork (head, heads) {
