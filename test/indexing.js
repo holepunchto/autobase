@@ -260,7 +260,7 @@ test('hyperbee indexer with extension', async t => {
   t.end()
 })
 
-test.only('hyperbee indexer with remote rebasing', async t => {
+test('hyperbee indexer with remote rebasing', async t => {
   const outputA = new Omega(ram)
   const writerA = new Omega(ram)
   const outputB = new Omega(ram)
