@@ -136,7 +136,12 @@ module.exports = class Autobase {
   async remoteRebase (indexes, opts = {}) {
     await Promise.all([this.ready(), ...indexes.map(i => i.ready())])
 
-    const rebasers = indexes.map(i => new Rebaser(new MemCore(i), opts))
+    // If opts is an Array, then the index-specific options will be passed to each rebaser.
+    // TODO: Better way to handle this?
+    const rebasers = indexes.map((i, idx) => {
+      const opt = Array.isArray(opts) ? opts[idx] : opts
+      return new Rebaser(opt.wrap !== false ? new MemCore(i) : i, opt)
+    })
 
     let best = null
     for await (const inputNode of this.createCausalStream(opts)) {
