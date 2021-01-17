@@ -8,14 +8,19 @@ message Header {
   optional Metadata metadata = 2;
 }
 
+message Clock {
+  required bytes key = 1;
+  required uint64 length = 2;
+}
+
 message InputNode {
-  map<string, uint64> links = 1;
+  repeated Clock links = 1;
   optional bytes value = 2;
 }
 
 message IndexNode {
-  map<string, uint64> clock = 1;
-  required string key = 2;
+  repeated Clock clock = 1;
+  required bytes key = 2;
   required uint64 seq = 3;
   required uint32 batch = 4 [default = 1];
 
