@@ -190,7 +190,7 @@ module.exports = class Autobase {
             valueEncoding: null
           })
           let val = IndexNode.decode(block).value
-          if (opts.valueEncoding) val = opts.valueEncoding.decode(val)
+          if (opts && opts.valueEncoding) val = opts.valueEncoding.decode(val)
           return val
         }
       }
