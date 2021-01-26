@@ -1,5 +1,6 @@
 const streamx = require('streamx')
 const lock = require('mutexify/promise')
+const codecs = require('codecs')
 const { toPromises } = require('hypercore-promisifier')
 
 const { InputNode, IndexNode } = require('./lib/nodes')
@@ -49,6 +50,7 @@ module.exports = class Autobase {
 
   async heads () {
     await this.ready()
+    await Promise.all(this.inputs.map(i => i.update()))
     return Promise.all(this.inputs.map(i => this._getInputNode(i, i.length - 1)))
   }
 
@@ -189,8 +191,12 @@ module.exports = class Autobase {
             ...opts,
             valueEncoding: null
           })
-          let val = IndexNode.decode(block).value
-          if (opts && opts.valueEncoding) val = opts.valueEncoding.decode(val)
+          const decoded = IndexNode.decode(block)
+          let val = decoded.value || decoded.node.value
+          if (opts && opts.valueEncoding) {
+            if (opts.valueEncoding.decode) val = opts.valueEncoding.decode(val)
+            else val = codecs(opts.valueEncoding).decode(val)
+          }
           return val
         }
       }
