@@ -182,40 +182,33 @@ module.exports = class Autobase {
     }
   }
 
-  // TODO: Better place to put this?
-  static unwrap (output) {
-    return new Proxy(output, {
-      get (target, prop) {
-        if (prop !== 'get') return target[prop]
-        return async (idx, opts) => {
-          const block = await target.get(idx, {
-            ...opts,
-            valueEncoding: null
-          })
-          const decoded = IndexNode.decode(block)
-          let val = decoded.value || decoded.node.value
-          if (opts && opts.valueEncoding) {
-            if (opts.valueEncoding.decode) val = opts.valueEncoding.decode(val)
-            else val = codecs(opts.valueEncoding).decode(val)
-          }
-          return val
-        }
+  // TODO: Better way to do put this?
+  decodeIndex (output, decodeOpts = {}) {
+    const get = async (idx, opts) => {
+      const block = await output.get(idx, {
+        ...opts,
+        valueEncoding: null
+      })
+      const decoded = IndexNode.decode(block)
+      if (decodeOpts.includeInputNodes && this._inputsByKey.has(decoded.node.key)) {
+        const input = this._inputsByKey.get(decoded.node.key)
+        const inputNode = InputNode.decode(await input.get(decoded.node.seq))
+        inputNode.key = decoded.node.key
+        inputNode.seq = decoded.node.seq
+        decoded.node = inputNode
       }
-    })
-  }
-
-  static decodeIndex (output) {
+      if (!decodeOpts.unwrap) return decoded
+      let val = decoded.value || decoded.node.value
+      if (opts && opts.valueEncoding) {
+        if (opts.valueEncoding.decode) val = opts.valueEncoding.decode(val)
+        else val = codecs(opts.valueEncoding).decode(val)
+      }
+      return val
+    }
     return new Proxy(output, {
       get (target, prop) {
-        if (prop !== 'get') return target[prop]
-        return async (idx, opts) => {
-          const block = await target.get(idx, {
-            ...opts,
-            valueEncoding: null
-          })
-          const decoded = IndexNode.decode(block)
-          return decoded
-        }
+        if (prop === 'get') return get
+        return target[prop]
       }
     })
   }

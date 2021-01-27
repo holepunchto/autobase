@@ -1,5 +1,3 @@
-const { IndexNode } = require('../../lib/nodes')
-
 async function causalValues (base) {
   const buf = []
   for await (const indexNode of base.createCausalStream()) {
@@ -8,10 +6,14 @@ async function causalValues (base) {
   return buf
 }
 
-async function indexedValues (output) {
+async function indexedValues (base, output, opts = {}) {
   const buf = []
-  for (let i = output.length - 1; i > 0; i--) {
-    const indexNode = IndexNode.decode(await output.get(i))
+  const index = base.decodeIndex(output, {
+    includeInputNodes: true,
+    ...opts
+  })
+  for (let i = index.length - 1; i > 0; i--) {
+    const indexNode = await index.get(i)
     buf.push(debugIndexNode(indexNode))
   }
   return buf

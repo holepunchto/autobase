@@ -23,7 +23,5 @@ message IndexNode {
   required bytes key = 2;
   required uint64 seq = 3;
   required uint32 batch = 4 [default = 1];
-
-  optional InputNode node = 5;
-  optional bytes value = 6;
+  optional bytes value = 5;
 }
