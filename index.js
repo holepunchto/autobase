@@ -137,6 +137,7 @@ module.exports = class Autobase {
 
   async remoteRebase (indexes, opts = {}) {
     await Promise.all([this.ready(), ...indexes.map(i => i.ready())])
+    await Promise.all([this.ready(), ...indexes.map(i => i.update())])
 
     // If opts is an Array, then the index-specific options will be passed to each rebaser.
     // TODO: Better way to handle this?
@@ -198,6 +199,22 @@ module.exports = class Autobase {
             else val = codecs(opts.valueEncoding).decode(val)
           }
           return val
+        }
+      }
+    })
+  }
+
+  static decodeIndex (output) {
+    return new Proxy(output, {
+      get (target, prop) {
+        if (prop !== 'get') return target[prop]
+        return async (idx, opts) => {
+          const block = await target.get(idx, {
+            ...opts,
+            valueEncoding: null
+          })
+          const decoded = IndexNode.decode(block)
+          return decoded
         }
       }
     })
