@@ -1,3 +1,4 @@
+const { EventEmitter } = require('events')
 const streamx = require('streamx')
 const lock = require('mutexify/promise')
 const codecs = require('codecs')
@@ -10,12 +11,17 @@ const MemCore = require('./lib/memory-hypercore')
 
 const INPUT_TYPE = '@autobase/input'
 
-module.exports = class Autobase {
+module.exports = class Autobase extends EventEmitter {
   constructor (inputs = []) {
+    super()
     this.inputs = inputs.map(i => toPromises(i))
     this._inputsByKey = new Map()
     this._lock = lock()
     this._readyProm = null
+
+    for (const core of this.inputs) {
+      core.on('append', (...args) => this.emit('input-append', ...args))
+    }
   }
 
   async _ready () {
