@@ -37,7 +37,7 @@ module.exports = class Autobase extends EventEmitter {
 
   // Private Methods
 
-  async _getInputNode (input, seq) {
+  async _getInputNode (input, seq, opts = {}) {
     if (seq < 1) return null
     try {
       const block = await input.get(seq)
@@ -45,6 +45,14 @@ module.exports = class Autobase extends EventEmitter {
       const node = InputNode.decode(block)
       node.key = input.key.toString('hex')
       node.seq = seq
+      if (node.partial && !opts.allowPartial) {
+        while (++seq < input.length) {
+          const next = await this._getInputNode(input, seq, { allowPartial: true })
+          if (next.partial) continue
+          node.clock = next.clock
+          break
+        }
+      }
       return node
     } catch (_) {
       // Decoding errors should be discarded.
@@ -135,7 +143,15 @@ module.exports = class Autobase extends EventEmitter {
           protocol: INPUT_TYPE
         }))
       }
-      return input.append(InputNode.encode({ value, links }))
+      if (!Array.isArray(value)) return input.append(InputNode.encode({ value, links }))
+      const nodes = []
+      for (let i = 0; i < value.length; i++) {
+        const node = { value: value[i] }
+        if (i !== value.length - 1) node.partial = true
+        else node.links = links
+        nodes.push(InputNode.encode(node))
+      }
+      return input.append(nodes)
     } finally {
       release()
     }
@@ -194,7 +210,7 @@ module.exports = class Autobase extends EventEmitter {
       const decoded = IndexNode.decode(block)
       if (decodeOpts.includeInputNodes && this._inputsByKey.has(decoded.node.key)) {
         const input = this._inputsByKey.get(decoded.node.key)
-        const inputNode = InputNode.decode(await input.get(decoded.node.seq))
+        const inputNode = await this._getInputNode(input, decoded.node.seq)
         inputNode.key = decoded.node.key
         inputNode.seq = decoded.node.seq
         decoded.node = inputNode
@@ -217,11 +233,7 @@ module.exports = class Autobase extends EventEmitter {
 
   decodeInput (input, decodeOpts = {}) {
     const get = async (idx, opts) => {
-      const block = await input.get(idx, {
-        ...opts,
-        valueEncoding: null
-      })
-      const decoded = InputNode.decode(block)
+      const decoded = await this._getInputNode(input, idx)
       if (!decodeOpts.unwrap) return decoded
       return decoded.value
     }

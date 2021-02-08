@@ -16,6 +16,7 @@ message Clock {
 message InputNode {
   repeated Clock links = 1;
   optional bytes value = 2;
+  optional bool partial = 3;
 }
 
 message IndexNode {
