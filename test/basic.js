@@ -417,7 +417,7 @@ test('rebase with stateless reducer', async t => {
 
   {
     await base.localRebase(output, {
-      reduce: function (_, indexNode) {
+      reduce: function (indexNode) {
         return Buffer.from(indexNode.node.value.toString('utf-8').toUpperCase(), 'utf-8')
       }
     })
@@ -452,7 +452,7 @@ test('rebase with stateful reducer, reinitializes state correctly', async t => {
     init: function () {
       reinitialized++
     },
-    reduce: function (_, indexNode) {
+    reduce: function (indexNode) {
       return Buffer.from(indexNode.node.value.toString('utf-8').toUpperCase(), 'utf-8')
     }
   }
