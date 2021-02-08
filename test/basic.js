@@ -351,8 +351,8 @@ test('can cut out a writer, causal writes interleaved', async t => {
 })
 
 test('many writers, no causal writes', async t => {
-  const NUM_WRITERS = 30
-  const NUM_APPENDS = 10
+  const NUM_WRITERS = 10
+  const NUM_APPENDS = 11
 
   const output = new Omega(ram)
   const base = new Autobase()
@@ -363,7 +363,7 @@ test('many writers, no causal writes', async t => {
     await base.addInput(writer)
     writers.push(writer)
     for (let j = 0; j < i; j++) {
-      await base.append(writer, `w${i}-${j}`, await base.latest())
+      await base.append(writer, `w${i}-${j}`, await base.latest(writer))
     }
   }
 
@@ -373,17 +373,30 @@ test('many writers, no causal writes', async t => {
     t.same(indexed.length, (NUM_WRITERS * (NUM_WRITERS + 1)) / 2)
   }
 
+  const middleWriter = writers[Math.floor(writers.length / 2)]
+  const decodedMiddleWriter = base.decodeInput(middleWriter)
+
+  // Appending to the middle writer NUM_APPEND times should shift it to the front of the index.
   for (let i = 0; i < NUM_APPENDS; i++) {
-    const writer = writers[Math.floor(writers.length / 2)]
-    await base.append(writer, `new entry ${i}`, await base.latest(writer))
-    const result = await base.localRebase(output)
-    console.log('result:', result)
+    await base.append(middleWriter, `new entry ${i}`, await base.latest(middleWriter))
+  }
+
+  const { index } = await base.localRebase(output)
+  const decoded = base.decodeIndex(index, {
+    includeInputNodes: true,
+    unwrap: true
+  })
+
+  for (let i = 1; i < NUM_APPENDS + Math.floor(writers.length / 2) + 1; i++) {
+    const latestNode = await decoded.get(i)
+    const val = latestNode.toString('utf-8')
+    t.same(val, (await decodedMiddleWriter.get(i)).value.toString('utf-8'))
   }
 
   t.end()
 })
 
-test('rebase with mapper', async t => {
+test('rebase with reducer', async t => {
   const output = new Omega(ram)
   const writerA = new Omega(ram)
   const writerB = new Omega(ram)
@@ -404,7 +417,7 @@ test('rebase with mapper', async t => {
 
   {
     await base.localRebase(output, {
-      map: function (indexNode) {
+      reduce: function (_, indexNode) {
         return Buffer.from(indexNode.node.value.toString('utf-8').toUpperCase(), 'utf-8')
       }
     })

@@ -145,12 +145,7 @@ module.exports = class Autobase extends EventEmitter {
     await Promise.all([this.ready(), ...indexes.map(i => i.ready())])
     await Promise.all([this.ready(), ...indexes.map(i => i.update())])
 
-    // If opts is an Array, then the index-specific options will be passed to each rebaser.
-    // TODO: Better way to handle this?
-    const rebasers = indexes.map((i, idx) => {
-      const opt = Array.isArray(opts) ? opts[idx] : opts
-      return new Rebaser(opt.wrap !== false ? new MemCore(i) : i, opt)
-    })
+    const rebasers = indexes.map(i => new Rebaser(opts.wrap !== false ? new MemCore(i) : i, opts))
 
     let best = null
     for await (const inputNode of this.createCausalStream(opts)) {
@@ -183,6 +178,7 @@ module.exports = class Autobase extends EventEmitter {
     await rebaser.commit()
 
     return {
+      index,
       added: rebaser.added,
       removed: rebaser.removed
     }
@@ -212,6 +208,24 @@ module.exports = class Autobase extends EventEmitter {
       return val
     }
     return new Proxy(output, {
+      get (target, prop) {
+        if (prop === 'get') return get
+        return target[prop]
+      }
+    })
+  }
+
+  decodeInput (input, decodeOpts = {}) {
+    const get = async (idx, opts) => {
+      const block = await input.get(idx, {
+        ...opts,
+        valueEncoding: null
+      })
+      const decoded = InputNode.decode(block)
+      if (!decodeOpts.unwrap) return decoded
+      return decoded.value
+    }
+    return new Proxy(input, {
       get (target, prop) {
         if (prop === 'get') return get
         return target[prop]
