@@ -7,7 +7,7 @@ const { toPromises } = require('hypercore-promisifier')
 const { InputNode, IndexNode } = require('./lib/nodes')
 const { Header } = require('./lib/messages')
 const Rebaser = require('./lib/rebaser')
-const MemCore = require('./lib/memory-hypercore')
+const MemoryView = require('./lib/memory-view')
 
 const INPUT_TYPE = '@autobase/input'
 
@@ -161,7 +161,7 @@ module.exports = class Autobase extends EventEmitter {
     await Promise.all([this.ready(), ...indexes.map(i => i.ready())])
     await Promise.all([this.ready(), ...indexes.map(i => i.update())])
 
-    const rebasers = indexes.map(i => new Rebaser(opts.wrap !== false ? new MemCore(i) : i, opts))
+    const rebasers = indexes.map(i => new Rebaser(opts.wrap !== false ? MemoryView.from(i) : i, opts))
 
     let best = null
     for await (const inputNode of this.createCausalStream(opts)) {
