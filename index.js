@@ -42,9 +42,7 @@ module.exports = class Autobase extends EventEmitter {
     try {
       const block = await input.get(seq)
       if (!block) return null
-      const node = InputNode.decode(block)
-      node.key = input.key.toString('hex')
-      node.seq = seq
+      const node = InputNode.decode(block, { key: input.key, seq })
       if (node.partial && !opts.allowPartial) {
         while (++seq < input.length) {
           const next = await this._getInputNode(input, seq, { allowPartial: true })
@@ -79,8 +77,8 @@ module.exports = class Autobase extends EventEmitter {
 
     for (const head of heads) {
       if (!head) continue
-      if (inputs.size && !inputs.has(head.key)) continue
-      links.set(head.key, this._inputsByKey.get(head.key).length - 1)
+      if (inputs.size && !inputs.has(head.id)) continue
+      links.set(head.id, this._inputsByKey.get(head.id).length - 1)
     }
     return links
   }
@@ -111,7 +109,7 @@ module.exports = class Autobase extends EventEmitter {
         const forkIndex = heads.indexOf(node)
         this.push(new IndexNode({ node, clock }))
 
-        nextNode(self._inputsByKey.get(node.key), node.seq).then(next => {
+        nextNode(self._inputsByKey.get(node.id), node.seq).then(next => {
           if (next) heads[forkIndex] = next
           else heads.splice(forkIndex, 1)
           return cb(null)
@@ -208,8 +206,8 @@ module.exports = class Autobase extends EventEmitter {
         valueEncoding: null
       })
       const decoded = IndexNode.decode(block)
-      if (decodeOpts.includeInputNodes && this._inputsByKey.has(decoded.node.key)) {
-        const input = this._inputsByKey.get(decoded.node.key)
+      if (decodeOpts.includeInputNodes && this._inputsByKey.has(decoded.node.id)) {
+        const input = this._inputsByKey.get(decoded.node.id)
         const inputNode = await this._getInputNode(input, decoded.node.seq)
         inputNode.key = decoded.node.key
         inputNode.seq = decoded.node.seq
@@ -277,12 +275,12 @@ function forkSize (node, i, heads) {
 
 function forkInfo (heads) {
   const forks = []
-  const clock = []
+  const clock = new Map()
 
   for (const head of heads) {
     if (!head) continue
     if (isFork(head, heads)) forks.push(head)
-    clock.push([head.key, head.seq])
+    clock.set(head.id, head.seq)
   }
 
   const sizes = forks.map(forkSize)
