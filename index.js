@@ -139,7 +139,7 @@ module.exports = class Autobase extends EventEmitter {
     links = linksToMap(links)
     try {
       if (!input.length) {
-        await input.append(Header.encode({
+        await input.append(Header.fullEncode({
           protocol: INPUT_TYPE
         }))
       }

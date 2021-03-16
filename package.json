@@ -9,6 +9,7 @@
     "install:machines": "cd test/machines/indexer && npm i"
   },
   "dependencies": {
+    "compact-encoding": "^2.0.0",
     "debounceify": "^1.0.0",
     "hypercore-promisifier": "^1.0.3",
     "mutexify": "^1.3.1",
