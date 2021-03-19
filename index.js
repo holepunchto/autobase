@@ -43,13 +43,19 @@ module.exports = class Autobase extends EventEmitter {
       const block = await input.get(seq)
       if (!block) return null
       const node = InputNode.decode(block, { key: input.key, seq })
-      if (node.partial && !opts.allowPartial) {
+      if (node.batch && !opts.allowPartial) {
+        let batchEnd = node
         while (++seq < input.length) {
           const next = await this._getInputNode(input, seq, { allowPartial: true })
-          if (next.partial) continue
-          node.clock = next.clock
+          if (next.batch === node.batch) {
+            batchEnd = next
+            continue
+          }
           break
         }
+        node.links = batchEnd.links
+        if (node.seq > 1) node.links.set(node.id, node.seq - 1)
+        else node.links.delete(node.id)
       }
       return node
     } catch (_) {
@@ -100,6 +106,7 @@ module.exports = class Autobase extends EventEmitter {
       },
       read (cb) {
         const { forks, clock, smallest } = forkInfo(heads)
+
         if (!forks.length) {
           this.push(null)
           return cb(null)
@@ -131,6 +138,32 @@ module.exports = class Autobase extends EventEmitter {
     }
   }
 
+  async _append (input, value, links) {
+    const head = await this._getInputNode(input, input.length - 1)
+
+    // Make sure that causal information propagates.
+    // TODO: This should use an embedded index in the future.
+    if (head && head.links) {
+      const inputId = input.key.toString('hex')
+      for (const [id, length] of head.links) {
+        if (id === inputId || links.has(id)) continue
+        links.set(id, length)
+      }
+    }
+
+    if (!Array.isArray(value)) return input.append(InputNode.encode({ key: input.key, value, links }))
+
+    const nodes = []
+    const batchId = input.length
+    for (let i = 0; i < value.length; i++) {
+      const node = { key: input.key, value: value[i], batch: batchId }
+      if (i === value.length - 1) node.links = links
+      nodes.push(InputNode.encode(node))
+    }
+
+    return input.append(nodes)
+  }
+
   async append (input, value, links) {
     const release = await this._lock()
     await this.ready()
@@ -141,15 +174,7 @@ module.exports = class Autobase extends EventEmitter {
           protocol: INPUT_TYPE
         }))
       }
-      if (!Array.isArray(value)) return input.append(InputNode.encode({ value, links }))
-      const nodes = []
-      for (let i = 0; i < value.length; i++) {
-        const node = { value: value[i] }
-        if (i !== value.length - 1) node.partial = true
-        else node.links = links
-        nodes.push(InputNode.encode(node))
-      }
-      return input.append(nodes)
+      return this._append(input, value, links)
     } finally {
       release()
     }
@@ -198,7 +223,7 @@ module.exports = class Autobase extends EventEmitter {
     }
   }
 
-  // TODO: Better way to do put this?
+  // TODO: Better way to do these?
   decodeIndex (output, decodeOpts = {}) {
     const get = async (idx, opts) => {
       const block = await output.get(idx, {

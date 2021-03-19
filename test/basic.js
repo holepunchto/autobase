@@ -15,13 +15,13 @@ test('linearizes short branches on long branches', async t => {
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
-    await base.append(writerA, `a${i}`, await base.latest(writerA))
+    await base.append(writerA, `a${i}`)
   }
   for (let i = 0; i < 2; i++) {
-    await base.append(writerB, `b${i}`, await base.latest(writerB))
+    await base.append(writerB, `b${i}`)
   }
   for (let i = 0; i < 3; i++) {
-    await base.append(writerC, `c${i}`, await base.latest(writerC))
+    await base.append(writerC, `c${i}`)
   }
 
   {
@@ -52,13 +52,13 @@ test('causal writes', async t => {
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
-    await base.append(writerA, `a${i}`, await base.latest(writerA))
+    await base.append(writerA, `a${i}`)
   }
   for (let i = 0; i < 2; i++) {
-    await base.append(writerB, `b${i}`, await base.latest([writerA, writerB]))
+    await base.append(writerB, `b${i}`, await base.latest(writerA))
   }
   for (let i = 0; i < 3; i++) {
-    await base.append(writerC, `c${i}`, await base.latest(writerC))
+    await base.append(writerC, `c${i}`)
   }
 
   {
@@ -75,6 +75,44 @@ test('causal writes', async t => {
     const output = await causalValues(base)
     t.same(output.map(v => v.value), ['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0'])
   }
+
+  t.end()
+})
+
+test('manually specifying links', async t => {
+  const writerA = new Omega(ram)
+  const writerB = new Omega(ram)
+
+  const base = new Autobase([writerA, writerB])
+  await base.ready()
+
+  await base.append(writerA, 'a0')
+  await base.append(writerA, 'a1')
+  await base.append(writerB, 'b0', [
+    [writerA.key.toString('hex'), 2] // Links to a1
+  ])
+  await base.append(writerB, 'b1')
+  await base.append(writerB, 'b2')
+
+  const output = await causalValues(base)
+  t.same(output.map(v => v.value), ['b2', 'b1', 'b0', 'a1', 'a0'])
+
+  t.end()
+})
+
+test('dynamically adding a new input', async t => {
+  const writerA = new Omega(ram)
+  const writerB = new Omega(ram)
+
+  const base = new Autobase([writerA])
+  await base.ready()
+
+  await base.append(writerA, 'a0')
+  await base.addInput(writerB)
+  await base.append(writerB, 'b0', await base.latest(writerA))
+
+  const output = await causalValues(base)
+  t.same(output.map(v => v.value), ['b0', 'a0'])
 
   t.end()
 })

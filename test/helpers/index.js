@@ -29,8 +29,18 @@ function debugIndexNode (indexNode) {
   }
 }
 
+function debugInputNode (inputNode) {
+  if (!inputNode) return null
+  return {
+    ...inputNode,
+    key: inputNode.id,
+    value: inputNode.value.toString()
+  }
+}
+
 module.exports = {
   causalValues,
   indexedValues,
-  debugIndexNode
+  debugIndexNode,
+  debugInputNode
 }
