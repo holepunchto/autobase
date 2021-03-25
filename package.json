@@ -7,6 +7,7 @@
     "test": "standard && tape test/*.js"
   },
   "dependencies": {
+    "hypercore": "github:hypercore-skunkworks/hypercore-x",
     "compact-encoding": "^2.0.0",
     "debounceify": "^1.0.0",
     "hypercore-promisifier": "^1.0.3",
@@ -15,7 +16,6 @@
     "streamx": "^2.10.0"
   },
   "devDependencies": {
-    "hypercore": "github:hypercore-skunkworks/hypercorex",
     "protocol-buffers": "^4.2.0",
     "standard": "^16.0.3",
     "tape": "^5.1.0"
