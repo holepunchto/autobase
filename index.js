@@ -180,7 +180,7 @@ module.exports = class Autobase extends EventEmitter {
     }
   }
 
-  async remoteRebase (indexes, opts = {}) {
+  async rebasedView (indexes, opts = {}) {
     await Promise.all([this.ready(), ...indexes.map(i => i.ready())])
     await Promise.all([this.ready(), ...indexes.map(i => i.update())])
 
@@ -206,7 +206,7 @@ module.exports = class Autobase extends EventEmitter {
     }
   }
 
-  async localRebase (index, opts = {}) {
+  async rebaseInto (index, opts = {}) {
     await Promise.all([this.ready(), index.ready()])
 
     const rebaser = new Rebaser(index, opts)

@@ -25,7 +25,7 @@ test('rebase with stateless reducer', async t => {
   }
 
   {
-    await base.localRebase(output, {
+    await base.rebaseInto(output, {
       reduce: function (indexNode) {
         return Buffer.from(indexNode.node.value.toString('utf-8').toUpperCase(), 'utf-8')
       }
@@ -67,7 +67,7 @@ test('rebase with stateful reducer, reinitializes state correctly', async t => {
   }
 
   {
-    await base.localRebase(output, {
+    await base.rebaseInto(output, {
       init: reducer.init,
       reduce: reducer.reduce
     })
@@ -80,7 +80,7 @@ test('rebase with stateful reducer, reinitializes state correctly', async t => {
   await base.append(writerA, 'a1', await base.latest(writerA))
 
   {
-    await base.localRebase(output, {
+    await base.rebaseInto(output, {
       init: reducer.init,
       reduce: reducer.reduce
     })
@@ -94,7 +94,7 @@ test('rebase with stateful reducer, reinitializes state correctly', async t => {
   await base.append(writerA, 'a3', await base.latest(writerA))
 
   {
-    await base.localRebase(output, {
+    await base.rebaseInto(output, {
       init: reducer.init,
       reduce: reducer.reduce
     })
