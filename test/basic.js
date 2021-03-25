@@ -1,14 +1,14 @@
 const test = require('tape')
-const Omega = require('omega')
+const Hypercore = require('hypercore')
 const ram = require('random-access-memory')
 
 const { causalValues } = require('./helpers')
 const Autobase = require('..')
 
 test('linearizes short branches on long branches', async t => {
-  const writerA = new Omega(ram)
-  const writerB = new Omega(ram)
-  const writerC = new Omega(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
   await base.ready()
@@ -43,9 +43,9 @@ test('linearizes short branches on long branches', async t => {
 })
 
 test('causal writes', async t => {
-  const writerA = new Omega(ram)
-  const writerB = new Omega(ram)
-  const writerC = new Omega(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
   await base.ready()
@@ -80,8 +80,8 @@ test('causal writes', async t => {
 })
 
 test('manually specifying links', async t => {
-  const writerA = new Omega(ram)
-  const writerB = new Omega(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
 
   const base = new Autobase([writerA, writerB])
   await base.ready()
@@ -101,8 +101,8 @@ test('manually specifying links', async t => {
 })
 
 test('dynamically adding a new input', async t => {
-  const writerA = new Omega(ram)
-  const writerB = new Omega(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
 
   const base = new Autobase([writerA])
   await base.ready()

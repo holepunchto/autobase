@@ -1,15 +1,15 @@
 const test = require('tape')
-const Omega = require('omega')
+const Hypercore = require('hypercore')
 const ram = require('random-access-memory')
 
 const { causalValues, indexedValues } = require('./helpers')
 const Autobase = require('..')
 
 test('simple rebase', async t => {
-  const output = new Omega(ram)
-  const writerA = new Omega(ram)
-  const writerB = new Omega(ram)
-  const writerC = new Omega(ram)
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
 
@@ -51,10 +51,10 @@ test('simple rebase', async t => {
 })
 
 test('rebasing with causal writes preserves links', async t => {
-  const output = new Omega(ram)
-  const writerA = new Omega(ram)
-  const writerB = new Omega(ram)
-  const writerC = new Omega(ram)
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
 
@@ -89,10 +89,10 @@ test('rebasing with causal writes preserves links', async t => {
 })
 
 test('does not over-truncate', async t => {
-  const output = new Omega(ram)
-  const writerA = new Omega(ram)
-  const writerB = new Omega(ram)
-  const writerC = new Omega(ram)
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
 
@@ -146,10 +146,10 @@ test('does not over-truncate', async t => {
 })
 
 test('can cut out a writer', async t => {
-  const output = new Omega(ram)
-  const writerA = new Omega(ram)
-  const writerB = new Omega(ram)
-  const writerC = new Omega(ram)
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
   await base.ready()
@@ -190,10 +190,10 @@ test('can cut out a writer', async t => {
 })
 
 test('can cut out a writer, causal writes', async t => {
-  const output = new Omega(ram)
-  const writerA = new Omega(ram)
-  const writerB = new Omega(ram)
-  const writerC = new Omega(ram)
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
   await base.ready()
@@ -234,9 +234,9 @@ test('can cut out a writer, causal writes', async t => {
 })
 
 test('can cut out a writer, causal writes interleaved', async t => {
-  const output = new Omega(ram)
-  const writerA = new Omega(ram)
-  const writerB = new Omega(ram)
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
 
   const base = new Autobase([writerA, writerB])
 
@@ -280,12 +280,12 @@ test('many writers, no causal writes', async t => {
   const NUM_WRITERS = 10
   const NUM_APPENDS = 11
 
-  const output = new Omega(ram)
+  const output = new Hypercore(ram)
   const base = new Autobase()
   const writers = []
 
   for (let i = 1; i < NUM_WRITERS + 1; i++) {
-    const writer = new Omega(ram)
+    const writer = new Hypercore(ram)
     await base.addInput(writer)
     writers.push(writer)
     for (let j = 0; j < i; j++) {
@@ -323,10 +323,10 @@ test('many writers, no causal writes', async t => {
 })
 
 test('double-rebasing is a no-op', async t => {
-  const output = new Omega(ram)
-  const writerA = new Omega(ram)
-  const writerB = new Omega(ram)
-  const writerC = new Omega(ram)
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
 
@@ -363,13 +363,13 @@ test('double-rebasing is a no-op', async t => {
 })
 
 test('remote rebasing selects longest index', async t => {
-  const writerA = new Omega(ram)
-  const writerB = new Omega(ram)
-  const writerC = new Omega(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
 
-  const output1 = new Omega(ram)
-  const output2 = new Omega(ram)
-  const output3 = new Omega(ram)
+  const output1 = new Hypercore(ram)
+  const output2 = new Hypercore(ram)
+  const output3 = new Hypercore(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
   await base.ready()

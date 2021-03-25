@@ -1,14 +1,14 @@
 const test = require('tape')
-const Omega = require('omega')
+const Hypercore = require('hypercore')
 const ram = require('random-access-memory')
 
 const { causalValues } = require('./helpers')
 const Autobase = require('..')
 
 test('batches array-valued appends using partial input nodes', async t => {
-  const writerA = new Omega(ram)
-  const writerB = new Omega(ram)
-  const writerC = new Omega(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
   await base.ready()

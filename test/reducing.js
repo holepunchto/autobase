@@ -1,15 +1,15 @@
 const test = require('tape')
-const Omega = require('omega')
+const Hypercore = require('hypercore')
 const ram = require('random-access-memory')
 
 const { indexedValues } = require('./helpers')
 const Autobase = require('..')
 
 test('rebase with stateless reducer', async t => {
-  const output = new Omega(ram)
-  const writerA = new Omega(ram)
-  const writerB = new Omega(ram)
-  const writerC = new Omega(ram)
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
 
@@ -38,10 +38,10 @@ test('rebase with stateless reducer', async t => {
 })
 
 test('rebase with stateful reducer, reinitializes state correctly', async t => {
-  const output = new Omega(ram)
-  const writerA = new Omega(ram)
-  const writerB = new Omega(ram)
-  const writerC = new Omega(ram)
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
 
   const base = new Autobase([writerA, writerB, writerC])
 
