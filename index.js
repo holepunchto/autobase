@@ -1,6 +1,8 @@
 const { EventEmitter } = require('events')
+
 const streamx = require('streamx')
 const lock = require('mutexify/promise')
+const cenc = require('compact-encoding')
 const codecs = require('codecs')
 const { toPromises } = require('hypercore-promisifier')
 
@@ -170,7 +172,7 @@ module.exports = class Autobase extends EventEmitter {
     links = linksToMap(links)
     try {
       if (!input.length) {
-        await input.append(Header.fullEncode({
+        await input.append(cenc.encode(Header, {
           protocol: INPUT_TYPE
         }))
       }
