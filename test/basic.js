@@ -116,3 +116,5 @@ test('dynamically adding a new input', async t => {
 
   t.end()
 })
+
+// TODO: Add a test case that links directly to the links of a previous input node.
