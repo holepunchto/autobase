@@ -171,7 +171,9 @@ module.exports = class AutobaseCore {
 
     const rebasers = []
     for (const index of indexes) {
-      const view = await StableIndexView.from(index, opts)
+      const view = (index instanceof StableIndexView)
+        ? index
+        : await StableIndexView.from(index, opts)
       rebasers.push(new Rebaser(view, opts))
     }
 
@@ -197,8 +199,11 @@ module.exports = class AutobaseCore {
   async rebaseInto (index, opts = {}) {
     await Promise.all([this.ready(), index.ready()])
 
-    const view = await StableIndexView.from(index, opts)
-    const rebaser = new Rebaser(view, opts)
+    index = (index instanceof StableIndexView)
+      ? index
+      : await StableIndexView.from(index, opts)
+
+    const rebaser = new Rebaser(index, opts)
 
     for await (const inputNode of this.createCausalStream(opts)) {
       if (await rebaser.update(inputNode)) break

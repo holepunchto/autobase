@@ -2,16 +2,16 @@ const test = require('tape')
 const Hypercore = require('hypercore-x')
 const ram = require('random-access-memory')
 
-const { indexedValues } = require('./helpers')
-const Autobase = require('..')
+const { indexedValues } = require('../helpers')
+const AutobaseCore = require('../../core')
 
-test('rebase with stateless reducer', async t => {
+test('map with stateless mapper', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
+  const base = new AutobaseCore([writerA, writerB, writerC])
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -26,7 +26,7 @@ test('rebase with stateless reducer', async t => {
 
   {
     await base.rebaseInto(output, {
-      reduce: function (indexNode) {
+      map: function (indexNode) {
         return Buffer.from(indexNode.node.value.toString('utf-8').toUpperCase(), 'utf-8')
       }
     })
@@ -37,13 +37,14 @@ test('rebase with stateless reducer', async t => {
   t.end()
 })
 
-test('rebase with stateful reducer, reinitializes state correctly', async t => {
+// TODO: Do we still need a state reinitialization test with the StableIndexView?
+test.skip('rebase with stateful mapper, reinitializes state correctly', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
+  const base = new AutobaseCore([writerA, writerB, writerC])
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -102,6 +103,39 @@ test('rebase with stateful reducer, reinitializes state correctly', async t => {
     t.same(indexed.map(v => v.value), ['B2', 'B1', 'B0', 'A3', 'A2', 'A1', 'A0', 'C4', 'C3', 'C2', 'C1', 'C0'])
     t.same(reinitialized, 2)
   }
+
+  t.end()
+})
+
+test('stateful mapper', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new AutobaseCore([writerA, writerB, writerC])
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(writerA, `a${i}`, await base.latest(writerA))
+  }
+  for (let i = 0; i < 3; i++) {
+    await base.append(writerB, `b${i}`, await base.latest(writerB))
+  }
+  for (let i = 0; i < 5; i++) {
+    await base.append(writerC, `c${i}`, await base.latest(writerC))
+  }
+
+  let state = 0
+  function statefulMapper (indexNode) {
+    return Buffer.from(indexNode.node.value.toString('utf-8').toUpperCase() + '-' + state++, 'utf-8')
+  }
+
+  await base.rebaseInto(output, {
+    map: statefulMapper
+  })
+  const indexed = await indexedValues(base, output)
+  console.log('indexed:', indexed)
 
   t.end()
 })
