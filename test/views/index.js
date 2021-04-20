@@ -2,9 +2,9 @@ const test = require('tape')
 const Hypercore = require('hypercore-x')
 const ram = require('random-access-memory')
 
-const MemoryView = require('../lib/views/memory')
+const MemoryView = require('../../lib/views/memory')
 
-test('simple memory view', async t => {
+test.skip('simple memory view', async t => {
   t.plan(9)
 
   const core = new Hypercore(ram, { valueEncoding: 'utf-8' })

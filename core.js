@@ -4,11 +4,12 @@ const cenc = require('compact-encoding')
 const codecs = require('codecs')
 
 const Rebaser = require('./lib/rebaser')
-const StableIndexView = require('./lib/views/stable-index')
+const MemoryView = require('./lib/views/memory')
 const { InputNode, IndexNode } = require('./lib/nodes')
 const { Header } = require('./lib/messages')
 
 const INPUT_TYPE = '@autobase/input'
+const INDEX_TYPE = '@autobase/index'
 
 module.exports = class AutobaseCore {
   constructor (inputs) {
@@ -36,6 +37,10 @@ module.exports = class AutobaseCore {
 
   async _getInputNode (input, seq, opts = {}) {
     if (seq < 1) return null
+    if (typeof input === 'string') {
+      if (!this._inputsByKey.has(input)) return null
+      input = this._inputsByKey.get(input)
+    }
     try {
       const block = await input.get(seq)
       if (!block) return null
@@ -148,7 +153,6 @@ module.exports = class AutobaseCore {
     return input.append(nodes)
   }
 
-
   async append (input, value, links) {
     const release = await this._lock()
     await this.ready()
@@ -166,14 +170,16 @@ module.exports = class AutobaseCore {
   }
 
   async rebasedView (indexes, opts = {}) {
+    if (!Array.isArray(indexes)) indexes = [indexes]
+
     await Promise.all([this.ready(), ...indexes.map(i => i.ready())])
     await Promise.all([this.ready(), ...indexes.map(i => i.update())])
 
     const rebasers = []
     for (const index of indexes) {
-      const view = (index instanceof StableIndexView)
+      const view = (index instanceof MemoryView)
         ? index
-        : await StableIndexView.from(index, opts)
+        : await MemoryView.from(this, index)
       rebasers.push(new Rebaser(view, opts))
     }
 
@@ -190,7 +196,11 @@ module.exports = class AutobaseCore {
     await best.commit({ flush: false })
 
     return {
-      index: best.index,
+      index: await MemoryView.from(this, best.index, {
+        ...opts,
+        unwrap: !!opts.unwrap,
+        includeInputNodes: opts.includeInputNodes !== false
+      }),
       added: best.added,
       removed: best.removed
     }
@@ -199,9 +209,15 @@ module.exports = class AutobaseCore {
   async rebaseInto (index, opts = {}) {
     await Promise.all([this.ready(), index.ready()])
 
-    index = (index instanceof StableIndexView)
+    if (!index.length) {
+      await index.append(cenc.encode(Header, {
+        protocol: INDEX_TYPE
+      }))
+    }
+
+    index = (index instanceof MemoryView)
       ? index
-      : await StableIndexView.from(index, opts)
+      : await MemoryView.from(this, index)
 
     const rebaser = new Rebaser(index, opts)
 
@@ -211,41 +227,14 @@ module.exports = class AutobaseCore {
     await rebaser.commit()
 
     return {
-      index,
+      index: await MemoryView.from(this, index, {
+        ...opts,
+        unwrap: !!opts.unwrap,
+        includeInputNodes: opts.includeInputNodes !== false
+      }),
       added: rebaser.added,
       removed: rebaser.removed
     }
-  }
-
-  // TODO: Better way to do these?
-  decodeIndex (output, decodeOpts = {}) {
-    const get = async (idx, opts) => {
-      const block = await output.get(idx, {
-        ...opts,
-        valueEncoding: null
-      })
-      const decoded = IndexNode.decode(block)
-      if (decodeOpts.includeInputNodes && this._inputsByKey.has(decoded.node.id)) {
-        const input = this._inputsByKey.get(decoded.node.id)
-        const inputNode = await this._getInputNode(input, decoded.node.seq)
-        inputNode.key = decoded.node.key
-        inputNode.seq = decoded.node.seq
-        decoded.node = inputNode
-      }
-      if (!decodeOpts.unwrap) return decoded
-      let val = decoded.value || decoded.node.value
-      if (opts && opts.valueEncoding) {
-        if (opts.valueEncoding.decode) val = opts.valueEncoding.decode(val)
-        else val = codecs(opts.valueEncoding).decode(val)
-      }
-      return val
-    }
-    return new Proxy(output, {
-      get (target, prop) {
-        if (prop === 'get') return get
-        return target[prop]
-      }
-    })
   }
 
   decodeInput (input, decodeOpts = {}) {

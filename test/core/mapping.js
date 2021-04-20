@@ -25,12 +25,12 @@ test('map with stateless mapper', async t => {
   }
 
   {
-    await base.rebaseInto(output, {
+    const { index } = await base.rebaseInto(output, {
       map: function (indexNode) {
         return Buffer.from(indexNode.node.value.toString('utf-8').toUpperCase(), 'utf-8')
       }
     })
-    const indexed = await indexedValues(base, output)
+    const indexed = await indexedValues(index)
     t.same(indexed.map(v => v.value), ['A0', 'B1', 'B0', 'C2', 'C1', 'C0'])
   }
 
@@ -107,7 +107,7 @@ test.skip('rebase with stateful mapper, reinitializes state correctly', async t 
   t.end()
 })
 
-test('stateful mapper', async t => {
+test.skip('stateful mapper', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)

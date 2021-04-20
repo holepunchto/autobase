@@ -1,7 +1,6 @@
-const cenc = require('compact-encoding')
-
 const AutobaseCore = require('./core')
 const { Manifest, User } = require('./lib/manifest')
+const MemoryView = require('./lib/views/memory')
 
 const INPUT_NAME = '@autobase/input'
 const INDEX_NAME = '@autobase/output'
@@ -35,38 +34,22 @@ module.exports = class Autobase {
     this._opening = null
   }
 
-  async _refresh (opts = {}) {
-    opts = {
-      ...opts,
-      includeInputNodes: true,
-      unwrap: false,
-      map: opts.apply
-    }
+  async _refresh (view, opts = {}) {
+    opts = { ...opts, map: opts.apply }
     const rebasePromise = this._localIndex
-      ? this._base.rebaseInto(this._localIndex, opts)
-      : this._base.rebasedView(this._indexes, opts)
+      ? this._base.rebaseInto(view || this._localIndex, opts)
+      : this._base.rebasedView(view || this._indexes, opts)
     const { index } = await rebasePromise
     return index
   }
 
-  createIndex (opts = {}) {
-    let currentView = null
-    const update = async (...args) => {
-      currentView = await this._refresh(opts)
-      return currentView.update(...args)
-    }
-    const get = (...args) => {
-      if (!currentView) return null
-      return currentView.get(...args)
-    }
-    const proxy = new Proxy(currentView, {
-      get (target, prop) {
-        if (prop === 'update') return update
-        if (prop === 'get') return get
-        return target[prop]
-      }
+  async createIndex (opts = {}) {
+    const view = await MemoryView.from(this._base, this._localIndex, {
+      unwrap: true,
+      includeInputNodes: true,
+      onupdate: () => this._refresh(view, opts)
     })
-    return proxy
+    return view
   }
 
   async append (value, links) {
@@ -85,12 +68,6 @@ module.exports = class Autobase {
     const id = await store.immutable.put(User.deflate(user))
     return { user, id }
   }
-
-  static async create (store, users, opts = {}) {
-    const manifest = [
-      ...users,
-    ]
-  }
 }
 
-function noop () {}
+function noop () { }

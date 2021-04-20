@@ -6,12 +6,8 @@ async function causalValues (base) {
   return buf
 }
 
-async function indexedValues (base, output, opts = {}) {
+async function indexedValues (index) {
   const buf = []
-  const index = base.decodeIndex(output, {
-    includeInputNodes: true,
-    ...opts
-  })
   for (let i = index.length - 1; i > 0; i--) {
     const indexNode = await index.get(i)
     buf.push(debugIndexNode(indexNode))
