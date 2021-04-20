@@ -1,5 +1,5 @@
 const test = require('tape')
-const Hypercore = require('hypercore')
+const Hypercore = require('hypercore-x')
 const ram = require('random-access-memory')
 
 const { indexedValues } = require('./helpers')
