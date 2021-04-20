@@ -23,13 +23,12 @@ module.exports = class Autobase {
   }
 
   async _open () {
-    this.manifest = await inflateManifest(this.store, this.manifest)
-    this.local = await inflateUser(this.store, this.local)
+    this.manifest = Manifest.inflate(this.store, this.manifest)
+    this.local = Manifest.inflate(this.store, this.local)
 
-    this._writers = this.manifest.writers
+    this._writers = this.manifest.filter(u => !!u.input)
+    this._indexes = this.manifest.filter(u => !!u.index)
     this._localInput = this.local.input
-
-    this._indexes = this.manifest.indexes
     this._localIndex = this.local.index
 
     this._base = new AutobaseCore(this._inputs)

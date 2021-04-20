@@ -2,15 +2,15 @@ const test = require('tape')
 const Hypercore = require('hypercore-x')
 const ram = require('random-access-memory')
 
-const { causalValues } = require('./helpers')
-const Autobase = require('..')
+const { causalValues } = require('../helpers')
+const AutobaseCore = require('../../core')
 
 test('batches array-valued appends using partial input nodes', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
+  const base = new AutobaseCore([writerA, writerB, writerC])
   await base.ready()
 
   // Create three dependent forks

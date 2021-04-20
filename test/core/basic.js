@@ -2,15 +2,15 @@ const test = require('tape')
 const Hypercore = require('hypercore-x')
 const ram = require('random-access-memory')
 
-const { causalValues } = require('./helpers')
-const Autobase = require('..')
+const { causalValues } = require('../helpers')
+const AutobaseCore = require('../../core')
 
 test('linearizes short branches on long branches', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
+  const base = new AutobaseCore([writerA, writerB, writerC])
   await base.ready()
 
   // Create three independent forks
@@ -47,7 +47,7 @@ test('causal writes', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
+  const base = new AutobaseCore([writerA, writerB, writerC])
   await base.ready()
 
   // Create three independent forks
@@ -83,7 +83,7 @@ test('manually specifying links', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB])
+  const base = new AutobaseCore([writerA, writerB])
   await base.ready()
 
   await base.append(writerA, 'a0')
@@ -96,23 +96,6 @@ test('manually specifying links', async t => {
 
   const output = await causalValues(base)
   t.same(output.map(v => v.value), ['b2', 'b1', 'b0', 'a1', 'a0'])
-
-  t.end()
-})
-
-test('dynamically adding a new input', async t => {
-  const writerA = new Hypercore(ram)
-  const writerB = new Hypercore(ram)
-
-  const base = new Autobase([writerA])
-  await base.ready()
-
-  await base.append(writerA, 'a0')
-  await base.addInput(writerB)
-  await base.append(writerB, 'b0', await base.latest(writerA))
-
-  const output = await causalValues(base)
-  t.same(output.map(v => v.value), ['b0', 'a0'])
 
   t.end()
 })

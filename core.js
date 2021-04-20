@@ -1,0 +1,322 @@
+const streamx = require('streamx')
+const lock = require('mutexify/promise')
+const cenc = require('compact-encoding')
+const codecs = require('codecs')
+
+const Rebaser = require('./lib/rebaser')
+const StableIndexView = require('./lib/views/stable-index')
+const { InputNode, IndexNode } = require('./lib/nodes')
+const { Header } = require('./lib/messages')
+
+const INPUT_TYPE = '@autobase/input'
+
+module.exports = class AutobaseCore {
+  constructor (inputs) {
+    this.inputs = inputs
+
+    this._lock = lock()
+    this._inputsByKey = null
+    this._readyProm = null
+
+    this.ready()
+  }
+
+  async _ready () {
+    await Promise.all(this.inputs.map(i => i.ready()))
+    this._inputsByKey = new Map(this.inputs.map(i => [i.key.toString('hex'), i]))
+  }
+
+  async ready () {
+    if (this._readyProm) return this._readyProm
+    this._readyProm = this._ready()
+    return this._readyProm
+  }
+
+  // Private Methods
+
+  async _getInputNode (input, seq, opts = {}) {
+    if (seq < 1) return null
+    try {
+      const block = await input.get(seq)
+      if (!block) return null
+      const node = InputNode.decode(block, { key: input.key, seq })
+      if (node.batch && !opts.allowPartial) {
+        let batchEnd = node
+        while (++seq < input.length) {
+          const next = await this._getInputNode(input, seq, { allowPartial: true })
+          if (next.batch === node.batch) {
+            batchEnd = next
+            continue
+          }
+          break
+        }
+        node.links = batchEnd.links
+        if (node.seq > 1) node.links.set(node.id, node.seq - 1)
+        else node.links.delete(node.id)
+      }
+      return node
+    } catch (_) {
+      // Decoding errors should be discarded.
+      return null
+    }
+  }
+
+  // Public API
+
+  async heads () {
+    await this.ready()
+    await Promise.all(this.inputs.map(i => i.update()))
+    return Promise.all(this.inputs.map(i => this._getInputNode(i, i.length - 1)))
+  }
+
+  async latest (inputs) {
+    await this.ready()
+    if (!inputs) inputs = []
+    else inputs = Array.isArray(inputs) ? inputs : [inputs]
+    inputs = new Set(inputs.map(i => i.key.toString('hex')))
+
+    const heads = await this.heads()
+    const links = new Map()
+
+    for (const head of heads) {
+      if (!head) continue
+      if (inputs.size && !inputs.has(head.id)) continue
+      links.set(head.id, this._inputsByKey.get(head.id).length - 1)
+    }
+    return links
+  }
+
+  createCausalStream (opts = {}) {
+    const self = this
+    let heads = null
+
+    const nextNode = async (input, seq) => {
+      if (seq === 0) return null
+      return this._getInputNode(input, seq - 1)
+    }
+
+    return new streamx.Readable({
+      open (cb) {
+        self.heads()
+          .then(h => { heads = h })
+          .then(() => cb(null), err => cb(err))
+      },
+      read (cb) {
+        const { forks, clock, smallest } = forkInfo(heads)
+
+        if (!forks.length) {
+          this.push(null)
+          return cb(null)
+        }
+
+        const node = forks[smallest]
+        const forkIndex = heads.indexOf(node)
+        this.push(new IndexNode({ node, clock }))
+
+        nextNode(self._inputsByKey.get(node.id), node.seq).then(next => {
+          if (next) heads[forkIndex] = next
+          else heads.splice(forkIndex, 1)
+          return cb(null)
+        }, err => cb(err))
+      }
+    })
+  }
+
+  async _append (input, value, links) {
+    const head = await this._getInputNode(input, input.length - 1)
+
+    // Make sure that causal information propagates.
+    // TODO: This should use an embedded index in the future.
+    if (head && head.links) {
+      const inputId = input.key.toString('hex')
+      for (const [id, length] of head.links) {
+        if (id === inputId || links.has(id)) continue
+        links.set(id, length)
+      }
+    }
+
+    if (!Array.isArray(value)) return input.append(InputNode.encode({ key: input.key, value, links }))
+
+    const nodes = []
+    const batchId = input.length
+    for (let i = 0; i < value.length; i++) {
+      const node = { key: input.key, value: value[i], batch: batchId }
+      if (i === value.length - 1) node.links = links
+      nodes.push(InputNode.encode(node))
+    }
+
+    return input.append(nodes)
+  }
+
+
+  async append (input, value, links) {
+    const release = await this._lock()
+    await this.ready()
+    links = linksToMap(links)
+    try {
+      if (!input.length) {
+        await input.append(cenc.encode(Header, {
+          protocol: INPUT_TYPE
+        }))
+      }
+      return this._append(input, value, links)
+    } finally {
+      release()
+    }
+  }
+
+  async rebasedView (indexes, opts = {}) {
+    await Promise.all([this.ready(), ...indexes.map(i => i.ready())])
+    await Promise.all([this.ready(), ...indexes.map(i => i.update())])
+
+    const rebasers = []
+    for (const index of indexes) {
+      const view = await StableIndexView.from(index, opts)
+      rebasers.push(new Rebaser(view, opts))
+    }
+
+    let best = null
+    for await (const inputNode of this.createCausalStream(opts)) {
+      for (const rebaser of rebasers) {
+        if (!(await rebaser.update(inputNode))) continue
+        best = rebaser
+        break
+      }
+      if (best) break
+    }
+    if (!best) best = rebasers[0]
+    await best.commit({ flush: false })
+
+    return {
+      index: best.index,
+      added: best.added,
+      removed: best.removed
+    }
+  }
+
+  async rebaseInto (index, opts = {}) {
+    await Promise.all([this.ready(), index.ready()])
+
+    const view = await StableIndexView.from(index, opts)
+    const rebaser = new Rebaser(view, opts)
+
+    for await (const inputNode of this.createCausalStream(opts)) {
+      if (await rebaser.update(inputNode)) break
+    }
+    await rebaser.commit()
+
+    return {
+      index,
+      added: rebaser.added,
+      removed: rebaser.removed
+    }
+  }
+
+  // TODO: Better way to do these?
+  decodeIndex (output, decodeOpts = {}) {
+    const get = async (idx, opts) => {
+      const block = await output.get(idx, {
+        ...opts,
+        valueEncoding: null
+      })
+      const decoded = IndexNode.decode(block)
+      if (decodeOpts.includeInputNodes && this._inputsByKey.has(decoded.node.id)) {
+        const input = this._inputsByKey.get(decoded.node.id)
+        const inputNode = await this._getInputNode(input, decoded.node.seq)
+        inputNode.key = decoded.node.key
+        inputNode.seq = decoded.node.seq
+        decoded.node = inputNode
+      }
+      if (!decodeOpts.unwrap) return decoded
+      let val = decoded.value || decoded.node.value
+      if (opts && opts.valueEncoding) {
+        if (opts.valueEncoding.decode) val = opts.valueEncoding.decode(val)
+        else val = codecs(opts.valueEncoding).decode(val)
+      }
+      return val
+    }
+    return new Proxy(output, {
+      get (target, prop) {
+        if (prop === 'get') return get
+        return target[prop]
+      }
+    })
+  }
+
+  decodeInput (input, decodeOpts = {}) {
+    const get = async (idx, opts) => {
+      const decoded = await this._getInputNode(input, idx)
+      if (!decodeOpts.unwrap) return decoded
+      return decoded.value
+    }
+    return new Proxy(input, {
+      get (target, prop) {
+        if (prop === 'get') return get
+        return target[prop]
+      }
+    })
+  }
+}
+
+function isFork (head, heads) {
+  if (!head) return false
+  for (const other of heads) {
+    if (!other) continue
+    if (head.lte(other)) return false
+  }
+  return true
+}
+
+function forkSize (node, i, heads) {
+  const high = {}
+
+  for (const head of heads) {
+    if (head === node) continue
+    for (const [key, length] of head.links) {
+      if (length > (high[key] || 0)) high[key] = length
+    }
+  }
+
+  let s = 0
+
+  for (const [key, length] of node.links) {
+    const h = high[key] || 0
+    if (length > h) s += length - h
+  }
+
+  return s
+}
+
+function forkInfo (heads) {
+  const forks = []
+  const clock = new Map()
+
+  for (const head of heads) {
+    if (!head) continue
+    if (isFork(head, heads)) forks.push(head)
+    clock.set(head.id, head.seq)
+  }
+
+  const sizes = forks.map(forkSize)
+  let smallest = 0
+  for (let i = 1; i < sizes.length; i++) {
+    if (sizes[i] === sizes[smallest] && forks[i].key < forks[smallest].feed) {
+      smallest = i
+    } else if (sizes[i] < sizes[smallest]) {
+      smallest = i
+    }
+  }
+
+  return {
+    forks,
+    clock,
+    smallest
+  }
+}
+
+function linksToMap (links) {
+  if (!links) return new Map()
+  if (links instanceof Map) return links
+  if (Array.isArray(links)) return new Map(links)
+  return new Map(Object.entries(links))
+}

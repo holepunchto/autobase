@@ -2,8 +2,8 @@ const test = require('tape')
 const Hypercore = require('hypercore-x')
 const ram = require('random-access-memory')
 
-const { causalValues, indexedValues } = require('./helpers')
-const Autobase = require('..')
+const { causalValues, indexedValues } = require('../helpers')
+const AutobaseCore = require('../../core')
 
 test('simple rebase', async t => {
   const output = new Hypercore(ram)
@@ -11,7 +11,7 @@ test('simple rebase', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
+  const base = new AutobaseCore([writerA, writerB, writerC])
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -56,7 +56,7 @@ test('rebasing with causal writes preserves links', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
+  const base = new AutobaseCore([writerA, writerB, writerC])
 
   // Create three causally-linked forks
   for (let i = 0; i < 1; i++) {
@@ -94,7 +94,7 @@ test('does not over-truncate', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
+  const base = new AutobaseCore([writerA, writerB, writerC])
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -151,7 +151,7 @@ test('can cut out a writer', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
+  const base = new AutobaseCore([writerA, writerB, writerC])
   await base.ready()
 
   // Create three independent forks
@@ -175,7 +175,7 @@ test('can cut out a writer', async t => {
   }
 
   // Cut out writer B. Should truncate 3
-  const base2 = new Autobase([writerA, writerC])
+  const base2 = new AutobaseCore([writerA, writerC])
 
   {
     const result = await base2.rebaseInto(output)
@@ -195,7 +195,7 @@ test('can cut out a writer, causal writes', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
+  const base = new AutobaseCore([writerA, writerB, writerC])
   await base.ready()
 
   // Create three independent forks
@@ -219,7 +219,7 @@ test('can cut out a writer, causal writes', async t => {
   }
 
   // Cut out writer B. Should truncate 3
-  const base2 = new Autobase([writerA, writerC])
+  const base2 = new AutobaseCore([writerA, writerC])
 
   {
     const result = await base2.rebaseInto(output)
@@ -238,7 +238,7 @@ test('can cut out a writer, causal writes interleaved', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB])
+  const base = new AutobaseCore([writerA, writerB])
 
   for (let i = 0; i < 6; i++) {
     if (i % 2) {
@@ -257,7 +257,7 @@ test('can cut out a writer, causal writes interleaved', async t => {
     t.same(output.length, 7)
   }
 
-  const base2 = new Autobase([writerA])
+  const base2 = new AutobaseCore([writerA])
 
   {
     const output = await causalValues(base2)
@@ -281,13 +281,16 @@ test('many writers, no causal writes', async t => {
   const NUM_APPENDS = 11
 
   const output = new Hypercore(ram)
-  const base = new Autobase()
   const writers = []
 
   for (let i = 1; i < NUM_WRITERS + 1; i++) {
     const writer = new Hypercore(ram)
-    await base.addInput(writer)
     writers.push(writer)
+  }
+
+  const base = new AutobaseCore(writers)
+  for (let i = 1; i < NUM_WRITERS + 1; i++) {
+    const writer = writers[i - 1]
     for (let j = 0; j < i; j++) {
       await base.append(writer, `w${i}-${j}`, await base.latest(writer))
     }
@@ -328,7 +331,7 @@ test('double-rebasing is a no-op', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
+  const base = new AutobaseCore([writerA, writerB, writerC])
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -371,7 +374,7 @@ test('remote rebasing selects longest index', async t => {
   const output2 = new Hypercore(ram)
   const output3 = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
+  const base = new AutobaseCore([writerA, writerB, writerC])
   await base.ready()
 
   // Create three independent forks
