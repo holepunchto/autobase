@@ -179,7 +179,7 @@ module.exports = class AutobaseCore {
     for (const index of indexes) {
       const view = (index instanceof MemoryView)
         ? index
-        : await MemoryView.from(this, index)
+        : new MemoryView(this, index)
       rebasers.push(new Rebaser(view, opts))
     }
 
@@ -196,8 +196,9 @@ module.exports = class AutobaseCore {
     await best.commit({ flush: false })
 
     return {
-      index: await MemoryView.from(this, best.index, {
+      index: new MemoryView(this, best.index, {
         ...opts,
+        readonly: true,
         unwrap: !!opts.unwrap,
         includeInputNodes: opts.includeInputNodes !== false
       }),
@@ -209,15 +210,14 @@ module.exports = class AutobaseCore {
   async rebaseInto (index, opts = {}) {
     await Promise.all([this.ready(), index.ready()])
 
-    if (!index.length) {
-      await index.append(cenc.encode(Header, {
-        protocol: INDEX_TYPE
-      }))
+    if (!(index instanceof MemoryView)) {
+      if (!index.length) {
+        await index.append(cenc.encode(Header, {
+          protocol: INDEX_TYPE
+        }))
+      }
+      index = new MemoryView(this, index)
     }
-
-    index = (index instanceof MemoryView)
-      ? index
-      : await MemoryView.from(this, index)
 
     const rebaser = new Rebaser(index, opts)
 
@@ -227,8 +227,9 @@ module.exports = class AutobaseCore {
     await rebaser.commit()
 
     return {
-      index: await MemoryView.from(this, index, {
+      index: new MemoryView(this, index, {
         ...opts,
+        readonly: true,
         unwrap: !!opts.unwrap,
         includeInputNodes: opts.includeInputNodes !== false
       }),
