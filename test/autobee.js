@@ -11,7 +11,6 @@ class Autobee {
     this.autobase = new Autobase(corestore, manifest, local)
     this.opts = opts
 
-    this.output = null // Set in _open
     this.bee = null // Set in _open
 
     this._opening = this._open()
@@ -21,31 +20,29 @@ class Autobee {
 
   async _open () {
     await this.autobase.ready()
-    this.output = this.autobase.createIndex({
+    const index = await this.autobase.createIndex({
       apply: this._apply.bind(this)
     })
-    this.bee = new Hyperbee(this.output, {
+    this.bee = new Hyperbee(index, {
       ...this.opts,
-      extension: false,
-      readonly: true
+      extension: false
     })
   }
 
-  _encodeOp (op) {
-    return Buffer.from(JSON.stringify(op))
-  }
-
-  _decodeOp (raw) {
-    return JSON.parse(raw.toString())
-  }
-
-  _apply (node) {
-    console.log('APPLYING NODES:', nodes)
+  async _apply (indexNodes) {
+    if (!Array.isArray(indexNodes)) indexNodes = [indexNodes]
+    const ops = indexNodes.map(indexNode => JSON.parse(indexNode.node.value.toString()))
+    const b = this.bee.batch()
+    for (const op of ops) {
+      if (op.type === 'put') await b.put(op.key, op.value)
+    }
+    await b.flush()
   }
 
   async put (key, value) {
     if (this._opening) await this._opening
-    return this.autobase.append(this._encodeOp({ type: 'put', key, value }))
+    const op = Buffer.from(JSON.stringify({ type: 'put', key, value }))
+    return this.autobase.append(op)
   }
 
   async get (key) {
@@ -62,8 +59,6 @@ test('simple autobee', async t => {
 
   const { user: firstUser } = await Autobase.createUser(store1)
   const { user: secondUser } = await Autobase.createUser(store2)
-  console.log('first user:', firstUser)
-  console.log('second user:', secondUser)
   const manifest = [firstUser, secondUser]
 
   const bee1 = new Autobee(store1, manifest, firstUser, {

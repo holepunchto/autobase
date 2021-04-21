@@ -59,21 +59,29 @@ module.exports = class Autobase {
     this._opening = null
   }
 
-  async _refresh (view, opts = {}) {
-    opts = { ...opts, map: opts.apply }
+  async _refresh (opts = {}) {
     const rebasePromise = this._localIndex
-      ? this._base.rebaseInto(view || this._localIndex, opts)
-      : this._base.rebasedView(view || this._indexes, opts)
+      ? this._base.rebaseInto(opts.view || this._localIndex, opts)
+      : this._base.rebasedView(opts.view || this._indexes, opts)
     const result = await rebasePromise
     return result.index
   }
 
-  createIndex (opts = {}) {
+  async createIndex (opts = {}) {
+    await this._refresh(opts)
+    let refreshing = false
     const view = new MemoryView(this._base, this._localIndex, {
-      readonly: true,
       unwrap: true,
       includeInputNodes: true,
-      onupdate: () => this._refresh(view, opts)
+      onupdate: async () => {
+        if (refreshing) return
+        refreshing = true
+        try {
+          await this._refresh({ ...opts, view })
+        } finally {
+          refreshing = false
+        }
+      }
     })
     return view
   }
