@@ -1,7 +1,6 @@
 const streamx = require('streamx')
 const lock = require('mutexify/promise')
 const cenc = require('compact-encoding')
-const codecs = require('codecs')
 
 const Rebaser = require('./lib/rebaser')
 const MemoryView = require('./lib/views/memory')

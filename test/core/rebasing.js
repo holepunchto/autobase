@@ -336,7 +336,7 @@ test('double-rebasing is a no-op', async t => {
     await base.append(writerB, `b${i}`, await base.latest(writerB))
   }
   for (let i = 0; i < 3; i++) {
-    await base.append(writerC, `c${i}`, await base. latest(writerC))
+    await base.append(writerC, `c${i}`, await base.latest(writerC))
   }
 
   {

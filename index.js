@@ -1,5 +1,5 @@
 const AutobaseCore = require('./core')
-const { Manifest, User } = require('./lib/manifest')
+const { Manifest } = require('./lib/manifest')
 const MemoryView = require('./lib/views/memory')
 
 const INPUT_NAME = '@autobase/input'

@@ -32,11 +32,13 @@ class Autobee {
   async _apply ({ node }) {
     const op = JSON.parse(node.value.toString())
     const b = this.bee.batch()
+
     const process = async op => {
       if (op.type === 'put') await b.put(op.key, op.value)
     }
     if (Array.isArray(op)) await Promise.all(op.map(process))
     else await process(op)
+
     await b.flush()
   }
 
