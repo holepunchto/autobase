@@ -27,9 +27,9 @@ module.exports = class Autobase {
     this.manifest = Manifest.inflate(this.store, this.manifest)
     this._inputs = []
     this._indexes = []
+
     const indexes = new Set()
     const inputs = new Set()
-
     for (const { input, index } of this.manifest) {
       if (input) {
         this._inputs.push(input)

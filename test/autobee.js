@@ -1,58 +1,10 @@
 const test = require('tape')
-const Hyperbee = require('hyperbee')
-const Corestore = require('corestore')
 const ram = require('random-access-memory')
+const Corestore = require('corestore')
 
 const { Manifest, User } = require('../lib/manifest')
+const Autobee = require('../examples/autobee')
 const Autobase = require('..')
-
-class Autobee {
-  constructor (corestore, manifest, local, opts) {
-    this.autobase = new Autobase(corestore, manifest, local)
-    this.opts = opts
-
-    this.bee = null // Set in _open
-
-    this._opening = this._open()
-    this._opening.catch(noop)
-    this.ready = () => this._opening
-  }
-
-  async _open () {
-    await this.autobase.ready()
-    const index = await this.autobase.createIndex({
-      apply: this._apply.bind(this)
-    })
-    this.bee = new Hyperbee(index, {
-      ...this.opts,
-      extension: false
-    })
-  }
-
-  async _apply ({ node }) {
-    const op = JSON.parse(node.value.toString())
-    const b = this.bee.batch()
-
-    const process = async op => {
-      if (op.type === 'put') await b.put(op.key, op.value)
-    }
-    if (Array.isArray(op)) await Promise.all(op.map(process))
-    else await process(op)
-
-    await b.flush()
-  }
-
-  async put (key, value) {
-    if (this._opening) await this._opening
-    const op = Buffer.from(JSON.stringify({ type: 'put', key, value }))
-    return this.autobase.append(op)
-  }
-
-  async get (key) {
-    if (this._opening) await this._opening
-    return this.bee.get(key)
-  }
-}
 
 test('simple autobee', async t => {
   const store1 = await Corestore.fromStorage(ram)
@@ -98,5 +50,3 @@ function replicate (store1, store2) {
   const s2 = store2.replicate(false)
   s1.pipe(s2).pipe(s1)
 }
-
-function noop () {}
