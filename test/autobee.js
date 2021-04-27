@@ -20,12 +20,11 @@ test('simple autobee', async t => {
     keyEncoding: 'utf-8',
     valueEncoding: 'utf-8'
   })
+  // Initialize from deflated manifest/user to simulate deserialization.
   const bee2 = new Autobee(store2, Manifest.deflate(manifest), User.deflate(secondUser), {
     keyEncoding: 'utf-8',
     valueEncoding: 'utf-8'
   })
-  await bee1.ready()
-  await bee2.ready()
 
   await bee1.put('a', 'b')
   await bee2.put('c', 'd')

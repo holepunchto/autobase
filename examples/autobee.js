@@ -51,4 +51,3 @@ module.exports = class Autobee {
 }
 
 function noop () {}
-

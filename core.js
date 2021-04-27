@@ -171,7 +171,6 @@ module.exports = class AutobaseCore {
   async rebasedView (indexes, opts = {}) {
     if (!Array.isArray(indexes)) indexes = [indexes]
 
-    await Promise.all([this.ready(), ...indexes.map(i => i.ready())])
     await Promise.all([this.ready(), ...indexes.map(i => i.update())])
 
     const rebasers = []

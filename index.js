@@ -1,9 +1,9 @@
 const AutobaseCore = require('./core')
-const { Manifest } = require('./lib/manifest')
 const MemoryView = require('./lib/views/memory')
+const { Manifest } = require('./lib/manifest')
 
 const INPUT_NAME = '@autobase/input'
-const INDEX_NAME = '@autobase/output'
+const INDEX_NAME = '@autobase/index'
 
 const TOKEN = Buffer.from('46d08fc8fa0344bd5d6a09d5e119584e31c553812ea506e5e56bd0d41e9eb0e2', 'hex')
 
