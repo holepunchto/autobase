@@ -16,20 +16,16 @@ module.exports = class AutobaseCore {
 
     this._lock = lock()
     this._inputsByKey = null
-    this._readyProm = null
 
-    this.ready()
+    this._opening = this._open()
+    this._opening.catch(noop)
+    this.ready = () => this._opening
   }
 
-  async _ready () {
+  async _open () {
     await Promise.all(this.inputs.map(i => i.ready()))
     this._inputsByKey = new Map(this.inputs.map(i => [i.key.toString('hex'), i]))
-  }
-
-  async ready () {
-    if (this._readyProm) return this._readyProm
-    this._readyProm = this._ready()
-    return this._readyProm
+    this._opening = null
   }
 
   // Private Methods
@@ -40,29 +36,32 @@ module.exports = class AutobaseCore {
       if (!this._inputsByKey.has(input)) return null
       input = this._inputsByKey.get(input)
     }
+    const block = await input.get(seq)
+    if (!block) return null
+
+    let node = null
     try {
-      const block = await input.get(seq)
-      if (!block) return null
-      const node = InputNode.decode(block, { key: input.key, seq })
-      if (node.batch && !opts.allowPartial) {
-        let batchEnd = node
-        while (++seq < input.length) {
-          const next = await this._getInputNode(input, seq, { allowPartial: true })
-          if (next.batch === node.batch) {
-            batchEnd = next
-            continue
-          }
-          break
-        }
-        node.links = batchEnd.links
-        if (node.seq > 1) node.links.set(node.id, node.seq - 1)
-        else node.links.delete(node.id)
-      }
-      return node
-    } catch (_) {
+      node = InputNode.decode(block, { key: input.key, seq })
+    } catch {
       // Decoding errors should be discarded.
       return null
     }
+    if (!node.batch || opts.allowPartial) return node
+
+    let batchEnd = node
+    while (++seq < input.length) {
+      const next = await this._getInputNode(input, seq, { allowPartial: true })
+      if (next.batch === node.batch) {
+        batchEnd = next
+        continue
+      }
+      break
+    }
+    node.links = batchEnd.links
+    if (node.seq > 1) node.links.set(node.id, node.seq - 1)
+    else node.links.delete(node.id)
+
+    return node
   }
 
   // Public API
@@ -313,3 +312,5 @@ function linksToMap (links) {
   if (Array.isArray(links)) return new Map(links)
   return new Map(Object.entries(links))
 }
+
+function noop () {}
