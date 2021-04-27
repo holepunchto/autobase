@@ -36,13 +36,14 @@ module.exports = class AutobaseCore {
       if (!this._inputsByKey.has(input)) return null
       input = this._inputsByKey.get(input)
     }
+
     const block = await input.get(seq)
     if (!block) return null
 
     let node = null
     try {
       node = InputNode.decode(block, { key: input.key, seq })
-    } catch {
+    } catch (_) {
       // Decoding errors should be discarded.
       return null
     }
@@ -93,36 +94,36 @@ module.exports = class AutobaseCore {
     const self = this
     let heads = null
 
-    const nextNode = async (input, seq) => {
-      if (seq === 0) return null
-      return this._getInputNode(input, seq - 1)
+    const open = function (cb) {
+      self.heads()
+        .then(h => { heads = h })
+        .then(() => cb(null), err => cb(err))
     }
 
-    return new streamx.Readable({
-      open (cb) {
-        self.heads()
-          .then(h => { heads = h })
-          .then(() => cb(null), err => cb(err))
-      },
-      read (cb) {
-        const { forks, clock, smallest } = forkInfo(heads)
+    const read = function (cb) {
+      const { forks, clock, smallest } = forkInfo(heads)
 
-        if (!forks.length) {
-          this.push(null)
-          return cb(null)
-        }
-
-        const node = forks[smallest]
-        const forkIndex = heads.indexOf(node)
-        this.push(new IndexNode({ node, clock }))
-
-        nextNode(self._inputsByKey.get(node.id), node.seq).then(next => {
-          if (next) heads[forkIndex] = next
-          else heads.splice(forkIndex, 1)
-          return cb(null)
-        }, err => cb(err))
+      if (!forks.length) {
+        this.push(null)
+        return cb(null)
       }
-    })
+
+      const node = forks[smallest]
+      const forkIndex = heads.indexOf(node)
+      this.push(new IndexNode({ node, clock }))
+
+      if (node.seq <= 0) {
+        heads.splice(forkIndex, 1)
+        return cb(null)
+      }
+
+      self._getInputNode(node.id, node.seq - 1).then(next => {
+        heads[forkIndex] = next
+        return cb(null)
+      }, err => cb(err))
+    }
+
+    return new streamx.Readable({ open, read })
   }
 
   async _append (input, value, links) {
