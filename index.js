@@ -47,10 +47,12 @@ module.exports = class Autobase {
     await this._localIndex.ready()
 
     if (!inputs.has(this._localInput.key.toString('hex'))) {
+      console.log('CLOSING LOCAL INPUT')
       await this._localInput.close()
       this._localInput = null
     }
     if (!indexes.has(this._localIndex.key.toString('hex'))) {
+      console.log('CLOSING LOCAL INDEX')
       await this._localIndex.close()
       this._localIndex = null
     }
@@ -59,31 +61,43 @@ module.exports = class Autobase {
     this._opening = null
   }
 
-  async _refresh (opts = {}) {
+  async refresh (opts = {}) {
+    if (this._opening) await this._opening
     const rebasePromise = this._localIndex
-      ? this._base.rebaseInto(opts.view || this._localIndex, opts)
-      : this._base.rebasedView(opts.view || this._indexes, opts)
+      ? this._base.rebaseInto(this._localIndex, opts)
+      : this._base.rebasedView(this._indexes, opts)
     const result = await rebasePromise
+    console.log('REFRESH RESULT:', { added: result.added, removed: result.removed })
     return result.index
   }
 
-  async createIndex (opts = {}) {
-    await this._refresh(opts)
+  createIndex (opts = {}) {
     let refreshing = false
-    const view = new MemoryView(this._base, this._localIndex, {
+    let view = null
+
+    const asyncOpen = async () => {
+      await this._opening
+      view = await this.refresh({ ...opts })
+      return {
+        base: this._base,
+        core: view
+      }
+    }
+
+    return new MemoryView(null, null, {
+      asyncOpen,
       unwrap: true,
       includeInputNodes: true,
       onupdate: async () => {
         if (refreshing) return
         refreshing = true
         try {
-          await this._refresh({ ...opts, view })
+          await this.refresh({ ...opts, view })
         } finally {
           refreshing = false
         }
       }
     })
-    return view
   }
 
   async append (value, links) {

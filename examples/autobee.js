@@ -1,28 +1,44 @@
 const Hyperbee = require('hyperbee')
+const HyperbeeExtension = require('hyperbee/lib/extension')
 
 const Autobase = require('..')
 
-module.exports = class Autobee {
-  constructor (corestore, manifest, local, opts) {
-    this.autobase = new Autobase(corestore, manifest, local)
-    this.opts = opts
+class AutobeeExtension extends HyperbeeExtension {
+  constructor (view) {
+    super()
+    this.view = view
+  }
 
-    this.bee = null // Set in _open
+  get (version, key) {
+    return super.get(this.view.indexLength, key)
+  }
+}
+
+module.exports = class Autobee {
+  constructor (corestore, manifest, local, opts = {}) {
+    this.autobase = new Autobase(corestore, manifest, local)
+
+    const index = this.autobase.createIndex({
+      apply: this._apply.bind(this)
+    })
+    let ext = null
+    if (opts.extension !== false) {
+      ext = new AutobeeExtension(index)
+      index.registerExtension('hyperbee', ext)
+    }
+    this.bee = new Hyperbee(index, {
+      ...opts,
+      extension: ext
+    })
+    if (ext) ext.db = this.bee
 
     this._opening = this._open()
     this._opening.catch(noop)
     this.ready = () => this._opening
   }
 
-  async _open () {
-    await this.autobase.ready()
-    const index = await this.autobase.createIndex({
-      apply: this._apply.bind(this)
-    })
-    this.bee = new Hyperbee(index, {
-      ...this.opts,
-      extension: false
-    })
+  _open () {
+    return this.autobase.ready()
   }
 
   async _apply ({ node }) {
@@ -39,14 +55,20 @@ module.exports = class Autobee {
   }
 
   async put (key, value) {
-    if (this._opening) await this._opening
     const op = Buffer.from(JSON.stringify({ type: 'put', key, value }))
     return this.autobase.append(op)
   }
 
   async get (key) {
-    if (this._opening) await this._opening
     return this.bee.get(key)
+  }
+
+  createReadStream (...args) {
+    return this.bee.createReadStream(...args)
+  }
+
+  refresh (...args) {
+    return this.autobase.refresh(...args)
   }
 }
 

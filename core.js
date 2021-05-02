@@ -174,11 +174,15 @@ module.exports = class AutobaseCore {
     await Promise.all([this.ready(), ...indexes.map(i => i.update())])
 
     const rebasers = []
-    for (const index of indexes) {
-      const view = (index instanceof MemoryView)
-        ? index
-        : new MemoryView(this, index)
-      rebasers.push(new Rebaser(view, opts))
+    if (!opts.view) {
+      for (const index of indexes) {
+        const view = (index instanceof MemoryView)
+          ? index
+          : new MemoryView(this, index)
+        rebasers.push(new Rebaser(view, opts))
+      }
+    } else {
+      rebasers.push(new Rebaser(opts.view, opts))
     }
 
     let best = null
@@ -190,22 +194,19 @@ module.exports = class AutobaseCore {
       }
       if (best) break
     }
+
     if (!best) best = rebasers[0]
     await best.commit({ flush: false })
 
     return {
-      index: new MemoryView(this, best.index, {
-        ...opts,
-        readonly: true,
-        unwrap: !!opts.unwrap,
-        includeInputNodes: opts.includeInputNodes !== false
-      }),
+      index: best.index,
       added: best.added,
       removed: best.removed
     }
   }
 
   async rebaseInto (index, opts = {}) {
+    if (!index && opts.view) index = opts.view
     await Promise.all([this.ready(), index.ready()])
 
     if (!(index instanceof MemoryView)) {
