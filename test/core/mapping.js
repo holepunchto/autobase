@@ -25,12 +25,12 @@ test('map with stateless mapper', async t => {
   }
 
   {
-    const { index } = await base.rebaseInto(output, {
-      map: function (indexNode) {
-        return Buffer.from(indexNode.node.value.toString('utf-8').toUpperCase(), 'utf-8')
+    const rebased = await base.rebaseInto(output, {
+      apply: function (indexNode, index) {
+        return index.append(Buffer.from(indexNode.node.value.toString('utf-8').toUpperCase(), 'utf-8'))
       }
     })
-    const indexed = await indexedValues(index)
+    const indexed = await indexedValues(rebased)
     t.same(indexed.map(v => v.value), ['A0', 'B1', 'B0', 'C2', 'C1', 'C0'])
   }
 

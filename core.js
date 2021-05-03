@@ -2,8 +2,7 @@ const streamx = require('streamx')
 const lock = require('mutexify/promise')
 const cenc = require('compact-encoding')
 
-const Rebaser = require('./lib/rebaser')
-const MemoryView = require('./lib/views/memory')
+const RebasedHypercore = require('./lib/rebase')
 const { InputNode, IndexNode } = require('./lib/nodes')
 const { Header } = require('./lib/messages')
 
@@ -169,67 +168,26 @@ module.exports = class AutobaseCore {
   }
 
   async rebasedView (indexes, opts = {}) {
-    if (!Array.isArray(indexes)) indexes = [indexes]
-
-    await Promise.all([this.ready(), ...indexes.map(i => i.update())])
-
-    const rebasers = []
-    if (!opts.view) {
-      for (const index of indexes) {
-        const view = (index instanceof MemoryView)
-          ? index
-          : new MemoryView(this, index)
-        rebasers.push(new Rebaser(view, opts))
-      }
-    } else {
-      rebasers.push(new Rebaser(opts.view, opts))
-    }
-
-    let best = null
-    for await (const inputNode of this.createCausalStream(opts)) {
-      for (const rebaser of rebasers) {
-        if (!(await rebaser.update(inputNode))) continue
-        best = rebaser
-        break
-      }
-      if (best) break
-    }
-
-    if (!best) best = rebasers[0]
-    await best.commit({ flush: false })
-
-    return {
-      index: best.index,
-      added: best.added,
-      removed: best.removed
-    }
+    if (this._opening) await this._opening
+    const rebased = new RebasedHypercore(this, indexes, opts)
+    await rebased.update()
+    return rebased
   }
 
   async rebaseInto (index, opts = {}) {
-    if (opts.view) index = opts.view
-    await Promise.all([this.ready(), index.ready()])
+    if (this._opening) await this._opening
 
-    if (!(index instanceof MemoryView)) {
-      if (!index.length) {
-        await index.append(cenc.encode(Header, {
-          protocol: INDEX_TYPE
-        }))
-      }
-      index = new MemoryView(this, index)
+    if (!index.length) {
+      await index.append(cenc.encode(Header, {
+        protocol: INDEX_TYPE
+      }))
     }
 
-    const rebaser = new Rebaser(index, opts)
+    const rebased = new RebasedHypercore(this, index, opts)
+    await rebased.update()
+    await rebased.commit(index)
 
-    for await (const inputNode of this.createCausalStream(opts)) {
-      if (await rebaser.update(inputNode)) break
-    }
-    await rebaser.commit()
-
-    return {
-      index,
-      added: rebaser.added,
-      removed: rebaser.removed
-    }
+    return rebased
   }
 
   decodeInput (input, decodeOpts = {}) {
