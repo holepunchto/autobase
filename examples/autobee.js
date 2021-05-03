@@ -42,14 +42,24 @@ module.exports = class Autobee {
   }
 
   async _apply ({ node }) {
+    console.log('applying node:', node)
     const op = JSON.parse(node.value.toString())
+    console.log('applying op:', op)
     const b = this.bee.batch()
 
     const process = async op => {
-      if (op.type === 'put') await b.put(op.key, op.value)
+      console.log('processing op:', op)
+      try{
+        if (op.type === 'put') await b.put(op.key, op.value)
+      } catch (err) {
+        console.log('ERR HERE:', err)
+      }
+      console.log('after processing')
     }
     if (Array.isArray(op)) await Promise.all(op.map(process))
     else await process(op)
+
+    console.log('after processing op')
 
     await b.flush()
   }

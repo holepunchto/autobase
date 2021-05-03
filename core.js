@@ -206,7 +206,7 @@ module.exports = class AutobaseCore {
   }
 
   async rebaseInto (index, opts = {}) {
-    if (!index && opts.view) index = opts.view
+    if (opts.view) index = opts.view
     await Promise.all([this.ready(), index.ready()])
 
     if (!(index instanceof MemoryView)) {
@@ -226,12 +226,7 @@ module.exports = class AutobaseCore {
     await rebaser.commit()
 
     return {
-      index: new MemoryView(this, index, {
-        ...opts,
-        readonly: true,
-        unwrap: !!opts.unwrap,
-        includeInputNodes: opts.includeInputNodes !== false
-      }),
+      index,
       added: rebaser.added,
       removed: rebaser.removed
     }

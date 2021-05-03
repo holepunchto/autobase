@@ -62,42 +62,48 @@ module.exports = class Autobase {
   }
 
   async refresh (opts = {}) {
+    console.log('in refresh, awaiting open')
     if (this._opening) await this._opening
+    console.log('in refresh, opening finished, local index?', !!this._localIndex)
     const rebasePromise = this._localIndex
       ? this._base.rebaseInto(this._localIndex, opts)
       : this._base.rebasedView(this._indexes, opts)
     const result = await rebasePromise
+    console.log('in refresh, rebasePromise resolved')
     console.log('REFRESH RESULT:', { added: result.added, removed: result.removed })
     return result.index
   }
 
   createIndex (opts = {}) {
+    const self = this
     let refreshing = false
-    let view = null
+    let currentIndex = self._localIndex
 
-    const asyncOpen = async () => {
-      await this._opening
-      view = await this.refresh({ ...opts })
-      return {
-        base: this._base,
-        core: view
+    const indexWrapper = MemoryView.async(open)
+    return indexWrapper
+
+    async function onupdate () {
+      if (refreshing) return
+      refreshing = true
+      try {
+        currentIndex = await self.refresh({ ...opts, view: currentIndex })
+      } finally {
+        refreshing = false
       }
     }
 
-    return new MemoryView(null, null, {
-      asyncOpen,
-      unwrap: true,
-      includeInputNodes: true,
-      onupdate: async () => {
-        if (refreshing) return
-        refreshing = true
-        try {
-          await this.refresh({ ...opts, view })
-        } finally {
-          refreshing = false
+    async function open () {
+      if (self._opening) await self._opening
+      return {
+        base: self._base,
+        core: currentIndex,
+        opts: {
+          unwrap: false,
+          includeInputNodes: true,
+          onupdate
         }
       }
-    })
+    }
   }
 
   async append (value, links) {

@@ -7,7 +7,7 @@ const { Manifest, User } = require('../lib/manifest')
 const Autobee = require('../examples/autobee')
 const Autobase = require('..')
 
-test('simple autobee', async t => {
+test.only('simple autobee', async t => {
   const store1 = await Corestore.fromStorage(ram)
   const store2 = await Corestore.fromStorage(ram)
   // Replicate both corestores
@@ -27,14 +27,18 @@ test('simple autobee', async t => {
     valueEncoding: 'utf-8'
   })
 
+  console.log(1)
   await bee1.put('a', 'b')
   await bee2.put('c', 'd')
+  console.log(2)
 
   {
     const node = await bee2.get('a')
+    console.log(2.5)
     t.true(node)
     t.same(node.value, 'b')
   }
+  console.log(3)
 
   {
     const node = await bee1.get('c')
@@ -45,7 +49,7 @@ test('simple autobee', async t => {
   t.end()
 })
 
-test.only('autobee extension', async t => {
+test('autobee extension', async t => {
   const NUM_RECORDS = 5
 
   const store1 = await Corestore.fromStorage(ram)
