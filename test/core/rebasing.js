@@ -26,9 +26,6 @@ test('simple rebase', async t => {
 
   {
     const index = await base.rebaseInto(output)
-    console.log('index here:', {
-      length: index.length
-    })
     const indexed = await indexedValues(index)
 
     t.same(indexed.map(v => v.value), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])

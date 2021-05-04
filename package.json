@@ -7,9 +7,10 @@
     "test": "standard && tape test/*.js"
   },
   "dependencies": {
-    "hypercore-x": "github:hypercore-skunkworks/hypercore-x",
-    "corestore": "github:hypercore-skunkworks/corestore",
     "compact-encoding": "^2.0.0",
+    "corestore": "github:hypercore-skunkworks/corestore",
+    "debounceify": "^1.0.0",
+    "hypercore-x": "github:hypercore-skunkworks/hypercore-x",
     "mutexify": "^1.3.1",
     "streamx": "^2.10.0"
   },

@@ -2,10 +2,10 @@ const test = require('tape')
 const Hypercore = require('hypercore-x')
 const ram = require('random-access-memory')
 
-const { indexedValues } = require('../helpers')
+const { bufferize, indexedValues } = require('../helpers')
 const AutobaseCore = require('../../core')
 
-test('map with stateless mapper', async t => {
+test.only('map with stateless mapper', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
@@ -25,13 +25,15 @@ test('map with stateless mapper', async t => {
   }
 
   {
-    const rebased = await base.rebaseInto(output, {
-      apply: function (indexNode, index) {
-        return index.append(Buffer.from(indexNode.node.value.toString('utf-8').toUpperCase(), 'utf-8'))
+    const rebased = base.rebaser(output, {
+      apply (batch, index) {
+        batch = batch.map(({ value }) => Buffer.from(value.toString('utf-8').toUpperCase(), 'utf-8'))
+        return rebased.append(batch)
       }
     })
     const indexed = await indexedValues(rebased)
-    t.same(indexed.map(v => v.value), ['A0', 'B1', 'B0', 'C2', 'C1', 'C0'])
+    console.log('indexed:', indexed.length, 'length:', rebased.length)
+    t.same(indexed.map(v => v.value), bufferize(['A0', 'B1', 'B0', 'C2', 'C1', 'C0']))
   }
 
   t.end()

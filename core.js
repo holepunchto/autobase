@@ -7,7 +7,6 @@ const { InputNode, IndexNode } = require('./lib/nodes')
 const { Header } = require('./lib/messages')
 
 const INPUT_TYPE = '@autobase/input'
-const INDEX_TYPE = '@autobase/index'
 
 module.exports = class AutobaseCore {
   constructor (inputs) {
@@ -46,20 +45,14 @@ module.exports = class AutobaseCore {
       // Decoding errors should be discarded.
       return null
     }
-    if (!node.batch || opts.allowPartial) return node
 
-    let batchEnd = node
-    while (++seq < input.length) {
-      const next = await this._getInputNode(input, seq, { allowPartial: true })
-      if (next.batch === node.batch) {
-        batchEnd = next
-        continue
-      }
-      break
-    }
-    node.links = batchEnd.links
-    if (node.seq > 1) node.links.set(node.id, node.seq - 1)
-    else node.links.delete(node.id)
+    if (node.batch[1] === 0) return node
+
+    const batchEnd = await this._getInputNode(input, seq + node.batch[1])
+
+    node.clock = batchEnd.clock
+    if (node.seq > 1) node.clock.set(node.id, node.seq - 1)
+    else node.clock.delete(node.id)
 
     return node
   }
@@ -79,14 +72,14 @@ module.exports = class AutobaseCore {
     inputs = new Set(inputs.map(i => i.key.toString('hex')))
 
     const heads = await this.heads()
-    const links = new Map()
+    const clock = new Map()
 
     for (const head of heads) {
       if (!head) continue
       if (inputs.size && !inputs.has(head.id)) continue
-      links.set(head.id, this._inputsByKey.get(head.id).length - 1)
+      clock.set(head.id, this._inputsByKey.get(head.id).length - 1)
     }
-    return links
+    return clock
   }
 
   createCausalStream (opts = {}) {
@@ -109,7 +102,10 @@ module.exports = class AutobaseCore {
 
       const node = forks[smallest]
       const forkIndex = heads.indexOf(node)
-      this.push(new IndexNode({ node, clock }))
+      this.push(new IndexNode({ ...node, change: node.key, clock }))
+
+      // TODO: When reading a batch node, parallel download them all (use batch[0])
+      // TODO: Make a causal stream extension for faster reads
 
       if (node.seq <= 0) {
         heads.splice(forkIndex, 1)
@@ -125,69 +121,53 @@ module.exports = class AutobaseCore {
     return new streamx.Readable({ open, read })
   }
 
-  async _append (input, value, links) {
+  async _append (input, value, clock) {
     const head = await this._getInputNode(input, input.length - 1)
 
     // Make sure that causal information propagates.
     // TODO: This should use an embedded index in the future.
-    if (head && head.links) {
+    if (head && head.clock) {
       const inputId = input.key.toString('hex')
-      for (const [id, length] of head.links) {
-        if (id === inputId || links.has(id)) continue
-        links.set(id, length)
+      for (const [id, length] of head.clock) {
+        if (id === inputId || clock.has(id)) continue
+        clock.set(id, length)
       }
     }
 
-    if (!Array.isArray(value)) return input.append(InputNode.encode({ key: input.key, value, links }))
+    if (!Array.isArray(value)) return input.append(InputNode.encode({ key: input.key, value, clock }))
 
     const nodes = []
-    const batchId = input.length
     for (let i = 0; i < value.length; i++) {
-      const node = { key: input.key, value: value[i], batch: batchId }
-      if (i === value.length - 1) node.links = links
+      const batch = [i, value.length - 1 - i]
+      const node = { key: input.key, value: value[i], batch }
+      if (i === value.length - 1) node.clock = clock
       nodes.push(InputNode.encode(node))
     }
 
     return input.append(nodes)
   }
 
-  async append (input, value, links) {
+  async append (input, value, clock) {
     const release = await this._lock()
     await this.ready()
-    links = linksToMap(links)
+    clock = clockToMap(clock)
     try {
       if (!input.length) {
         await input.append(cenc.encode(Header, {
           protocol: INPUT_TYPE
         }))
       }
-      return this._append(input, value, links)
+      return this._append(input, value, clock)
     } finally {
       release()
     }
   }
 
-  async rebasedView (indexes, opts = {}) {
-    if (this._opening) await this._opening
-    const rebased = new RebasedHypercore(this, indexes, opts)
-    await rebased.update()
-    return rebased
-  }
-
-  async rebaseInto (index, opts = {}) {
-    if (this._opening) await this._opening
-
-    if (!index.length) {
-      await index.append(cenc.encode(Header, {
-        protocol: INDEX_TYPE
-      }))
-    }
-
-    const rebased = new RebasedHypercore(this, index, opts)
-    await rebased.update()
-    await rebased.commit(index)
-
-    return rebased
+  rebaser (indexes, opts = {}) {
+    return new RebasedHypercore(this, indexes, {
+      ...opts,
+      open: this._opening
+    })
   }
 
   decodeInput (input, decodeOpts = {}) {
@@ -219,14 +199,14 @@ function forkSize (node, i, heads) {
 
   for (const head of heads) {
     if (head === node) continue
-    for (const [key, length] of head.links) {
+    for (const [key, length] of head.clock) {
       if (length > (high[key] || 0)) high[key] = length
     }
   }
 
   let s = 0
 
-  for (const [key, length] of node.links) {
+  for (const [key, length] of node.clock) {
     const h = high[key] || 0
     if (length > h) s += length - h
   }
@@ -261,11 +241,11 @@ function forkInfo (heads) {
   }
 }
 
-function linksToMap (links) {
-  if (!links) return new Map()
-  if (links instanceof Map) return links
-  if (Array.isArray(links)) return new Map(links)
-  return new Map(Object.entries(links))
+function clockToMap (clock) {
+  if (!clock) return new Map()
+  if (clock instanceof Map) return clock
+  if (Array.isArray(clock)) return new Map(clock)
+  return new Map(Object.entries(clock))
 }
 
 function noop () {}

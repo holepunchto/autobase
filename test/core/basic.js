@@ -2,7 +2,7 @@ const test = require('tape')
 const Hypercore = require('hypercore-x')
 const ram = require('random-access-memory')
 
-const { causalValues } = require('../helpers')
+const { bufferize, causalValues } = require('../helpers')
 const AutobaseCore = require('../../core')
 
 test('linearizes short branches on long branches', async t => {
@@ -26,7 +26,7 @@ test('linearizes short branches on long branches', async t => {
 
   {
     const output = await causalValues(base)
-    t.same(output.map(v => v.value), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
+    t.same(output.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
   }
 
   // Add 3 more records to A -- should switch fork ordering
@@ -36,7 +36,7 @@ test('linearizes short branches on long branches', async t => {
 
   {
     const output = await causalValues(base)
-    t.same(output.map(v => v.value), ['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0'])
+    t.same(output.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']))
   }
 
   t.end()
@@ -63,7 +63,7 @@ test('causal writes', async t => {
 
   {
     const output = await causalValues(base)
-    t.same(output.map(v => v.value), ['b1', 'b0', 'a0', 'c2', 'c1', 'c0'])
+    t.same(output.map(v => v.value), bufferize(['b1', 'b0', 'a0', 'c2', 'c1', 'c0']))
   }
 
   // Add 3 more records to A -- should switch fork ordering
@@ -73,13 +73,13 @@ test('causal writes', async t => {
 
   {
     const output = await causalValues(base)
-    t.same(output.map(v => v.value), ['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0'])
+    t.same(output.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']))
   }
 
   t.end()
 })
 
-test('manually specifying links', async t => {
+test('manually specifying clocks', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
 
@@ -95,7 +95,7 @@ test('manually specifying links', async t => {
   await base.append(writerB, 'b2')
 
   const output = await causalValues(base)
-  t.same(output.map(v => v.value), ['b2', 'b1', 'b0', 'a1', 'a0'])
+  t.same(output.map(v => v.value), bufferize(['b2', 'b1', 'b0', 'a1', 'a0']))
 
   t.end()
 })

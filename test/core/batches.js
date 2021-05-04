@@ -2,7 +2,7 @@ const test = require('tape')
 const Hypercore = require('hypercore-x')
 const ram = require('random-access-memory')
 
-const { causalValues } = require('../helpers')
+const { bufferize, causalValues } = require('../helpers')
 const AutobaseCore = require('../../core')
 
 test('batches array-valued appends using partial input nodes', async t => {
@@ -20,7 +20,7 @@ test('batches array-valued appends using partial input nodes', async t => {
 
   {
     const output = await causalValues(base)
-    t.same(output.map(v => v.value), ['b1', 'b0', 'c2', 'c1', 'c0', 'a0'])
+    t.same(output.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a0']))
   }
 
   // Add 4 more records to A -- should switch fork ordering
@@ -30,7 +30,7 @@ test('batches array-valued appends using partial input nodes', async t => {
 
   {
     const output = await causalValues(base)
-    t.same(output.map(v => v.value), ['b1', 'b0', 'c2', 'c1', 'c0', 'a4', 'a3', 'a2', 'a1', 'a0'])
+    t.same(output.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a4', 'a3', 'a2', 'a1', 'a0']))
   }
 
   t.end()

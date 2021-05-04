@@ -1,28 +1,19 @@
 async function causalValues (base) {
   const buf = []
   for await (const indexNode of base.createCausalStream()) {
-    buf.push(debugIndexNode(indexNode))
+    buf.push(indexNode)
   }
   return buf
 }
 
 async function indexedValues (index) {
   const buf = []
+  await index.update()
   for (let i = index.length - 1; i > 0; i--) {
     const indexNode = await index.get(i)
-    buf.push(debugIndexNode(indexNode))
+    buf.push(indexNode)
   }
   return buf
-}
-
-function debugIndexNode (indexNode) {
-  return {
-    value: (indexNode.value ?? indexNode.node.value).toString('utf8'),
-    key: indexNode.node.key,
-    seq: indexNode.node.seq,
-    links: indexNode.node.links,
-    clock: indexNode.clock
-  }
 }
 
 function debugInputNode (inputNode) {
@@ -34,9 +25,13 @@ function debugInputNode (inputNode) {
   }
 }
 
+function bufferize (arr) {
+  return arr.map(b => Buffer.from(b))
+}
+
 module.exports = {
+  bufferize,
   causalValues,
   indexedValues,
-  debugIndexNode,
   debugInputNode
 }
