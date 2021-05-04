@@ -7,7 +7,7 @@ const { Manifest, User } = require('../lib/manifest')
 const Autobee = require('../examples/autobee')
 const Autobase = require('..')
 
-test.only('simple autobee', async t => {
+test('simple autobee', async t => {
   const store1 = await Corestore.fromStorage(ram)
   const store2 = await Corestore.fromStorage(ram)
   // Replicate both corestores
@@ -27,18 +27,14 @@ test.only('simple autobee', async t => {
     valueEncoding: 'utf-8'
   })
 
-  console.log(1)
   await bee1.put('a', 'b')
   await bee2.put('c', 'd')
-  console.log(2)
 
   {
     const node = await bee2.get('a')
-    console.log(2.5)
     t.true(node)
     t.same(node.value, 'b')
   }
-  console.log(3)
 
   {
     const node = await bee1.get('c')
@@ -49,7 +45,8 @@ test.only('simple autobee', async t => {
   t.end()
 })
 
-test('autobee extension', async t => {
+// TODO: Wrap Hyperbee extension to get this working
+test.skip('autobee extension', async t => {
   const NUM_RECORDS = 5
 
   const store1 = await Corestore.fromStorage(ram)
@@ -86,7 +83,6 @@ test('autobee extension', async t => {
 
   console.log(await collect(bee2.createReadStream()))
 
-  /*
   const t0 = process.hrtime()
   const first = await collect(bee2.createReadStream())
   const t1 = process.hrtime(t0)
@@ -101,7 +97,6 @@ test('autobee extension', async t => {
 
   console.log('first:', first)
   console.log('second:', second)
-  */
 
   t.end()
 })

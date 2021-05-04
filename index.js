@@ -1,5 +1,4 @@
 const AutobaseCore = require('./core')
-const MemoryView = require('./lib/views/memory')
 const { Manifest } = require('./lib/manifest')
 
 const INPUT_NAME = '@autobase/input'
@@ -12,7 +11,7 @@ module.exports = class Autobase {
     this.store = store
     this.manifest = manifest
 
-    this._base = null
+    this._base = new AutobaseCore()
     this._inputs = null
     this._indexes = null
     this._localInput = null
@@ -47,38 +46,30 @@ module.exports = class Autobase {
     await this._localIndex.ready()
 
     if (!inputs.has(this._localInput.key.toString('hex'))) {
-      console.log('CLOSING LOCAL INPUT')
       await this._localInput.close()
       this._localInput = null
     }
     if (!indexes.has(this._localIndex.key.toString('hex'))) {
-      console.log('CLOSING LOCAL INDEX')
       await this._localIndex.close()
       this._localIndex = null
     }
 
-    this._base = new AutobaseCore(this._inputs)
+    this._base.setInputs(this._inputs)
     this._opening = null
   }
 
-  async refresh (opts = {}) {
-    if (this._opening) await this._opening
-    const rebasePromise = this._localIndex
-      ? this._base.rebaseInto(this._localIndex, opts)
-      : this._base.rebasedView(this._indexes, opts)
-    const result = await rebasePromise
-    return result.index
-  }
-
   createIndex (opts = {}) {
-    // TODO: Implement
+    return this._base.createRebaser(this._localIndex ? this._localIndex : this.indexes, {
+      ...opts,
+      open: this._opening
+    })
   }
 
-  async append (value, links) {
+  async append (value, clock) {
     if (this._opening) await this._opening
     if (!this._localInput) throw new Error('Autobase does not have write capabilities.')
-    links = links || await this._base.latest()
-    return this._base.append(this._localInput, value, links)
+    clock = clock || await this._base.latest()
+    return this._base.append(this._localInput, value, clock)
   }
 
   static async createUser (store, opts = {}) {

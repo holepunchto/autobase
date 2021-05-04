@@ -5,7 +5,7 @@ const ram = require('random-access-memory')
 const { bufferize, indexedValues } = require('../helpers')
 const AutobaseCore = require('../../core')
 
-test.only('map with stateless mapper', async t => {
+test('map with stateless mapper', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
@@ -25,14 +25,13 @@ test.only('map with stateless mapper', async t => {
   }
 
   {
-    const rebased = base.rebaser(output, {
+    const rebased = base.createRebaser(output, {
       apply (batch, index) {
         batch = batch.map(({ value }) => Buffer.from(value.toString('utf-8').toUpperCase(), 'utf-8'))
         return rebased.append(batch)
       }
     })
     const indexed = await indexedValues(rebased)
-    console.log('indexed:', indexed.length, 'length:', rebased.length)
     t.same(indexed.map(v => v.value), bufferize(['A0', 'B1', 'B0', 'C2', 'C1', 'C0']))
   }
 

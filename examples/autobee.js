@@ -1,36 +1,19 @@
 const Hyperbee = require('hyperbee')
-const HyperbeeExtension = require('hyperbee/lib/extension')
 
 const Autobase = require('..')
-
-class AutobeeExtension extends HyperbeeExtension {
-  constructor (view) {
-    super()
-    this.view = view
-  }
-
-  get (version, key) {
-    return super.get(this.view.indexLength, key)
-  }
-}
 
 module.exports = class Autobee {
   constructor (corestore, manifest, local, opts = {}) {
     this.autobase = new Autobase(corestore, manifest, local)
 
     const index = this.autobase.createIndex({
+      unwrap: true,
       apply: this._apply.bind(this)
     })
-    let ext = null
-    if (opts.extension !== false) {
-      ext = new AutobeeExtension(index)
-      index.registerExtension('hyperbee', ext)
-    }
     this.bee = new Hyperbee(index, {
       ...opts,
-      extension: ext
+      extension: false
     })
-    if (ext) ext.db = this.bee
 
     this._opening = this._open()
     this._opening.catch(noop)
@@ -41,27 +24,20 @@ module.exports = class Autobee {
     return this.autobase.ready()
   }
 
-  async _apply ({ node }) {
-    console.log('applying node:', node)
-    const op = JSON.parse(node.value.toString())
-    console.log('applying op:', op)
-    const b = this.bee.batch()
-
-    const process = async op => {
-      console.log('processing op:', op)
-      try{
-        if (op.type === 'put') await b.put(op.key, op.value)
-      } catch (err) {
-        console.log('ERR HERE:', err)
+  async _apply (batch, index) {
+    const b = this.bee.batch({ update: false })
+    for (const node of batch) {
+      const op = JSON.parse(node.value.toString())
+      switch (op.type) {
+        case 'put':
+          await b.put(op.key, op.value)
+          break
+        default:
+          // Discard malformed messages
+          break
       }
-      console.log('after processing')
     }
-    if (Array.isArray(op)) await Promise.all(op.map(process))
-    else await process(op)
-
-    console.log('after processing op')
-
-    await b.flush()
+    return b.flush()
   }
 
   async put (key, value) {

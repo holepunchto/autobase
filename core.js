@@ -21,6 +21,7 @@ module.exports = class AutobaseCore {
   }
 
   async _open () {
+    if (!this.inputs) return
     await Promise.all(this.inputs.map(i => i.ready()))
     this._inputsByKey = new Map(this.inputs.map(i => [i.key.toString('hex'), i]))
     this._opening = null
@@ -58,6 +59,12 @@ module.exports = class AutobaseCore {
   }
 
   // Public API
+
+  setInputs (inputs) {
+    this.inputs = inputs
+    this._opening = this._open()
+    this._opening.catch(noop)
+  }
 
   async heads () {
     await this.ready()
@@ -163,11 +170,17 @@ module.exports = class AutobaseCore {
     }
   }
 
-  rebaser (indexes, opts = {}) {
+  createRebaser (indexes, opts = {}) {
     return new RebasedHypercore(this, indexes, {
       ...opts,
-      open: this._opening
+      open: opts.open ? opts.open.then(() => this._opening) : this._opening
     })
+  }
+
+  async rebase (output, opts = {}) {
+    if (Array.isArray(output)) throw new Error('Rebase can only index into a single output core')
+    const rebaser = this.createRebaser(output, opts)
+    return rebaser.update()
   }
 
   decodeInput (input, decodeOpts = {}) {
