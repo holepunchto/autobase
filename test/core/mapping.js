@@ -3,7 +3,7 @@ const Hypercore = require('hypercore-x')
 const ram = require('random-access-memory')
 
 const { bufferize, indexedValues } = require('../helpers')
-const AutobaseCore = require('../../core')
+const Autobase = require('../..')
 
 test('map with stateless mapper', async t => {
   const output = new Hypercore(ram)
@@ -11,21 +11,21 @@ test('map with stateless mapper', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new AutobaseCore([writerA, writerB, writerC])
+  const base = new Autobase([writerA, writerB, writerC])
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
-    await base.append(writerA, `a${i}`, await base.latest(writerA))
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
   }
   for (let i = 0; i < 2; i++) {
-    await base.append(writerB, `b${i}`, await base.latest(writerB))
+    await base.append(`b${i}`, await base.latest(writerB), writerB)
   }
   for (let i = 0; i < 3; i++) {
-    await base.append(writerC, `c${i}`, await base.latest(writerC))
+    await base.append(`c${i}`, await base.latest(writerC), writerC)
   }
 
   {
-    const rebased = base.createRebaser(output, {
+    const rebased = base.createRebasedIndex(output, {
       apply (batch, index) {
         batch = batch.map(({ value }) => Buffer.from(value.toString('utf-8').toUpperCase(), 'utf-8'))
         return rebased.append(batch)

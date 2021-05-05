@@ -1,21 +1,24 @@
-const AutobaseCore = require('./core')
-const { Manifest } = require('./lib/manifest')
+const streamx = require('streamx')
+const lock = require('mutexify/promise')
+const cenc = require('compact-encoding')
 
-const INPUT_NAME = '@autobase/input'
-const INDEX_NAME = '@autobase/index'
+const RebasedHypercore = require('./lib/rebase')
+const { InputNode, IndexNode } = require('./lib/nodes')
+const { Header } = require('./lib/messages')
 
-const TOKEN = Buffer.from('46d08fc8fa0344bd5d6a09d5e119584e31c553812ea506e5e56bd0d41e9eb0e2', 'hex')
+const INPUT_TYPE = '@autobase/input'
 
-module.exports = class Autobase {
-  constructor (store, manifest) {
-    this.store = store
-    this.manifest = manifest
+module.exports = class AutobaseCore {
+  constructor (inputs, opts = {}) {
+    this.inputs = null
+    this.defaultIndexes = null
+    this.defaultInput = null
 
-    this._base = new AutobaseCore()
-    this._inputs = null
-    this._indexes = null
-    this._localInput = null
-    this._localIndex = null
+    this._inputs = inputs
+    this._defaultIndexes = opts.indexes
+    this._defaultInput = opts.input
+    this._lock = lock()
+    this._inputsByKey = null
 
     this._opening = this._open()
     this._opening.catch(noop)
@@ -23,65 +26,270 @@ module.exports = class Autobase {
   }
 
   async _open () {
-    this.manifest = Manifest.inflate(this.store, this.manifest)
-    this._inputs = []
-    this._indexes = []
+    this.inputs = await this._inputs
+    this.defaultIndexes = await this._defaultIndexes
+    this.defaultInput = await this._defaultInput
+    await Promise.all(this.inputs.map(i => i.ready()))
 
-    const indexes = new Set()
-    const inputs = new Set()
-    for (const { input, index } of this.manifest) {
-      if (input) {
-        this._inputs.push(input)
-        inputs.add(input.key.toString('hex'))
-      }
-      if (index) {
-        this._indexes.push(index)
-        indexes.add(index.key.toString('hex'))
+    if (!this.defaultInput) {
+      for (const input of this.inputs) {
+        if (input.writable) {
+          this.defaultInput = input
+          break
+        }
       }
     }
 
-    this._localInput = this.store.get({ name: INPUT_NAME, token: TOKEN })
-    this._localIndex = this.store.get({ name: INDEX_NAME, token: TOKEN })
-    await this._localInput.ready()
-    await this._localIndex.ready()
-
-    if (!inputs.has(this._localInput.key.toString('hex'))) {
-      await this._localInput.close()
-      this._localInput = null
+    if (this.defaultIndexes) {
+      if (!Array.isArray(this.defaultIndexes)) this.defaultIndexes = [this.defaultIndexes]
+      await Promise.all(this.defaultIndexes.map(i => i.ready()))
     }
-    if (!indexes.has(this._localIndex.key.toString('hex'))) {
-      await this._localIndex.close()
-      this._localIndex = null
-    }
+    if (this.defaultInput) await this.defaultInput.ready()
 
-    this._base.setInputs(this._inputs)
+    this._inputsByKey = new Map(this.inputs.map(i => [i.key.toString('hex'), i]))
     this._opening = null
   }
 
-  createIndex (opts = {}) {
-    return this._base.createRebaser(this._localIndex ? this._localIndex : this.indexes, {
-      ...opts,
-      open: this._opening
-    })
-  }
+  // Private Methods
 
-  async append (value, clock) {
-    if (this._opening) await this._opening
-    if (!this._localInput) throw new Error('Autobase does not have write capabilities.')
-    clock = clock || await this._base.latest()
-    return this._base.append(this._localInput, value, clock)
-  }
-
-  static async createUser (store, opts = {}) {
-    const user = {
-      input: opts.input !== false ? store.get({ name: INPUT_NAME, token: TOKEN }) : null,
-      index: opts.index !== false ? store.get({ name: INDEX_NAME, token: TOKEN }) : null
+  async _getInputNode (input, seq, opts = {}) {
+    if (seq < 1) return null
+    if (typeof input === 'string') {
+      if (!this._inputsByKey.has(input)) return null
+      input = this._inputsByKey.get(input)
     }
-    await Promise.allSettled([user.input.ready(), user.index.ready()])
-    // TODO: Store in immutable-store-extension by default
-    // const id = await store.immutable.put(User.deflate(user))
-    return { user, id: null }
+
+    const block = await input.get(seq)
+    if (!block) return null
+
+    let node = null
+    try {
+      node = InputNode.decode(block, { key: input.key, seq })
+    } catch (_) {
+      // Decoding errors should be discarded.
+      return null
+    }
+
+    if (node.batch[1] === 0) return node
+
+    const batchEnd = await this._getInputNode(input, seq + node.batch[1])
+
+    node.clock = batchEnd.clock
+    if (node.seq > 1) node.clock.set(node.id, node.seq - 1)
+    else node.clock.delete(node.id)
+
+    return node
+  }
+
+  // Public API
+
+  async heads () {
+    await this.ready()
+    await Promise.all(this.inputs.map(i => i.update()))
+    return Promise.all(this.inputs.map(i => this._getInputNode(i, i.length - 1)))
+  }
+
+  async latest (inputs) {
+    await this.ready()
+    if (!inputs) inputs = []
+    else inputs = Array.isArray(inputs) ? inputs : [inputs]
+    inputs = new Set(inputs.map(i => i.key.toString('hex')))
+
+    const heads = await this.heads()
+    const clock = new Map()
+
+    for (const head of heads) {
+      if (!head) continue
+      if (inputs.size && !inputs.has(head.id)) continue
+      clock.set(head.id, this._inputsByKey.get(head.id).length - 1)
+    }
+    return clock
+  }
+
+  createCausalStream (opts = {}) {
+    const self = this
+    let heads = null
+
+    const open = function (cb) {
+      self.heads()
+        .then(h => { heads = h })
+        .then(() => cb(null), err => cb(err))
+    }
+
+    const read = function (cb) {
+      const { forks, clock, smallest } = forkInfo(heads)
+
+      if (!forks.length) {
+        this.push(null)
+        return cb(null)
+      }
+
+      const node = forks[smallest]
+      const forkIndex = heads.indexOf(node)
+      this.push(new IndexNode({ ...node, change: node.key, clock }))
+
+      // TODO: When reading a batch node, parallel download them all (use batch[0])
+      // TODO: Make a causal stream extension for faster reads
+
+      if (node.seq <= 0) {
+        heads.splice(forkIndex, 1)
+        return cb(null)
+      }
+
+      self._getInputNode(node.id, node.seq - 1).then(next => {
+        heads[forkIndex] = next
+        return cb(null)
+      }, err => cb(err))
+    }
+
+    return new streamx.Readable({ open, read })
+  }
+
+  async _append (input, value, clock) {
+    const head = await this._getInputNode(input, input.length - 1)
+
+    // Make sure that causal information propagates.
+    // TODO: This should use an embedded index in the future.
+    if (head && head.clock) {
+      const inputId = input.key.toString('hex')
+      for (const [id, length] of head.clock) {
+        if (id === inputId || clock.has(id)) continue
+        clock.set(id, length)
+      }
+    }
+
+    if (!Array.isArray(value)) return input.append(InputNode.encode({ key: input.key, value, clock }))
+
+    const nodes = []
+    for (let i = 0; i < value.length; i++) {
+      const batch = [i, value.length - 1 - i]
+      const node = { key: input.key, value: value[i], batch }
+      if (i === value.length - 1) node.clock = clock
+      nodes.push(InputNode.encode(node))
+    }
+
+    return input.append(nodes)
+  }
+
+  async append (value, clock, input) {
+    if (clock !== null && !Array.isArray(clock) && !(clock instanceof Map)) {
+      input = clock
+      clock = null
+    }
+    await this.ready()
+    const release = await this._lock()
+    input = input || this.defaultInput
+    clock = clockToMap(clock || await this.latest())
+    try {
+      if (!input.length) {
+        await input.append(cenc.encode(Header, {
+          protocol: INPUT_TYPE
+        }))
+      }
+      return this._append(input, value, clock)
+    } finally {
+      release()
+    }
+  }
+
+  createRebasedIndex (indexes, opts = {}) {
+    if (isOptions(indexes)) return this.createRebasedIndex(null, indexes)
+    if (indexes) {
+      indexes = this._opening ? this._opening.then(() => indexes) : indexes
+      return new RebasedHypercore(this, indexes, opts)
+    }
+    if (this._defaultIndexes || this.defaultIndexes) {
+      indexes = this._opening ? this._opening.then(() => this.defaultIndexes) : this.defaultIndexes
+      return new RebasedHypercore(this, indexes, opts)
+    }
+    throw new Error('Indexes or default indexes are required when creating a rebased index')
+  }
+
+  // For testing
+  _decodeInput (input, decodeOpts = {}) {
+    const get = async (idx, opts) => {
+      const decoded = await this._getInputNode(input, idx)
+      if (!decodeOpts.unwrap) return decoded
+      return decoded.value
+    }
+    return new Proxy(input, {
+      get (target, prop) {
+        if (prop === 'get') return get
+        return target[prop]
+      }
+    })
   }
 }
 
-function noop () { }
+function isFork (head, heads) {
+  if (!head) return false
+  for (const other of heads) {
+    if (!other) continue
+    if (head.lte(other)) return false
+  }
+  return true
+}
+
+function forkSize (node, i, heads) {
+  const high = {}
+
+  for (const head of heads) {
+    if (head === node) continue
+    for (const [key, length] of head.clock) {
+      if (length > (high[key] || 0)) high[key] = length
+    }
+  }
+
+  let s = 0
+
+  for (const [key, length] of node.clock) {
+    const h = high[key] || 0
+    if (length > h) s += length - h
+  }
+
+  return s
+}
+
+function forkInfo (heads) {
+  const forks = []
+  const clock = new Map()
+
+  for (const head of heads) {
+    if (!head) continue
+    if (isFork(head, heads)) forks.push(head)
+    clock.set(head.id, head.seq)
+  }
+
+  const sizes = forks.map(forkSize)
+  let smallest = 0
+  for (let i = 1; i < sizes.length; i++) {
+    if (sizes[i] === sizes[smallest] && forks[i].key < forks[smallest].feed) {
+      smallest = i
+    } else if (sizes[i] < sizes[smallest]) {
+      smallest = i
+    }
+  }
+
+  return {
+    forks,
+    clock,
+    smallest
+  }
+}
+
+function clockToMap (clock) {
+  if (!clock) return new Map()
+  if (clock instanceof Map) return clock
+  if (Array.isArray(clock)) return new Map(clock)
+  return new Map(Object.entries(clock))
+}
+
+function isOptions (o) {
+  return (Object.prototype.toString.call(o) === '[object Object]') && !isHypercore(o)
+}
+
+function isHypercore (o) {
+  return o.get && o.replicate && o.append
+}
+
+function noop () {}

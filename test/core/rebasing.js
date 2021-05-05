@@ -3,7 +3,7 @@ const Hypercore = require('hypercore-x')
 const ram = require('random-access-memory')
 
 const { bufferize, causalValues, indexedValues } = require('../helpers')
-const AutobaseCore = require('../../core')
+const Autobase = require('../..')
 
 test('simple rebase', async t => {
   const output = new Hypercore(ram)
@@ -11,21 +11,21 @@ test('simple rebase', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new AutobaseCore([writerA, writerB, writerC])
+  const base = new Autobase([writerA, writerB, writerC])
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
-    await base.append(writerA, `a${i}`, await base.latest(writerA))
+    await base.append(`a${i}`, [], writerA)
   }
   for (let i = 0; i < 2; i++) {
-    await base.append(writerB, `b${i}`, await base.latest(writerB))
+    await base.append(`b${i}`, [], writerB)
   }
   for (let i = 0; i < 3; i++) {
-    await base.append(writerC, `c${i}`, await base.latest(writerC))
+    await base.append(`c${i}`, [], writerC)
   }
 
   {
-    const index = base.createRebaser(output)
+    const index = base.createRebasedIndex(output)
     const indexed = await indexedValues(index)
 
     t.same(indexed.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
@@ -36,11 +36,57 @@ test('simple rebase', async t => {
 
   // Add 3 more records to A -- should switch fork ordering
   for (let i = 1; i < 4; i++) {
-    await base.append(writerA, `a${i}`, await base.latest(writerA))
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
   }
 
   {
-    const index = base.createRebaser(output)
+    const index = base.createRebasedIndex(output)
+    const indexed = await indexedValues(index)
+    t.same(indexed.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']))
+    t.same(index.status.added, 9)
+    t.same(index.status.removed, 6)
+    t.same(output.length, 10)
+  }
+
+  t.end()
+})
+
+test('simple rebase with default index', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase([writerA, writerB, writerC], {
+    indexes: output
+  })
+  const index = base.createRebasedIndex()
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, [], writerA)
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, [], writerB)
+  }
+  for (let i = 0; i < 3; i++) {
+    await base.append(`c${i}`, [], writerC)
+  }
+
+  {
+    const indexed = await indexedValues(index)
+    t.same(indexed.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
+    t.same(index.status.added, 6)
+    t.same(index.status.removed, 0)
+    t.same(output.length, 7)
+  }
+
+  // Add 3 more records to A -- should switch fork ordering
+  for (let i = 1; i < 4; i++) {
+    await base.append(`a${i}`, [], writerA)
+  }
+
+  {
     const indexed = await indexedValues(index)
     t.same(indexed.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']))
     t.same(index.status.added, 9)
@@ -57,20 +103,20 @@ test('rebasing with causal writes preserves clock', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new AutobaseCore([writerA, writerB, writerC])
+  const base = new Autobase([writerA, writerB, writerC])
 
   // Create three causally-linked forks
   for (let i = 0; i < 1; i++) {
-    await base.append(writerA, `a${i}`, await base.latest())
+    await base.append(`a${i}`, writerA)
   }
   for (let i = 0; i < 2; i++) {
-    await base.append(writerB, `b${i}`, await base.latest())
+    await base.append(`b${i}`, writerB)
   }
   for (let i = 0; i < 3; i++) {
-    await base.append(writerC, `c${i}`, await base.latest())
+    await base.append(`c${i}`, writerC)
   }
 
-  const index = base.createRebaser(output)
+  const index = base.createRebasedIndex(output)
   const indexed = await indexedValues(index)
   t.same(indexed.map(v => v.value), bufferize(['c2', 'c1', 'c0', 'b1', 'b0', 'a0']))
   t.same(index.status.added, 6)
@@ -92,21 +138,21 @@ test('does not over-truncate', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new AutobaseCore([writerA, writerB, writerC])
+  const base = new Autobase([writerA, writerB, writerC], { indexes: output })
+  const index = base.createRebasedIndex()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
-    await base.append(writerA, `a${i}`, await base.latest(writerA))
+    await base.append(`a${i}`, [], writerA)
   }
   for (let i = 0; i < 2; i++) {
-    await base.append(writerB, `b${i}`, await base.latest(writerB))
+    await base.append(`b${i}`, [], writerB)
   }
   for (let i = 0; i < 5; i++) {
-    await base.append(writerC, `c${i}`, await base.latest(writerC))
+    await base.append(`c${i}`, [], writerC)
   }
 
   {
-    const index = base.createRebaser(output)
     const indexed = await indexedValues(index)
     t.same(indexed.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c4', 'c3', 'c2', 'c1', 'c0']))
     t.same(index.status.added, 8)
@@ -116,11 +162,10 @@ test('does not over-truncate', async t => {
 
   // Add 3 more records to A -- should switch fork ordering (A after C)
   for (let i = 1; i < 4; i++) {
-    await base.append(writerA, `a${i}`, await base.latest(writerA))
+    await base.append(`a${i}`, [], writerA)
   }
 
   {
-    const index = base.createRebaser(output)
     const indexed = await indexedValues(index)
     t.same(indexed.map(v => v.value), bufferize(['b1', 'b0', 'a3', 'a2', 'a1', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0']))
     t.same(index.status.added, 6)
@@ -129,10 +174,9 @@ test('does not over-truncate', async t => {
   }
 
   // Add 1 more record to B -- should not cause any reordering
-  await base.append(writerB, 'b2', await base.latest(writerB))
+  await base.append('b2', [], writerB)
 
   {
-    const index = base.createRebaser(output)
     const indexed = await indexedValues(index)
     t.same(indexed.map(v => v.value), bufferize(['b2', 'b1', 'b0', 'a3', 'a2', 'a1', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0']))
     t.same(index.status.added, 1)
@@ -289,29 +333,29 @@ test('many writers, no causal writes', async t => {
     writers.push(writer)
   }
 
-  const base = new AutobaseCore(writers)
+  const base = new Autobase(writers)
   for (let i = 1; i < NUM_WRITERS + 1; i++) {
     const writer = writers[i - 1]
     for (let j = 0; j < i; j++) {
-      await base.append(writer, `w${i}-${j}`, await base.latest(writer))
+      await base.append(`w${i}-${j}`, [], writer)
     }
   }
 
   {
-    const index = base.createRebaser(output)
+    const index = base.createRebasedIndex(output)
     const indexed = await indexedValues(index)
     t.same(indexed.length, (NUM_WRITERS * (NUM_WRITERS + 1)) / 2)
   }
 
   const middleWriter = writers[Math.floor(writers.length / 2)]
-  const decodedMiddleWriter = base.decodeInput(middleWriter)
+  const decodedMiddleWriter = base._decodeInput(middleWriter)
 
   // Appending to the middle writer NUM_APPEND times should shift it to the back of the index.
   for (let i = 0; i < NUM_APPENDS; i++) {
-    await base.append(middleWriter, `new entry ${i}`, await base.latest(middleWriter))
+    await base.append(`new entry ${i}`, [], middleWriter)
   }
 
-  const index = base.createRebaser(output, {
+  const index = base.createRebasedIndex(output, {
     unwrap: true
   })
   await index.update()
@@ -331,21 +375,21 @@ test('double-rebasing is a no-op', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new AutobaseCore([writerA, writerB, writerC])
+  const base = new Autobase([writerA, writerB, writerC], { indexes: output })
+  const index = base.createRebasedIndex()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
-    await base.append(writerA, `a${i}`, await base.latest(writerA))
+    await base.append(`a${i}`, [], writerA)
   }
   for (let i = 0; i < 2; i++) {
-    await base.append(writerB, `b${i}`, await base.latest(writerB))
+    await base.append(`b${i}`, [], writerB)
   }
   for (let i = 0; i < 3; i++) {
-    await base.append(writerC, `c${i}`, await base.latest(writerC))
+    await base.append(`c${i}`, [], writerC)
   }
 
   {
-    const index = base.createRebaser(output)
     const indexed = await indexedValues(index)
     t.same(indexed.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
     t.same(index.status.added, 6)
@@ -354,7 +398,6 @@ test('double-rebasing is a no-op', async t => {
   }
 
   {
-    const index = base.createRebaser(output)
     const indexed = await indexedValues(index)
     t.same(indexed.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
     t.same(index.status.added, 0)
@@ -374,28 +417,40 @@ test('remote rebasing selects longest index', async t => {
   const output2 = new Hypercore(ram)
   const output3 = new Hypercore(ram)
 
-  const base = new AutobaseCore([writerA, writerB, writerC])
+  const base = new Autobase([writerA, writerB, writerC])
   await base.ready()
 
   // Create three independent forks
   for (let i = 0; i < 3; i++) {
-    await base.append(writerA, `a${i}`, await base.latest(writerA))
+    await base.append(`a${i}`, [], writerA)
   }
-  await base.rebase(output1)
+
+  {
+    const index = base.createRebasedIndex(output1)
+    await index.update()
+  }
 
   for (let i = 0; i < 2; i++) {
-    await base.append(writerB, `b${i}`, await base.latest(writerB))
+    await base.append(`b${i}`, [], writerB)
   }
-  await base.rebase(output2)
+
+  {
+    const index = base.createRebasedIndex(output2)
+    await index.update()
+  }
 
   for (let i = 0; i < 1; i++) {
-    await base.append(writerC, `c${i}`, await base.latest(writerC))
+    await base.append(`c${i}`, [], writerC)
   }
-  await base.rebase(output3)
+
+  {
+    const index = base.createRebasedIndex(output3)
+    await index.update()
+  }
 
   {
     // Should not have to modify output3
-    const reader = base.createRebaser([output3], { autocommit: false })
+    const reader = base.createRebasedIndex([output3], { autocommit: false })
     await reader.update()
     t.same(reader.status.added, 0)
     t.same(reader.status.removed, 0)
@@ -404,7 +459,7 @@ test('remote rebasing selects longest index', async t => {
 
   {
     // Should not have to add B and C
-    const reader = base.createRebaser([output1], { autocommit: false })
+    const reader = base.createRebasedIndex([output1], { autocommit: false })
     await reader.update()
     t.same(reader.status.added, 3)
     t.same(reader.status.removed, 0)
@@ -413,7 +468,7 @@ test('remote rebasing selects longest index', async t => {
 
   {
     // Should select output2
-    const reader = base.createRebaser([output1, output2])
+    const reader = base.createRebasedIndex([output1, output2])
     await reader.update()
     t.same(reader.status.added, 1)
     t.same(reader.status.removed, 0)
@@ -422,7 +477,7 @@ test('remote rebasing selects longest index', async t => {
 
   {
     // Should select output3
-    const reader = base.createRebaser([output1, output2, output3])
+    const reader = base.createRebasedIndex([output1, output2, output3])
     await reader.update()
     t.same(reader.status.added, 0)
     t.same(reader.status.removed, 0)

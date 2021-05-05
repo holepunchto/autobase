@@ -1,12 +1,12 @@
 const Hyperbee = require('hyperbee')
 
-const Autobase = require('..')
+const { fromManifest }  = require('../manifest')
 
 module.exports = class Autobee {
-  constructor (corestore, manifest, local, opts = {}) {
-    this.autobase = new Autobase(corestore, manifest, local)
+  constructor (corestore, manifest, opts = {}) {
+    this.autobase = fromManifest(corestore, manifest, opts)
 
-    const index = this.autobase.createIndex({
+    const index = this.autobase.createRebasedIndex({
       unwrap: true,
       apply: this._apply.bind(this)
     })
@@ -28,14 +28,8 @@ module.exports = class Autobee {
     const b = this.bee.batch({ update: false })
     for (const node of batch) {
       const op = JSON.parse(node.value.toString())
-      switch (op.type) {
-        case 'put':
-          await b.put(op.key, op.value)
-          break
-        default:
-          // Discard malformed messages
-          break
-      }
+      // TODO: Handle deletions
+      if (op.type === 'put') await b.put(op.key, op.value)
     }
     return b.flush()
   }

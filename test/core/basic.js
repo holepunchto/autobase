@@ -3,25 +3,25 @@ const Hypercore = require('hypercore-x')
 const ram = require('random-access-memory')
 
 const { bufferize, causalValues } = require('../helpers')
-const AutobaseCore = require('../../core')
+const Autobase = require('../..')
 
 test('linearizes short branches on long branches', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new AutobaseCore([writerA, writerB, writerC])
+  const base = new Autobase([writerA, writerB, writerC])
   await base.ready()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
-    await base.append(writerA, `a${i}`)
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
   }
   for (let i = 0; i < 2; i++) {
-    await base.append(writerB, `b${i}`)
+    await base.append(`b${i}`, await base.latest(writerB), writerB)
   }
   for (let i = 0; i < 3; i++) {
-    await base.append(writerC, `c${i}`)
+    await base.append(`c${i}`, await base.latest(writerC), writerC)
   }
 
   {
@@ -31,7 +31,7 @@ test('linearizes short branches on long branches', async t => {
 
   // Add 3 more records to A -- should switch fork ordering
   for (let i = 1; i < 4; i++) {
-    await base.append(writerA, `a${i}`, await base.latest(writerA))
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
   }
 
   {
@@ -47,18 +47,18 @@ test('causal writes', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new AutobaseCore([writerA, writerB, writerC])
+  const base = new Autobase([writerA, writerB, writerC])
   await base.ready()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
-    await base.append(writerA, `a${i}`)
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
   }
   for (let i = 0; i < 2; i++) {
-    await base.append(writerB, `b${i}`, await base.latest(writerA))
+    await base.append(`b${i}`, await base.latest(writerA), writerB)
   }
   for (let i = 0; i < 3; i++) {
-    await base.append(writerC, `c${i}`)
+    await base.append(`c${i}`, await base.latest(writerC), writerC)
   }
 
   {
@@ -68,7 +68,7 @@ test('causal writes', async t => {
 
   // Add 3 more records to A -- should switch fork ordering
   for (let i = 1; i < 4; i++) {
-    await base.append(writerA, `a${i}`, await base.latest(writerA))
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
   }
 
   {
@@ -83,19 +83,41 @@ test('manually specifying clocks', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
 
-  const base = new AutobaseCore([writerA, writerB])
+  const base = new Autobase([writerA, writerB])
   await base.ready()
 
-  await base.append(writerA, 'a0')
-  await base.append(writerA, 'a1')
-  await base.append(writerB, 'b0', [
+  await base.append('a0', await base.latest(writerA), writerA)
+  await base.append('a1', await base.latest(writerA), writerA)
+  await base.append('b0', [
     [writerA.key.toString('hex'), 2] // Links to a1
-  ])
-  await base.append(writerB, 'b1')
-  await base.append(writerB, 'b2')
+  ], writerB)
+  await base.append('b1', await base.latest(writerB), writerB)
+  await base.append('b2', await base.latest(writerB), writerB)
 
   const output = await causalValues(base)
   t.same(output.map(v => v.value), bufferize(['b2', 'b1', 'b0', 'a1', 'a0']))
+
+  t.end()
+})
+
+test('supports a default writer and default latest clocks', async t => {
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+
+  const base1 = new Autobase([writerA, writerB], { defaultWriter: writerA })
+  const base2 = new Autobase([writerA, writerB], { defaultWriter: writerB })
+  await base1.ready()
+  await base2.ready()
+
+  await base1.append('a0')
+  await base1.append('a1')
+  await base2.append('b0')
+  await base1.append('a2')
+  await base2.append('b1')
+  await base1.append('a3')
+
+  const output = await causalValues(base1)
+  t.same(output.map(v => v.value), bufferize(['a3', 'b1', 'a2', 'b0', 'a1', 'a0']))
 
   t.end()
 })
