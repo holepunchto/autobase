@@ -1,11 +1,8 @@
 const Hyperbee = require('hyperbee')
 
-const { fromManifest } = require('../manifest')
-
 module.exports = class Autobee {
-  constructor (corestore, manifest, opts = {}) {
-    this.autobase = fromManifest(corestore, manifest, opts)
-
+  constructor (autobase, opts) {
+    this.autobase = autobase
     const index = this.autobase.createRebasedIndex({
       unwrap: true,
       apply: this._apply.bind(this)

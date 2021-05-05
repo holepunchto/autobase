@@ -32,8 +32,11 @@ module.exports = class AutobaseCore {
     await Promise.all(this.inputs.map(i => i.ready()))
 
     if (!this.defaultInput) {
+      console.log('NO DEFAULT INPUT')
       for (const input of this.inputs) {
+        console.log('INPUT:', input)
         if (input.writable) {
+          console.log('SETTING DEFAULT INPUT')
           this.defaultInput = input
           break
         }

@@ -1,28 +1,24 @@
 const test = require('tape')
 const ram = require('random-access-memory')
-const Corestore = require('corestore')
-const LatencyStream = require('latency-stream')
+const Hypercore = require('hypercore-x')
 
-const { Manifest, User } = require('../lib/manifest')
-const Autobee = require('../examples/autobee')
 const Autobase = require('..')
+const Autobee = require('../examples/autobee-simple')
 
 test('simple autobee', async t => {
-  const store1 = await Corestore.fromStorage(ram)
-  const store2 = await Corestore.fromStorage(ram)
-  // Replicate both corestores
-  replicate(store1, store2)
+  const firstUser = new Hypercore(ram)
+  const firstIndex = new Hypercore(ram)
+  const secondUser = new Hypercore(ram)
+  const secondIndex = new Hypercore(ram)
 
-  const { user: firstUser } = await Autobase.createUser(store1)
-  const { user: secondUser } = await Autobase.createUser(store2)
-  const manifest = [firstUser, secondUser]
+  const base1 = new Autobase([firstUser, secondUser], { indexes: firstIndex })
+  const base2 = new Autobase([firstUser, secondUser], { indexes: secondIndex })
 
-  const bee1 = new Autobee(store1, manifest, firstUser, {
+  const bee1 = new Autobee(base1, {
     keyEncoding: 'utf-8',
     valueEncoding: 'utf-8'
   })
-  // Initialize from deflated manifest/user to simulate deserialization.
-  const bee2 = new Autobee(store2, Manifest.deflate(manifest), User.deflate(secondUser), {
+  const bee2 = new Autobee(base2, {
     keyEncoding: 'utf-8',
     valueEncoding: 'utf-8'
   })
@@ -45,6 +41,7 @@ test('simple autobee', async t => {
   t.end()
 })
 
+/*
 // TODO: Wrap Hyperbee extension to get this working
 test.skip('autobee extension', async t => {
   const NUM_RECORDS = 5
@@ -120,3 +117,4 @@ async function collect (s) {
   }
   return buf
 }
+*/
