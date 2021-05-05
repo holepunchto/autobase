@@ -11,32 +11,62 @@ test('simple autobee', async t => {
   const secondUser = new Hypercore(ram)
   const secondIndex = new Hypercore(ram)
 
-  const base1 = new Autobase([firstUser, secondUser], { indexes: firstIndex })
-  const base2 = new Autobase([firstUser, secondUser], { indexes: secondIndex })
+  const inputs = [firstUser, secondUser]
 
-  const bee1 = new Autobee(base1, {
+  const base1 = new Autobase(inputs, {
+    indexes: firstIndex,
+    input: firstUser
+  })
+  const base2 = new Autobase(inputs, {
+    indexes: secondIndex,
+    input: secondUser
+  })
+  const base3 = new Autobase(inputs, {
+    indexes: [firstIndex, secondIndex],
+    autocommit: false // Needed because both indexes are writable.
+  })
+
+  const writer1 = new Autobee(base1, {
     keyEncoding: 'utf-8',
     valueEncoding: 'utf-8'
   })
-  const bee2 = new Autobee(base2, {
+  const writer2 = new Autobee(base2, {
+    keyEncoding: 'utf-8',
+    valueEncoding: 'utf-8'
+  })
+  // Simulates a remote reader (not part of the group).
+  const reader = new Autobee(base3, {
     keyEncoding: 'utf-8',
     valueEncoding: 'utf-8'
   })
 
-  await bee1.put('a', 'b')
-  await bee2.put('c', 'd')
+  await writer1.put('a', 'b')
+  await writer2.put('c', 'd')
+
+  t.same(firstUser.length, 2)
+  t.same(secondUser.length, 2)
 
   {
-    const node = await bee2.get('a')
+    const node = await writer2.get('a')
     t.true(node)
     t.same(node.value, 'b')
   }
 
   {
-    const node = await bee1.get('c')
+    const node = await writer1.get('c')
     t.true(node)
     t.same(node.value, 'd')
   }
+
+  {
+    const node = await reader.get('a')
+    t.true(node)
+    t.same(node.value, 'b')
+  }
+
+  // Both indexes should have processed two writes.
+  t.same(firstIndex.length, 3)
+  t.same(secondIndex.length, 3)
 
   t.end()
 })

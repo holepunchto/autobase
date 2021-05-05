@@ -194,7 +194,7 @@ test.skip('can cut out a writer', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new AutobaseCore([writerA, writerB, writerC])
+  const base = new Autobase([writerA, writerB, writerC])
   await base.ready()
 
   // Create three independent forks
@@ -218,7 +218,7 @@ test.skip('can cut out a writer', async t => {
   }
 
   // Cut out writer B. Should truncate 3
-  const base2 = new AutobaseCore([writerA, writerC])
+  const base2 = new Autobase([writerA, writerC])
 
   {
     const index = base2.createRebaser(output)
@@ -239,7 +239,7 @@ test.skip('can cut out a writer, causal writes', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new AutobaseCore([writerA, writerB, writerC])
+  const base = new Autobase([writerA, writerB, writerC])
   await base.ready()
 
   // Create three independent forks
@@ -263,7 +263,7 @@ test.skip('can cut out a writer, causal writes', async t => {
   }
 
   // Cut out writer B. Should truncate 3
-  const base2 = new AutobaseCore([writerA, writerC])
+  const base2 = new Autobase([writerA, writerC])
 
   {
     const index = await base2.rebaseInto(output)
@@ -283,7 +283,7 @@ test.skip('can cut out a writer, causal writes interleaved', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
 
-  const base = new AutobaseCore([writerA, writerB])
+  const base = new Autobase([writerA, writerB])
 
   for (let i = 0; i < 6; i++) {
     if (i % 2) {
@@ -302,7 +302,7 @@ test.skip('can cut out a writer, causal writes interleaved', async t => {
     t.same(output.length, 7)
   }
 
-  const base2 = new AutobaseCore([writerA])
+  const base2 = new Autobase([writerA])
 
   {
     const output = await causalValues(base2)

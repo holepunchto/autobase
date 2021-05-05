@@ -45,7 +45,7 @@ test.skip('rebase with stateful mapper, reinitializes state correctly', async t 
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new AutobaseCore([writerA, writerB, writerC])
+  const base = new Autobase([writerA, writerB, writerC])
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -114,7 +114,7 @@ test.skip('stateful mapper', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new AutobaseCore([writerA, writerB, writerC])
+  const base = new Autobase([writerA, writerB, writerC])
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {

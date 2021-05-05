@@ -31,7 +31,7 @@ module.exports = class Autobee {
     return b.flush()
   }
 
-  async put (key, value) {
+  async put (key, value, opts = {}) {
     const op = Buffer.from(JSON.stringify({ type: 'put', key, value }))
     return this.autobase.append(op)
   }
