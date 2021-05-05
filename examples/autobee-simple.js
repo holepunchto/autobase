@@ -21,7 +21,8 @@ module.exports = class Autobee {
     return this.autobase.ready()
   }
 
-  async _apply (batch, index) {
+  // A real apply function would need to handle conflicts.
+  async _apply (batch) {
     const b = this.bee.batch({ update: false })
     for (const node of batch) {
       const op = JSON.parse(node.value.toString())
@@ -38,14 +39,6 @@ module.exports = class Autobee {
 
   async get (key) {
     return this.bee.get(key)
-  }
-
-  createReadStream (...args) {
-    return this.bee.createReadStream(...args)
-  }
-
-  refresh (...args) {
-    return this.autobase.refresh(...args)
   }
 }
 

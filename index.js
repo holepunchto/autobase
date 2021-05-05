@@ -54,6 +54,7 @@ module.exports = class AutobaseCore {
 
   async _getInputNode (input, seq, opts = {}) {
     if (seq < 1) return null
+    if (Buffer.isBuffer(input)) input = input.toString('hex')
     if (typeof input === 'string') {
       if (!this._inputsByKey.has(input)) return null
       input = this._inputsByKey.get(input)

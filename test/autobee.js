@@ -3,7 +3,8 @@ const ram = require('random-access-memory')
 const Hypercore = require('hypercore-x')
 
 const Autobase = require('..')
-const Autobee = require('../examples/autobee-simple')
+const SimpleAutobee = require('../examples/autobee-simple')
+const AutobeeWithResolution = require('../examples/autobee-with-resolution')
 
 test('simple autobee', async t => {
   const firstUser = new Hypercore(ram)
@@ -26,16 +27,16 @@ test('simple autobee', async t => {
     autocommit: false // Needed because both indexes are writable.
   })
 
-  const writer1 = new Autobee(base1, {
+  const writer1 = new SimpleAutobee(base1, {
     keyEncoding: 'utf-8',
     valueEncoding: 'utf-8'
   })
-  const writer2 = new Autobee(base2, {
+  const writer2 = new SimpleAutobee(base2, {
     keyEncoding: 'utf-8',
     valueEncoding: 'utf-8'
   })
   // Simulates a remote reader (not part of the group).
-  const reader = new Autobee(base3, {
+  const reader = new SimpleAutobee(base3, {
     keyEncoding: 'utf-8',
     valueEncoding: 'utf-8'
   })
@@ -67,6 +68,68 @@ test('simple autobee', async t => {
   // Both indexes should have processed two writes.
   t.same(firstIndex.length, 3)
   t.same(secondIndex.length, 3)
+
+  t.end()
+})
+
+test('autobee with basic conflict resolution (only handles puts)', async t => {
+  const firstUser = new Hypercore(ram)
+  const firstIndex = new Hypercore(ram)
+  const secondUser = new Hypercore(ram)
+  const secondIndex = new Hypercore(ram)
+
+  const inputs = [firstUser, secondUser]
+
+  const base1 = new Autobase(inputs, {
+    indexes: firstIndex,
+    input: firstUser
+  })
+  const base2 = new Autobase(inputs, {
+    indexes: secondIndex,
+    input: secondUser
+  })
+
+  const writer1 = new AutobeeWithResolution(base1, {
+    keyEncoding: 'utf-8',
+    valueEncoding: 'utf-8'
+  })
+  const writer2 = new AutobeeWithResolution(base2, {
+    keyEncoding: 'utf-8',
+    valueEncoding: 'utf-8'
+  })
+
+  // Create two forking writes to 'a'
+  await writer1.put('a', 'a', []) // [] means empty clock
+  await writer1.put('b', 'b', []) // Two appends will shift writer1 to the back of the rebased index.
+  await writer1.put('c', 'c', []) // Two appends will shift writer1 to the back of the rebased index.
+  await writer2.put('a', 'a*', [])
+
+  {
+    const node = await writer2.get('a')
+    t.true(node)
+    t.same(node.value, 'a*') // Last one wins
+  }
+
+  // There should be one conflict for 'a'
+  {
+    const conflict = await writer2.get('_conflict/a')
+    t.true(conflict)
+  }
+
+  // Fix the conflict with another write that causally references both previous writes.
+  await writer2.put('a', 'resolved')
+
+  {
+    const node = await writer1.get('a')
+    t.true(node)
+    t.same(node.value, 'resolved')
+  }
+
+  // The conflict should be resolved
+  {
+    const conflict = await writer2.get('_conflict/a')
+    t.false(conflict)
+  }
 
   t.end()
 })

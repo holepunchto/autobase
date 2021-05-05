@@ -24,16 +24,39 @@ test('map with stateless mapper', async t => {
     await base.append(`c${i}`, await base.latest(writerC), writerC)
   }
 
-  {
-    const rebased = base.createRebasedIndex(output, {
-      apply (batch, index) {
-        batch = batch.map(({ value }) => Buffer.from(value.toString('utf-8').toUpperCase(), 'utf-8'))
-        return rebased.append(batch)
-      }
-    })
-    const indexed = await indexedValues(rebased)
-    t.same(indexed.map(v => v.value), bufferize(['A0', 'B1', 'B0', 'C2', 'C1', 'C0']))
-  }
+  const rebased = base.createRebasedIndex(output, {
+    apply (batch) {
+      batch = batch.map(({ value }) => Buffer.from(value.toString('utf-8').toUpperCase(), 'utf-8'))
+      return rebased.append(batch)
+    }
+  })
+  const indexed = await indexedValues(rebased)
+  t.same(indexed.map(v => v.value), bufferize(['A0', 'B1', 'B0', 'C2', 'C1', 'C0']))
+
+  t.end()
+})
+
+test('mapping into batches yields the correct clock on reads', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase([writerA, writerB, writerC])
+
+  // Create three independent forks
+  await base.append(['a0'], [], writerA)
+  await base.append(['b0', 'b1'], [], writerB)
+  await base.append(['c0', 'c1', 'c2'], [], writerC)
+
+  const rebased = base.createRebasedIndex(output, {
+    apply (batch) {
+      batch = batch.map(({ value }) => Buffer.from(value.toString('utf-8').toUpperCase(), 'utf-8'))
+      return rebased.append(batch)
+    }
+  })
+  const indexed = await indexedValues(rebased)
+  t.same(indexed.map(v => v.value), bufferize(['A0', 'B1', 'B0', 'C2', 'C1', 'C0']))
 
   t.end()
 })
