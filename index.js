@@ -17,6 +17,7 @@ module.exports = class AutobaseCore {
     this._inputs = inputs
     this._defaultIndexes = opts.indexes
     this._defaultInput = opts.input
+    this._autocommit = opts.autocommit
     this._lock = lock()
     this._inputsByKey = null
 
@@ -195,6 +196,9 @@ module.exports = class AutobaseCore {
 
   createRebasedIndex (indexes, opts = {}) {
     if (isOptions(indexes)) return this.createRebasedIndex(null, indexes)
+    if (opts.autocommit === undefined) {
+      opts.autocommit = this._autocommit
+    }
     if (indexes) {
       indexes = this._opening ? this._opening.then(() => indexes) : indexes
       return new RebasedHypercore(this, indexes, opts)

@@ -1,8 +1,12 @@
 const test = require('tape')
 const ram = require('random-access-memory')
 const Hypercore = require('hypercore-x')
+const Corestore = require('corestore')
 
 const Autobase = require('..')
+const { fromManifest, createUser } = require('../manifest')
+const { Manifest } = require('../lib/manifest')
+
 const SimpleAutobee = require('../examples/autobee-simple')
 const AutobeeWithResolution = require('../examples/autobee-with-resolution')
 
@@ -41,8 +45,8 @@ test('simple autobee', async t => {
     valueEncoding: 'utf-8'
   })
 
-  await writer1.put('a', 'b')
-  await writer2.put('c', 'd')
+  await writer1.put('a', 'a')
+  await writer2.put('b', 'b')
 
   t.same(firstUser.length, 2)
   t.same(secondUser.length, 2)
@@ -50,24 +54,62 @@ test('simple autobee', async t => {
   {
     const node = await writer2.get('a')
     t.true(node)
-    t.same(node.value, 'b')
+    t.same(node.value, 'a')
   }
 
   {
-    const node = await writer1.get('c')
+    const node = await writer1.get('b')
     t.true(node)
-    t.same(node.value, 'd')
+    t.same(node.value, 'b')
   }
 
   {
     const node = await reader.get('a')
     t.true(node)
-    t.same(node.value, 'b')
+    t.same(node.value, 'a')
   }
 
   // Both indexes should have processed two writes.
   t.same(firstIndex.length, 3)
   t.same(secondIndex.length, 3)
+
+  t.end()
+})
+
+test('autobee from manifest', async t => {
+  const storeA = await Corestore.fromStorage(ram)
+  const storeB = await Corestore.fromStorage(ram)
+  replicate(storeA, storeB)
+
+  const { user: userA } = await createUser(storeA)
+  const { user: userB } = await createUser(storeB)
+
+  const manifest = [userA, userB]
+  const deflated = Manifest.deflate(manifest)
+
+  const beeA = new SimpleAutobee(fromManifest(storeA, deflated), {
+    keyEncoding: 'utf-8',
+    valueEncoding: 'utf-8'
+  })
+  const beeB = new SimpleAutobee(fromManifest(storeB, deflated), {
+    keyEncoding: 'utf-8',
+    valueEncoding: 'utf-8'
+  })
+
+  await beeA.put('a', 'a')
+  await beeB.put('b', 'b')
+
+  {
+    const node = await beeB.get('a')
+    t.true(node)
+    t.same(node.value, 'a')
+  }
+
+  {
+    const node = await beeA.get('b')
+    t.true(node)
+    t.same(node.value, 'b')
+  }
 
   t.end()
 })
@@ -191,12 +233,6 @@ test.skip('autobee extension', async t => {
   t.end()
 })
 
-function replicate (store1, store2) {
-  const s1 = store1.replicate(true)
-  const s2 = store2.replicate(false)
-  s1.pipe(s2).pipe(s1)
-}
-
 function replicateWithLatency (store1, store2, latency = 10) {
   const s1 = store1.replicate(true)
   const s2 = store2.replicate(false)
@@ -211,3 +247,9 @@ async function collect (s) {
   return buf
 }
 */
+
+function replicate (store1, store2) {
+  const s1 = store1.replicate(true)
+  const s2 = store2.replicate(false)
+  s1.pipe(s2).pipe(s1)
+}

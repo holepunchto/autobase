@@ -468,7 +468,7 @@ test('remote rebasing selects longest index', async t => {
 
   {
     // Should select output2
-    const reader = base.createRebasedIndex([output1, output2])
+    const reader = base.createRebasedIndex([output1, output2], { autocommit: false })
     await reader.update()
     t.same(reader.status.added, 1)
     t.same(reader.status.removed, 0)
@@ -477,7 +477,7 @@ test('remote rebasing selects longest index', async t => {
 
   {
     // Should select output3
-    const reader = base.createRebasedIndex([output1, output2, output3])
+    const reader = base.createRebasedIndex([output1, output2, output3], { autocommit: false })
     await reader.update()
     t.same(reader.status.added, 0)
     t.same(reader.status.removed, 0)

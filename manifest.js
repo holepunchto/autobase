@@ -1,5 +1,5 @@
 const Autobase = require('./index')
-const { Manifest } = require('./lib/manifest')
+const { Manifest, User } = require('./lib/manifest')
 
 const INPUT_NAME = '@autobase/input'
 const INDEX_NAME = '@autobase/index'
@@ -16,8 +16,11 @@ function fromManifest (store, manifest, opts = {}) {
     if (user.index) indexes.push(user.index)
   }
 
-  const inputsReady = Promise.all(inputs.map(i => i.ready()))
-  const indexesReady = Promise.all(indexes.map(i => i.ready()))
+  const localInput = getLocalInput(store)
+  const localIndex = getLocalIndex(store)
+
+  const inputsReady = readyAndReplaceLocal(inputs, localInput)
+  const indexesReady = readyAndReplaceLocal(indexes, localIndex)
 
   return new Autobase(inputsReady.then(() => inputs), {
     ...opts,
@@ -27,13 +30,37 @@ function fromManifest (store, manifest, opts = {}) {
 
 async function createUser (store, opts = {}) {
   const user = {
-    input: opts.input !== false ? store.get({ name: INPUT_NAME, token: TOKEN }) : null,
-    index: opts.index !== false ? store.get({ name: INDEX_NAME, token: TOKEN }) : null
+    input: opts.input !== false ? getLocalInput(store) : null,
+    index: opts.index !== false ? getLocalIndex(store) : null
   }
   await Promise.allSettled([user.input.ready(), user.index.ready()])
-  // TODO: Store in immutable-store-extension by default
-  // const id = await store.immutable.put(User.deflate(user))
-  return { user, id: null }
+  const id = await store.gossip.put(User.deflate(user))
+  return { user, id }
+}
+
+function getLocalInput (store) {
+  return store.get({ name: INPUT_NAME, token: TOKEN })
+}
+
+function getLocalIndex (store) {
+  return store.get({ name: INDEX_NAME, token: TOKEN })
+}
+
+async function readyAndReplaceLocal (cores, localCore) {
+  await Promise.all(cores.map(c => c.ready()))
+  await localCore.ready()
+
+  let replaced = false
+  for (let i = 0; i < cores.length; i++) {
+    if (!cores[i].key.equals(localCore.key)) continue
+    cores[i].close()
+    cores[i] = localCore
+    replaced = true
+  }
+
+  if (!replaced) localCore.close()
+
+  return cores
 }
 
 module.exports = {

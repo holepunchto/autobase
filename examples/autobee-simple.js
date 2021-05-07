@@ -1,9 +1,10 @@
 const Hyperbee = require('hyperbee')
 
-module.exports = class Autobee {
+module.exports = class SimpleAutobee {
   constructor (autobase, opts) {
     this.autobase = autobase
     const index = this.autobase.createRebasedIndex({
+      ...opts,
       unwrap: true,
       apply: this._apply.bind(this)
     })
