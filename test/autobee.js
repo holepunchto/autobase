@@ -79,7 +79,8 @@ test('simple autobee', async t => {
 test('autobee from manifest', async t => {
   const storeA = await Corestore.fromStorage(ram)
   const storeB = await Corestore.fromStorage(ram)
-  replicate(storeA, storeB)
+  const storeC = await Corestore.fromStorage(ram)
+  replicate(storeA, storeB, storeC)
 
   const { user: userA } = await createUser(storeA)
   const { user: userB } = await createUser(storeB)
@@ -92,6 +93,11 @@ test('autobee from manifest', async t => {
     valueEncoding: 'utf-8'
   })
   const beeB = new SimpleAutobee(fromManifest(storeB, deflated), {
+    keyEncoding: 'utf-8',
+    valueEncoding: 'utf-8'
+  })
+  // Simulates a remote reader (not part of the group).
+  const beeC = new SimpleAutobee(fromManifest(storeC, deflated), {
     keyEncoding: 'utf-8',
     valueEncoding: 'utf-8'
   })
@@ -109,6 +115,12 @@ test('autobee from manifest', async t => {
     const node = await beeA.get('b')
     t.true(node)
     t.same(node.value, 'b')
+  }
+
+  {
+    const node = await beeC.get('a')
+    t.true(node)
+    t.same(node.value, 'a')
   }
 
   t.end()
@@ -248,8 +260,12 @@ async function collect (s) {
 }
 */
 
-function replicate (store1, store2) {
-  const s1 = store1.replicate(true)
-  const s2 = store2.replicate(false)
-  s1.pipe(s2).pipe(s1)
+function replicate (...stores) {
+  for (const store1 of stores) {
+    for (const store2 of stores) {
+      const s1 = store1.replicate(true)
+      const s2 = store2.replicate(false)
+      s1.pipe(s2).pipe(s1)
+    }
+  }
 }
