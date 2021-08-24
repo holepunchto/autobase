@@ -8,7 +8,7 @@ const { Header } = require('./lib/messages')
 
 const INPUT_TYPE = '@autobase/input'
 
-module.exports = class AutobaseCore {
+module.exports = class Autobase {
   constructor (inputs, opts = {}) {
     this.inputs = null
     this.defaultIndexes = null

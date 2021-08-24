@@ -1,5 +1,5 @@
 const Autobase = require('./index')
-const { Manifest, User } = require('./lib/manifest')
+const { Manifest } = require('./lib/manifest')
 
 const INPUT_NAME = '@autobase/input'
 const INDEX_NAME = '@autobase/index'
@@ -34,8 +34,7 @@ async function createUser (store, opts = {}) {
     index: opts.index !== false ? getLocalIndex(store) : null
   }
   await Promise.allSettled([user.input.ready(), user.index.ready()])
-  const id = await store.gossip.put(User.deflate(user))
-  return { user, id }
+  return user
 }
 
 function getLocalInput (store) {

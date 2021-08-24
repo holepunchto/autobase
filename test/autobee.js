@@ -77,13 +77,13 @@ test('simple autobee', async t => {
 })
 
 test('autobee from manifest', async t => {
-  const storeA = await Corestore.fromStorage(ram)
-  const storeB = await Corestore.fromStorage(ram)
-  const storeC = await Corestore.fromStorage(ram)
+  const storeA = new Corestore(ram)
+  const storeB = new Corestore(ram)
+  const storeC = new Corestore(ram)
   replicate(storeA, storeB, storeC)
 
-  const { user: userA } = await createUser(storeA)
-  const { user: userB } = await createUser(storeB)
+  const userA = await createUser(storeA)
+  const userB = await createUser(storeB)
 
   const manifest = [userA, userB]
   const deflated = Manifest.deflate(manifest)
