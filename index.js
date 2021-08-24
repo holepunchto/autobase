@@ -108,6 +108,31 @@ module.exports = class Autobase {
     return clock
   }
 
+  async addInput (input) {
+    await this.ready()
+    await input.ready()
+    const release = await this._lock()
+    const id = input.key.toString('hex')
+    if (!this._inputsByKey.has(id)) {
+      this._inputs.push(input)
+      this._inputsByKey.set(id, input)
+    }
+    release()
+  }
+
+  async removeInput (input) {
+    await this.ready()
+    await input.ready()
+    const release = await this._lock()
+    const id = input.key.toString('hex')
+    if (this._inputsByKey.has(id)) {
+      const idx = this._inputs.indexOf(input)
+      this._inputs.splice(idx, 1)
+      this._inputsByKey.delete(id)
+    }
+    release()
+  }
+
   createCausalStream (opts = {}) {
     const self = this
     let heads = null

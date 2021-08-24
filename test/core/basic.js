@@ -122,4 +122,61 @@ test('supports a default writer and default latest clocks', async t => {
   t.end()
 })
 
+test('dynamically adding/removing inputs', async t => {
+  const writerA = new Hypercore(ram)
+
+  const base = new Autobase([writerA])
+  await base.ready()
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
+  }
+  {
+    const output = await causalValues(base)
+    t.same(output.map(v => v.value), bufferize(['a0']))
+  }
+
+  const writerB = new Hypercore(ram)
+  await base.addInput(writerB)
+
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, await base.latest(writerB), writerB)
+  }
+  {
+    const output = await causalValues(base)
+    t.same(output.map(v => v.value), bufferize(['a0', 'b1', 'b0']))
+  }
+
+  const writerC = new Hypercore(ram)
+  await base.addInput(writerC)
+
+  for (let i = 0; i < 3; i++) {
+    await base.append(`c${i}`, await base.latest(writerC), writerC)
+  }
+  {
+    const output = await causalValues(base)
+    t.same(output.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
+  }
+
+  // Add 3 more records to A -- should switch fork ordering
+  for (let i = 1; i < 4; i++) {
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
+  }
+
+  {
+    const output = await causalValues(base)
+    t.same(output.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']))
+  }
+
+  await base.removeInput(writerC)
+
+  {
+    const output = await causalValues(base)
+    t.same(output.map(v => v.value), bufferize(['b1', 'b0', 'a3', 'a2', 'a1', 'a0']))
+  }
+
+  t.end()
+})
+
 // TODO: Add a test case that links directly to the links of a previous input node.
