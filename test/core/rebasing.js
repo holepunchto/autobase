@@ -486,3 +486,87 @@ test('remote rebasing selects longest index', async t => {
 
   t.end()
 })
+
+test('can dynamically add/remove default indexes', async function (t) {
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const index1 = new Hypercore(ram)
+  const index2 = new Hypercore(ram)
+  const index3 = new Hypercore(ram)
+
+  const base1 = new Autobase([writerA, writerB, writerC])
+  await base1.ready()
+
+  // Create three independent forks, and rebase them into separate indexes
+  for (let i = 0; i < 3; i++) {
+    await base1.append(`a${i}`, [], writerA)
+  }
+
+  {
+    const index = base1.createRebasedIndex(index1)
+    await index.update()
+  }
+
+  for (let i = 0; i < 2; i++) {
+    await base1.append(`b${i}`, [], writerB)
+  }
+
+  {
+    const index = base1.createRebasedIndex(index2)
+    await index.update()
+  }
+
+  for (let i = 0; i < 1; i++) {
+    await base1.append(`c${i}`, [], writerC)
+  }
+
+  {
+    const index = base1.createRebasedIndex(index3)
+    await index.update()
+  }
+
+  const base2 = new Autobase([writerA, writerB, writerC])
+
+  {
+    const reader = base2.createRebasedIndex({ autocommit: false })
+    await reader.update()
+    t.same(reader.status.added, 6)
+    t.same(reader.status.removed, 0)
+    t.same(reader.length, 7)
+  }
+
+  await base2.addDefaultIndex(index1)
+
+  {
+    const reader = base2.createRebasedIndex({ autocommit: false })
+    await reader.update()
+    t.same(reader.status.added, 3)
+    t.same(reader.status.removed, 0)
+    t.same(reader.length, 7)
+  }
+
+  await base2.addDefaultIndex(index2)
+
+  {
+    const reader = base2.createRebasedIndex({ autocommit: false })
+    await reader.update()
+    t.same(reader.status.added, 1)
+    t.same(reader.status.removed, 0)
+    t.same(reader.length, 7)
+  }
+
+  await base2.addDefaultIndex(index3)
+
+  {
+    // Should select output3
+    const reader = base2.createRebasedIndex({ autocommit: false })
+    await reader.update()
+    t.same(reader.status.added, 0)
+    t.same(reader.status.removed, 0)
+    t.same(reader.length, 7)
+  }
+
+  t.end()
+})

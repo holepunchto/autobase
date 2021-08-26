@@ -20,7 +20,9 @@ module.exports = class Autobase {
     this._autocommit = opts.autocommit
     this._lock = lock()
     this._inputsByKey = null
+    this._rebasersWithDefaultIndexes = []
 
+    this.opened = false
     this._opening = this._open()
     this._opening.catch(noop)
     this.ready = () => this._opening
@@ -48,7 +50,7 @@ module.exports = class Autobase {
     if (this.defaultInput) await this.defaultInput.ready()
 
     this._inputsByKey = new Map(this.inputs.map(i => [i.key.toString('hex'), i]))
-    this._opening = null
+    this.opened = true
   }
 
   // Private Methods
@@ -86,13 +88,13 @@ module.exports = class Autobase {
   // Public API
 
   async heads () {
-    await this.ready()
+    if (!this.opened) await this.ready()
     await Promise.all(this.inputs.map(i => i.update()))
     return Promise.all(this.inputs.map(i => this._getInputNode(i, i.length - 1)))
   }
 
   async latest (inputs) {
-    await this.ready()
+    if (!this.opened) await this.ready()
     if (!inputs) inputs = []
     else inputs = Array.isArray(inputs) ? inputs : [inputs]
     inputs = new Set(inputs.map(i => i.key.toString('hex')))
@@ -109,28 +111,40 @@ module.exports = class Autobase {
   }
 
   async addInput (input) {
-    await this.ready()
+    if (!this.opened) await this.ready()
     await input.ready()
-    const release = await this._lock()
     const id = input.key.toString('hex')
     if (!this._inputsByKey.has(id)) {
       this._inputs.push(input)
       this._inputsByKey.set(id, input)
     }
-    release()
   }
 
   async removeInput (input) {
-    await this.ready()
+    if (!this.opened) await this.ready()
     await input.ready()
-    const release = await this._lock()
     const id = input.key.toString('hex')
     if (this._inputsByKey.has(id)) {
       const idx = this._inputs.indexOf(input)
       this._inputs.splice(idx, 1)
       this._inputsByKey.delete(id)
     }
-    release()
+  }
+
+  async addDefaultIndex (index) {
+    if (!this.opened) await this.ready()
+    await index.ready()
+    if (!this.defaultIndexes) this.defaultIndexes = []
+    this.defaultIndexes.push(index)
+  }
+
+  async removeDefaultIndex (index) {
+    if (!this.opened) await this.ready()
+    await index.ready()
+    if (!this.defaultIndexes) return
+    const idx = this.defaultIndexes.indexOf(index)
+    if (idx === -1) return
+    this.defaultIndexes.splice(idx, 1)
   }
 
   createCausalStream (opts = {}) {
@@ -203,7 +217,7 @@ module.exports = class Autobase {
       input = clock
       clock = null
     }
-    await this.ready()
+    if (!this.opened) await this.ready()
     const release = await this._lock()
     input = input || this.defaultInput
     clock = clockToMap(clock || await this.latest())
@@ -221,18 +235,11 @@ module.exports = class Autobase {
 
   createRebasedIndex (indexes, opts = {}) {
     if (isOptions(indexes)) return this.createRebasedIndex(null, indexes)
+    indexes = indexes || this.defaultIndexes || this._defaultIndexes || []
     if (opts.autocommit === undefined) {
       opts.autocommit = this._autocommit
     }
-    if (indexes) {
-      indexes = this._opening ? this._opening.then(() => indexes) : indexes
-      return new RebasedHypercore(this, indexes, opts)
-    }
-    if (this._defaultIndexes || this.defaultIndexes) {
-      indexes = this._opening ? this._opening.then(() => this.defaultIndexes) : this.defaultIndexes
-      return new RebasedHypercore(this, indexes, opts)
-    }
-    throw new Error('Indexes or default indexes are required when creating a rebased index')
+    return new RebasedHypercore(this, indexes, opts)
   }
 
   // For testing

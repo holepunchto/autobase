@@ -179,4 +179,41 @@ test('dynamically adding/removing inputs', async t => {
   t.end()
 })
 
+test('dynamically adding inputs does not alter existing causal streams', async t => {
+  const writerA = new Hypercore(ram)
+
+  const base = new Autobase([writerA])
+  await base.ready()
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
+  }
+  {
+    const output = await causalValues(base)
+    t.same(output.map(v => v.value), bufferize(['a0']))
+  }
+
+  const writerB = new Hypercore(ram)
+  await base.addInput(writerB)
+
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, await base.latest(writerB), writerB)
+  }
+
+  const output = []
+  const stream = base.createCausalStream()
+  await new Promise(resolve => stream.once('readable', resolve)) // Once the stream is opened, its heads are locked
+
+  const writerC = new Hypercore(ram)
+  await base.addInput(writerC)
+
+  for await (const node of stream) { // The stream should not have writerC's nodes
+    output.push(node)
+  }
+  t.same(output.map(v => v.value), bufferize(['a0', 'b1', 'b0']))
+
+  t.end()
+})
+
 // TODO: Add a test case that links directly to the links of a previous input node.
