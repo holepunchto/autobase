@@ -130,9 +130,10 @@ module.exports = class Autobase {
     const id = Buffer.isBuffer(input) ? input.toString('hex') : input.key.toString('hex')
     if (!this._inputsByKey.has(id)) return
 
-    const idx = this._inputs.indexOf(input)
+    input = this._inputsByKey.get(id)
+    const idx = this.inputs.indexOf(input)
 
-    this._inputs.splice(idx, 1)
+    this.inputs.splice(idx, 1)
     this._inputsByKey.delete(id)
   }
 

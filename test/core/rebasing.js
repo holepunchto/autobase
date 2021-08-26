@@ -338,7 +338,6 @@ test('can cut out a writer, causal writes', async t => {
 
   {
     const indexed = await indexedValues(index)
-    console.log('indexed:', indexed.map(v => v.value.toString()))
     t.same(indexed.map(v => v.value), bufferize(['a0', 'c4', 'c3', 'c2', 'c1', 'c0']))
     t.same(index.status.added, 0) // b1 and b0 are removed
     t.same(index.status.removed, 2) // b1 and b0 are removed
@@ -376,7 +375,6 @@ test('can cut out a writer, causal writes interleaved', async t => {
 
   {
     const indexed = await indexedValues(index)
-    console.log('values:', indexed.map(v => v.value.toString()))
     t.same(indexed.map(v => v.value), bufferize(['a5', 'a3', 'a1']))
     t.same(index.status.added, 3)
     t.same(index.status.removed, 6)
