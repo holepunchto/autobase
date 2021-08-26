@@ -2,7 +2,7 @@ const test = require('tape')
 const Hypercore = require('hypercore-x')
 const ram = require('random-access-memory')
 
-const { bufferize, causalValues, indexedValues } = require('../helpers')
+const { bufferize, indexedValues } = require('../helpers')
 const Autobase = require('../..')
 
 test('simple rebase', async t => {
@@ -187,29 +187,27 @@ test('does not over-truncate', async t => {
   t.end()
 })
 
-// TODO: Should cutting out a writer then indexing into an existing index be supported?
-test.skip('can cut out a writer', async t => {
+test('can cut out a writer', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
-  await base.ready()
+  const base = new Autobase([writerA, writerB, writerC], { indexes: output })
+  const index = base.createRebasedIndex()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
-    await base.append(writerA, `a${i}`, await base.latest(writerA))
+    await base.append(`a${i}`, [], writerA)
   }
   for (let i = 0; i < 2; i++) {
-    await base.append(writerB, `b${i}`, await base.latest(writerB))
+    await base.append(`b${i}`, [], writerB)
   }
   for (let i = 0; i < 5; i++) {
-    await base.append(writerC, `c${i}`, await base.latest(writerC))
+    await base.append(`c${i}`, [], writerC)
   }
 
   {
-    const index = base.createRebaser(output)
     const indexed = await indexedValues(index)
     t.same(indexed.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c4', 'c3', 'c2', 'c1', 'c0']))
     t.same(index.status.added, 8)
@@ -218,103 +216,170 @@ test.skip('can cut out a writer', async t => {
   }
 
   // Cut out writer B. Should truncate 3
-  const base2 = new Autobase([writerA, writerC])
+  await base.removeInput(writerB)
 
   {
-    const index = base2.createRebaser(output)
     const indexed = await indexedValues(index)
     t.same(indexed.map(v => v.value), bufferize(['a0', 'c4', 'c3', 'c2', 'c1', 'c0']))
-    t.same(index.status.added, 2) // a0 and c4 are reindexed
-    t.same(index.status.removed, 4) // a0 and c4 are both popped and reindexed
+    t.same(index.status.added, 1) // a0 is reindexed
+    t.same(index.status.removed, 3) // a0 is popped and reindexed
     t.same(output.length, 7)
   }
 
   t.end()
 })
 
-// TODO: Should cutting out a writer then indexing into an existing index be supported?
-test.skip('can cut out a writer, causal writes', async t => {
+test('can cut out a writer from the back', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
-  await base.ready()
+  const base = new Autobase([writerA, writerB, writerC], { indexes: output })
+  const index = base.createRebasedIndex()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
-    await base.append(writerA, `a${i}`, await base.latest(writerA))
-  }
-  for (let i = 0; i < 2; i++) {
-    await base.append(writerB, `b${i}`, await base.latest([writerB, writerA]))
+    await base.append(`a${i}`, [], writerA)
   }
   for (let i = 0; i < 5; i++) {
-    await base.append(writerC, `c${i}`, await base.latest(writerC))
+    await base.append(`b${i}`, [], writerB)
   }
 
   {
-    const index = await base.rebaseInto(output)
     const indexed = await indexedValues(index)
-    t.same(indexed.map(v => v.value), ['b1', 'b0', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0'])
-    t.same(index.added, 8)
-    t.same(index.removed, 0)
+    t.same(indexed.map(v => v.value), bufferize(['a0', 'b4', 'b3', 'b2', 'b1', 'b0']))
+    t.same(index.status.added, 6)
+    t.same(index.status.removed, 0)
+    t.same(output.length, 7)
+  }
+
+  await base.removeInput(writerB)
+
+  {
+    const indexed = await indexedValues(index)
+    t.same(indexed.map(v => v.value), bufferize(['a0']))
+    t.same(index.status.added, 1) // a0 is reindexed
+    t.same(index.status.removed, 6) // a0 is popped and reindexed
+    t.same(output.length, 2)
+  }
+
+  t.end()
+})
+
+test('can cut out a writer from the front', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase([writerA, writerB, writerC], { indexes: output })
+  const index = base.createRebasedIndex()
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, [], writerA)
+  }
+  for (let i = 0; i < 5; i++) {
+    await base.append(`b${i}`, [], writerB)
+  }
+
+  {
+    const indexed = await indexedValues(index)
+    t.same(indexed.map(v => v.value), bufferize(['a0', 'b4', 'b3', 'b2', 'b1', 'b0']))
+    t.same(index.status.added, 6)
+    t.same(index.status.removed, 0)
+    t.same(output.length, 7)
+  }
+
+  await base.removeInput(writerA)
+
+  {
+    const indexed = await indexedValues(index)
+    t.same(indexed.map(v => v.value), bufferize(['b4', 'b3', 'b2', 'b1', 'b0']))
+    t.same(index.status.added, 0) // a0 is removed
+    t.same(index.status.removed, 1) // a0 is removed
+    t.same(output.length, 6)
+  }
+
+  t.end()
+})
+
+test('can cut out a writer, causal writes', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase([writerA, writerB, writerC], { indexes: output })
+  const index = base.createRebasedIndex()
+
+  // Create three causally-linked forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, await base.latest([writerB, writerA]), writerB)
+  }
+  for (let i = 0; i < 5; i++) {
+    await base.append(`c${i}`, await base.latest(writerC), writerC)
+  }
+
+  {
+    const indexed = await indexedValues(index)
+    t.same(indexed.map(v => v.value), bufferize(['b1', 'b0', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0']))
+    t.same(index.status.added, 8)
+    t.same(index.status.removed, 0)
     t.same(output.length, 9)
   }
 
   // Cut out writer B. Should truncate 3
-  const base2 = new Autobase([writerA, writerC])
+  await base.removeInput(writerB)
 
   {
-    const index = await base2.rebaseInto(output)
     const indexed = await indexedValues(index)
-    t.same(indexed.map(v => v.value), ['a0', 'c4', 'c3', 'c2', 'c1', 'c0'])
-    t.same(index.added, 1) // a0 is reindexed
-    t.same(index.removed, 3) // a0, b1, and b0 are popped, a0 is reindexed
+    console.log('indexed:', indexed.map(v => v.value.toString()))
+    t.same(indexed.map(v => v.value), bufferize(['a0', 'c4', 'c3', 'c2', 'c1', 'c0']))
+    t.same(index.status.added, 0) // b1 and b0 are removed
+    t.same(index.status.removed, 2) // b1 and b0 are removed
     t.same(output.length, 7)
   }
 
   t.end()
 })
 
-// TODO: Should cutting out a writer then indexing into an existing index be supported?
-test.skip('can cut out a writer, causal writes interleaved', async t => {
+test('can cut out a writer, causal writes interleaved', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB])
+  const base = new Autobase([writerA, writerB], { indexes: output })
+  const index = base.createRebasedIndex()
 
   for (let i = 0; i < 6; i++) {
     if (i % 2) {
-      await base.append(writerA, `a${i}`, await base.latest([writerA, writerB]))
+      await base.append(`a${i}`, writerA)
     } else {
-      await base.append(writerB, `b${i}`, await base.latest([writerA, writerB]))
+      await base.append(`b${i}`, writerB)
     }
   }
 
   {
-    const index = await base.rebaseInto(output)
     const indexed = await indexedValues(index)
-    t.same(indexed.map(v => v.value), ['a5', 'b4', 'a3', 'b2', 'a1', 'b0'])
-    t.same(index.added, 6)
-    t.same(index.removed, 0)
+    t.same(indexed.map(v => v.value), bufferize(['a5', 'b4', 'a3', 'b2', 'a1', 'b0']))
+    t.same(index.status.added, 6)
+    t.same(index.status.removed, 0)
     t.same(output.length, 7)
   }
 
-  const base2 = new Autobase([writerA])
+  await base.removeInput(writerB)
 
   {
-    const output = await causalValues(base2)
-    t.same(output.map(v => v.value), ['a5', 'a3', 'a1'])
-  }
-
-  {
-    const index = await base2.rebaseInto(output)
     const indexed = await indexedValues(index)
-    t.same(indexed.map(v => v.value), ['a5', 'a3', 'a1'])
-    t.same(index.added, 3)
-    t.same(index.removed, 6)
+    console.log('values:', indexed.map(v => v.value.toString()))
+    t.same(indexed.map(v => v.value), bufferize(['a5', 'a3', 'a1']))
+    t.same(index.status.added, 3)
+    t.same(index.status.removed, 6)
     t.same(output.length, 4)
   }
 

@@ -14,12 +14,13 @@ module.exports = class Autobase {
     this.defaultIndexes = null
     this.defaultInput = null
 
-    this._inputs = inputs
+    this._inputs = inputs || []
     this._defaultIndexes = opts.indexes
     this._defaultInput = opts.input
     this._autocommit = opts.autocommit
     this._lock = lock()
     this._inputsByKey = null
+    this._defaultIndexesByKey = null
     this._rebasersWithDefaultIndexes = []
 
     this.opened = false
@@ -46,10 +47,13 @@ module.exports = class Autobase {
     if (this.defaultIndexes) {
       if (!Array.isArray(this.defaultIndexes)) this.defaultIndexes = [this.defaultIndexes]
       await Promise.all(this.defaultIndexes.map(i => i.ready()))
+      this._defaultIndexesByKey = new Map(this.defaultIndexes.map(i => [i.key.toString('hex'), i]))
     }
     if (this.defaultInput) await this.defaultInput.ready()
 
     this._inputsByKey = new Map(this.inputs.map(i => [i.key.toString('hex'), i]))
+    if (!this._defaultIndexesByKey) this._defaultIndexesByKey = new Map()
+
     this.opened = true
   }
 
@@ -122,13 +126,14 @@ module.exports = class Autobase {
 
   async removeInput (input) {
     if (!this.opened) await this.ready()
-    await input.ready()
-    const id = input.key.toString('hex')
-    if (this._inputsByKey.has(id)) {
-      const idx = this._inputs.indexOf(input)
-      this._inputs.splice(idx, 1)
-      this._inputsByKey.delete(id)
-    }
+    if (typeof input.ready === 'function') await input.ready()
+    const id = Buffer.isBuffer(input) ? input.toString('hex') : input.key.toString('hex')
+    if (!this._inputsByKey.has(id)) return
+
+    const idx = this._inputs.indexOf(input)
+
+    this._inputs.splice(idx, 1)
+    this._inputsByKey.delete(id)
   }
 
   async addDefaultIndex (index) {
@@ -140,11 +145,15 @@ module.exports = class Autobase {
 
   async removeDefaultIndex (index) {
     if (!this.opened) await this.ready()
-    await index.ready()
-    if (!this.defaultIndexes) return
+    if (typeof index.ready === 'function') await index.ready()
+    const id = Buffer.isBuffer(index) ? index.toString('hex') : index.key.toString('hex')
+    if (!this._defaultIndexesByKey.has(id)) return
+
+    index = this._defaultIndexesByKey.get(id)
     const idx = this.defaultIndexes.indexOf(index)
-    if (idx === -1) return
+
     this.defaultIndexes.splice(idx, 1)
+    this._defaultIndexesByKey.delete(id)
   }
 
   createCausalStream (opts = {}) {
