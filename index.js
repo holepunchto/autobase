@@ -135,6 +135,8 @@ module.exports = class Autobase {
 
     this.inputs.splice(idx, 1)
     this._inputsByKey.delete(id)
+
+    return input
   }
 
   async addDefaultIndex (index) {
@@ -155,6 +157,8 @@ module.exports = class Autobase {
 
     this.defaultIndexes.splice(idx, 1)
     this._defaultIndexesByKey.delete(id)
+
+    return index
   }
 
   createCausalStream (opts = {}) {
