@@ -1,7 +1,11 @@
 async function causalValues (base) {
+  return collect(base.createCausalStream())
+}
+
+async function collect (stream, map) {
   const buf = []
-  for await (const indexNode of base.createCausalStream()) {
-    buf.push(indexNode)
+  for await (const node of stream) {
+    buf.push(map ? map(node) : node)
   }
   return buf
 }
@@ -31,6 +35,7 @@ function bufferize (arr) {
 
 module.exports = {
   bufferize,
+  collect,
   causalValues,
   indexedValues,
   debugInputNode

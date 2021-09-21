@@ -22,6 +22,9 @@ module.exports = class Autobase {
     this._inputsByKey = null
     this._defaultIndexesByKey = null
     this._rebasersWithDefaultIndexes = []
+    this._readStreams = []
+
+    this._onappend = this._bumpReadStreams.bind(this)
 
     this.opened = false
     this._opening = this._open()
@@ -53,6 +56,10 @@ module.exports = class Autobase {
 
     this._inputsByKey = new Map(this.inputs.map(i => [i.key.toString('hex'), i]))
     if (!this._defaultIndexesByKey) this._defaultIndexesByKey = new Map()
+
+    for (const input of this.inputs) {
+      input.on('append', this._onappend)
+    }
 
     this.opened = true
   }
@@ -89,6 +96,12 @@ module.exports = class Autobase {
     return node
   }
 
+  _bumpReadStreams () {
+    for (const stream of this._readStreams) {
+      stream.bump()
+    }
+  }
+
   // Public API
 
   async heads () {
@@ -121,6 +134,8 @@ module.exports = class Autobase {
     if (!this._inputsByKey.has(id)) {
       this._inputs.push(input)
       this._inputsByKey.set(id, input)
+      input.on('append', this._onappend)
+      this._bumpReadStreams()
     }
   }
 
@@ -135,6 +150,8 @@ module.exports = class Autobase {
 
     this.inputs.splice(idx, 1)
     this._inputsByKey.delete(id)
+    input.removeListener('append', this._onappend)
+    this._bumpReadStreams()
 
     return input
   }
@@ -165,13 +182,15 @@ module.exports = class Autobase {
     const self = this
     let heads = null
 
-    const open = function (cb) {
+    return new streamx.Readable({ open, read })
+
+    function open (cb) {
       self.heads()
         .then(h => { heads = h })
         .then(() => cb(null), err => cb(err))
     }
 
-    const read = function (cb) {
+    function read (cb) {
       const { forks, clock, smallest } = forkInfo(heads)
 
       if (!forks.length) {
@@ -196,8 +215,131 @@ module.exports = class Autobase {
         return cb(null)
       }, err => cb(err))
     }
+  }
 
-    return new streamx.Readable({ open, read })
+  createReadStream (opts = {}) {
+    const self = this
+
+    const positionsByKey = new Map()
+    const nodesByKey = new Map()
+    const snapshotLengthsByKey = new Map()
+
+    let running = false
+    let bumped = false
+
+    const stream = new streamx.Readable({ open, read })
+    stream.bump = bump
+
+    this._readStreams.push(stream)
+    stream.once('close', () => {
+      const idx = this._readStreams.indexOf(stream)
+      if (idx === -1) return
+      this._readStreams.splice(idx, 1)
+    })
+
+    return stream
+
+    async function open (cb) {
+      try {
+        if (!self.opened) await self.ready()
+        await maybeSnapshot()
+        await updateAll()
+        return cb(null)
+      } catch (err) {
+        return cb(err)
+      }
+    }
+
+    function read (cb) {
+      _read().then(cb, cb)
+    }
+
+    async function _read () {
+      if (running) return
+      running = true
+      try {
+        while (!streamx.Readable.isBackpressured(stream)) {
+          await updateAll()
+          while (bumped) {
+            bumped = false
+            await updateAll()
+          }
+
+          const oldest = findOldestNode(nodesByKey)
+
+          if (!oldest) {
+            if (opts.live) return
+            stream.push(null)
+            return
+          }
+
+          if (!(opts.bootstrapping && hasUnsatisfiedInputs(oldest, self._inputsByKey))) {
+            const pos = positionsByKey.get(oldest.id)
+            nodesByKey.delete(oldest.id)
+            positionsByKey.set(oldest.id, pos + 1)
+            stream.push(oldest)
+            continue
+          }
+        }
+      } finally {
+        running = false
+      }
+    }
+
+    async function maybeSnapshot () {
+      for (const [key, input] of self._inputsByKey) {
+        await input.update()
+        if (!opts.live) snapshotLengthsByKey.set(key, input.length)
+      }
+    }
+
+    async function updateAll () {
+      const inputKeys = (opts.live || opts.bootstrap) ? self._inputsByKey.keys() : snapshotLengthsByKey.keys()
+      for (const key of inputKeys) {
+        const input = self._inputsByKey.get(key)
+
+        let pos = positionsByKey.get(key)
+        if (pos === undefined) {
+          pos = 1
+          positionsByKey.set(key, pos)
+        }
+
+        const snapshotLength = snapshotLengthsByKey.get(key)
+        if (snapshotLength) {
+          if (pos >= snapshotLength) continue
+        } else {
+          if (pos >= input.length) await input.update()
+          if (pos >= input.length) continue
+        }
+
+        nodesByKey.set(key, await self._getInputNode(input, pos))
+      }
+    }
+
+    function bump () {
+      bumped = true
+      _read().catch(err => stream.destroy(err))
+    }
+
+    function findOldestNode (nodesByKey) {
+      for (const node of nodesByKey.values()) {
+        if (!node) continue
+        let oldest = true
+        for (const n2 of nodesByKey.values()) {
+          if (!n2 || n2 === node) continue
+          if (n2.lte(node)) oldest = false
+        }
+        if (oldest) return node
+      }
+      return null
+    }
+
+    function hasUnsatisfiedInputs (node, inputsByKey) {
+      for (const key of node.clock.keys()) {
+        if (!inputsByKey.has(key)) return true
+      }
+      return false
+    }
   }
 
   async _append (input, value, clock) {
@@ -254,6 +396,12 @@ module.exports = class Autobase {
       opts.autocommit = this._autocommit
     }
     return new RebasedHypercore(this, indexes, opts)
+  }
+
+  close () {
+    for (const input of this.inputs) {
+      input.removeListener('append', this._onappend)
+    }
   }
 
   // For testing

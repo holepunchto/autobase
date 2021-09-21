@@ -50,7 +50,7 @@ test('causal writes', async t => {
   const base = new Autobase([writerA, writerB, writerC])
   await base.ready()
 
-  // Create three independent forks
+  // Create three dependent branches
   for (let i = 0; i < 1; i++) {
     await base.append(`a${i}`, await base.latest(writerA), writerA)
   }
