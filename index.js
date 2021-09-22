@@ -280,9 +280,11 @@ module.exports = class Autobase {
           const pos = positionsByKey.get(oldest.id)
           nodesByKey.delete(oldest.id)
           positionsByKey.set(oldest.id, pos + 1)
-          stream.push(oldest)
 
-          if (opts.wait) await opts.wait(oldest)
+          const mapped = opts.map ? opts.map(oldest) : oldest
+          stream.push(mapped)
+
+          if (opts.wait) await opts.wait(mapped)
         }
       } finally {
         running = false
