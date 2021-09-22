@@ -79,12 +79,11 @@ Options include:
 ```js
 {
   live: false, // Enable live mode (the stream will continuously yield new nodes)
+  map: (node) => node // A sync map function
   resolve: async (node) => true | false, // A resolve hook (described above)
   wait: async (node) => undefined // A wait hook (described above)
 }
 ```
-
-
 
 ## License
 
