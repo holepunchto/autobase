@@ -64,6 +64,26 @@ Creates a new Autobase from a set of input Hypercores
 #### `const stream = base.createCausalStream()`
 Generate a Readable stream of input blocks with deterministic, causal ordering.
 
+#### `const stream = base.createReadStream(opts = {})`
+Generate a Readable stream of input blocks, from earliest to latest.
+
+Unlike `createCausalStream`, the ordering of `createReadStream` is not deterministic. The read stream only gives you the guarantee that every node it yields will __not__ be causally-dependent on any node yielded later.
+
+`createReadStream` can be passed two custom async hooks:
+1. `resolve`: Called when an unsatisfied node (a node that links to an unknown input) is encountered. Can be used to dynamically add inputs to the Autobase.
+  * Returning `true` indicates that you added new inputs to the Autobase, and so the read stream should begin processing those inputs.
+  * Returning `false` indicates that you did not resolve the missing links, and so the node should be yielded immediately as is.
+2. `wait`: Called after each node is yielded. Can be used to dynamically add inputs to the Autobase.
+
+Options include:
+```js
+{
+  live: false, // Enable live mode (the stream will continuously yield new nodes)
+  resolve: async (node) => true | false, // A resolve hook (described above)
+  wait: async (node) => undefined // A wait hook (described above)
+}
+```
+
 
 
 ## License
