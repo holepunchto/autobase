@@ -227,8 +227,14 @@ module.exports = class Autobase {
     let running = false
     let bumped = false
 
-    const stream = new streamx.Readable({ open, read })
-    stream.bump = bump
+    const stream = new streamx.Readable({
+      open: cb => _open().then(cb, cb),
+      read: cb => _read().then(cb, cb)
+    })
+    stream.bump = () => {
+      bumped = true
+      _read().catch(err => stream.destroy(err))
+    }
 
     this._readStreams.push(stream)
     stream.once('close', () => {
@@ -239,19 +245,10 @@ module.exports = class Autobase {
 
     return stream
 
-    async function open (cb) {
-      try {
-        if (!self.opened) await self.ready()
-        await maybeSnapshot()
-        await updateAll()
-        return cb(null)
-      } catch (err) {
-        return cb(err)
-      }
-    }
-
-    function read (cb) {
-      _read().then(cb, cb)
+    async function _open (cb) {
+      if (!self.opened) await self.ready()
+      await maybeSnapshot()
+      await updateAll()
     }
 
     async function _read () {
@@ -273,13 +270,19 @@ module.exports = class Autobase {
             return
           }
 
-          if (!(opts.bootstrapping && hasUnsatisfiedInputs(oldest, self._inputsByKey))) {
-            const pos = positionsByKey.get(oldest.id)
-            nodesByKey.delete(oldest.id)
-            positionsByKey.set(oldest.id, pos + 1)
-            stream.push(oldest)
-            continue
+          const unsatisfied = hasUnsatisfiedInputs(oldest, self._inputsByKey)
+          if (unsatisfied && opts.resolve) {
+            const resolved = await opts.resolve(oldest)
+            if (resolved !== false) continue
+            // If resolved is false, yield the unresolved node as usual
           }
+
+          const pos = positionsByKey.get(oldest.id)
+          nodesByKey.delete(oldest.id)
+          positionsByKey.set(oldest.id, pos + 1)
+          stream.push(oldest)
+
+          if (opts.wait) await opts.wait(oldest)
         }
       } finally {
         running = false
@@ -294,7 +297,8 @@ module.exports = class Autobase {
     }
 
     async function updateAll () {
-      const inputKeys = (opts.live || opts.bootstrap) ? self._inputsByKey.keys() : snapshotLengthsByKey.keys()
+      const allowUpdates = opts.live || opts.resolve || opts.wait // TODO: Make this behavior more customizable
+      const inputKeys = allowUpdates ? self._inputsByKey.keys() : snapshotLengthsByKey.keys()
       for (const key of inputKeys) {
         const input = self._inputsByKey.get(key)
 
@@ -314,11 +318,6 @@ module.exports = class Autobase {
 
         nodesByKey.set(key, await self._getInputNode(input, pos))
       }
-    }
-
-    function bump () {
-      bumped = true
-      _read().catch(err => stream.destroy(err))
     }
 
     function findOldestNode (nodesByKey) {
