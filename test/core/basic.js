@@ -104,8 +104,8 @@ test('supports a default writer and default latest clocks', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
 
-  const base1 = new Autobase([writerA, writerB], { defaultWriter: writerA })
-  const base2 = new Autobase([writerA, writerB], { defaultWriter: writerB })
+  const base1 = new Autobase([writerA, writerB], { input: writerA })
+  const base2 = new Autobase([writerA, writerB], { input: writerB })
   await base1.ready()
   await base2.ready()
 
@@ -118,6 +118,38 @@ test('supports a default writer and default latest clocks', async t => {
 
   const output = await causalValues(base1)
   t.same(output.map(v => v.value), bufferize(['a3', 'b1', 'a2', 'b0', 'a1', 'a0']))
+  t.same(output[0].change, writerA.key)
+  t.same(output[1].change, writerB.key)
+
+  t.end()
+})
+
+test('adding duplicate inputs is a no-op', async t => {
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+
+  const base1 = new Autobase([writerA, writerA, writerB, writerB], { input: writerA })
+  const base2 = new Autobase([writerA, writerB], { input: writerB })
+  await base1.ready()
+  await base2.ready()
+
+  await base2.addInput(writerA)
+  await base2.addInput(writerB)
+
+  t.same(base1.inputs.length, 2)
+  t.same(base2.inputs.length, 2)
+
+  await base1.append('a0')
+  await base1.append('a1')
+  await base2.append('b0')
+  await base1.append('a2')
+  await base2.append('b1')
+  await base1.append('a3')
+
+  const output = await causalValues(base1)
+  t.same(output.map(v => v.value), bufferize(['a3', 'b1', 'a2', 'b0', 'a1', 'a0']))
+  t.same(output[0].change, writerA.key)
+  t.same(output[1].change, writerB.key)
 
   t.end()
 })

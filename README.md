@@ -26,7 +26,7 @@ Here's how you would create an Autobase from 3 known writers, and a locally-avai
 const autobase = require('autobase')
 
 // Assuming writerA, writerB, and writerC are Hypercore 10 instances
-const base = new Autobase([writerA, writerB, writerC], { defaultWriter: writerA })
+const base = new Autobase([writerA, writerB, writerC], { input: writerA })
 
 // Add a few messages to the local writer.
 // These messages will contain the Autobase's latest vector clock by default.

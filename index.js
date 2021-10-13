@@ -38,6 +38,17 @@ module.exports = class Autobase {
     this.defaultInput = await this._defaultInput
     await Promise.all(this.inputs.map(i => i.ready()))
 
+    this._inputsByKey = new Map()
+    const inputs = []
+    for (let i = 0; i < this.inputs.length; i++) {
+      const input = this.inputs[i]
+      const id = input.key.toString('hex')
+      if (this._inputsByKey.has(id)) continue
+      this._inputsByKey.set(id, input)
+      inputs.push(input)
+    }
+    this.inputs = inputs
+
     if (!this.defaultInput) {
       for (const input of this.inputs) {
         if (input.writable) {
@@ -54,7 +65,6 @@ module.exports = class Autobase {
     }
     if (this.defaultInput) await this.defaultInput.ready()
 
-    this._inputsByKey = new Map(this.inputs.map(i => [i.key.toString('hex'), i]))
     if (!this._defaultIndexesByKey) this._defaultIndexesByKey = new Map()
 
     for (const input of this.inputs) {
@@ -132,7 +142,7 @@ module.exports = class Autobase {
     await input.ready()
     const id = input.key.toString('hex')
     if (!this._inputsByKey.has(id)) {
-      this._inputs.push(input)
+      this.inputs.push(input)
       this._inputsByKey.set(id, input)
       input.on('append', this._onappend)
       this._bumpReadStreams()
