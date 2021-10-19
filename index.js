@@ -33,21 +33,17 @@ module.exports = class Autobase {
   }
 
   async _open () {
-    this.inputs = await this._inputs
-    this.defaultIndexes = await this._defaultIndexes
     this.defaultInput = await this._defaultInput
+    const inputs = (await this._inputs) || []
+    let defaultIndexes = (await this._defaultIndexes) || []
 
-    if (this.defaultIndexes) {
-      if (!Array.isArray(this.defaultIndexes)) this.defaultIndexes = [this.defaultIndexes]
-    } else {
-      this.defaultIndexes = []
-    }
+    if (defaultIndexes && !Array.isArray(defaultIndexes)) defaultIndexes = [defaultIndexes]
 
-    await Promise.all(this.inputs.map(i => i.ready()))
-    await Promise.all(this.defaultIndexes.map(i => i.ready()))
+    await Promise.all(inputs.map(i => i.ready()))
+    await Promise.all(defaultIndexes.map(i => i.ready()))
 
-    this._inputsByKey = intoByKeyMap(this.inputs)
-    this._defaultIndexesByKey = intoByKeyMap(this.defaultIndexes)
+    this._inputsByKey = intoByKeyMap(inputs)
+    this._defaultIndexesByKey = intoByKeyMap(defaultIndexes)
 
     this.inputs = [...this._inputsByKey.values()]
     this.defaultIndexes = [...this._defaultIndexesByKey.values()]
@@ -163,7 +159,9 @@ module.exports = class Autobase {
   async addDefaultIndex (index) {
     if (!this.opened) await this.ready()
     await index.ready()
-    if (!this.defaultIndexes) this.defaultIndexes = []
+
+    if (this._defaultIndexesByKey.has(index.key.toString('hex'))) return
+
     this.defaultIndexes.push(index)
   }
 
