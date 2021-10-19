@@ -36,18 +36,21 @@ module.exports = class Autobase {
     this.inputs = await this._inputs
     this.defaultIndexes = await this._defaultIndexes
     this.defaultInput = await this._defaultInput
-    await Promise.all(this.inputs.map(i => i.ready()))
 
-    this._inputsByKey = new Map()
-    const inputs = []
-    for (let i = 0; i < this.inputs.length; i++) {
-      const input = this.inputs[i]
-      const id = input.key.toString('hex')
-      if (this._inputsByKey.has(id)) continue
-      this._inputsByKey.set(id, input)
-      inputs.push(input)
+    if (this.defaultIndexes) {
+      if (!Array.isArray(this.defaultIndexes)) this.defaultIndexes = [this.defaultIndexes]
+    } else {
+      this.defaultIndexes = []
     }
-    this.inputs = inputs
+
+    await Promise.all(this.inputs.map(i => i.ready()))
+    await Promise.all(this.defaultIndexes.map(i => i.ready()))
+
+    this._inputsByKey = intoByKeyMap(this.inputs)
+    this._defaultIndexesByKey = intoByKeyMap(this.defaultIndexes)
+
+    this.inputs = [...this._inputsByKey.values()]
+    this.defaultIndexes = [...this._defaultIndexesByKey.values()]
 
     if (!this.defaultInput) {
       for (const input of this.inputs) {
@@ -57,15 +60,6 @@ module.exports = class Autobase {
         }
       }
     }
-
-    if (this.defaultIndexes) {
-      if (!Array.isArray(this.defaultIndexes)) this.defaultIndexes = [this.defaultIndexes]
-      await Promise.all(this.defaultIndexes.map(i => i.ready()))
-      this._defaultIndexesByKey = new Map(this.defaultIndexes.map(i => [i.key.toString('hex'), i]))
-    }
-    if (this.defaultInput) await this.defaultInput.ready()
-
-    if (!this._defaultIndexesByKey) this._defaultIndexesByKey = new Map()
 
     for (const input of this.inputs) {
       input.on('append', this._onappend)
@@ -500,6 +494,18 @@ function isOptions (o) {
 
 function isHypercore (o) {
   return o.get && o.replicate && o.append
+}
+
+function intoByKeyMap (cores) {
+  const m = new Map()
+  if (!cores) return m
+  if (!Array.isArray(cores)) cores = [cores]
+  for (const core of cores) {
+    const id = core.key.toString('hex')
+    if (m.has(id)) continue
+    m.set(id, core)
+  }
+  return m
 }
 
 function noop () {}
