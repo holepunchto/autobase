@@ -6,7 +6,7 @@ Automatically rebase multiple causally-linked Hypercores into a single, lineariz
 
 The output of an Autobase is "just a Hypercore", which means it can be used to transform higher-level data structures (like Hyperbee) into multiwriter data structures with minimal additional work.
 
-These multi-writer data structures operate using an event-sourcing pattern, where Autobase inputs are "operation logs", and outputs are indexed views over those logs.
+These multiwriter data structures operate using an event-sourcing pattern, where Autobase inputs are "operation logs", and outputs are indexed views over those logs.
 
 ## How It Works
 
@@ -120,6 +120,10 @@ The simplest kind of rebased index (`const index = base.createRebasedIndex()`), 
 ##### `const stream = base.createCausalStream()`
 Generate a Readable stream of input blocks with deterministic, causal ordering.
 
+Any two users who create an Autobase with the same set of inputs, and the same lengths (i.e. both users have the same initial states), will produce identical causal streams.
+
+If an input node is causally-dependent on another node that is not available, the causal stream will not proceed past that node, as this would produce inconsistent output.
+
 #### Read Streams
 
 Similar to `Hypercore.createReadStream()`, this stream starts at the beginning of each input, and does not guarantee the same deterministic ordering as the causal stream. Unlike causal streams, which are used mainly for indexing, read streams can be used to observe updates. And since they move forward in time, they can be live.
@@ -151,7 +155,25 @@ Autobase is designed with indexing in mind. There's a one-to-many relationship b
 
 These derived indexes, called `RebasedIndexes`, in many ways look and feel like normal Hypercores. They support `get`, `update`, and `length` operations. Under the hood, though, they're...
 
-By default, an index is just a persisted version of an Autobase's causal stream, saved into a Hypercore. 
+By default, an index is just a persisted version of an Autobase's causal stream, saved into a Hypercore. But you can do a lot more with them, by using the `apply` option to `createRebasedIndex`.
+
+#### Customizing Indexes with `apply`
+
+The default rebased index is just a persisted causal stream -- input nodes are recorded into an index Hypercore in causal order, with no further modifications. This minimal "index" is useful on its own for applications that don't follow an event-sourcing pattern (i.e. chat), but most use-cases involve processing operations in the inputs into indexed outputs.
+
+To support indexing, `createRebasedIndex` can be provided with an `apply` function that's passed batches of input nodes during rebasing, and can choose what to store in the index. Inside `apply`, the index can be directly mutated through the `index.append` method, and these mutations will be batched when the call exits.
+
+The simplest `apply` function is just a mapper, a function that modifies each input node and saves it into the index in a one-to-one fashion. Here's an example that uppercases String inputs, and saves the resulting index into an `output` Hypercore:
+```js
+const index = base.createRebasedIndex(output, {
+  apply (batch) {
+    batch = batch.map(({ value }) => Buffer.from(value.toString('utf-8').toUpperCase(), 'utf-8'))
+    return index.append(batch)
+  }
+})
+```
+
+More sophisticated indexing might require multiple appends per input node, or reading from the index during `apply` -- both are perfectly valid. The [multiwriter Hyperbee example](examples/autobee-simple.js) shows how this `apply` pattern can be used to build Hypercore-based indexing data structures using this approach.
 
 #### Index Creation 
 
@@ -179,8 +201,6 @@ The length of the rebased index in bytes.
 ##### `await index.append([blocks])`
 
 __Note__: This operation can only be performed inside the `apply` function.
-
-##### `await index.commit()`
 
 ## License
 
