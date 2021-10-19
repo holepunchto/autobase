@@ -1,7 +1,5 @@
 # Autobase
 
-*⚠️ Alpha Warning: Autobase currently depends on an alpha version of [Hypercore 10](https://github.com/hypercore-skunkworks/hypercore-x). ⚠️*
-
 Automatically rebase multiple causally-linked Hypercores into a single, linearized Hypercore.
 
 The output of an Autobase is "just a Hypercore", which means it can be used to transform higher-level data structures (like Hyperbee) into multi-writer data structures with minimal additional work.
@@ -48,7 +46,7 @@ Autobase lets you write concise multi-writer data structures. As an example, a m
 
 ### Autobase Creation
 
-#### `const base = new Autobase(inputs, opts = {})`
+##### `const base = new Autobase(inputs, opts = {})`
 Creates a new Autobase from a set of input Hypercores
 
 `inputs`: An Array of causally-linked Hypercores
@@ -61,10 +59,34 @@ Creates a new Autobase from a set of input Hypercores
 }
 ```
 
-#### `const stream = base.createCausalStream()`
+##### `base.inputs`
+The list of input Hypercores.
+
+##### `base.defaultIndexes`
+The list of default rebased indexes.
+
+### Adding Log Entries
+
+##### `await base.append(input, value, clock)`
+
+##### `const clock = await base.latest([input1, input2, ...])`
+
+### Dynamically Adding and Removing Inputs/Indexes
+
+##### `await base.addInput(input)`
+
+##### `await base.removeInput(input)`
+
+##### `await base.addDefaultIndex(index)`
+
+##### `await base.removeDefaultIndex(index)`
+
+### Two Kinds of Streams
+
+##### `const stream = base.createCausalStream()`
 Generate a Readable stream of input blocks with deterministic, causal ordering.
 
-#### `const stream = base.createReadStream(opts = {})`
+##### `const stream = base.createReadStream(opts = {})`
 Generate a Readable stream of input blocks, from earliest to latest.
 
 Unlike `createCausalStream`, the ordering of `createReadStream` is not deterministic. The read stream only gives you the guarantee that every node it yields will __not__ be causally-dependent on any node yielded later.
@@ -84,6 +106,43 @@ Options include:
   wait: async (node) => undefined // A wait hook (described above)
 }
 ```
+
+### Rebased Indexes
+
+Autobase is designed with indexing in mind. There's a one-to-many relationship between an Autobase instance, and the derived indexes it can be used to power. A single Autobase might be indexed in many different ways.
+
+These derived indexes, called `RebasedIndexes`, in many ways look and feel like normal Hypercores. They support `get`, `update`, and `length` operations. Under the hood, though, they're...
+
+By default, an index is just a persisted version of an Autobase's causal stream, saved into a Hypercore. 
+
+#### Index Creation 
+
+#### `const index = base.createRebasedIndex(indexes, opts)`
+
+#### `RebasedIndex` API
+
+##### `index.status`
+The status of the last rebase operation.
+
+Returns an object of the form `{ added: N, removed: M }` where:
+* `added` indicates how many nodes were appended to the index during the rebase
+* `removed` incidates how many nodes were truncated from the index during the rebase
+
+##### `index.length`
+The length of the rebased index. Similar to `hypercore.length`.
+
+##### `index.byteLength`
+The length of the rebased index in bytes.
+
+##### `await index.update()`
+
+##### `await index.get(idx, opts)`
+
+##### `await index.append([blocks])`
+
+__Note__: This operation can only be performed inside the `apply` function.
+
+##### `await index.commit()`
 
 ## License
 
