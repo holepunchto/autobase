@@ -14,7 +14,7 @@
     "streamx": "^2.10.0"
   },
   "devDependencies": {
-    "corestore": "github:hypercore-skunkworks/neocorestore",
+    "corestore": "next",
     "hypercore-x": "github:hypercore-skunkworks/hypercore-x",
     "hyperbee": "^1.5.3",
     "latency-stream": "^1.0.0",
