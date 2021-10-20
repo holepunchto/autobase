@@ -158,7 +158,7 @@ These derived indexes, called `RebasedIndexes`, in many ways look and feel like 
 
 By default, an index is just a persisted version of an Autobase's causal stream, saved into a Hypercore. But you can do a lot more with them, by using the `apply` option to `createRebasedIndex` you can define your own indexing strategies.
 
-Rebased Indexes are incredible powerful as they can be persisted to a Hypercore using the new truncate API added in Hypercore 10. This means that peers queries your multiwriter data structure don't need to read in all changes and apply them themself. Instead they can just start from an existing index, and if that index is missing indexing any data from inputs just apply those locally - this all happens automatically for you!
+Rebased Indexes are incredible powerful as they can be persisted to a Hypercore using the new truncate API added in Hypercore 10. This means that peers querying a multiwriter data structure don't need to read in all changes and apply them themself. Instead they can start from an existing index, and if that index is missing indexing any data from inputs, the peer can just apply those locally. The best thing is that this all happens automatically for you!
 
 ### Customizing Indexes with `apply`
 
