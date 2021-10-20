@@ -12,17 +12,13 @@ module.exports = class SimpleAutobee {
       ...opts,
       extension: false
     })
-
-    this._opening = this._open()
-    this._opening.catch(noop)
-    this.ready = () => this._opening
   }
 
-  _open () {
+  ready () {
     return this.autobase.ready()
   }
 
-  // A real apply function would need to handle conflicts.
+  // A real apply function would need to handle conflicts, beyond last-one-wins.
   async _apply (batch) {
     const b = this.bee.batch({ update: false })
     for (const node of batch) {
@@ -30,17 +26,15 @@ module.exports = class SimpleAutobee {
       // TODO: Handle deletions
       if (op.type === 'put') await b.put(op.key, op.value)
     }
-    return b.flush()
+    await b.flush()
   }
 
   async put (key, value, opts = {}) {
     const op = Buffer.from(JSON.stringify({ type: 'put', key, value }))
-    return this.autobase.append(op)
+    return await this.autobase.append(op)
   }
 
   async get (key) {
-    return this.bee.get(key)
+    return await this.bee.get(key)
   }
 }
-
-function noop () {}

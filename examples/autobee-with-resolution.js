@@ -21,13 +21,9 @@ module.exports = class Autobee {
       ...opts,
       extension: false
     })
-
-    this._opening = this._open()
-    this._opening.catch(noop)
-    this.ready = () => this._opening
   }
 
-  _open () {
+  ready () {
     return this.autobase.ready()
   }
 
@@ -54,7 +50,7 @@ module.exports = class Autobee {
       }
     }
 
-    return b.flush()
+    return await b.flush()
 
     async function handleConflict (existing) {
       const { change: existingChange, seq: existingSeq } = self._decode(existing.value)
@@ -71,7 +67,7 @@ module.exports = class Autobee {
 
   async put (key, value, opts) {
     const op = Buffer.from(JSON.stringify({ type: 'put', key, value }))
-    return this.autobase.append(op, opts)
+    return await this.autobase.append(op, opts)
   }
 
   async get (key) {
@@ -81,5 +77,3 @@ module.exports = class Autobee {
     return node
   }
 }
-
-function noop () { }

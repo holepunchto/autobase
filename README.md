@@ -42,7 +42,7 @@ await index.update()
 await index.get(0)
 ```
 
-Autobase lets you write concise multiwriter data structures. As an example, a multiwriter Hyperbee (with basic, last-one-wins conflict resolution) can be written with [~45 lines of code](examples/autobee-simple.js).
+Autobase lets you write concise multiwriter data structures. As an example, a multiwriter Hyperbee (with basic, last-one-wins conflict resolution) can be written with [~40 lines of code](examples/autobee-simple.js).
 
 In addition multiwriter data structures built on Autobase inherit the same feature set as Hypercore. This means that users can securely query a multiwriter data structure built with Autobase by only downloading a fraction of the data.
 
