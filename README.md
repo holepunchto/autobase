@@ -10,7 +10,7 @@ These multiwriter data structures operate using an event-sourcing pattern, where
 
 ## How It Works
 
-To see an example of how Autobase can be used alongside Hyperbee to build a P2P aggregation/voting tool, head over to [our multiwriter workshop](https://github.com/hypercore-protocol/hypernews).
+To see an example of how Autobase can be used alongside Hyperbee to build a P2P aggregation/voting tool, head over to [our multiwriter workshop](https://github.com/hypercore-protocol/p2p-multiwriter-with-autobase).
 
 ## Installation
 ```
