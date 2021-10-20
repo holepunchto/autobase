@@ -1,9 +1,9 @@
 const test = require('tape')
-const Hypercore = require('hypercore-x')
+const Hypercore = require('hypercore')
 const ram = require('random-access-memory')
 
-const { bufferize, indexedValues } = require('../helpers')
-const Autobase = require('../..')
+const { bufferize, indexedValues } = require('./helpers')
+const Autobase = require('../')
 
 test('map with stateless mapper', async t => {
   const output = new Hypercore(ram)

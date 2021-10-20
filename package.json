@@ -1,7 +1,7 @@
 {
   "name": "autobase",
   "version": "0.0.0",
-  "description": "WIP - nothing to see here",
+  "description": "Autobase lets you write concise multiwriter data structures with Hypercore",
   "main": "index.js",
   "scripts": {
     "test": "standard && tape test/*.js"
@@ -9,35 +9,38 @@
   "dependencies": {
     "compact-encoding": "^2.0.0",
     "debounceify": "^1.0.0",
-    "immutable-store-extension": "github:hypercore-skunkworks/immutable-store-extension",
     "mutexify": "^1.3.1",
     "safety-catch": "^1.0.1",
     "streamx": "^2.10.0"
   },
   "devDependencies": {
     "corestore": "next",
-    "hypercore-x": "github:hypercore-skunkworks/hypercore-x",
+    "hypercore": "next",
     "hyperbee": "^1.5.3",
     "latency-stream": "^1.0.0",
-    "protocol-buffers": "^4.2.0",
     "random-access-memory": "^3.1.2",
     "standard": "^16.0.3",
     "tape": "^5.1.0"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/hypercore-skunkworks/autobase.git"
+    "url": "https://github.com/hypercore-protocol/autobase.git"
   },
-  "author": "Mathias Buus (@mafintosh)",
+  "contributors": [
+    {
+      "name": "Mathias Buus",
+      "email": "mathiasbuus@gmail.com",
+      "url": "https://mafinto.sh"
+    },
+    {
+      "name": "Andrew Osheroff",
+      "email": "andrewosh@gmail.com",
+      "url": "https://andrewosh.com"
+    }
+  ],
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/hypercore-skunkworks/autobase/issues"
+    "url": "https://github.com/hypercore-protocol/autobase/issues"
   },
-  "homepage": "https://github.com/hypercore-skunkworks/autobase",
-  "standard": {
-    "ignore": [
-      "lib/messages.js",
-      "test/machines/indexer"
-    ]
-  }
+  "homepage": "https://github.com/hypercore-protocol/autobase"
 }

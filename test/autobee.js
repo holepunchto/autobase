@@ -1,6 +1,6 @@
 const test = require('tape')
 const ram = require('random-access-memory')
-const Hypercore = require('hypercore-x')
+const Hypercore = require('hypercore')
 
 const Autobase = require('..')
 const SimpleAutobee = require('../examples/autobee-simple')
