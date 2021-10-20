@@ -46,8 +46,6 @@ Autobase lets you write concise multiwriter data structures. As an example, a mu
 
 ## API
 
-### Autobase Creation
-
 #### `const base = new Autobase(inputs, opts = {})`
 Creates a new Autobase from a set of input Hypercores
 
@@ -69,16 +67,13 @@ The list of input Hypercores.
 #### `base.defaultIndexes`
 The list of default rebased indexes.
 
-### Adding Entries
-
 #### `await base.append(value, [clock], [input])`
 Append a new value to the autobase.
 
-* `clock`: The causal clock and defaults to base.latest
+* `clock`: The causal clock and defaults to base.latest.
 
 #### `const clock = await base.latest([input1, input2, ...])`
-
-### Dynamically Changing Inputs/Indexes
+Generate a causal clock linking the latest entries of each input.
 
 #### `await base.addInput(input)`
 Adds a new input Hypercore.
@@ -108,7 +103,7 @@ Removes a default index Hypercore.
 
 * `index` must be a Hypercore that is currently a default index.
 
-### Two Kinds of Streams
+## API - Two Kinds of Streams
 
 In order to generate shareable, derived indexes, Autobase must first be able to generate a deterministic, causal ordering over all the operations in its input Hypercores.
 
@@ -155,7 +150,7 @@ Options include:
 }
 ```
 
-### Rebased Indexes
+## API - Rebased Indexes
 
 Autobase is designed with indexing in mind. There's a one-to-many relationship between an Autobase instance, and the derived indexes it can be used to power. A single Autobase might be indexed in many different ways.
 
@@ -196,8 +191,6 @@ Options include:
   apply (batch) {} // The apply function described above
 }
 ```
-
-### `RebasedIndex` API
 
 #### `index.status`
 The status of the last rebase operation.
