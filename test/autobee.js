@@ -1,12 +1,8 @@
 const test = require('tape')
 const ram = require('random-access-memory')
 const Hypercore = require('hypercore-x')
-const Corestore = require('corestore')
 
 const Autobase = require('..')
-const { fromManifest, createUser } = require('../manifest')
-const { Manifest } = require('../lib/manifest')
-
 const SimpleAutobee = require('../examples/autobee-simple')
 const AutobeeWithResolution = require('../examples/autobee-with-resolution')
 
@@ -72,56 +68,6 @@ test('simple autobee', async t => {
   // Both indexes should have processed two writes.
   t.same(firstIndex.length, 3)
   t.same(secondIndex.length, 3)
-
-  t.end()
-})
-
-test('autobee from manifest', async t => {
-  const storeA = new Corestore(ram)
-  const storeB = new Corestore(ram)
-  const storeC = new Corestore(ram)
-  replicate(storeA, storeB, storeC)
-
-  const userA = await createUser(storeA)
-  const userB = await createUser(storeB)
-
-  const manifest = [userA, userB]
-  const deflated = Manifest.deflate(manifest)
-
-  const beeA = new SimpleAutobee(fromManifest(storeA, deflated), {
-    keyEncoding: 'utf-8',
-    valueEncoding: 'utf-8'
-  })
-  const beeB = new SimpleAutobee(fromManifest(storeB, deflated), {
-    keyEncoding: 'utf-8',
-    valueEncoding: 'utf-8'
-  })
-  // Simulates a remote reader (not part of the group).
-  const beeC = new SimpleAutobee(fromManifest(storeC, deflated), {
-    keyEncoding: 'utf-8',
-    valueEncoding: 'utf-8'
-  })
-
-  await beeA.put('a', 'a')
-  await beeB.put('b', 'b')
-
-  {
-    const node = await beeB.get('a')
-    t.true(node)
-    t.same(node.value, 'a')
-  }
-
-  {
-    const node = await beeA.get('b')
-    t.true(node)
-    t.same(node.value, 'b')
-  }
-
-  {
-    const node = await beeC.get('a')
-    t.true(node)
-    t.same(node.value, 'a')
-  }
 
   t.end()
 })
@@ -259,13 +205,3 @@ async function collect (s) {
   return buf
 }
 */
-
-function replicate (...stores) {
-  for (const store1 of stores) {
-    for (const store2 of stores) {
-      const s1 = store1.replicate(true)
-      const s2 = store2.replicate(false)
-      s1.pipe(s2).pipe(s1)
-    }
-  }
-}
