@@ -33,6 +33,8 @@ module.exports = class Autobase {
   }
 
   async _open () {
+    this._inputsValidation()
+
     this.defaultInput = await this._defaultInput
     const inputs = (await this._inputs) || []
     let defaultIndexes = (await this._defaultIndexes) || []
@@ -65,6 +67,14 @@ module.exports = class Autobase {
   }
 
   // Private Methods
+
+  _inputsValidation () {
+    for (const input of this._inputs) {
+      if (input.valueEncoding) {
+        throw new Error('Hypercore input must be binary ones.')
+      }
+    }
+  }
 
   async _getInputNode (input, seq, opts = {}) {
     if (seq < 1) return null
