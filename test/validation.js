@@ -13,7 +13,7 @@ test('should throw if hypercore valueEncoding is utf-8', async t => {
     await base.ready()
     t.fail('Should not be ready')
   } catch (error) {
-    t.equal(error.message, 'Hypercore input must be binary ones.')
+    t.equal(error.message, 'Hypercore input must be binary ones')
   }
 })
 
@@ -26,7 +26,7 @@ test('should throw if hypercore valueEncoding is json', async t => {
     await base.ready()
     t.fail('Should not be ready')
   } catch (error) {
-    t.equal(error.message, 'Hypercore input must be binary ones.')
+    t.equal(error.message, 'Hypercore input must be binary ones')
   }
 })
 

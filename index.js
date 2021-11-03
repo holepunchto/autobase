@@ -72,7 +72,7 @@ module.exports = class Autobase {
   _inputsValidation () {
     for (const input of this._inputs) {
       if (input.valueEncoding && input.valueEncoding !== codecs.binary) {
-        throw new Error('Hypercore input must be binary ones.')
+        throw new Error('Hypercore input must be binary ones')
       }
     }
   }
