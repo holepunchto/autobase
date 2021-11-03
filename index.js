@@ -1,6 +1,7 @@
 const streamx = require('streamx')
 const lock = require('mutexify/promise')
 const cenc = require('compact-encoding')
+const codecs = require('codecs')
 
 const RebasedHypercore = require('./lib/rebase')
 const { InputNode, IndexNode } = require('./lib/nodes')
@@ -70,7 +71,7 @@ module.exports = class Autobase {
 
   _inputsValidation () {
     for (const input of this._inputs) {
-      if (input.valueEncoding) {
+      if (input.valueEncoding && input.valueEncoding !== codecs.binary) {
         throw new Error('Hypercore input must be binary ones.')
       }
     }
