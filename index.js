@@ -34,7 +34,7 @@ module.exports = class Autobase {
   }
 
   async _open () {
-    this._inputsValidation()
+    this._validateInputs()
 
     this.defaultInput = await this._defaultInput
     const inputs = (await this._inputs) || []
@@ -69,7 +69,7 @@ module.exports = class Autobase {
 
   // Private Methods
 
-  _inputsValidation () {
+  _validateInputs () {
     for (const input of this._inputs) {
       if (input.valueEncoding && input.valueEncoding !== codecs.binary) {
         throw new Error('Hypercore input must be binary ones')
