@@ -71,9 +71,13 @@ module.exports = class Autobase {
 
   _validateInputs () {
     for (const input of this._inputs) {
-      if (input.valueEncoding && input.valueEncoding !== codecs.binary) {
-        throw new Error('Hypercore input must be binary ones')
-      }
+      this._validateInput(input)
+    }
+  }
+
+  _validateInput (input) {
+    if (input.valueEncoding && input.valueEncoding !== codecs.binary) {
+      throw new Error('Hypercore inputs must be binary ones')
     }
   }
 
@@ -139,6 +143,8 @@ module.exports = class Autobase {
   }
 
   async addInput (input) {
+    this._validateInput(input)
+
     if (!this.opened) await this.ready()
     await input.ready()
     const id = input.key.toString('hex')
