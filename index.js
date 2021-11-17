@@ -1,31 +1,30 @@
 const streamx = require('streamx')
-const lock = require('mutexify/promise')
-const cenc = require('compact-encoding')
 const codecs = require('codecs')
+const debounce = require('debounceify')
 
 const RebasedHypercore = require('./lib/rebase')
 const { InputNode, IndexNode } = require('./lib/nodes')
-const { Header } = require('./lib/messages')
-
-const INPUT_TYPE = '@autobase/input'
 
 module.exports = class Autobase {
   constructor (inputs, opts = {}) {
     this.inputs = null
     this.defaultIndexes = null
     this.defaultInput = null
+    this.local = null
+
+    this._latestClock = null
+    this._autocommit = opts.autocommit
 
     this._inputs = inputs || []
-    this._defaultIndexes = opts.indexes
     this._defaultInput = opts.input
-    this._autocommit = opts.autocommit
-    this._lock = lock()
     this._inputsByKey = null
+    this._onappend = debounce(this._onInputAppended.bind(this))
+
+    this._defaultIndexes = opts.indexes
     this._defaultIndexesByKey = null
     this._rebasersWithDefaultIndexes = []
-    this._readStreams = []
 
-    this._onappend = this._bumpReadStreams.bind(this)
+    this._readStreams = []
 
     this.opened = false
     this._opening = this._open()
@@ -34,8 +33,6 @@ module.exports = class Autobase {
   }
 
   async _open () {
-    this._validateInputs()
-
     this.defaultInput = await this._defaultInput
     const inputs = (await this._inputs) || []
     let defaultIndexes = (await this._defaultIndexes) || []
@@ -45,20 +42,29 @@ module.exports = class Autobase {
     await Promise.all(inputs.map(i => i.ready()))
     await Promise.all(defaultIndexes.map(i => i.ready()))
 
+    const writers = []
+    for (const input of inputs) {
+      if (!input.writable) continue
+
+      const writer = this._createWriter(input)
+      writers.push(writer)
+
+      if (!this.defaultInput) {
+        this.defaultInput = input
+      }
+      if (input === this.defaultInput) {
+        this.local = writer
+      }
+    }
+
     this._inputsByKey = intoByKeyMap(inputs)
+    this._writersByKey = intoByKeyMap(writers)
     this._defaultIndexesByKey = intoByKeyMap(defaultIndexes)
 
     this.inputs = [...this._inputsByKey.values()]
-    this.defaultIndexes = [...this._defaultIndexesByKey.values()]
+    this._validateInputs()
 
-    if (!this.defaultInput) {
-      for (const input of this.inputs) {
-        if (input.writable) {
-          this.defaultInput = input
-          break
-        }
-      }
-    }
+    this.defaultIndexes = [...this._defaultIndexesByKey.values()]
 
     for (const input of this.inputs) {
       input.on('append', this._onappend)
@@ -68,6 +74,29 @@ module.exports = class Autobase {
   }
 
   // Private Methods
+
+  _createInputBatch (input, batch, clock) {
+    const nodes = []
+    for (let i = 0; i < batch.length; i++) {
+      const batchOffset = (batch.length !== 1) ? [i, batch.length - 1 - i] : null
+      const node = { key: input.key, value: batch[i], batch: batchOffset }
+      if (i === batch.length - 1) node.clock = clock
+      nodes.push(InputNode.encode(node))
+    }
+    return nodes
+  }
+
+  _createWriter (input) {
+    return input.session({
+      preload: async () => {
+        await this.ready()
+        await this.latest()
+        return null
+      },
+      encodeBatch: batch => this._createInputBatch(input, batch, clockToMap(this._latestClock)),
+      valueEncoding: InputNode
+    })
+  }
 
   _validateInputs () {
     for (const input of this._inputs) {
@@ -82,7 +111,7 @@ module.exports = class Autobase {
   }
 
   async _getInputNode (input, seq, opts = {}) {
-    if (seq < 1) return null
+    if (seq < 0) return null
     if (Buffer.isBuffer(input)) input = input.toString('hex')
     if (typeof input === 'string') {
       if (!this._inputsByKey.has(input)) return null
@@ -105,10 +134,15 @@ module.exports = class Autobase {
     const batchEnd = await this._getInputNode(input, seq + node.batch[1])
 
     node.clock = batchEnd.clock
-    if (node.seq > 1) node.clock.set(node.id, node.seq - 1)
+    if (node.seq > 0) node.clock.set(node.id, node.seq - 1)
     else node.clock.delete(node.id)
 
     return node
+  }
+
+  async _onInputAppended () {
+    this._bumpReadStreams()
+    return this.latest() // Updates this._latestClock
   }
 
   _bumpReadStreams () {
@@ -137,20 +171,25 @@ module.exports = class Autobase {
     for (const head of heads) {
       if (!head) continue
       if (inputs.size && !inputs.has(head.id)) continue
-      clock.set(head.id, this._inputsByKey.get(head.id).length - 1)
+      const length = this._inputsByKey.get(head.id).length
+      if (!length) continue
+      clock.set(head.id, length - 1)
     }
+
+    this._latestClock = clock
     return clock
   }
 
   async addInput (input) {
-    this._validateInput(input)
-
     if (!this.opened) await this.ready()
     await input.ready()
+    this._validateInput(input)
+
     const id = input.key.toString('hex')
     if (!this._inputsByKey.has(id)) {
       this.inputs.push(input)
       this._inputsByKey.set(id, input)
+      this._writersByKey.set(id, this._createWriter(input))
       input.on('append', this._onappend)
       this._bumpReadStreams()
     }
@@ -168,6 +207,13 @@ module.exports = class Autobase {
     this.inputs.splice(idx, 1)
     this._inputsByKey.delete(id)
     input.removeListener('append', this._onappend)
+
+    const writer = this._writersByKey.get(id)
+    if (writer) {
+      await writer.close()
+      this._writersByKey.delete(id)
+    }
+
     this._bumpReadStreams()
 
     return input
@@ -224,7 +270,7 @@ module.exports = class Autobase {
       // TODO: When reading a batch node, parallel download them all (use batch[0])
       // TODO: Make a causal stream extension for faster reads
 
-      if (node.seq <= 0) {
+      if (node.seq === 0) {
         heads.splice(forkIndex, 1)
         return cb(null)
       }
@@ -325,7 +371,7 @@ module.exports = class Autobase {
 
         let pos = positionsByKey.get(key)
         if (pos === undefined) {
-          pos = 1
+          pos = 0
           positionsByKey.set(key, pos)
         }
 
@@ -362,7 +408,17 @@ module.exports = class Autobase {
     }
   }
 
-  async _append (input, value, clock) {
+  async append (value, clock, input) {
+    if (clock !== null && !Array.isArray(clock) && !(clock instanceof Map)) {
+      input = clock
+      clock = null
+    }
+    if (!Array.isArray(value)) value = [value]
+    if (!this.opened) await this.ready()
+
+    input = input || this.defaultInput
+    clock = clockToMap(clock || await this.latest())
+
     const head = await this._getInputNode(input, input.length - 1)
 
     // Make sure that causal information propagates.
@@ -375,38 +431,8 @@ module.exports = class Autobase {
       }
     }
 
-    if (!Array.isArray(value)) return input.append(InputNode.encode({ key: input.key, value, clock }))
-
-    const nodes = []
-    for (let i = 0; i < value.length; i++) {
-      const batch = [i, value.length - 1 - i]
-      const node = { key: input.key, value: value[i], batch }
-      if (i === value.length - 1) node.clock = clock
-      nodes.push(InputNode.encode(node))
-    }
-
-    return input.append(nodes)
-  }
-
-  async append (value, clock, input) {
-    if (clock !== null && !Array.isArray(clock) && !(clock instanceof Map)) {
-      input = clock
-      clock = null
-    }
-    if (!this.opened) await this.ready()
-    const release = await this._lock()
-    input = input || this.defaultInput
-    clock = clockToMap(clock || await this.latest())
-    try {
-      if (!input.length) {
-        await input.append(cenc.encode(Header, {
-          protocol: INPUT_TYPE
-        }))
-      }
-      return this._append(input, value, clock)
-    } finally {
-      release()
-    }
+    const batch = this._createInputBatch(input, value, clock)
+    return input.append(batch)
   }
 
   createRebasedIndex (indexes, opts = {}) {
@@ -454,14 +480,16 @@ function forkSize (node, i, heads) {
 
   for (const head of heads) {
     if (head === node) continue
-    for (const [key, length] of head.clock) {
+    for (const [key, seq] of head.clock) {
+      const length = seq + 1
       if (length > (high[key] || 0)) high[key] = length
     }
   }
 
   let s = 0
 
-  for (const [key, length] of node.clock) {
+  for (const [key, seq] of node.clock) {
+    const length = seq + 1
     const h = high[key] || 0
     if (length > h) s += length - h
   }

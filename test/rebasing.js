@@ -426,7 +426,7 @@ test('many writers, no causal writes', async t => {
   for (let i = 1; i < NUM_APPENDS + Math.floor(writers.length / 2) + 1; i++) {
     const latestNode = await index.get(i)
     const val = latestNode.toString('utf-8')
-    t.same(val, (await decodedMiddleWriter.get(i)).value.toString('utf-8'))
+    t.same(val, (await decodedMiddleWriter.get(i - 1)).value.toString('utf-8'))
   }
 
   t.end()

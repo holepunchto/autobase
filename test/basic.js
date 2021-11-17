@@ -248,4 +248,43 @@ test('dynamically adding inputs does not alter existing causal streams', async t
   t.end()
 })
 
+test('can append through the local input', async t => {
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase([writerA, writerB, writerC], {
+    input: writerA
+  })
+  await base.ready()
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.local.append(`a${i}`)
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, await base.latest(writerB), writerB)
+  }
+  for (let i = 0; i < 3; i++) {
+    await base.append(`c${i}`, await base.latest(writerC), writerC)
+  }
+
+  {
+    const output = await causalValues(base)
+    t.same(output.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
+  }
+
+  // Add 3 more records to A -- should include the latest clock and so should not change fork ordering
+  for (let i = 1; i < 4; i++) {
+    await base.local.append(`a${i}`)
+  }
+
+  {
+    const output = await causalValues(base)
+    t.same(output.map(v => v.value), bufferize(['a3', 'a2', 'a1', 'a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
+  }
+
+  t.end()
+})
+
 // TODO: Add a test case that links directly to the links of a previous input node.
