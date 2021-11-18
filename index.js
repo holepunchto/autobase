@@ -1,11 +1,14 @@
 const streamx = require('streamx')
 const codecs = require('codecs')
 const debounce = require('debounceify')
+const c = require('compact-encoding')
 
 const RebasedHypercore = require('./lib/rebase')
 const { InputNode, IndexNode } = require('./lib/nodes')
+const { NodeHeader } = require('./lib/nodes/messages')
 
 const INPUT_PROTOCOL = '@autobase/input/v1'
+const INDEX_PROTOCOL = '@autobase/index/v1'
 
 module.exports = class Autobase {
   constructor (inputs, opts = {}) {
@@ -86,7 +89,9 @@ module.exports = class Autobase {
       nodes.push(node)
     }
     if (input.length === 0) {
-      nodes[0].header = { protocol: INPUT_PROTOCOL }
+      nodes[0].header = {
+        protocol: INPUT_PROTOCOL
+      }
     }
     return nodes.map(InputNode.encode)
   }
@@ -129,7 +134,7 @@ module.exports = class Autobase {
     let node = null
     try {
       node = InputNode.decode(block, { key: input.key, seq })
-    } catch (_) {
+    } catch (err) {
       // Decoding errors should be discarded.
       return null
     }
@@ -446,12 +451,29 @@ module.exports = class Autobase {
     if (opts.autocommit === undefined) {
       opts.autocommit = this._autocommit
     }
-    return new RebasedHypercore(this, indexes, opts)
+    return new RebasedHypercore(this, indexes, {
+      ...opts,
+      header: {
+        protocol: INDEX_PROTOCOL
+      }
+    })
   }
 
   close () {
     for (const input of this.inputs) {
       input.removeListener('append', this._onappend)
+    }
+  }
+
+  static async isAutobase (core) {
+    if (core.length === 0) return false
+    try {
+      const block = await core.get(0, { valueEncoding: 'binary' })
+      const decoded = c.decode(NodeHeader, block)
+      const protocol = decoded && decoded.protocol
+      return protocol && (protocol === INPUT_PROTOCOL || protocol === INDEX_PROTOCOL)
+    } catch {
+      return false
     }
   }
 

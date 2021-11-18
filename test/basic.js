@@ -287,4 +287,27 @@ test('can append through the local input', async t => {
   t.end()
 })
 
+test('can parse headers', async t => {
+  const output = new Hypercore(ram)
+  const writer = new Hypercore(ram)
+  const notAutobase = new Hypercore(ram)
+  await notAutobase.append(Buffer.from('hello world'))
+
+  const base = new Autobase([writer], {
+    input: writer
+  })
+  await base.ready()
+
+  await base.local.append('a0')
+
+  const index = base.createRebasedIndex(output)
+  await index.update()
+
+  t.true(await Autobase.isAutobase(writer))
+  t.true(await Autobase.isAutobase(output))
+  t.false(await Autobase.isAutobase(notAutobase))
+
+  t.end()
+})
+
 // TODO: Add a test case that links directly to the links of a previous input node.
