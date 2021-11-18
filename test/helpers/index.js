@@ -13,7 +13,7 @@ async function collect (stream, map) {
 async function indexedValues (index) {
   const buf = []
   await index.update()
-  for (let i = index.length - 1; i > 0; i--) {
+  for (let i = index.length - 1; i >= 0; i--) {
     const indexNode = await index.get(i)
     buf.push(indexNode)
   }

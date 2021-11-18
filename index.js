@@ -5,6 +5,8 @@ const debounce = require('debounceify')
 const RebasedHypercore = require('./lib/rebase')
 const { InputNode, IndexNode } = require('./lib/nodes')
 
+const INPUT_PROTOCOL = '@autobase/input/v1'
+
 module.exports = class Autobase {
   constructor (inputs, opts = {}) {
     this.inputs = null
@@ -81,9 +83,12 @@ module.exports = class Autobase {
       const batchOffset = (batch.length !== 1) ? [i, batch.length - 1 - i] : null
       const node = { key: input.key, value: batch[i], batch: batchOffset }
       if (i === batch.length - 1) node.clock = clock
-      nodes.push(InputNode.encode(node))
+      nodes.push(node)
     }
-    return nodes
+    if (input.length === 0) {
+      nodes[0].header = { protocol: INPUT_PROTOCOL }
+    }
+    return nodes.map(InputNode.encode)
   }
 
   _createWriter (input) {
