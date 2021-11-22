@@ -310,4 +310,23 @@ test('can parse headers', async t => {
   t.end()
 })
 
+test('close cleans up writer sessions', async t => {
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+
+  const base = new Autobase([writerA, writerB])
+  await base.ready()
+
+  t.same(writerA.sessions.length, 2)
+  t.same(writerB.sessions.length, 2)
+
+  await base.close()
+  await base.close()
+
+  t.same(writerA.sessions.length, 1)
+  t.same(writerB.sessions.length, 1)
+
+  t.end()
+})
+
 // TODO: Add a test case that links directly to the links of a previous input node.
