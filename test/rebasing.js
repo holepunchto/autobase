@@ -357,9 +357,9 @@ test('can cut out a writer, causal writes interleaved', async t => {
 
   for (let i = 0; i < 6; i++) {
     if (i % 2) {
-      await base.append(`a${i}`, writerA)
+      await base.append(`a${i}`, await base.latest(), writerA)
     } else {
-      await base.append(`b${i}`, writerB)
+      await base.append(`b${i}`, await base.latest(), writerB)
     }
   }
 

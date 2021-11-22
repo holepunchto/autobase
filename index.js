@@ -15,15 +15,13 @@ module.exports = class Autobase {
     this.inputs = null
     this.defaultIndexes = null
     this.defaultInput = null
-    this.local = null
+    this.clock = null
 
-    this._latestClock = null
     this._autocommit = opts.autocommit
 
     this._inputs = inputs || []
     this._defaultInput = opts.input
     this._inputsByKey = null
-    this._writersByKey = null
     this._onappend = debounce(this._onInputAppended.bind(this))
 
     this._defaultIndexes = opts.indexes
@@ -32,7 +30,6 @@ module.exports = class Autobase {
 
     this._readStreams = []
 
-    this.closed = false
     this.opened = false
     this._closing = null
     this._opening = this._open()
@@ -50,29 +47,21 @@ module.exports = class Autobase {
 
     await Promise.all(inputs.map(i => i.ready()))
     await Promise.all(defaultIndexes.map(i => i.ready()))
+    this._validateInputs()
 
-    const writers = []
-    for (const input of inputs) {
-      if (!input.writable) continue
-
-      const writer = this._createWriter(input)
-      writers.push(writer)
-
-      if (!this.defaultInput) {
-        this.defaultInput = input
-      }
-      if (input === this.defaultInput) {
-        this.local = writer
+    if (!this.defaultInput) {
+      for (const input of inputs) {
+        if (input.writable) {
+          this.defaultInput = input
+          break
+        }
       }
     }
 
     this._inputsByKey = intoByKeyMap(inputs)
-    this._writersByKey = intoByKeyMap(writers)
     this._defaultIndexesByKey = intoByKeyMap(defaultIndexes)
 
     this.inputs = [...this._inputsByKey.values()]
-    this._validateInputs()
-
     this.defaultIndexes = [...this._defaultIndexesByKey.values()]
 
     for (const input of this.inputs) {
@@ -98,18 +87,6 @@ module.exports = class Autobase {
       }
     }
     return nodes.map(InputNode.encode)
-  }
-
-  _createWriter (input) {
-    return input.session({
-      preload: async () => {
-        await this.ready()
-        await this.latest()
-        return null
-      },
-      encodeBatch: batch => this._createInputBatch(input, batch, clockToMap(this._latestClock)),
-      valueEncoding: InputNode
-    })
   }
 
   _validateInputs () {
@@ -156,7 +133,7 @@ module.exports = class Autobase {
 
   async _onInputAppended () {
     this._bumpReadStreams()
-    return this.latest() // Updates this._latestClock
+    return this.latest() // Updates this.clock
   }
 
   _bumpReadStreams () {
@@ -190,7 +167,7 @@ module.exports = class Autobase {
       clock.set(head.id, length - 1)
     }
 
-    this._latestClock = clock
+    this.clock = clock
     return clock
   }
 
@@ -203,7 +180,6 @@ module.exports = class Autobase {
     if (!this._inputsByKey.has(id)) {
       this.inputs.push(input)
       this._inputsByKey.set(id, input)
-      this._writersByKey.set(id, this._createWriter(input))
       input.on('append', this._onappend)
       this._bumpReadStreams()
     }
@@ -221,12 +197,6 @@ module.exports = class Autobase {
     this.inputs.splice(idx, 1)
     this._inputsByKey.delete(id)
     input.removeListener('append', this._onappend)
-
-    const writer = this._writersByKey.get(id)
-    if (writer) {
-      await writer.close()
-      this._writersByKey.delete(id)
-    }
 
     this._bumpReadStreams()
 
@@ -431,7 +401,7 @@ module.exports = class Autobase {
     if (!this.opened) await this.ready()
 
     input = input || this.defaultInput
-    clock = clockToMap(clock || await this.latest())
+    clock = clockToMap(clock || this.clock || await this.latest())
 
     const head = await this._getInputNode(input, input.length - 1)
 
@@ -463,21 +433,10 @@ module.exports = class Autobase {
     })
   }
 
-  async _close () {
+  close () {
     for (const input of this.inputs) {
       input.removeListener('append', this._onappend)
     }
-    for (const writer of this._writersByKey.values()) {
-      await writer.close()
-    }
-    this.closed = true
-  }
-
-  close () {
-    if (this.closed) return Promise.resolve()
-    if (this._closing) return this._closing
-    this._closing = this._close()
-    return this._closing
   }
 
   static async isAutobase (core) {
@@ -486,7 +445,7 @@ module.exports = class Autobase {
       const block = await core.get(0, { valueEncoding: 'binary' })
       const decoded = c.decode(NodeHeader, block)
       const protocol = decoded && decoded.protocol
-      return protocol && (protocol === INPUT_PROTOCOL || protocol === INDEX_PROTOCOL)
+      return !!protocol && (protocol === INPUT_PROTOCOL || protocol === INDEX_PROTOCOL)
     } catch {
       return false
     }
