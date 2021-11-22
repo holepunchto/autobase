@@ -31,7 +31,10 @@ const base = new Autobase([inputA, inputB, inputC], { input: inputA })
 // Add a few messages to the local writer.
 // These messages will contain the Autobase's latest vector clock by default.
 await base.append('hello')
-await base.append('world')
+
+// You can also append through the `base.local` property.
+// `base.local` is a Hypercore session with a custom valueEncoding that includes the latest Autobase clocks.
+await base.local.append('world')
 
 // Create a linearized "index" Hypercore with causal ordering. `output` is a Hypercore.
 // When index.update is called, the inputs will be automatically rebased into the index.
@@ -57,7 +60,7 @@ Options include:
 
 ```js
 {
-  defaultInput: null,  // A default Hypercore to append to
+  input: null,         // A default Hypercore to append to
   indexes: null,       // A list of rebased index Hypercores
   autocommit: true     // Automatically persist changes to rebased indexes after updates
 }
@@ -68,6 +71,21 @@ The list of input Hypercores.
 
 #### `base.defaultIndexes`
 The list of default rebased indexes.
+
+#### `base.local`
+If the Autobase is initialized with a writable Hypercore, `base.local` will be a Hypercore session with a special `valueEncoding` that wraps appended values with the latest Autobase clock.
+
+This is mostly useful for ergonomics, as `base.local` is "just a Hypercore":
+
+```js
+// These are equivalent
+const base = new Autobase([inputA])
+await base.local.append('hello')
+await base.append('hello', await base.latest(), inputA)
+```
+
+#### `await Autobase.isAutobase(core)`
+Returns `true` if `core` is either an Autobase input or a rebased index.
 
 #### `await base.append(value, [clock], [input])`
 Append a new value to the autobase.
