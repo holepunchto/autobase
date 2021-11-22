@@ -23,6 +23,7 @@ module.exports = class Autobase {
     this._inputs = inputs || []
     this._defaultInput = opts.input
     this._inputsByKey = null
+    this._writersByKey = null
     this._onappend = debounce(this._onInputAppended.bind(this))
 
     this._defaultIndexes = opts.indexes
@@ -31,8 +32,11 @@ module.exports = class Autobase {
 
     this._readStreams = []
 
+    this.closed = false
     this.opened = false
+    this._closing = null
     this._opening = this._open()
+
     this._opening.catch(noop)
     this.ready = () => this._opening
   }
@@ -134,7 +138,7 @@ module.exports = class Autobase {
     let node = null
     try {
       node = InputNode.decode(block, { key: input.key, seq })
-    } catch (err) {
+    } catch {
       // Decoding errors should be discarded.
       return null
     }
@@ -459,10 +463,21 @@ module.exports = class Autobase {
     })
   }
 
-  close () {
+  async _close () {
     for (const input of this.inputs) {
       input.removeListener('append', this._onappend)
     }
+    for (const writer of this._writersByKey.values()) {
+      await writer.close()
+    }
+    this.closed = true
+  }
+
+  close () {
+    if (this.closed) return Promise.resolve()
+    if (this._closing) return this._closing
+    this._closing = this._close()
+    return this._closing
   }
 
   static async isAutobase (core) {
