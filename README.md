@@ -35,7 +35,7 @@ await base.append('world')
 
 // Create a linearized view Hypercore with causal ordering. `output` is a Hypercore.
 // When view.update is called, the inputs will be automatically linearized and stored into the output.
-const view = base.createRebasedIndex(output)
+const view = base.linearize(output)
 
 // Use `view` as you would any other Hypercore.
 await view.update()
@@ -133,7 +133,7 @@ Causal streams start at the heads (the last blocks) of all inputs, and walk back
 
 They should fail in the presence of unavailable nodes -- the deterministic ordering ensures that any indexer will process input nodes in the same order.
 
-The simplest kind of linearized view (`const index = base.createRebasedIndex()`), is just a Hypercore containing the results of a causal stream in reversed order (block N in the index will not be causally-dependent on block N+1).
+The simplest kind of linearized view (`const view = base.linearize()`), is just a Hypercore containing the results of a causal stream in reversed order (block N in the index will not be causally-dependent on block N+1).
 
 #### `const stream = base.createCausalStream()`
 Generate a Readable stream of input blocks with deterministic, causal ordering.
