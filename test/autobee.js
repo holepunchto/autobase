@@ -8,22 +8,22 @@ const AutobeeWithResolution = require('../examples/autobee-with-resolution')
 
 test('simple autobee', async t => {
   const firstUser = new Hypercore(ram)
-  const firstIndex = new Hypercore(ram)
+  const firstOutput = new Hypercore(ram)
   const secondUser = new Hypercore(ram)
-  const secondIndex = new Hypercore(ram)
+  const secondOutput = new Hypercore(ram)
 
   const inputs = [firstUser, secondUser]
 
   const base1 = new Autobase(inputs, {
-    indexes: firstIndex,
+    outputs: firstOutput,
     input: firstUser
   })
   const base2 = new Autobase(inputs, {
-    indexes: secondIndex,
+    outputs: secondOutput,
     input: secondUser
   })
   const base3 = new Autobase(inputs, {
-    indexes: [firstIndex, secondIndex],
+    outputs: [firstOutput, secondOutput],
     autocommit: false // Needed because both indexes are writable.
   })
 
@@ -66,26 +66,26 @@ test('simple autobee', async t => {
   }
 
   // Both indexes should have processed two writes.
-  t.same(firstIndex.length, 3)
-  t.same(secondIndex.length, 3)
+  t.same(firstOutput.length, 3)
+  t.same(secondOutput.length, 3)
 
   t.end()
 })
 
 test('autobee with basic conflict resolution (only handles puts)', async t => {
   const firstUser = new Hypercore(ram)
-  const firstIndex = new Hypercore(ram)
+  const firstOutput = new Hypercore(ram)
   const secondUser = new Hypercore(ram)
-  const secondIndex = new Hypercore(ram)
+  const secondOutput = new Hypercore(ram)
 
   const inputs = [firstUser, secondUser]
 
   const base1 = new Autobase(inputs, {
-    indexes: firstIndex,
+    outputs: firstOutput,
     input: firstUser
   })
   const base2 = new Autobase(inputs, {
-    indexes: secondIndex,
+    outputs: secondOutput,
     input: secondUser
   })
 
