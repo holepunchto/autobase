@@ -15,7 +15,7 @@ module.exports = class Autobase {
     this.inputs = null
     this.defaultIndexes = null
     this.defaultInput = null
-    this.clock = null
+    this._clock = null
 
     this._autocommit = opts.autocommit
 
@@ -133,7 +133,7 @@ module.exports = class Autobase {
 
   async _onInputAppended () {
     this._bumpReadStreams()
-    this._getLatestClock() // Updates this.clock
+    this._getLatestClock() // Updates this._clock
   }
 
   _bumpReadStreams () {
@@ -143,6 +143,10 @@ module.exports = class Autobase {
   }
 
   // Public API
+
+  clock () {
+    return this._clock
+  }
 
   async heads () {
     if (!this.opened) await this.ready()
@@ -162,7 +166,7 @@ module.exports = class Autobase {
       clock.set(id, input.length - 1)
     }
 
-    this.clock = clock
+    this._clock = clock
     return clock
   }
 
@@ -404,15 +408,15 @@ module.exports = class Autobase {
     input = input || this.defaultInput
     clock = clockToMap(clock || this._getLatestClock())
 
-    const head = await this._getInputNode(input, input.length - 1)
-
     // Make sure that causal information propagates.
+    // This is tracking inputs that were present in the previous append, but have since been removed.
     // TODO: This should use an embedded index in the future.
+    const head = await this._getInputNode(input, input.length - 1)
     if (head && head.clock) {
       const inputId = input.key.toString('hex')
-      for (const [id, length] of head.clock) {
+      for (const [id, seq] of head.clock) {
         if (id === inputId || clock.has(id)) continue
-        clock.set(id, length)
+        clock.set(id, seq)
       }
     }
 
