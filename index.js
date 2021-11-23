@@ -133,7 +133,7 @@ module.exports = class Autobase {
 
   async _onInputAppended () {
     this._bumpReadStreams()
-    return this.latest() // Updates this.clock
+    this._getLatestClock() // Updates this.clock
   }
 
   _bumpReadStreams () {
@@ -150,25 +150,26 @@ module.exports = class Autobase {
     return Promise.all(this.inputs.map(i => this._getInputNode(i, i.length - 1)))
   }
 
-  async latest (inputs) {
-    if (!this.opened) await this.ready()
-    if (!inputs) inputs = []
-    else inputs = Array.isArray(inputs) ? inputs : [inputs]
-    inputs = new Set(inputs.map(i => i.key.toString('hex')))
+  _getLatestClock (inputs) {
+    if (!inputs) inputs = this.inputs
+    if (!Array.isArray(inputs)) inputs = [inputs]
 
-    const heads = await this.heads()
     const clock = new Map()
-
-    for (const head of heads) {
-      if (!head) continue
-      if (inputs.size && !inputs.has(head.id)) continue
-      const length = this._inputsByKey.get(head.id).length
-      if (!length) continue
-      clock.set(head.id, length - 1)
+    for (const input of inputs) {
+      const id = input.key.toString('hex')
+      if (!this._inputsByKey.has(id)) throw new Error('Hypercore is not an input of the Autobase')
+      if (input.length === 0) continue
+      clock.set(id, input.length - 1)
     }
 
     this.clock = clock
     return clock
+  }
+
+  async latest (inputs) {
+    if (!this.opened) await this.ready()
+    await Promise.all(this.inputs.map(i => i.update()))
+    return this._getLatestClock(inputs)
   }
 
   async addInput (input) {
@@ -401,7 +402,7 @@ module.exports = class Autobase {
     if (!this.opened) await this.ready()
 
     input = input || this.defaultInput
-    clock = clockToMap(clock || this.clock || await this.latest())
+    clock = clockToMap(clock || this._getLatestClock())
 
     const head = await this._getInputNode(input, input.length - 1)
 
