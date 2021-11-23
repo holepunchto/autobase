@@ -3,12 +3,12 @@ const Hyperbee = require('hyperbee')
 module.exports = class SimpleAutobee {
   constructor (autobase, opts) {
     this.autobase = autobase
-    const index = this.autobase.createRebasedIndex({
+    const view = this.autobase.linearize({
       ...opts,
       unwrap: true,
       apply: this._apply.bind(this)
     })
-    this.bee = new Hyperbee(index, {
+    this.bee = new Hyperbee(view, {
       ...opts,
       extension: false
     })

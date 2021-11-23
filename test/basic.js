@@ -261,8 +261,8 @@ test('can parse headers', async t => {
 
   await base.append('a0')
 
-  const index = base.createRebasedIndex(output)
-  await index.update()
+  const view = base.linearize(output)
+  await view.update()
 
   t.true(await Autobase.isAutobase(writer))
   t.true(await Autobase.isAutobase(output))

@@ -3,17 +3,17 @@ const codecs = require('codecs')
 const debounce = require('debounceify')
 const c = require('compact-encoding')
 
-const RebasedHypercore = require('./lib/rebase')
-const { InputNode, IndexNode } = require('./lib/nodes')
+const LinearizedView = require('./lib/linearize')
+const { InputNode, OutputNode } = require('./lib/nodes')
 const { NodeHeader } = require('./lib/nodes/messages')
 
 const INPUT_PROTOCOL = '@autobase/input/v1'
-const INDEX_PROTOCOL = '@autobase/index/v1'
+const OUTPUT_PROTOCOL = '@autobase/output/v1'
 
 module.exports = class Autobase {
   constructor (inputs, opts = {}) {
     this.inputs = null
-    this.defaultIndexes = null
+    this.defaultOutputs = null
     this.defaultInput = null
     this._clock = null
 
@@ -24,9 +24,9 @@ module.exports = class Autobase {
     this._inputsByKey = null
     this._onappend = debounce(this._onInputAppended.bind(this))
 
-    this._defaultIndexes = opts.indexes
-    this._defaultIndexesByKey = null
-    this._rebasersWithDefaultIndexes = []
+    this._defaultOutputs = opts.outputs
+    this._defaultOutputsByKey = null
+    this._rebasersWithDefaultOutputs = []
 
     this._readStreams = []
 
@@ -41,12 +41,12 @@ module.exports = class Autobase {
   async _open () {
     this.defaultInput = await this._defaultInput
     const inputs = (await this._inputs) || []
-    let defaultIndexes = (await this._defaultIndexes) || []
+    let defaultOutputs = (await this._defaultOutputs) || []
 
-    if (defaultIndexes && !Array.isArray(defaultIndexes)) defaultIndexes = [defaultIndexes]
+    if (defaultOutputs && !Array.isArray(defaultOutputs)) defaultOutputs = [defaultOutputs]
 
     await Promise.all(inputs.map(i => i.ready()))
-    await Promise.all(defaultIndexes.map(i => i.ready()))
+    await Promise.all(defaultOutputs.map(o => o.ready()))
     this._validateInputs()
 
     if (!this.defaultInput) {
@@ -59,10 +59,10 @@ module.exports = class Autobase {
     }
 
     this._inputsByKey = intoByKeyMap(inputs)
-    this._defaultIndexesByKey = intoByKeyMap(defaultIndexes)
+    this._defaultOutputsByKey = intoByKeyMap(defaultOutputs)
 
     this.inputs = [...this._inputsByKey.values()]
-    this.defaultIndexes = [...this._defaultIndexesByKey.values()]
+    this.defaultOutputs = [...this._defaultOutputsByKey.values()]
 
     for (const input of this.inputs) {
       input.on('append', this._onappend)
@@ -208,28 +208,28 @@ module.exports = class Autobase {
     return input
   }
 
-  async addDefaultIndex (index) {
+  async addDefaultOutput (output) {
     if (!this.opened) await this.ready()
-    await index.ready()
+    await output.ready()
 
-    if (this._defaultIndexesByKey.has(index.key.toString('hex'))) return
+    if (this._defaultOutputsByKey.has(output.key.toString('hex'))) return
 
-    this.defaultIndexes.push(index)
+    this.defaultOutputs.push(output)
   }
 
-  async removeDefaultIndex (index) {
+  async removeDefaultOutput (output) {
     if (!this.opened) await this.ready()
-    if (typeof index.ready === 'function') await index.ready()
-    const id = Buffer.isBuffer(index) ? index.toString('hex') : index.key.toString('hex')
-    if (!this._defaultIndexesByKey.has(id)) return
+    if (typeof output.ready === 'function') await output.ready()
+    const id = Buffer.isBuffer(output) ? output.toString('hex') : output.key.toString('hex')
+    if (!this._defaultOutputsByKey.has(id)) return
 
-    index = this._defaultIndexesByKey.get(id)
-    const idx = this.defaultIndexes.indexOf(index)
+    output = this._defaultOutputsByKey.get(id)
+    const idx = this.defaultOutputs.indexOf(output)
 
-    this.defaultIndexes.splice(idx, 1)
-    this._defaultIndexesByKey.delete(id)
+    this.defaultOutputs.splice(idx, 1)
+    this._defaultOutputsByKey.delete(id)
 
-    return index
+    return output
   }
 
   createCausalStream (opts = {}) {
@@ -254,7 +254,7 @@ module.exports = class Autobase {
 
       const node = forks[smallest]
       const forkIndex = heads.indexOf(node)
-      this.push(new IndexNode({ ...node, change: node.key, clock }))
+      this.push(new OutputNode({ ...node, change: node.key, clock }))
 
       // TODO: When reading a batch node, parallel download them all (use batch[0])
       // TODO: Make a causal stream extension for faster reads
@@ -424,16 +424,16 @@ module.exports = class Autobase {
     return input.append(batch)
   }
 
-  createRebasedIndex (indexes, opts = {}) {
-    if (isOptions(indexes)) return this.createRebasedIndex(null, indexes)
-    indexes = indexes || this.defaultIndexes || this._defaultIndexes || []
+  linearize (outputs, opts = {}) {
+    if (isOptions(outputs)) return this.linearize(null, outputs)
+    outputs = outputs || this.defaultOutputs || this._defaultOutputs || []
     if (opts.autocommit === undefined) {
       opts.autocommit = this._autocommit
     }
-    return new RebasedHypercore(this, indexes, {
+    return new LinearizedView(this, outputs, {
       ...opts,
       header: {
-        protocol: INDEX_PROTOCOL
+        protocol: OUTPUT_PROTOCOL
       }
     })
   }
@@ -450,7 +450,7 @@ module.exports = class Autobase {
       const block = await core.get(0, { valueEncoding: 'binary' })
       const decoded = c.decode(NodeHeader, block)
       const protocol = decoded && decoded.protocol
-      return !!protocol && (protocol === INPUT_PROTOCOL || protocol === INDEX_PROTOCOL)
+      return !!protocol && (protocol === INPUT_PROTOCOL || protocol === OUTPUT_PROTOCOL)
     } catch {
       return false
     }

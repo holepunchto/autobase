@@ -10,7 +10,7 @@ async function collect (stream, map) {
   return buf
 }
 
-async function indexedValues (index) {
+async function linearizedValues (index) {
   const buf = []
   await index.update()
   for (let i = index.length - 1; i >= 0; i--) {
@@ -37,6 +37,6 @@ module.exports = {
   bufferize,
   collect,
   causalValues,
-  indexedValues,
+  linearizedValues,
   debugInputNode
 }
