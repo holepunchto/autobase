@@ -113,7 +113,7 @@ Adds a new default output Hypercore.
 
 * `output` must be either a fresh Hypercore, or a Hypercore that was previously used as an Autobase output.
 
-Default outputs are mainly useful during [remote linearizing](), when readers of an Autobase can use them as the "trunk" during linearization, and thus can minimize the amount of local re-processing they need to do during updates.
+Default outputs are mainly useful during "remote linearizing", when readers of an Autobase can use them as the "trunk" during linearization, and thus can minimize the amount of local re-processing they need to do during updates.
 
 #### `await base.removeDefaultOutput(output)`
 Removes a default index Hypercore. `output` can be either a Hypercore, or a Hypercore key.
