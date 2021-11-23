@@ -109,12 +109,12 @@ test('supports a default writer and default latest clocks', async t => {
   await base1.ready()
   await base2.ready()
 
-  await base1.append('a0')
-  await base1.append('a1')
-  await base2.append('b0')
-  await base1.append('a2')
-  await base2.append('b1')
-  await base1.append('a3')
+  await base1.append('a0', await base1.latest())
+  await base1.append('a1', await base1.latest())
+  await base2.append('b0', await base2.latest())
+  await base1.append('a2', await base1.latest())
+  await base2.append('b1', await base2.latest())
+  await base1.append('a3', await base1.latest())
 
   const output = await causalValues(base1)
   t.same(output.map(v => v.value), bufferize(['a3', 'b1', 'a2', 'b0', 'a1', 'a0']))
@@ -139,12 +139,12 @@ test('adding duplicate inputs is a no-op', async t => {
   t.same(base1.inputs.length, 2)
   t.same(base2.inputs.length, 2)
 
-  await base1.append('a0')
-  await base1.append('a1')
-  await base2.append('b0')
-  await base1.append('a2')
-  await base2.append('b1')
-  await base1.append('a3')
+  await base1.append('a0', await base1.latest())
+  await base1.append('a1', await base1.latest())
+  await base2.append('b0', await base2.latest())
+  await base1.append('a2', await base1.latest())
+  await base2.append('b1', await base2.latest())
+  await base1.append('a3', await base1.latest())
 
   const output = await causalValues(base1)
   t.same(output.map(v => v.value), bufferize(['a3', 'b1', 'a2', 'b0', 'a1', 'a0']))
@@ -244,6 +244,29 @@ test('dynamically adding inputs does not alter existing causal streams', async t
     output.push(node)
   }
   t.same(output.map(v => v.value), bufferize(['a0', 'b1', 'b0']))
+
+  t.end()
+})
+
+test('can parse headers', async t => {
+  const output = new Hypercore(ram)
+  const writer = new Hypercore(ram)
+  const notAutobase = new Hypercore(ram)
+  await notAutobase.append(Buffer.from('hello world'))
+
+  const base = new Autobase([writer], {
+    input: writer
+  })
+  await base.ready()
+
+  await base.append('a0')
+
+  const index = base.createRebasedIndex(output)
+  await index.update()
+
+  t.true(await Autobase.isAutobase(writer))
+  t.true(await Autobase.isAutobase(output))
+  t.false(await Autobase.isAutobase(notAutobase))
 
   t.end()
 })

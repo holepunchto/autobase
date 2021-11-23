@@ -57,7 +57,7 @@ Options include:
 
 ```js
 {
-  defaultInput: null,  // A default Hypercore to append to
+  input: null,         // A default Hypercore to append to
   indexes: null,       // A list of rebased index Hypercores
   autocommit: true     // Automatically persist changes to rebased indexes after updates
 }
@@ -68,6 +68,12 @@ The list of input Hypercores.
 
 #### `base.defaultIndexes`
 The list of default rebased indexes.
+
+#### `base.clock`
+A Map containing the latest lengths for all Autobase inputs.
+
+#### `await Autobase.isAutobase(core)`
+Returns `true` if `core` is either an Autobase input or a rebased index.
 
 #### `await base.append(value, [clock], [input])`
 Append a new value to the autobase.

@@ -142,7 +142,7 @@ test('read stream - resolve hook, resolvable', async t => {
     const output = await collect(base2.createReadStream({
       async resolve (node) {
         t.same(node.id, writerB.key.toString('hex'))
-        t.same(node.clock.get(writerA.key.toString('hex')), 1)
+        t.same(node.clock.get(writerA.key.toString('hex')), 0)
         await base2.addInput(writerA)
         return true
       }
@@ -182,7 +182,7 @@ test('read stream - resolve hook, not resolvable', async t => {
     const output = await collect(base2.createReadStream({
       async resolve (node) {
         t.same(node.id, writerB.key.toString('hex'))
-        t.same(node.clock.get(writerA.key.toString('hex')), 1)
+        t.same(node.clock.get(writerA.key.toString('hex')), 0)
         return false
       }
     }))

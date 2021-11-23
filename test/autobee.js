@@ -44,8 +44,8 @@ test('simple autobee', async t => {
   await writer1.put('a', 'a')
   await writer2.put('b', 'b')
 
-  t.same(firstUser.length, 2)
-  t.same(secondUser.length, 2)
+  t.same(firstUser.length, 1)
+  t.same(secondUser.length, 1)
 
   {
     const node = await writer2.get('a')
