@@ -59,7 +59,7 @@ Options include:
 {
   input: null,         // A default Hypercore to append to
   outputs: null,       // A list of output Hypercores
-  autocommit: true     // Automatically persist changes to rebased indexes after updates
+  autocommit: true     // Automatically persist changes to output Hypercores after updates
 }
 ```
 
@@ -75,7 +75,7 @@ Returns a Map containing the latest lengths for all Autobase inputs.
 The Map has the form: `(hex-encoded-key) -> (Hypercore length)`
 
 #### `await Autobase.isAutobase(core)`
-Returns `true` if `core` is either an Autobase input or a rebased index.
+Returns `true` if `core` is an Autobase input or an output.
 
 #### `await base.append(value, [clock], [input])`
 Append a new value to the autobase.
