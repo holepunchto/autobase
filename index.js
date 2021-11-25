@@ -101,7 +101,7 @@ module.exports = class Autobase {
     }
   }
 
-  async _getInputNode (input, seq, opts = {}) {
+  async _getInputNode (input, seq, opts) {
     if (seq < 0) return null
     if (Buffer.isBuffer(input)) input = input.toString('hex')
     if (typeof input === 'string') {
@@ -109,7 +109,7 @@ module.exports = class Autobase {
       input = this._inputsByKey.get(input)
     }
 
-    const block = await input.get(seq)
+    const block = await input.get(seq, opts)
     if (!block) return null
 
     let node = null
@@ -274,10 +274,11 @@ module.exports = class Autobase {
   createReadStream (opts = {}) {
     const self = this
 
-    const positionsByKey = new Map()
+    const positionsByKey = opts.checkpoint || new Map()
     const nodesByKey = new Map()
     const snapshotLengthsByKey = new Map()
 
+    const wait = opts.wait !== false
     let running = false
     let bumped = false
 
@@ -289,6 +290,7 @@ module.exports = class Autobase {
       bumped = true
       _read().catch(err => stream.destroy(err))
     }
+    stream.checkpoint = positionsByKey
 
     this._readStreams.push(stream)
     stream.once('close', () => {
@@ -325,8 +327,8 @@ module.exports = class Autobase {
           }
 
           const unsatisfied = hasUnsatisfiedInputs(oldest, self._inputsByKey)
-          if (unsatisfied && opts.resolve) {
-            const resolved = await opts.resolve(oldest)
+          if (unsatisfied && opts.onresolve) {
+            const resolved = await opts.onresolve(oldest)
             if (resolved !== false) continue
             // If resolved is false, yield the unresolved node as usual
           }
@@ -338,7 +340,7 @@ module.exports = class Autobase {
           const mapped = opts.map ? opts.map(oldest) : oldest
           stream.push(mapped)
 
-          if (opts.wait) await opts.wait(mapped)
+          if (opts.onwait) await opts.onwait(mapped)
         }
       } finally {
         running = false
@@ -353,8 +355,10 @@ module.exports = class Autobase {
     }
 
     async function updateAll () {
-      const allowUpdates = opts.live || opts.resolve || opts.wait // TODO: Make this behavior more customizable
+      const allowUpdates = opts.live || opts.onresolve || opts.onwait // TODO: Make this behavior more customizable
       const inputKeys = allowUpdates ? self._inputsByKey.keys() : snapshotLengthsByKey.keys()
+
+      const loadPromises = []
       for (const key of inputKeys) {
         const input = self._inputsByKey.get(key)
 
@@ -368,11 +372,15 @@ module.exports = class Autobase {
         if (snapshotLength) {
           if (pos >= snapshotLength) continue
         } else {
-          if (pos >= input.length) await input.update()
+          if (pos >= input.length && wait) await input.update()
           if (pos >= input.length) continue
         }
 
-        nodesByKey.set(key, await self._getInputNode(input, pos))
+        loadPromises.push(self._getInputNode(input, pos, { wait }).then(node => [key, node]))
+      }
+
+      for (const [key, node] of await Promise.all(loadPromises)) {
+        nodesByKey.set(key, node)
       }
     }
 

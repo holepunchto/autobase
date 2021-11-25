@@ -114,7 +114,7 @@ test('read stream -- live, causally-linked writes', async t => {
   t.end()
 })
 
-test('read stream - resolve hook, resolvable', async t => {
+test('read stream - onresolve hook, resolvable', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
 
@@ -131,16 +131,16 @@ test('read stream - resolve hook, resolvable', async t => {
   }
 
   {
-    // Without the resolve hook, the read stream should consider A to be purged
+    // Without the onresolve hook, the read stream should consider A to be purged
     const output = await collect(base2.createReadStream())
     t.same(output.length, 2)
     validateReadOrder(t, output)
   }
 
   {
-    // With the resolve hook, the read stream can be passed missing writers
+    // With the onresolve hook, the read stream can be passed missing writers
     const output = await collect(base2.createReadStream({
-      async resolve (node) {
+      async onresolve (node) {
         t.same(node.id, writerB.key.toString('hex'))
         t.same(node.clock.get(writerA.key.toString('hex')), 0)
         await base2.addInput(writerA)
@@ -154,7 +154,7 @@ test('read stream - resolve hook, resolvable', async t => {
   t.end()
 })
 
-test('read stream - resolve hook, not resolvable', async t => {
+test('read stream - onresolve hook, not resolvable', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
 
@@ -171,16 +171,16 @@ test('read stream - resolve hook, not resolvable', async t => {
   }
 
   {
-    // Without the resolve hook, the read stream should consider A to be purged
+    // Without the onresolve hook, the read stream should consider A to be purged
     const output = await collect(base2.createReadStream())
     t.same(output.length, 2)
     validateReadOrder(t, output)
   }
 
   {
-    // With the resolve hook, returning false should emit the unresolved nodes (same behavior as { resolve: undefined } option)
+    // With the onresolve hook, returning false should emit the unresolved nodes (same behavior as { onresolve: undefined } option)
     const output = await collect(base2.createReadStream({
-      async resolve (node) {
+      async onresolve (node) {
         t.same(node.id, writerB.key.toString('hex'))
         t.same(node.clock.get(writerA.key.toString('hex')), 0)
         return false
@@ -193,7 +193,7 @@ test('read stream - resolve hook, not resolvable', async t => {
   t.end()
 })
 
-test('read stream - wait hook', async t => {
+test('read stream - onwait hook', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
 
@@ -210,20 +210,61 @@ test('read stream - wait hook', async t => {
   }
 
   {
-    // Without the wait hook, the read stream should consider A to be purged
+    // Without the onwait hook, the read stream should consider A to be purged
     const output = await collect(base2.createReadStream())
     t.same(output.length, 2)
     validateReadOrder(t, output)
   }
 
   {
-    // With the wait hook, inputs can be added before the stream ends
+    // With the onwait hook, inputs can be added before the stream ends
     const output = await collect(base2.createReadStream({
-      async wait (node) {
+      async onwait (node) {
         if (node.value.toString() !== 'b1') return
         await base2.addInput(writerA)
       }
     }))
+    t.same(output.length, 3)
+    validateReadOrder(t, output)
+  }
+
+  t.end()
+})
+
+test('read stream - resume from checkpoint', async t => {
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase([writerA, writerB, writerC])
+  await base.ready()
+
+  // Create three dependent branches
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, await base.latest(writerA), writerB)
+  }
+  for (let i = 0; i < 3; i++) {
+    await base.append(`c${i}`, await base.latest(writerC), writerC)
+  }
+
+  const firstStream = base.createReadStream()
+
+  {
+    const output = await collect(firstStream)
+    t.same(output.length, 6)
+    validateReadOrder(t, output)
+  }
+
+  // Add 3 more records to A -- not causally linked to B or C
+  for (let i = 1; i < 4; i++) {
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
+  }
+
+  {
+    const output = await collect(base.createReadStream({ checkpoint: firstStream.checkpoint }))
     t.same(output.length, 3)
     validateReadOrder(t, output)
   }

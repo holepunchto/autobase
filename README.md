@@ -151,19 +151,29 @@ Generate a Readable stream of input blocks, from earliest to latest.
 
 Unlike `createCausalStream`, the ordering of `createReadStream` is not deterministic. The read stream only gives you the guarantee that every node it yields will __not__ be causally-dependent on any node yielded later.
 
+Read streams have a public property `checkpoint`, which can be used to create new read streams that resume from the checkpoint's position:
+```js
+const stream1 = base.createReadStream()
+// Do something with stream1 here
+const stream2 = base.createReadStream({ checkpoint: stream1.checkpoint }) // Resume from stream1.checkpoint
+
+```
+
 `createReadStream` can be passed two custom async hooks:
-* `resolve`: Called when an unsatisfied node (a node that links to an unknown input) is encountered. Can be used to dynamically add inputs to the Autobase.
+* `onresolve`: Called when an unsatisfied node (a node that links to an unknown input) is encountered. Can be used to dynamically add inputs to the Autobase.
   * Returning `true` indicates that you added new inputs to the Autobase, and so the read stream should begin processing those inputs.
   * Returning `false` indicates that you did not resolve the missing links, and so the node should be yielded immediately as is.
-* `wait`: Called after each node is yielded. Can be used to dynamically add inputs to the Autobase.
+* `onwait`: Called after each node is yielded. Can be used to dynamically add inputs to the Autobase.
 
 Options include:
 ```js
 {
   live: false, // Enable live mode (the stream will continuously yield new nodes)
-  map: (node) => node // A sync map function
-  resolve: async (node) => true | false, // A resolve hook (described above)
-  wait: async (node) => undefined // A wait hook (described above)
+  map: (node) => node // A sync map function,
+  checkpoint: null, // Resume from where a previous read stream left off (`readStream.checkpoint`)
+  wait: true, // If false, the read stream will only yield previously-downloaded blocks.
+  onresolve: async (node) => true | false, // A resolve hook (described above)
+  onwait: async (node) => undefined // A wait hook (described above)
 }
 ```
 
