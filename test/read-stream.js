@@ -239,7 +239,6 @@ test('read stream - resume from checkpoint', async t => {
   const base = new Autobase([writerA, writerB, writerC])
   await base.ready()
 
-  // Create three dependent branches
   for (let i = 0; i < 1; i++) {
     await base.append(`a${i}`, await base.latest(writerA), writerA)
   }
@@ -266,6 +265,40 @@ test('read stream - resume from checkpoint', async t => {
   {
     const output = await collect(base.createReadStream({ checkpoint: firstStream.checkpoint }))
     t.same(output.length, 3)
+    validateReadOrder(t, output)
+  }
+
+  t.end()
+})
+
+test('read stream - resume from empty checkpoint', async t => {
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase([writerA, writerB, writerC])
+  await base.ready()
+
+  const firstStream = base.createReadStream()
+
+  {
+    const output = await collect(firstStream)
+    t.same(output.length, 0)
+  }
+
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, await base.latest(writerA), writerB)
+  }
+  for (let i = 0; i < 3; i++) {
+    await base.append(`c${i}`, await base.latest(writerC), writerC)
+  }
+
+  {
+    const output = await collect(base.createReadStream({ checkpoint: firstStream.checkpoint }))
+    t.same(output.length, 6)
     validateReadOrder(t, output)
   }
 
