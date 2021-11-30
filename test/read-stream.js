@@ -369,7 +369,6 @@ test('read stream - tail option will start at the latest clock', async t => {
     })
   })
 
-  // Add 3 more records to A -- not causally linked to B or C
   for (let i = 1; i < 4; i++) {
     await base.append(`a${i}`, await base.latest(writerA), writerA)
   }
