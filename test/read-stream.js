@@ -342,6 +342,42 @@ test('read stream - { wait: false } will not download remote blocks', async t =>
   t.end()
 })
 
+test('read stream - tail option will start at the latest clock', async t => {
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase([writerA, writerB, writerC])
+  await base.ready()
+
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, await base.latest(writerA), writerB)
+  }
+  for (let i = 0; i < 3; i++) {
+    await base.append(`c${i}`, await base.latest(writerC), writerC)
+  }
+
+  const expected = ['a1', 'a2', 'a3']
+  const firstStream = base.createReadStream({ tail: true, live: true })
+  const sawUpdates = new Promise(resolve => {
+    firstStream.on('data', node => {
+      t.same(node.value.toString(), expected.shift())
+      if (!expected.length) resolve()
+    })
+  })
+
+  // Add 3 more records to A -- not causally linked to B or C
+  for (let i = 1; i < 4; i++) {
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
+  }
+
+  await sawUpdates
+  t.end()
+})
+
 function validateReadOrder (t, nodes) {
   for (let i = 0; i < nodes.length - 2; i++) {
     t.true(lteOrIndependent(nodes[i], nodes[i + 1]))

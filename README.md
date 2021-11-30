@@ -169,6 +169,7 @@ Options include:
 ```js
 {
   live: false, // Enable live mode (the stream will continuously yield new nodes)
+  tail: false, // When in live mode, start at the latest clock instead of the earliest
   map: (node) => node // A sync map function,
   checkpoint: null, // Resume from where a previous read stream left off (`readStream.checkpoint`)
   wait: true, // If false, the read stream will only yield previously-downloaded blocks.
