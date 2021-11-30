@@ -1,6 +1,6 @@
 {
   "name": "autobase",
-  "version": "1.0.0-alpha.4",
+  "version": "1.0.0-alpha.5",
   "description": "Autobase lets you write concise multiwriter data structures with Hypercore",
   "main": "index.js",
   "scripts": {
