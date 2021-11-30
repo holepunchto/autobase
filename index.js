@@ -364,7 +364,7 @@ module.exports = class Autobase {
 
         let pos = positionsByKey.get(key)
         if (pos === undefined) {
-          pos = 0
+          pos = opts.tail === true ? input.length : 0
           positionsByKey.set(key, pos)
         }
 
