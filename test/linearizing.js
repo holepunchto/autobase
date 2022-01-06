@@ -635,3 +635,42 @@ test('linearizing - can dynamically add/remove default outputs', async function 
 
   t.end()
 })
+
+test('linearizing - linearize operations are debounced', async function (t) {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase([writerA, writerB, writerC])
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, [], writerA)
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, [], writerB)
+  }
+  for (let i = 0; i < 3; i++) {
+    await base.append(`c${i}`, [], writerC)
+  }
+
+  const view = base.linearize(output)
+  await Promise.all([
+    view.update(),
+    view.update(),
+    view.update(),
+    view.update()
+  ])
+
+  const outputNodes = []
+  for (let i = 0; i < view.length; i++) {
+    outputNodes.push(await view.get(i))
+  }
+  outputNodes.reverse()
+
+  t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
+  t.same(output.length, 6)
+
+  t.end()
+})
