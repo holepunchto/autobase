@@ -44,5 +44,10 @@
   "bugs": {
     "url": "https://github.com/hypercore-protocol/autobase/issues"
   },
-  "homepage": "https://github.com/hypercore-protocol/autobase"
+  "homepage": "https://github.com/hypercore-protocol/autobase",
+  "standard": {
+    "ignore": [
+      "fuzzing"
+    ]
+  }
 }
