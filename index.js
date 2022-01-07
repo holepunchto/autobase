@@ -1,3 +1,4 @@
+const { EventEmitter } = require('events')
 const streamx = require('streamx')
 const codecs = require('codecs')
 const debounce = require('debounceify')
@@ -10,8 +11,9 @@ const { NodeHeader } = require('./lib/nodes/messages')
 const INPUT_PROTOCOL = '@autobase/input/v1'
 const OUTPUT_PROTOCOL = '@autobase/output/v1'
 
-module.exports = class Autobase {
+module.exports = class Autobase extends EventEmitter {
   constructor (inputs, opts = {}) {
+    super()
     this.inputs = null
     this.defaultOutputs = null
     this.defaultInput = null
@@ -132,6 +134,7 @@ module.exports = class Autobase {
   }
 
   async _onInputAppended () {
+    this.emit('append')
     this._bumpReadStreams()
     this._getLatestClock() // Updates this._clock
   }
