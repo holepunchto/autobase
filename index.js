@@ -31,6 +31,7 @@ module.exports = class Autobase extends EventEmitter {
     this._rebasersWithDefaultOutputs = []
 
     this._readStreams = []
+    this._views = []
 
     this.opened = false
     this._closing = null
@@ -441,17 +442,26 @@ module.exports = class Autobase extends EventEmitter {
     if (opts.autocommit === undefined) {
       opts.autocommit = this._autocommit
     }
-    return new LinearizedView(this, outputs, {
+    const view = new LinearizedView(this, outputs, {
       ...opts,
       header: {
         protocol: OUTPUT_PROTOCOL
       }
     })
+    this._views.push(view)
+    view.once('close', () => {
+      const idx = this._views.indexOf(view)
+      if (idx !== -1) this._views.splice(idx, 1)
+    })
+    return view
   }
 
   close () {
     for (const input of this.inputs) {
       input.removeListener('append', this._onappend)
+    }
+    for (const view of this._views) {
+      view.close()
     }
   }
 

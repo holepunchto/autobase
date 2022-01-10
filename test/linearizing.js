@@ -818,7 +818,7 @@ test('linearizing - will discard local in-memory view if remote is updated', asy
   t.end()
 })
 
-test('linearizing - linearize operations are debounced', async function (t) {
+test('linearizing - linearize operations are debounced', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
@@ -826,7 +826,6 @@ test('linearizing - linearize operations are debounced', async function (t) {
 
   const base = new Autobase([writerA, writerB, writerC])
 
-  // Create three independent forks
   for (let i = 0; i < 1; i++) {
     await base.append(`a${i}`, [], writerA)
   }
@@ -853,6 +852,48 @@ test('linearizing - linearize operations are debounced', async function (t) {
 
   t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
   t.same(output.length, 6)
+
+  t.end()
+})
+
+test('closing a view will cleanup event listeners', async t => {
+  const output1 = new Hypercore(ram)
+  const output2 = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase([writerA, writerB, writerC])
+
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, [], writerA)
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, [], writerB)
+  }
+  for (let i = 0; i < 3; i++) {
+    await base.append(`c${i}`, [], writerC)
+  }
+
+  const view1 = base.linearize(output1)
+  const view2 = base.linearize(output2)
+
+  await view1.update()
+  await view2.update()
+
+  t.same(output1.listenerCount('truncate'), 1)
+  t.same(output2.listenerCount('truncate'), 1)
+  t.same(base._views.length, 2)
+
+  await view1.close()
+
+  t.same(output1.listenerCount('truncate'), 0)
+  t.same(base._views.length, 1)
+
+  await view2.close()
+
+  t.same(output2.listenerCount('truncate'), 0)
+  t.same(base._views.length, 0)
 
   t.end()
 })
