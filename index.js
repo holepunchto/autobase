@@ -1,7 +1,6 @@
 const { EventEmitter } = require('events')
 const streamx = require('streamx')
 const codecs = require('codecs')
-const debounce = require('debounceify')
 const c = require('compact-encoding')
 
 const LinearizedView = require('./lib/linearize')
