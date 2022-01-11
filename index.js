@@ -26,15 +26,8 @@ module.exports = class Autobase extends EventEmitter {
     this._outputsByKey = new Map()
     this._readStreams = []
 
-    if (apply) {
-      this.view = new LinearizedView(this, {
-        header: { protocol: OUTPUT_PROTOCOL },
-        unwrap,
-        apply
-      })
-    } else {
-      this.view = null
-    }
+    this.view = null
+    if (apply) this.start({ apply, unwrap })
 
     const self = this
     this._onappend = this._onInputAppended.bind(this)
@@ -148,6 +141,10 @@ module.exports = class Autobase extends EventEmitter {
   }
 
   // Public API
+
+  get started () {
+    return !!this.view
+  }
 
   start ({ apply, unwrap } = {}) {
     if (this.view) throw new Error('Start must only be called once')
