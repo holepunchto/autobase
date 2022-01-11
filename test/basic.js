@@ -10,8 +10,9 @@ test('linearizes short branches on long branches', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
-  await base.ready()
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC]
+  })
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -47,8 +48,9 @@ test('causal writes', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
-  await base.ready()
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC]
+  })
 
   // Create three dependent branches
   for (let i = 0; i < 1; i++) {
@@ -83,8 +85,9 @@ test('manually specifying clocks', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB])
-  await base.ready()
+  const base = new Autobase({
+    inputs: [writerA, writerB]
+  })
 
   await base.append('a0', await base.latest(writerA), writerA)
   await base.append('a1', await base.latest(writerA), writerA)
@@ -100,14 +103,18 @@ test('manually specifying clocks', async t => {
   t.end()
 })
 
-test('supports a default writer and default latest clocks', async t => {
+test('supports a local input and default latest clocks', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
 
-  const base1 = new Autobase([writerA, writerB], { input: writerA })
-  const base2 = new Autobase([writerA, writerB], { input: writerB })
-  await base1.ready()
-  await base2.ready()
+  const base1 = new Autobase({
+    inputs: [writerA, writerB],
+    localInput: writerA
+  })
+  const base2 = new Autobase({
+    inputs: [writerA, writerB],
+    localInput: writerB
+  })
 
   await base1.append('a0', await base1.latest())
   await base1.append('a1', await base1.latest())
@@ -128,10 +135,14 @@ test('adding duplicate inputs is a no-op', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
 
-  const base1 = new Autobase([writerA, writerA, writerB, writerB], { input: writerA })
-  const base2 = new Autobase([writerA, writerB], { input: writerB })
-  await base1.ready()
-  await base2.ready()
+  const base1 = new Autobase({
+    inputs: [writerA, writerA, writerB, writerB],
+    localInput: writerA
+  })
+  const base2 = new Autobase({
+    inputs: [writerA, writerB],
+    localInput: writerB
+  })
 
   await base2.addInput(writerA)
   await base2.addInput(writerB)
@@ -157,8 +168,9 @@ test('adding duplicate inputs is a no-op', async t => {
 test('dynamically adding/removing inputs', async t => {
   const writerA = new Hypercore(ram)
 
-  const base = new Autobase([writerA])
-  await base.ready()
+  const base = new Autobase({
+    inputs: [writerA]
+  })
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -214,8 +226,9 @@ test('dynamically adding/removing inputs', async t => {
 test('dynamically adding inputs does not alter existing causal streams', async t => {
   const writerA = new Hypercore(ram)
 
-  const base = new Autobase([writerA])
-  await base.ready()
+  const base = new Autobase({
+    inputs: [writerA]
+  })
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -254,15 +267,14 @@ test('can parse headers', async t => {
   const notAutobase = new Hypercore(ram)
   await notAutobase.append(Buffer.from('hello world'))
 
-  const base = new Autobase([writer], {
-    input: writer
+  const base = new Autobase({
+    inputs: [writer],
+    outputs: [output],
+    localInput: writer,
+    localOutput: output
   })
-  await base.ready()
-
   await base.append('a0')
-
-  const view = base.linearize(output)
-  await view.update()
+  await base.view.update()
 
   t.true(await Autobase.isAutobase(writer))
   t.true(await Autobase.isAutobase(output))

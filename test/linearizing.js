@@ -5,110 +5,16 @@ const ram = require('random-access-memory')
 const { bufferize, linearizedValues } = require('./helpers')
 const Autobase = require('../')
 
-test('linearizing - three independent forks, persisted', async t => {
+test('linearizing - three independent forks', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
-
-  // Create three independent forks
-  for (let i = 0; i < 1; i++) {
-    await base.append(`a${i}`, [], writerA)
-  }
-  for (let i = 0; i < 2; i++) {
-    await base.append(`b${i}`, [], writerB)
-  }
-  for (let i = 0; i < 3; i++) {
-    await base.append(`c${i}`, [], writerC)
-  }
-
-  {
-    const view = base.linearize(output)
-    const outputNodes = await linearizedValues(view)
-
-    t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
-    t.same(view.status.added, 6)
-    t.same(view.status.removed, 0)
-    t.same(output.length, 6)
-  }
-
-  // Add 3 more records to A -- should switch fork ordering
-  for (let i = 1; i < 4; i++) {
-    await base.append(`a${i}`, await base.latest(writerA), writerA)
-  }
-
-  {
-    const view = base.linearize(output)
-    const outputNodes = await linearizedValues(view)
-
-    t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']))
-    t.same(view.status.added, 9)
-    t.same(view.status.removed, 6)
-    t.same(output.length, 9)
-  }
-
-  t.end()
-})
-
-test('linearizing - three independent forks, not persisted', async t => {
-  const output = new Hypercore(ram)
-  const writerA = new Hypercore(ram)
-  const writerB = new Hypercore(ram)
-  const writerC = new Hypercore(ram)
-
-  const base = new Autobase([writerA, writerB, writerC])
-
-  // Create three independent forks
-  for (let i = 0; i < 1; i++) {
-    await base.append(`a${i}`, [], writerA)
-  }
-  for (let i = 0; i < 2; i++) {
-    await base.append(`b${i}`, [], writerB)
-  }
-  for (let i = 0; i < 3; i++) {
-    await base.append(`c${i}`, [], writerC)
-  }
-
-  const view = base.linearize(output, { autocommit: false })
-
-  {
-    const outputNodes = await linearizedValues(view)
-    t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
-    t.same(view.status.added, 6)
-    t.same(view.status.removed, 0)
-    t.same(view.length, 6)
-    t.same(output.length, 0)
-  }
-
-  // Add 3 more records to A -- should switch fork ordering
-  for (let i = 1; i < 4; i++) {
-    await base.append(`a${i}`, await base.latest(writerA), writerA)
-  }
-
-  {
-    const outputNodes = await linearizedValues(view)
-    t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']))
-    t.same(view.status.added, 9)
-    t.same(view.status.removed, 6)
-    t.same(view.length, 9)
-    t.same(output.length, 0)
-  }
-
-  t.end()
-})
-
-test('linearizing - default output', async t => {
-  const output = new Hypercore(ram)
-  const writerA = new Hypercore(ram)
-  const writerB = new Hypercore(ram)
-  const writerC = new Hypercore(ram)
-
-  const base = new Autobase([writerA, writerB, writerC], {
-    outputs: output
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output
   })
-  const view = base.linearize()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -122,23 +28,25 @@ test('linearizing - default output', async t => {
   }
 
   {
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
+
     t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
-    t.same(view.status.added, 6)
-    t.same(view.status.removed, 0)
+    t.same(base.view.status.added, 6)
+    t.same(base.view.status.removed, 0)
     t.same(output.length, 6)
   }
 
   // Add 3 more records to A -- should switch fork ordering
   for (let i = 1; i < 4; i++) {
-    await base.append(`a${i}`, [], writerA)
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
   }
 
   {
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
+
     t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']))
-    t.same(view.status.added, 9)
-    t.same(view.status.removed, 6)
+    t.same(base.view.status.added, 9)
+    t.same(base.view.status.removed, 6)
     t.same(output.length, 9)
   }
 
@@ -151,7 +59,10 @@ test('linearizing - causal writes preserve clock', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output
+  })
 
   // Create three causally-linked forks
   for (let i = 0; i < 1; i++) {
@@ -164,17 +75,16 @@ test('linearizing - causal writes preserve clock', async t => {
     await base.append(`c${i}`, writerC)
   }
 
-  const view = base.linearize(output)
-  const outputNodes = await linearizedValues(view)
+  const outputNodes = await linearizedValues(base.view)
 
   t.same(outputNodes.map(v => v.value), bufferize(['c2', 'c1', 'c0', 'b1', 'b0', 'a0']))
-  t.same(view.status.added, 6)
-  t.same(view.status.removed, 0)
+  t.same(base.view.status.added, 6)
+  t.same(base.view.status.removed, 0)
   t.same(output.length, 6)
 
-  for (let i = 1; i < view.length; i++) {
-    const prev = await view.get(i - 1)
-    const node = await view.get(i)
+  for (let i = 1; i < base.view.length; i++) {
+    const prev = await base.view.get(i - 1)
+    const node = await base.view.get(i)
     t.true(prev.lte(node))
   }
 
@@ -187,8 +97,10 @@ test('linearizing - does not over-truncate', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC], { outputs: output })
-  const view = base.linearize()
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output
+  })
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -202,10 +114,10 @@ test('linearizing - does not over-truncate', async t => {
   }
 
   {
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
     t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c4', 'c3', 'c2', 'c1', 'c0']))
-    t.same(view.status.added, 8)
-    t.same(view.status.removed, 0)
+    t.same(base.view.status.added, 8)
+    t.same(base.view.status.removed, 0)
     t.same(output.length, 8)
   }
 
@@ -215,10 +127,10 @@ test('linearizing - does not over-truncate', async t => {
   }
 
   {
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
     t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'a3', 'a2', 'a1', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0']))
-    t.same(view.status.added, 6)
-    t.same(view.status.removed, 3)
+    t.same(base.view.status.added, 6)
+    t.same(base.view.status.removed, 3)
     t.same(output.length, 11)
   }
 
@@ -226,10 +138,10 @@ test('linearizing - does not over-truncate', async t => {
   await base.append('b2', [], writerB)
 
   {
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
     t.same(outputNodes.map(v => v.value), bufferize(['b2', 'b1', 'b0', 'a3', 'a2', 'a1', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0']))
-    t.same(view.status.added, 1)
-    t.same(view.status.removed, 0)
+    t.same(base.view.status.added, 1)
+    t.same(base.view.status.removed, 0)
     t.same(output.length, 12)
   }
 
@@ -242,8 +154,10 @@ test('linearizing - can cut out a writer', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC], { outputs: output })
-  const view = base.linearize()
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output
+  })
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -257,10 +171,10 @@ test('linearizing - can cut out a writer', async t => {
   }
 
   {
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
     t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c4', 'c3', 'c2', 'c1', 'c0']))
-    t.same(view.status.added, 8)
-    t.same(view.status.removed, 0)
+    t.same(base.view.status.added, 8)
+    t.same(base.view.status.removed, 0)
     t.same(output.length, 8)
   }
 
@@ -268,10 +182,10 @@ test('linearizing - can cut out a writer', async t => {
   await base.removeInput(writerB)
 
   {
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
     t.same(outputNodes.map(v => v.value), bufferize(['a0', 'c4', 'c3', 'c2', 'c1', 'c0']))
-    t.same(view.status.added, 1) // a0 is reindexed
-    t.same(view.status.removed, 3) // a0 is popped and reindexed
+    t.same(base.view.status.added, 1) // a0 is reindexed
+    t.same(base.view.status.removed, 3) // a0 is popped and reindexed
     t.same(output.length, 6)
   }
 
@@ -284,8 +198,10 @@ test('linearizing - can cut out a writer from the back', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC], { outputs: output })
-  const view = base.linearize()
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output
+  })
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -296,20 +212,20 @@ test('linearizing - can cut out a writer from the back', async t => {
   }
 
   {
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
     t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b4', 'b3', 'b2', 'b1', 'b0']))
-    t.same(view.status.added, 6)
-    t.same(view.status.removed, 0)
+    t.same(base.view.status.added, 6)
+    t.same(base.view.status.removed, 0)
     t.same(output.length, 6)
   }
 
   await base.removeInput(writerB)
 
   {
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
     t.same(outputNodes.map(v => v.value), bufferize(['a0']))
-    t.same(view.status.added, 1) // a0 is reindexed
-    t.same(view.status.removed, 6) // a0 is popped and reindexed
+    t.same(base.view.status.added, 1) // a0 is reindexed
+    t.same(base.view.status.removed, 6) // a0 is popped and reindexed
     t.same(output.length, 1)
   }
 
@@ -322,8 +238,10 @@ test('linearizing - can cut out a writer from the front', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC], { outputs: output })
-  const view = base.linearize()
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output
+  })
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -334,20 +252,20 @@ test('linearizing - can cut out a writer from the front', async t => {
   }
 
   {
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
     t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b4', 'b3', 'b2', 'b1', 'b0']))
-    t.same(view.status.added, 6)
-    t.same(view.status.removed, 0)
+    t.same(base.view.status.added, 6)
+    t.same(base.view.status.removed, 0)
     t.same(output.length, 6)
   }
 
   await base.removeInput(writerA)
 
   {
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
     t.same(outputNodes.map(v => v.value), bufferize(['b4', 'b3', 'b2', 'b1', 'b0']))
-    t.same(view.status.added, 0) // a0 is removed
-    t.same(view.status.removed, 1) // a0 is removed
+    t.same(base.view.status.added, 0) // a0 is removed
+    t.same(base.view.status.removed, 1) // a0 is removed
     t.same(output.length, 5)
   }
 
@@ -360,8 +278,10 @@ test('linearizing - can cut out a writer, causal writes', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC], { outputs: output })
-  const view = base.linearize()
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output
+  })
 
   // Create three causally-linked forks
   for (let i = 0; i < 1; i++) {
@@ -375,10 +295,10 @@ test('linearizing - can cut out a writer, causal writes', async t => {
   }
 
   {
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
     t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0']))
-    t.same(view.status.added, 8)
-    t.same(view.status.removed, 0)
+    t.same(base.view.status.added, 8)
+    t.same(base.view.status.removed, 0)
     t.same(output.length, 8)
   }
 
@@ -386,10 +306,10 @@ test('linearizing - can cut out a writer, causal writes', async t => {
   await base.removeInput(writerB)
 
   {
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
     t.same(outputNodes.map(v => v.value), bufferize(['a0', 'c4', 'c3', 'c2', 'c1', 'c0']))
-    t.same(view.status.added, 0) // b1 and b0 are removed
-    t.same(view.status.removed, 2) // b1 and b0 are removed
+    t.same(base.view.status.added, 0) // b1 and b0 are removed
+    t.same(base.view.status.removed, 2) // b1 and b0 are removed
     t.same(output.length, 6)
   }
 
@@ -401,8 +321,10 @@ test('linearizing - can cut out a writer, causal writes interleaved', async t =>
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB], { outputs: output })
-  const view = base.linearize()
+  const base = new Autobase({
+    inputs: [writerA, writerB],
+    localOutput: output
+  })
 
   for (let i = 0; i < 6; i++) {
     if (i % 2) {
@@ -413,20 +335,20 @@ test('linearizing - can cut out a writer, causal writes interleaved', async t =>
   }
 
   {
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
     t.same(outputNodes.map(v => v.value), bufferize(['a5', 'b4', 'a3', 'b2', 'a1', 'b0']))
-    t.same(view.status.added, 6)
-    t.same(view.status.removed, 0)
+    t.same(base.view.status.added, 6)
+    t.same(base.view.status.removed, 0)
     t.same(output.length, 6)
   }
 
   await base.removeInput(writerB)
 
   {
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
     t.same(outputNodes.map(v => v.value), bufferize(['a5', 'a3', 'a1']))
-    t.same(view.status.added, 3)
-    t.same(view.status.removed, 6)
+    t.same(base.view.status.added, 3)
+    t.same(base.view.status.removed, 6)
     t.same(output.length, 3)
   }
 
@@ -445,7 +367,10 @@ test('linearizing - many writers, no causal writes', async t => {
     writers.push(writer)
   }
 
-  const base = new Autobase(writers)
+  const base = new Autobase({
+    inputs: writers,
+    localOutput: output
+  })
   for (let i = 1; i < NUM_WRITERS + 1; i++) {
     const writer = writers[i - 1]
     for (let j = 0; j < i; j++) {
@@ -454,8 +379,7 @@ test('linearizing - many writers, no causal writes', async t => {
   }
 
   {
-    const view = base.linearize(output)
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
     t.same(outputNodes.length, (NUM_WRITERS * (NUM_WRITERS + 1)) / 2)
   }
 
@@ -467,15 +391,12 @@ test('linearizing - many writers, no causal writes', async t => {
     await base.append(`new entry ${i}`, [], middleWriter)
   }
 
-  const view = base.linearize(output, {
-    unwrap: true
-  })
-  await view.update()
+  await base.view.update()
 
   for (let i = 0; i < NUM_APPENDS + Math.floor(writers.length / 2); i++) {
-    const latestNode = await view.get(i)
-    const val = latestNode.toString('utf-8')
-    t.same(val, (await decodedMiddleWriter.get(i)).value.toString('utf-8'))
+    const latestNode = await base.view.get(i)
+    const val = latestNode.value.toString()
+    t.same(val, (await decodedMiddleWriter.get(i)).value.toString())
   }
 
   t.end()
@@ -487,8 +408,10 @@ test('linearizing - double-linearizing is a no-op', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC], { outputs: output })
-  const view = base.linearize()
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output
+  })
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -502,18 +425,18 @@ test('linearizing - double-linearizing is a no-op', async t => {
   }
 
   {
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
     t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
-    t.same(view.status.added, 6)
-    t.same(view.status.removed, 0)
+    t.same(base.view.status.added, 6)
+    t.same(base.view.status.removed, 0)
     t.same(output.length, 6)
   }
 
   {
-    const outputNodes = await linearizedValues(view)
+    const outputNodes = await linearizedValues(base.view)
     t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
-    t.same(view.status.added, 0)
-    t.same(view.status.removed, 0)
+    t.same(base.view.status.added, 0)
+    t.same(base.view.status.removed, 0)
     t.same(output.length, 6)
   }
 
@@ -529,71 +452,85 @@ test('linearizing - selects longest remote output', async t => {
   const output2 = new Hypercore(ram)
   const output3 = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
-  await base.ready()
+  const inputs = [writerA, writerB, writerC]
+  const base1 = new Autobase({
+    inputs,
+    localOutput: output1
+  })
+  const base2 = new Autobase({
+    inputs,
+    localOutput: output2
+  })
+  const base3 = new Autobase({
+    inputs,
+    localOutput: output3
+  })
 
-  // Create three independent forks
+  // Create three independent forks and linearize them into separate outputs
   for (let i = 0; i < 3; i++) {
-    await base.append(`a${i}`, [], writerA)
+    await base1.append(`a${i}`, [], writerA)
   }
 
-  {
-    const view = base.linearize(output1)
-    await view.update()
-  }
+  await base1.view.update()
 
   for (let i = 0; i < 2; i++) {
-    await base.append(`b${i}`, [], writerB)
+    await base1.append(`b${i}`, [], writerB)
   }
 
-  {
-    const view = base.linearize(output2)
-    await view.update()
-  }
+  await base2.view.update()
 
   for (let i = 0; i < 1; i++) {
-    await base.append(`c${i}`, [], writerC)
+    await base1.append(`c${i}`, [], writerC)
   }
 
-  {
-    const view = base.linearize(output3)
-    await view.update()
-  }
+  await base3.view.update()
 
   {
     // Should not have to modify output3
-    const view = base.linearize([output3], { autocommit: false })
-    await view.update()
-    t.same(view.status.added, 0)
-    t.same(view.status.removed, 0)
-    t.same(view.length, 6)
+    const base = new Autobase({
+      inputs,
+      outputs: [output3]
+    })
+    await base.view.update()
+    t.same(base.view.status.added, 0)
+    t.same(base.view.status.removed, 0)
+    t.same(base.view.length, 6)
   }
 
   {
     // Should not have to add B and C
-    const view = base.linearize([output1], { autocommit: false })
-    await view.update()
-    t.same(view.status.added, 3)
-    t.same(view.status.removed, 0)
-    t.same(view.length, 6)
+    const base = new Autobase({
+      inputs,
+      outputs: [output1]
+    })
+    await base.view.update()
+    t.same(base.view.status.added, 3)
+    t.same(base.view.status.removed, 0)
+    t.same(base.view.length, 6)
   }
 
   {
     // Should select output2
-    const view = base.linearize([output1, output2], { autocommit: false })
-    await view.update()
-    t.same(view.status.added, 1)
-    t.same(view.status.removed, 0)
-    t.same(view.length, 6)
+    const base = new Autobase({
+      inputs,
+      outputs: [output1, output2]
+    })
+    await base.view.update()
+    t.same(base.view.status.added, 1)
+    t.same(base.view.status.removed, 0)
+    t.same(base.view.length, 6)
   }
 
   {
     // Should select output3
-    const view = base.linearize([output1, output2, output3], { autocommit: false })
-    await view.update()
-    t.same(view.status.added, 0)
-    t.same(view.status.removed, 0)
-    t.same(view.length, 6)
+    const base = new Autobase({
+      inputs,
+      outputs: [output1, output2, output3]
+    })
+    await base.view.update()
+    t.same(base.view.status.added, 0)
+    t.same(base.view.status.removed, 0)
+    t.same(base.view.length, 6)
   }
 
   t.end()
@@ -608,67 +545,62 @@ test('linearizing - can dynamically add/remove default outputs', async t => {
   const output2 = new Hypercore(ram)
   const output3 = new Hypercore(ram)
 
-  const base1 = new Autobase([writerA, writerB, writerC])
-  await base1.ready()
+  const inputs = [writerA, writerB, writerC]
+  const base1 = new Autobase({
+    inputs,
+    localOutput: output1
+  })
+  const base2 = new Autobase({
+    inputs,
+    localOutput: output2
+  })
+  const base3 = new Autobase({
+    inputs,
+    localOutput: output3
+  })
 
-  // Create three independent forks, and rebase them into separate indexes
+  // Create three independent forks, and linearize them into separate outputs
   for (let i = 0; i < 3; i++) {
     await base1.append(`a${i}`, [], writerA)
   }
 
-  {
-    const view = base1.linearize(output1)
-    await view.update()
-  }
+  await base1.view.update()
 
   for (let i = 0; i < 2; i++) {
     await base1.append(`b${i}`, [], writerB)
   }
 
-  {
-    const view = base1.linearize(output2)
-    await view.update()
-  }
+  await base2.view.update()
 
   for (let i = 0; i < 1; i++) {
     await base1.append(`c${i}`, [], writerC)
   }
 
-  {
-    const view = base1.linearize(output3)
-    await view.update()
-  }
+  await base3.view.update()
 
-  const base2 = new Autobase([writerA, writerB, writerC], { outputs: output1 })
+  const base4 = new Autobase({
+    inputs,
+    outputs: [output1]
+  })
 
-  {
-    const view = base2.linearize({ autocommit: false })
-    await view.update()
-    t.same(view.status.added, 3)
-    t.same(view.status.removed, 0)
-    t.same(view.length, 6)
-  }
+  await base4.view.update()
+  t.same(base4.view.status.added, 3)
+  t.same(base4.view.status.removed, 0)
+  t.same(base4.view.length, 6)
 
-  await base2.addDefaultOutput(output2)
+  await base4.addOutput(output2)
 
-  {
-    const view = base2.linearize({ autocommit: false })
-    await view.update()
-    t.same(view.status.added, 1)
-    t.same(view.status.removed, 0)
-    t.same(view.length, 6)
-  }
+  await base4.view.update()
+  t.same(base4.view.status.added, 1)
+  t.same(base4.view.status.removed, 0)
+  t.same(base4.view.length, 6)
 
-  await base2.addDefaultOutput(output3)
+  await base4.addOutput(output3)
 
-  {
-    // Should select output3
-    const view = base2.linearize({ autocommit: false })
-    await view.update()
-    t.same(view.status.added, 0)
-    t.same(view.status.removed, 0)
-    t.same(view.length, 6)
-  }
+  await base4.view.update()
+  t.same(base4.view.status.added, 0)
+  t.same(base4.view.status.removed, 0)
+  t.same(base4.view.length, 6)
 
   t.end()
 })
@@ -680,98 +612,66 @@ test('linearizing - can locally extend an out-of-date remote output', async t =>
 
   const output1 = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
-  await base.ready()
-
-  let sharedView = null
+  const inputs = [writerA, writerB, writerC]
+  const writerBase = new Autobase({
+    inputs,
+    localOutput: output1
+  })
+  const readerBase = new Autobase({
+    inputs,
+    outputs: [output1]
+  })
 
   for (let i = 0; i < 3; i++) {
-    await base.append(`a${i}`, [], writerA)
+    await writerBase.append(`a${i}`, [], writerA)
   }
+  await writerBase.view.update()
+  await readerBase.view.update()
 
-  {
-    const view = base.linearize(output1)
-    sharedView = base.linearize(output1, { autocommit: false })
-    await view.update()
-  }
-
-  {
-    const view = base.linearize(output1, { autocommit: false })
-    await sharedView.update()
-    await view.update()
-    t.same(sharedView.status.added, 0)
-    t.same(sharedView.status.removed, 0)
-    t.same(sharedView.length, 3)
-    t.same(view.status.added, 0)
-    t.same(view.status.removed, 0)
-    t.same(view.length, 3)
-  }
+  t.same(writerBase.view.status.added, 3)
+  t.same(writerBase.view.status.removed, 0)
+  t.same(writerBase.view.length, 3)
+  t.same(readerBase.view.status.added, 0)
+  t.same(readerBase.view.status.removed, 0)
+  t.same(readerBase.view.length, 3)
 
   for (let i = 0; i < 2; i++) {
-    await base.append(`b${i}`, [], writerB)
+    await writerBase.append(`b${i}`, [], writerB)
   }
 
-  {
-    const view = base.linearize(output1, { autocommit: false })
-    await sharedView.update()
-    await view.update()
-    t.same(sharedView.status.added, 2)
-    t.same(sharedView.status.removed, 0)
-    t.same(sharedView.length, 5)
-    t.same(view.status.added, 2)
-    t.same(view.status.removed, 0)
-    t.same(view.length, 5)
-  }
+  await readerBase.view.update()
+  t.same(readerBase.view.status.added, 2)
+  t.same(readerBase.view.status.removed, 0)
+  t.same(readerBase.view.length, 5)
 
   for (let i = 0; i < 1; i++) {
-    await base.append(`c${i}`, [], writerC)
+    await writerBase.append(`c${i}`, [], writerC)
   }
 
-  {
-    const view = base.linearize(output1, { autocommit: false })
-    await sharedView.update()
-    await view.update()
-    t.same(sharedView.status.added, 1)
-    t.same(sharedView.status.removed, 0)
-    t.same(sharedView.length, 6)
-    t.same(view.status.added, 3)
-    t.same(view.status.removed, 0)
-    t.same(view.length, 6)
-  }
+  await readerBase.view.update()
+  t.same(readerBase.view.status.added, 1)
+  t.same(readerBase.view.status.removed, 0)
+  t.same(readerBase.view.length, 6)
 
   // Extend C and lock the previous forks (will not reorg)
   for (let i = 1; i < 4; i++) {
-    await base.append(`c${i}`, writerC)
+    await writerBase.append(`c${i}`, writerC)
   }
 
-  {
-    const view = base.linearize(output1, { autocommit: false })
-    await sharedView.update()
-    await view.update()
-    t.same(sharedView.status.added, 3)
-    t.same(sharedView.status.removed, 0)
-    t.same(sharedView.length, 9)
-    t.same(view.status.added, 6)
-    t.same(view.status.removed, 0)
-    t.same(view.length, 9)
-  }
+  await readerBase.view.update()
+  t.same(readerBase.view.status.added, 3)
+  t.same(readerBase.view.status.removed, 0)
+  t.same(readerBase.view.length, 9)
 
   // Create a new B fork at the back (full reorg)
   for (let i = 1; i < 11; i++) {
-    await base.append(`b${i}`, [], writerB)
+    await writerBase.append(`b${i}`, [], writerB)
   }
 
-  {
-    const view = base.linearize(output1, { autocommit: false })
-    await sharedView.update()
-    await view.update()
-    t.same(sharedView.status.added, 19)
-    t.same(sharedView.status.removed, 9)
-    t.same(sharedView.length, 19)
-    t.same(view.status.added, 19)
-    t.same(view.status.removed, 3)
-    t.same(view.length, 19)
-  }
+  await readerBase.view.update()
+  t.same(readerBase.view.status.added, 19)
+  t.same(readerBase.view.status.removed, 9)
+  t.same(readerBase.view.length, 19)
 
   t.end()
 })
@@ -783,37 +683,42 @@ test('linearizing - will discard local in-memory view if remote is updated', asy
 
   const output1 = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
-  await base.ready()
-
-  const view = base.linearize(output1, { autocommit: false })
+  const inputs = [writerA, writerB, writerC]
+  const writerBase = new Autobase({
+    inputs,
+    localOutput: output1
+  })
+  const readerBase = new Autobase({
+    inputs,
+    outputs: [output1]
+  })
 
   for (let i = 0; i < 3; i++) {
-    await base.append(`a${i}`, [], writerA)
+    await writerBase.append(`a${i}`, [], writerA)
   }
 
-  await base.linearize(output1).update() // Pull the first 3 nodes into output1
-  await view.update()
-  t.same(view._bestLinearizer.committed.length, 0) // It should start up-to-date
+  await writerBase.view.update() // Pull the first 3 nodes into output1
+  await readerBase.view.update()
+  t.same(readerBase.view._bestLinearizer.committed.length, 0) // It should start up-to-date
 
   for (let i = 0; i < 2; i++) {
-    await base.append(`b${i}`, [], writerB)
+    await writerBase.append(`b${i}`, [], writerB)
   }
 
-  await view.update() // view extends output1 in memory
-  t.same(view._bestLinearizer.committed.length, 2)
+  await readerBase.view.update() // view extends output1 in memory
+  t.same(readerBase.view._bestLinearizer.committed.length, 2)
 
   for (let i = 0; i < 1; i++) {
-    await base.append(`c${i}`, [], writerC)
+    await writerBase.append(`c${i}`, [], writerC)
   }
 
-  await view.update()
-  t.same(view._bestLinearizer.committed.length, 3)
+  await readerBase.view.update()
+  t.same(readerBase.view._bestLinearizer.committed.length, 3)
 
   // Pull the latest changes into the output1
-  await base.linearize(output1).update()
-  await view.update()
-  t.same(view._bestLinearizer.committed.length, 0)
+  await writerBase.view.update()
+  await readerBase.view.update()
+  t.same(readerBase.view._bestLinearizer.committed.length, 0)
 
   t.end()
 })
@@ -824,7 +729,10 @@ test('linearizing - linearize operations are debounced', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output
+  })
 
   for (let i = 0; i < 1; i++) {
     await base.append(`a${i}`, [], writerA)
@@ -836,17 +744,16 @@ test('linearizing - linearize operations are debounced', async t => {
     await base.append(`c${i}`, [], writerC)
   }
 
-  const view = base.linearize(output)
   await Promise.all([
-    view.update(),
-    view.update(),
-    view.update(),
-    view.update()
+    base.view.update(),
+    base.view.update(),
+    base.view.update(),
+    base.view.update()
   ])
 
   const outputNodes = []
-  for (let i = 0; i < view.length; i++) {
-    outputNodes.push(await view.get(i))
+  for (let i = 0; i < base.view.length; i++) {
+    outputNodes.push(await base.view.get(i))
   }
   outputNodes.reverse()
 
@@ -856,45 +763,46 @@ test('linearizing - linearize operations are debounced', async t => {
   t.end()
 })
 
-// TODO: Re-enable after API updates
-test.skip('closing a view will cleanup event listeners', async t => {
+test('closing a view will cleanup event listeners', async t => {
   const output1 = new Hypercore(ram)
   const output2 = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
+  const inputs = [writerA, writerB, writerC]
+  const base1 = new Autobase({
+    inputs,
+    outputs: [output1]
+  })
+  const base2 = new Autobase({
+    inputs,
+    outputs: [output2]
+  })
 
   for (let i = 0; i < 1; i++) {
-    await base.append(`a${i}`, [], writerA)
+    await base1.append(`a${i}`, [], writerA)
   }
   for (let i = 0; i < 2; i++) {
-    await base.append(`b${i}`, [], writerB)
+    await base1.append(`b${i}`, [], writerB)
   }
   for (let i = 0; i < 3; i++) {
-    await base.append(`c${i}`, [], writerC)
+    await base1.append(`c${i}`, [], writerC)
   }
 
-  const view1 = base.linearize(output1)
-  const view2 = base.linearize(output2)
-
-  await view1.update()
-  await view2.update()
-
+  t.same(writerA.listenerCount('append'), 2)
   t.same(output1.listenerCount('truncate'), 1)
   t.same(output2.listenerCount('truncate'), 1)
-  t.same(base._views.length, 2)
 
-  await view1.close()
+  await base1.close()
 
+  t.same(writerA.listenerCount('append'), 1)
   t.same(output1.listenerCount('truncate'), 0)
-  t.same(base._views.length, 1)
 
-  await view2.close()
+  await base2.close()
 
+  t.same(writerA.listenerCount('append'), 0)
   t.same(output2.listenerCount('truncate'), 0)
-  t.same(base._views.length, 0)
 
   t.end()
 })

@@ -2,6 +2,7 @@ const { EventEmitter } = require('events')
 const streamx = require('streamx')
 const codecs = require('codecs')
 const c = require('compact-encoding')
+const safetyCatch = require('safety-catch')
 
 const LinearizedView = require('./lib/linearize')
 const { InputNode, OutputNode } = require('./lib/nodes')
@@ -11,74 +12,83 @@ const INPUT_PROTOCOL = '@autobase/input/v1'
 const OUTPUT_PROTOCOL = '@autobase/output/v1'
 
 module.exports = class Autobase extends EventEmitter {
-  constructor (inputs, opts = {}) {
+  constructor ({ inputs, outputs, localInput, localOutput, apply } = {}) {
     super()
-    this.inputs = null
-    this.defaultOutputs = null
-    this.defaultInput = null
-    this._clock = null
-
-    this._autocommit = opts.autocommit
-
-    this._inputs = inputs || []
-    this._defaultInput = opts.input
-    this._inputsByKey = null
-
-    this._defaultOutputs = opts.outputs
-    this._defaultOutputsByKey = null
-    this._rebasersWithDefaultOutputs = []
-
-    this._readStreams = []
-    this._views = []
-
+    this.inputs = inputs || []
+    this.outputs = outputs || []
+    this.localInput = localInput
+    this.localOutput = localOutput
+    this.clock = null
     this.opened = false
-    this._closing = null
-    this._opening = this._open()
+    this.closed = false
 
-    this._opening.catch(noop)
-    this.ready = () => this._opening
+    this._inputsByKey = new Map()
+    this._outputsByKey = new Map()
+    this._readStreams = []
+
+    this.view = new LinearizedView(this, {
+      header: { protocol: OUTPUT_PROTOCOL },
+      apply
+    })
 
     const self = this
     this._onappend = this._onInputAppended.bind(this)
     this._ontruncate = function (length, forkId) {
       self._onOutputTruncated(this, length, forkId)
     }
-  }
 
-  async _open () {
-    this.defaultInput = await this._defaultInput
-    const inputs = (await this._inputs) || []
-    let defaultOutputs = (await this._defaultOutputs) || []
-
-    if (defaultOutputs && !Array.isArray(defaultOutputs)) defaultOutputs = [defaultOutputs]
-
-    await Promise.all(inputs.map(i => i.ready()))
-    await Promise.all(defaultOutputs.map(o => o.ready()))
-    this._validateInputs()
-
-    if (!this.defaultInput) {
-      for (const input of inputs) {
-        if (input.writable) {
-          this.defaultInput = input
-          break
-        }
-      }
-    }
-
-    this._inputsByKey = intoByKeyMap(inputs)
-    this._defaultOutputsByKey = intoByKeyMap(defaultOutputs)
-
-    this.inputs = [...this._inputsByKey.values()]
-    this.defaultOutputs = [...this._defaultOutputsByKey.values()]
-
-    for (const input of this.inputs) {
-      input.on('append', this._onappend)
-    }
-
-    this.opened = true
+    this._opening = this._open()
+    this._opening.catch(safetyCatch)
+    this.ready = () => this._opening
   }
 
   // Private Methods
+
+  async _open () {
+    await Promise.all([
+      ...this.inputs.map(i => i.ready()),
+      ...this.outputs.map(o => o.ready())
+    ])
+
+    for (const input of this.inputs) {
+      const id = input.key.toString('hex')
+      if (this._inputsByKey.has(id)) continue
+
+      this._validateInput(input)
+      input.on('append', this._onappend)
+      this._inputsByKey.set(id, input)
+    }
+
+    for (const output of this.outputs) {
+      const id = output.key.toString('hex')
+      if (this._outputsByKey.has(id)) continue
+
+      output.on('truncate', this._ontruncate)
+      this._outputsByKey.set(id, output)
+    }
+
+    this.inputs = [...this._inputsByKey.values()]
+    this.outputs = [...this._outputsByKey.values()]
+    this.opened = true
+  }
+
+  _onOutputTruncated (output, length, forkId) {
+    for (const view of this._views) {
+      view._onOutputTruncated(output, length, forkId)
+    }
+  }
+
+  _onInputAppended () {
+    this.emit('append')
+    this._bumpReadStreams()
+    this._getLatestClock() // Updates this.clock
+  }
+
+  _bumpReadStreams () {
+    for (const stream of this._readStreams) {
+      stream.bump()
+    }
+  }
 
   _createInputBatch (input, batch, clock) {
     const nodes = []
@@ -94,12 +104,6 @@ module.exports = class Autobase extends EventEmitter {
       }
     }
     return nodes.map(InputNode.encode)
-  }
-
-  _validateInputs () {
-    for (const input of this._inputs) {
-      this._validateInput(input)
-    }
   }
 
   _validateInput (input) {
@@ -138,32 +142,10 @@ module.exports = class Autobase extends EventEmitter {
     return node
   }
 
-  _onOutputTruncated (output, length, forkId) {
-    for (const view of this._views) {
-      view._onOutputTruncated(output, length, forkId)
-    }
-  }
-
-  _onInputAppended () {
-    this.emit('append')
-    this._bumpReadStreams()
-    this._getLatestClock() // Updates this._clock
-  }
-
-  _bumpReadStreams () {
-    for (const stream of this._readStreams) {
-      stream.bump()
-    }
-  }
-
   // Public API
 
-  clock () {
-    return this._clock
-  }
-
   async heads () {
-    if (!this.opened) await this.ready()
+    if (!this.opened) await this._opening
     await Promise.all(this.inputs.map(i => i.update()))
     return Promise.all(this.inputs.map(i => this._getInputNode(i, i.length - 1)))
   }
@@ -180,32 +162,33 @@ module.exports = class Autobase extends EventEmitter {
       clock.set(id, input.length - 1)
     }
 
-    this._clock = clock
+    this.clock = clock
     return clock
   }
 
   async latest (inputs) {
-    if (!this.opened) await this.ready()
+    if (!this.opened) await this._opening
     await Promise.all(this.inputs.map(i => i.update()))
     return this._getLatestClock(inputs)
   }
 
   async addInput (input) {
-    if (!this.opened) await this.ready()
+    if (!this.opened) await this._opening
     await input.ready()
     this._validateInput(input)
 
     const id = input.key.toString('hex')
-    if (!this._inputsByKey.has(id)) {
-      this.inputs.push(input)
-      this._inputsByKey.set(id, input)
-      input.on('append', this._onappend)
-      this._bumpReadStreams()
-    }
+    if (this._inputsByKey.has(id)) return
+
+    this.inputs.push(input)
+    this._inputsByKey.set(id, input)
+    input.on('append', this._onappend)
+
+    this._bumpReadStreams()
   }
 
   async removeInput (input) {
-    if (!this.opened) await this.ready()
+    if (!this.opened) await this._opening
     if (typeof input.ready === 'function') await input.ready()
     const id = Buffer.isBuffer(input) ? input.toString('hex') : input.key.toString('hex')
     if (!this._inputsByKey.has(id)) return
@@ -222,28 +205,30 @@ module.exports = class Autobase extends EventEmitter {
     return input
   }
 
-  async addDefaultOutput (output) {
-    if (!this.opened) await this.ready()
+  async addOutput (output) {
+    if (!this.opened) await this._opening
     await output.ready()
 
-    if (this._defaultOutputsByKey.has(output.key.toString('hex'))) return
-    output.on('truncate', this._ontruncate)
+    const id = output.key.toString('hex')
+    if (this._outputsByKey.has(id)) return
 
-    this.defaultOutputs.push(output)
+    this.outputs.push(output)
+    this._outputsByKey.set(id, output)
+    output.on('truncate', this._ontruncate)
   }
 
-  async removeDefaultOutput (output) {
-    if (!this.opened) await this.ready()
+  async removeOutput (output) {
+    if (!this.opened) await this._opening
     if (typeof output.ready === 'function') await output.ready()
     const id = Buffer.isBuffer(output) ? output.toString('hex') : output.key.toString('hex')
-    if (!this._defaultOutputsByKey.has(id)) return
+    if (!this._outputsByKey.has(id)) return
 
-    output = this._defaultOutputsByKey.get(id)
+    output = this._outputsByKey.get(id)
     output.removeListener('truncate', this._ontruncate)
-    const idx = this.defaultOutputs.indexOf(output)
 
-    this.defaultOutputs.splice(idx, 1)
-    this._defaultOutputsByKey.delete(id)
+    const idx = this.outputs.indexOf(output)
+    this.outputs.splice(idx, 1)
+    this._outputsByKey.delete(id)
 
     return output
   }
@@ -318,7 +303,7 @@ module.exports = class Autobase extends EventEmitter {
     return stream
 
     async function _open (cb) {
-      if (!self.opened) await self.ready()
+      if (!self.opened) await self._opening
       await maybeSnapshot()
       await updateAll()
     }
@@ -422,14 +407,14 @@ module.exports = class Autobase extends EventEmitter {
   }
 
   async append (value, clock, input) {
+    if (!this.opened) await this._opening
     if (clock !== null && !Array.isArray(clock) && !(clock instanceof Map)) {
       input = clock
       clock = null
     }
     if (!Array.isArray(value)) value = [value]
-    if (!this.opened) await this.ready()
 
-    input = input || this.defaultInput
+    input = input || this.localInput
     clock = clockToMap(clock || this._getLatestClock())
 
     // Make sure that causal information propagates.
@@ -448,33 +433,15 @@ module.exports = class Autobase extends EventEmitter {
     return input.append(batch)
   }
 
-  linearize (outputs, opts = {}) {
-    if (isOptions(outputs)) return this.linearize(null, outputs)
-    outputs = outputs || this.defaultOutputs || this._defaultOutputs || []
-    if (opts.autocommit === undefined) {
-      opts.autocommit = this._autocommit
-    }
-    const view = new LinearizedView(this, outputs, {
-      ...opts,
-      header: {
-        protocol: OUTPUT_PROTOCOL
-      }
-    })
-    this._views.push(view)
-    view.once('close', () => {
-      const idx = this._views.indexOf(view)
-      if (idx !== -1) this._views.splice(idx, 1)
-    })
-    return view
-  }
-
   close () {
+    if (this.closed) return
     for (const input of this.inputs) {
       input.removeListener('append', this._onappend)
     }
     for (const output of this.outputs) {
       output.removeListener('truncate', this._ontruncate)
     }
+    this.closed = true
   }
 
   static async isAutobase (core) {
@@ -570,24 +537,6 @@ function clockToMap (clock) {
   return new Map(Object.entries(clock))
 }
 
-function isOptions (o) {
-  return (Object.prototype.toString.call(o) === '[object Object]') && !isHypercore(o)
-}
-
 function isHypercore (o) {
   return o.get && o.replicate && o.append
 }
-
-function intoByKeyMap (cores) {
-  const m = new Map()
-  if (!cores) return m
-  if (!Array.isArray(cores)) cores = [cores]
-  for (const core of cores) {
-    const id = core.key.toString('hex')
-    if (m.has(id)) continue
-    m.set(id, core)
-  }
-  return m
-}
-
-function noop () {}

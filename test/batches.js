@@ -10,8 +10,9 @@ test('batches array-valued appends using partial input nodes', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
-  await base.ready()
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC]
+  })
 
   // Create three dependent forks
   await base.append(['a0'], await base.latest(writerA), writerA)
