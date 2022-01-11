@@ -1,3 +1,4 @@
+const fs = require('fs').promises
 const p = require('path')
 const { tmpdir } = require('os')
 const ram = require('random-access-memory')
@@ -7,6 +8,15 @@ const Autobase = require('..')
 
 const VALUE_CHARACTERS = 'abcdefghijklmnopqrstuvwxyz'
 let setups = 0
+
+module.exports = async function fuzz (rng, opts) {
+  const { state, cleanup } = await setup(opts)
+  return {
+    operations: await operations(state, rng, opts),
+    validation: await validation(state, rng, opts),
+    cleanup
+  }
+}
 
 async function setup () {
   const dir = p.join(tmpdir(), `autobase-fuzzing-${process.pid}`)
@@ -31,19 +41,23 @@ async function setup () {
   const view2 = base2.linearize([output1], { autocommit: false })
 
   return {
-    reference: {
+    state: {
       autobases: [base1, base2],
       views: {
         local: view1,
         remote: view2
       }
     },
-    actual: null,
-    state: null
+    cleanup
+  }
+
+  async function cleanup () {
+    await Promise.all([store1.close(), store2.close()])
+    await fs.rm(dir, { recursive: true })
   }
 }
 
-function operations ({ autobases, views }, _, rng, { operations: opts } = {}) {
+function operations ({ autobases, views }, rng, { operations: opts } = {}) {
   const append = {
     inputs: () => [rng(autobases.length), randomString(rng, VALUE_CHARACTERS, opts.append.valueLength || 5)],
     operation: async (inputIdx, value) => {
@@ -81,7 +95,7 @@ function operations ({ autobases, views }, _, rng, { operations: opts } = {}) {
   }
 }
 
-function validation ({ autobases, views }, _, rng, opts = {}) {
+function validation ({ autobases, views }, rng, opts = {}) {
   const compareViewAndCausalStream = async () => {
     const memView = await processCausalStream(autobases[0].createCausalStream())
     await views.remote.update()
@@ -91,6 +105,8 @@ function validation ({ autobases, views }, _, rng, opts = {}) {
     if (viewLength > memLength) {
       throw new Error(`view is longer than causal stream: ${memLength} !== ${viewLength}`)
     }
+
+    throw new Error('synthetic failure')
 
     for (let i = 0; i < viewLength; i++) {
       const memValue = memView[i]?.value?.toString()
@@ -111,12 +127,6 @@ function validation ({ autobases, views }, _, rng, opts = {}) {
       }
     }
   }
-}
-
-module.exports = {
-  setup,
-  operations,
-  validation
 }
 
 async function processCausalStream (stream) {

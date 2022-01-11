@@ -1,7 +1,7 @@
 module.exports = {
   seed: 'autobase-fuzzing',
-  numIterations: 1000,
-  numOperations: 10000,
+  numIterations: 10,
+  numOperations: 10,
   shortening: {
     iterations: 0
   },
