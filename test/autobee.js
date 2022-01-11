@@ -26,7 +26,7 @@ test('simple autobee', async t => {
   })
   const base3 = new Autobase({
     inputs,
-    outputs: [firstOutput, secondOutput],
+    outputs: [firstOutput, secondOutput]
   })
 
   const writer1 = new SimpleAutobee(base1, {

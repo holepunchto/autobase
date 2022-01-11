@@ -550,7 +550,3 @@ function clockToMap (clock) {
   if (Array.isArray(clock)) return new Map(clock)
   return new Map(Object.entries(clock))
 }
-
-function isHypercore (o) {
-  return o.get && o.replicate && o.append
-}
