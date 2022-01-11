@@ -25,10 +25,6 @@ module.exports = class Autobase extends EventEmitter {
     this._defaultInput = opts.input
     this._inputsByKey = null
 
-    const self = this
-    this._onappend = this._onInputAppended.bind(this)
-    this._ontruncate = this._onOutputTruncated.bind(this)
-
     this._defaultOutputs = opts.outputs
     this._defaultOutputsByKey = null
     this._rebasersWithDefaultOutputs = []
@@ -42,6 +38,12 @@ module.exports = class Autobase extends EventEmitter {
 
     this._opening.catch(noop)
     this.ready = () => this._opening
+
+    const self = this
+    this._onappend = this._onInputAppended.bind(this)
+    this._ontruncate = function (length, forkId) {
+      self._onOutputTruncated(this, length, forkId)
+    }
   }
 
   async _open () {
@@ -226,7 +228,7 @@ module.exports = class Autobase extends EventEmitter {
     await output.ready()
 
     if (this._defaultOutputsByKey.has(output.key.toString('hex'))) return
-    output.on('truncate',
+    output.on('truncate', this._ontruncate)
 
     this.defaultOutputs.push(output)
   }
@@ -238,6 +240,7 @@ module.exports = class Autobase extends EventEmitter {
     if (!this._defaultOutputsByKey.has(id)) return
 
     output = this._defaultOutputsByKey.get(id)
+    output.removeListener('truncate', this._ontruncate)
     const idx = this.defaultOutputs.indexOf(output)
 
     this.defaultOutputs.splice(idx, 1)
