@@ -12,7 +12,7 @@ const INPUT_PROTOCOL = '@autobase/input/v1'
 const OUTPUT_PROTOCOL = '@autobase/output/v1'
 
 module.exports = class Autobase extends EventEmitter {
-  constructor ({ inputs, outputs, localInput, localOutput, apply } = {}) {
+  constructor ({ inputs, outputs, localInput, localOutput, apply, unwrap } = {}) {
     super()
     this.inputs = inputs || []
     this.outputs = outputs || []
@@ -26,10 +26,15 @@ module.exports = class Autobase extends EventEmitter {
     this._outputsByKey = new Map()
     this._readStreams = []
 
-    this.view = new LinearizedView(this, {
-      header: { protocol: OUTPUT_PROTOCOL },
-      apply
-    })
+    if (apply) {
+      this.view = new LinearizedView(this, {
+        header: { protocol: OUTPUT_PROTOCOL },
+        unwrap,
+        apply
+      })
+    } else {
+      this.view = null
+    }
 
     const self = this
     this._onappend = this._onInputAppended.bind(this)
@@ -143,6 +148,15 @@ module.exports = class Autobase extends EventEmitter {
   }
 
   // Public API
+
+  start ({ apply, unwrap } = {}) {
+    if (this.view) throw new Error('Start must only be called once')
+    this.view = new LinearizedView(this, {
+      header: { protocol: OUTPUT_PROTOCOL },
+      apply,
+      unwrap
+    })
+  }
 
   async heads () {
     if (!this.opened) await this._opening

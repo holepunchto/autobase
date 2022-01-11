@@ -13,11 +13,11 @@ const Hyperbee = require('hyperbee')
 module.exports = class Autobee {
   constructor (autobase, opts) {
     this.autobase = autobase
-    this.view = this.autobase.linearize({
+    this.autobase.start({
       unwrap: true,
       apply: this._apply.bind(this)
     })
-    this.bee = new Hyperbee(this.view, {
+    this.bee = new Hyperbee(this.autobase.view, {
       ...opts,
       extension: false
     })

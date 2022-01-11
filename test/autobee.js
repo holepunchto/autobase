@@ -14,17 +14,19 @@ test('simple autobee', async t => {
 
   const inputs = [firstUser, secondUser]
 
-  const base1 = new Autobase(inputs, {
-    outputs: firstOutput,
-    input: firstUser
+  const base1 = new Autobase({
+    inputs,
+    localOutput: firstOutput,
+    localInput: firstUser
   })
-  const base2 = new Autobase(inputs, {
-    outputs: secondOutput,
-    input: secondUser
+  const base2 = new Autobase({
+    inputs,
+    localOutput: secondOutput,
+    localInput: secondUser
   })
-  const base3 = new Autobase(inputs, {
+  const base3 = new Autobase({
+    inputs,
     outputs: [firstOutput, secondOutput],
-    autocommit: false // Needed because both indexes are writable.
   })
 
   const writer1 = new SimpleAutobee(base1, {
@@ -80,13 +82,15 @@ test('autobee with basic conflict resolution (only handles puts)', async t => {
 
   const inputs = [firstUser, secondUser]
 
-  const base1 = new Autobase(inputs, {
-    outputs: firstOutput,
-    input: firstUser
+  const base1 = new Autobase({
+    inputs,
+    localOutput: firstOutput,
+    localInput: firstUser
   })
-  const base2 = new Autobase(inputs, {
-    outputs: secondOutput,
-    input: secondUser
+  const base2 = new Autobase({
+    inputs,
+    localOutput: secondOutput,
+    localInput: secondUser
   })
 
   const writer1 = new AutobeeWithResolution(base1, {

@@ -15,6 +15,7 @@ test('linearizing - three independent forks', async t => {
     inputs: [writerA, writerB, writerC],
     localOutput: output
   })
+  base.start()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -63,6 +64,7 @@ test('linearizing - causal writes preserve clock', async t => {
     inputs: [writerA, writerB, writerC],
     localOutput: output
   })
+  base.start()
 
   // Create three causally-linked forks
   for (let i = 0; i < 1; i++) {
@@ -101,6 +103,7 @@ test('linearizing - does not over-truncate', async t => {
     inputs: [writerA, writerB, writerC],
     localOutput: output
   })
+  base.start()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -158,6 +161,7 @@ test('linearizing - can cut out a writer', async t => {
     inputs: [writerA, writerB, writerC],
     localOutput: output
   })
+  base.start()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -202,6 +206,7 @@ test('linearizing - can cut out a writer from the back', async t => {
     inputs: [writerA, writerB, writerC],
     localOutput: output
   })
+  base.start()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -242,6 +247,7 @@ test('linearizing - can cut out a writer from the front', async t => {
     inputs: [writerA, writerB, writerC],
     localOutput: output
   })
+  base.start()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -282,6 +288,7 @@ test('linearizing - can cut out a writer, causal writes', async t => {
     inputs: [writerA, writerB, writerC],
     localOutput: output
   })
+  base.start()
 
   // Create three causally-linked forks
   for (let i = 0; i < 1; i++) {
@@ -325,6 +332,7 @@ test('linearizing - can cut out a writer, causal writes interleaved', async t =>
     inputs: [writerA, writerB],
     localOutput: output
   })
+  base.start()
 
   for (let i = 0; i < 6; i++) {
     if (i % 2) {
@@ -371,6 +379,7 @@ test('linearizing - many writers, no causal writes', async t => {
     inputs: writers,
     localOutput: output
   })
+  base.start()
   for (let i = 1; i < NUM_WRITERS + 1; i++) {
     const writer = writers[i - 1]
     for (let j = 0; j < i; j++) {
@@ -412,6 +421,7 @@ test('linearizing - double-linearizing is a no-op', async t => {
     inputs: [writerA, writerB, writerC],
     localOutput: output
   })
+  base.start()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -465,6 +475,9 @@ test('linearizing - selects longest remote output', async t => {
     inputs,
     localOutput: output3
   })
+  base1.start()
+  base2.start()
+  base3.start()
 
   // Create three independent forks and linearize them into separate outputs
   for (let i = 0; i < 3; i++) {
@@ -491,6 +504,7 @@ test('linearizing - selects longest remote output', async t => {
       inputs,
       outputs: [output3]
     })
+    base.start()
     await base.view.update()
     t.same(base.view.status.added, 0)
     t.same(base.view.status.removed, 0)
@@ -503,6 +517,7 @@ test('linearizing - selects longest remote output', async t => {
       inputs,
       outputs: [output1]
     })
+    base.start()
     await base.view.update()
     t.same(base.view.status.added, 3)
     t.same(base.view.status.removed, 0)
@@ -515,6 +530,7 @@ test('linearizing - selects longest remote output', async t => {
       inputs,
       outputs: [output1, output2]
     })
+    base.start()
     await base.view.update()
     t.same(base.view.status.added, 1)
     t.same(base.view.status.removed, 0)
@@ -527,6 +543,7 @@ test('linearizing - selects longest remote output', async t => {
       inputs,
       outputs: [output1, output2, output3]
     })
+    base.start()
     await base.view.update()
     t.same(base.view.status.added, 0)
     t.same(base.view.status.removed, 0)
@@ -558,6 +575,9 @@ test('linearizing - can dynamically add/remove default outputs', async t => {
     inputs,
     localOutput: output3
   })
+  base1.start()
+  base2.start()
+  base3.start()
 
   // Create three independent forks, and linearize them into separate outputs
   for (let i = 0; i < 3; i++) {
@@ -582,6 +602,7 @@ test('linearizing - can dynamically add/remove default outputs', async t => {
     inputs,
     outputs: [output1]
   })
+  base4.start()
 
   await base4.view.update()
   t.same(base4.view.status.added, 3)
@@ -621,6 +642,8 @@ test('linearizing - can locally extend an out-of-date remote output', async t =>
     inputs,
     outputs: [output1]
   })
+  writerBase.start()
+  readerBase.start()
 
   for (let i = 0; i < 3; i++) {
     await writerBase.append(`a${i}`, [], writerA)
@@ -692,6 +715,8 @@ test('linearizing - will discard local in-memory view if remote is updated', asy
     inputs,
     outputs: [output1]
   })
+  writerBase.start()
+  readerBase.start()
 
   for (let i = 0; i < 3; i++) {
     await writerBase.append(`a${i}`, [], writerA)
@@ -733,6 +758,7 @@ test('linearizing - linearize operations are debounced', async t => {
     inputs: [writerA, writerB, writerC],
     localOutput: output
   })
+  base.start()
 
   for (let i = 0; i < 1; i++) {
     await base.append(`a${i}`, [], writerA)
