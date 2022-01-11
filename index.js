@@ -24,7 +24,10 @@ module.exports = class Autobase extends EventEmitter {
     this._inputs = inputs || []
     this._defaultInput = opts.input
     this._inputsByKey = null
-    this._onappend = debounce(this._onInputAppended.bind(this))
+
+    const self = this
+    this._onappend = this._onInputAppended.bind(this)
+    this._ontruncate = this._onOutputTruncated.bind(this)
 
     this._defaultOutputs = opts.outputs
     this._defaultOutputsByKey = null
@@ -134,7 +137,13 @@ module.exports = class Autobase extends EventEmitter {
     return node
   }
 
-  async _onInputAppended () {
+  _onOutputTruncated (output, length, forkId) {
+    for (const view of this._views) {
+      view._onOutputTruncated(output, length, forkId)
+    }
+  }
+
+  _onInputAppended () {
     this.emit('append')
     this._bumpReadStreams()
     this._getLatestClock() // Updates this._clock
@@ -217,6 +226,7 @@ module.exports = class Autobase extends EventEmitter {
     await output.ready()
 
     if (this._defaultOutputsByKey.has(output.key.toString('hex'))) return
+    output.on('truncate',
 
     this.defaultOutputs.push(output)
   }
@@ -460,8 +470,8 @@ module.exports = class Autobase extends EventEmitter {
     for (const input of this.inputs) {
       input.removeListener('append', this._onappend)
     }
-    for (const view of this._views) {
-      view.close()
+    for (const output of this.outputs) {
+      output.removeListener('truncate', this._ontruncate)
     }
   }
 
