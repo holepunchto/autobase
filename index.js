@@ -1,10 +1,12 @@
 const { EventEmitter } = require('events')
+
+const safetyCatch = require('safety-catch')
 const streamx = require('streamx')
 const codecs = require('codecs')
 const c = require('compact-encoding')
-const safetyCatch = require('safety-catch')
 
 const LinearizedView = require('./lib/linearize')
+const MemberBatch = require('./lib/batch')
 const { InputNode, OutputNode } = require('./lib/nodes')
 const { NodeHeader } = require('./lib/nodes/messages')
 
@@ -14,17 +16,18 @@ const OUTPUT_PROTOCOL = '@autobase/output/v1'
 module.exports = class Autobase extends EventEmitter {
   constructor ({ inputs, outputs, localInput, localOutput, apply, unwrap, autostart } = {}) {
     super()
-    this.inputs = inputs || []
-    this.outputs = outputs || []
     this.localInput = localInput
     this.localOutput = localOutput
     this.clock = null
     this.opened = false
     this.closed = false
 
+    this._inputs = inputs || []
+    this._outputs = outputs || []
     this._inputsByKey = new Map()
     this._outputsByKey = new Map()
     this._readStreams = []
+    this._batchId = 0
 
     this.view = null
     if (apply || autostart) this.start({ apply, unwrap })
@@ -44,30 +47,59 @@ module.exports = class Autobase extends EventEmitter {
 
   async _open () {
     await Promise.all([
-      ...this.inputs.map(i => i.ready()),
-      ...this.outputs.map(o => o.ready())
+      ...this._inputs.map(i => i.ready()),
+      ...this._outputs.map(o => o.ready())
     ])
 
-    for (const input of this.inputs) {
-      const id = input.key.toString('hex')
-      if (this._inputsByKey.has(id)) continue
-
-      this._validateInput(input)
-      input.on('append', this._onappend)
-      this._inputsByKey.set(id, input)
+    for (const input of this._inputs) {
+      this._addInput(input)
+    }
+    for (const output of this._outputs) {
+      this._addOutput(output)
     }
 
-    for (const output of this.outputs) {
-      const id = output.key.toString('hex')
-      if (this._outputsByKey.has(id)) continue
-
-      output.on('truncate', this._ontruncate)
-      this._outputsByKey.set(id, output)
-    }
-
-    this.inputs = [...this._inputsByKey.values()]
-    this.outputs = [...this._outputsByKey.values()]
     this.opened = true
+  }
+
+  // Called by MemberBatch
+  _addInput (input) {
+    this._validateInput(input)
+
+    const id = input.key.toString('hex')
+    if (this._inputsByKey.has(id)) return
+
+    this._inputsByKey.set(id, input)
+    input.on('append', this._onappend)
+  }
+
+  // Called by MemberBatch
+  _addOutput (output) {
+    const id = output.key.toString('hex')
+    if (this._outputsByKey.has(id)) return
+
+    this.outputs.push(output)
+    this._outputsByKey.set(id, output)
+    output.on('truncate', this._ontruncate)
+  }
+
+  // Called by MemberBatch
+  _removeInput (input) {
+    const id = Buffer.isBuffer(input) ? input.toString('hex') : input.key.toString('hex')
+    if (!this._inputsByKey.has(id)) return
+
+    input = this._inputsByKey.get(id)
+    input.removeListener('append', this._onappend)
+    this._inputsByKey.delete(id)
+  }
+
+  // Called by MemberBatch
+  _removeOutput (output) {
+    const id = Buffer.isBuffer(output) ? output.toString('hex') : output.key.toString('hex')
+    if (!this._outputsByKey.has(id)) return
+
+    output = this._outputsByKey.get(id)
+    output.removeListener('truncate', this._ontruncate)
+    this._outputsByKey.delete(id)
   }
 
   _onOutputTruncated (output, length, forkId) {
@@ -142,6 +174,14 @@ module.exports = class Autobase extends EventEmitter {
 
   // Public API
 
+  get inputs () {
+    return [...this._inputsByKey.values()]
+  }
+
+  get outputs () {
+    return [...this._outputsByKey.values()]
+  }
+
   get started () {
     return !!this.view
   }
@@ -183,65 +223,32 @@ module.exports = class Autobase extends EventEmitter {
     return this._getLatestClock(inputs)
   }
 
+  memberBatch () {
+    return new MemberBatch(this)
+  }
+
   async addInput (input) {
-    if (!this.opened) await this._opening
-    await input.ready()
-    this._validateInput(input)
-
-    const id = input.key.toString('hex')
-    if (this._inputsByKey.has(id)) return
-
-    this.inputs.push(input)
-    this._inputsByKey.set(id, input)
-    input.on('append', this._onappend)
-
-    this._bumpReadStreams()
+    const batch = new MemberBatch(this)
+    batch.addInput(input)
+    return batch.commit()
   }
 
   async removeInput (input) {
-    if (!this.opened) await this._opening
-    if (typeof input.ready === 'function') await input.ready()
-    const id = Buffer.isBuffer(input) ? input.toString('hex') : input.key.toString('hex')
-    if (!this._inputsByKey.has(id)) return
-
-    input = this._inputsByKey.get(id)
-    const idx = this.inputs.indexOf(input)
-
-    this.inputs.splice(idx, 1)
-    this._inputsByKey.delete(id)
-    input.removeListener('append', this._onappend)
-
-    this._bumpReadStreams()
-
-    return input
+    const batch = new MemberBatch(this)
+    batch.removeInput(input)
+    return batch.commit()
   }
 
   async addOutput (output) {
-    if (!this.opened) await this._opening
-    await output.ready()
-
-    const id = output.key.toString('hex')
-    if (this._outputsByKey.has(id)) return
-
-    this.outputs.push(output)
-    this._outputsByKey.set(id, output)
-    output.on('truncate', this._ontruncate)
+    const batch = new MemberBatch(this)
+    batch.addOutput(output)
+    return batch.commit()
   }
 
   async removeOutput (output) {
-    if (!this.opened) await this._opening
-    if (typeof output.ready === 'function') await output.ready()
-    const id = Buffer.isBuffer(output) ? output.toString('hex') : output.key.toString('hex')
-    if (!this._outputsByKey.has(id)) return
-
-    output = this._outputsByKey.get(id)
-    output.removeListener('truncate', this._ontruncate)
-
-    const idx = this.outputs.indexOf(output)
-    this.outputs.splice(idx, 1)
-    this._outputsByKey.delete(id)
-
-    return output
+    const batch = new MemberBatch(this)
+    batch.removeOutput(output)
+    return batch.commit()
   }
 
   createCausalStream (opts = {}) {
