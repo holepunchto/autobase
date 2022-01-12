@@ -10,8 +10,9 @@ test('read stream -- not live, causally-linked writes', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
-  await base.ready()
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC]
+  })
 
   // Create three dependent branches
   for (let i = 0; i < 1; i++) {
@@ -49,8 +50,9 @@ test('read stream -- not live, inputs snapshotted', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB])
-  await base.ready()
+  const base = new Autobase({
+    inputs: [writerA, writerB]
+  })
 
   for (let i = 0; i < 1; i++) {
     await base.append(`a${i}`, await base.latest(writerA), writerA)
@@ -81,8 +83,9 @@ test('read stream -- live, causally-linked writes', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB])
-  await base.ready()
+  const base = new Autobase({
+    inputs: [writerA, writerB]
+  })
 
   for (let i = 0; i < 1; i++) {
     await base.append(`a${i}`, await base.latest(writerA), writerA)
@@ -118,8 +121,12 @@ test('read stream - onresolve hook, resolvable', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
 
-  const base1 = new Autobase([writerA, writerB])
-  const base2 = new Autobase([writerB])
+  const base1 = new Autobase({
+    inputs: [writerA, writerB]
+  })
+  const base2 = new Autobase({
+    inputs: [writerB]
+  })
 
   // Create three dependent branches
   for (let i = 0; i < 1; i++) {
@@ -158,8 +165,12 @@ test('read stream - onresolve hook, not resolvable', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
 
-  const base1 = new Autobase([writerA, writerB])
-  const base2 = new Autobase([writerB])
+  const base1 = new Autobase({
+    inputs: [writerA, writerB]
+  })
+  const base2 = new Autobase({
+    inputs: [writerB]
+  })
 
   // Create three dependent branches
   for (let i = 0; i < 1; i++) {
@@ -197,8 +208,12 @@ test('read stream - onwait hook', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
 
-  const base1 = new Autobase([writerA, writerB])
-  const base2 = new Autobase([writerB])
+  const base1 = new Autobase({
+    inputs: [writerA, writerB]
+  })
+  const base2 = new Autobase({
+    inputs: [writerB]
+  })
 
   // Create two independent branches
   for (let i = 0; i < 1; i++) {
@@ -236,8 +251,9 @@ test('read stream - resume from checkpoint', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
-  await base.ready()
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC]
+  })
 
   for (let i = 0; i < 1; i++) {
     await base.append(`a${i}`, await base.latest(writerA), writerA)
@@ -276,8 +292,9 @@ test('read stream - resume from empty checkpoint', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
-  await base.ready()
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC]
+  })
 
   const firstStream = base.createReadStream()
 
@@ -311,8 +328,14 @@ test('read stream - { wait: false } will not download remote blocks', async t =>
   const writerB = new Hypercore(ram)
   const remoteWriterA = new Hypercore(ram, writerA.key)
 
-  const base1 = new Autobase([writerA], { input: writerA })
-  const base2 = new Autobase([remoteWriterA, writerB], { input: writerB })
+  const base1 = new Autobase({
+    inputs: [writerA],
+    localInput: writerA
+  })
+  const base2 = new Autobase({
+    inputs: [remoteWriterA, writerB],
+    localInput: writerB
+  })
 
   const s1 = writerA.replicate(true, { live: true })
   const s2 = remoteWriterA.replicate(false, { live: true })
@@ -347,8 +370,9 @@ test('read stream - tail option will start at the latest clock', async t => {
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
 
-  const base = new Autobase([writerA, writerB, writerC])
-  await base.ready()
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC]
+  })
 
   for (let i = 0; i < 1; i++) {
     await base.append(`a${i}`, await base.latest(writerA), writerA)

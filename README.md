@@ -25,21 +25,24 @@ Here's how you would create an Autobase from 3 known inputs, and a locally-avail
 const autobase = require('autobase')
 
 // Assuming inputA, inputB, and inputC are Hypercore 10 instances
-// inputA will be the "default input" during append operations
-const base = new Autobase([inputA, inputB, inputC], { input: inputA })
+// inputA will be used during append operations
+const base = new Autobase({
+  inputs: [inputA, inputB, inputC],
+  localInput: inputA,
+  autostart: true
+})
 
 // Add a few messages to the local writer.
 // These messages will contain the Autobase's latest vector clock by default.
 await base.append('hello')
 await base.append('world')
 
-// Create a linearized view Hypercore with causal ordering. `output` is a Hypercore.
-// When view.update is called, the inputs will be automatically linearized and stored into the output.
-const view = base.linearize(output)
+// base.view is a linearized view Hypercore with causal ordering. `output` is a Hypercore.
+// When base.view.update() is called, the inputs will be automatically linearized and stored into the output.
 
 // Use `view` as you would any other Hypercore.
-await view.update()
-await view.get(0)
+await base.view.update()
+await base.view.get(0)
 ```
 
 Autobase lets you write concise multiwriter data structures. As an example, a multiwriter Hyperbee (with basic, last-one-wins conflict resolution) can be written with [~40 lines of code](examples/autobee-simple.js).
@@ -48,26 +51,34 @@ In addition multiwriter data structures built on Autobase inherit the same featu
 
 ## API
 
-#### `const base = new Autobase(inputs, opts = {})`
-Creates a new Autobase from a set of input Hypercores
-
-* `inputs`: An Array of causally-linked Hypercores
+#### `const base = new Autobase({ inputs, outputs, ...opts } = {})`
+Creates a new Autobase from a set of input/output Hypercores
 
 Options include:
 
 ```js
 {
-  input: null,         // A default Hypercore to append to
-  outputs: null,       // A list of output Hypercores
-  autocommit: true     // Automatically persist changes to output Hypercores after updates
+  inputs: [],        // The list of Hypercores for Autobase to linearize
+  outputs: [],       // An optional list of output Hypercores containing linearied views
+  localInput: null,  // The Hypercore that will be written to in base.append operations
+  localOutput: null, // A writable Hypercore that linearized views will be persisted into
+  autostart: false,  // Create a linearized view (base.view) immediately
+  apply: null,       // Create a linearized view (base.view) immediately using this apply function
+  unwrap: false      // base.view.get calls will return node values only instead of full nodes
 }
 ```
 
 #### `base.inputs`
 The list of input Hypercores.
 
-#### `base.defaultOutputs`
-The list of default output Hypercores containing persisted linearized views.
+#### `base.outputs`
+The list of output Hypercores containing persisted linearized views.
+
+#### `base.localInput`
+If non-null, this Hypercore will be appended to in base.append operations.
+
+#### `base.localOutput`
+If non-null, `base.view` will be persisted into this Hypercore.
 
 #### `const clock = base.clock()`
 Returns a Map containing the latest lengths for all Autobase inputs.
@@ -108,17 +119,17 @@ Removing an input, and then subsequently linearizing the Autobase into an existi
 
 In the future, we're planning to add support for "soft removal", which will freeze an input at a specific length, and not process blocks past that length, while still preserving that input's history in linearized views. For most applications, soft removal matches the intuition behind "removing a user".
 
-#### `await base.addDefaultOutput(index)`
-Adds a new default output Hypercore.
+#### `await base.addOutput(output)`
+Adds a new output Hypercore.
 
 * `output` must be either a fresh Hypercore, or a Hypercore that was previously used as an Autobase output.
 
-Default outputs are mainly useful during "remote linearizing", when readers of an Autobase can use them as the "trunk" during linearization, and thus can minimize the amount of local re-processing they need to do during updates.
+If `base.outputs` is not empty, Autobase will do "remote linearizing": `base.view.update()` will treat these outputs as the "trunk", minimizing the amount of local re-processing they need to do during updates.
 
-#### `await base.removeDefaultOutput(output)`
-Removes a default index Hypercore. `output` can be either a Hypercore, or a Hypercore key.
+#### `await base.removeOutput(output)`
+Removes an output Hypercore. `output` can be either a Hypercore, or a Hypercore key.
 
-* `output` must be a Hypercore, or a Hypercore key, that is currently a default output.
+* `output` must be a Hypercore, or a Hypercore key, that is currently an output (in `base.outputs`).
 
 ## API - Two Kinds of Streams
 
@@ -180,7 +191,7 @@ Options include:
 
 ## API - Linearized Views
 
-Autobase is designed for sharing linearized views over many input Hypercores. There's a one-to-many relationship between an Autobase instance, and the linearized views it can be used to power. A single Autobase might be processed in many different ways.
+Autobase is designed for computing and sharing linearized views over many input Hypercores. A linearized view is a "merged" view over the inputs, giving you a way of interacting with the N input Hypercores as though it were a single, combined Hypercore.
 
 These views, instances of the `LinearizedView` class, in many ways look and feel like normal Hypercores. They support `get`, `update`, and `length` operations.
 
@@ -192,24 +203,38 @@ Linearized views are incredible powerful as they can be persisted to a Hypercore
 
 The default linearized view is just a persisted causal stream -- input nodes are recorded into an output Hypercore in causal order, with no further modifications. This minimally-processed view is useful on its own for applications that don't follow an event-sourcing pattern (i.e. chat), but most use-cases involve processing operations in the inputs into indexed representations.
 
-To support indexing, `linearize` can be provided with an `apply` function that's passed batches of input nodes during rebasing, and can choose what to store in the output. Inside `apply`, the view can be directly mutated through the `view.append` method, and these mutations will be batched when the call exits.
+To support indexing, `base.start` can be provided with an `apply` function that's passed batches of input nodes during rebasing, and can choose what to store in the output. Inside `apply`, the view can be directly mutated through the `view.append` method, and these mutations will be batched when the call exits.
 
 The simplest `apply` function is just a mapper, a function that modifies each input node and saves it into the view in a one-to-one fashion. Here's an example that uppercases String inputs, and saves the resulting view into an `output` Hypercore:
 ```js
-const view = base.linearize(output, {
+base.start({
   async apply (batch) {
     batch = batch.map(({ value }) => Buffer.from(value.toString('utf-8').toUpperCase(), 'utf-8'))
     await view.append(batch)
   }
 })
+// After base.start, the linearized view is available as a property on the Autobase
+await base.view.update()
+console.log(base.view.length)
 ```
 
 More sophisticated indexing might require multiple appends per input node, or reading from the view during `apply` -- both are perfectly valid. The [multiwriter Hyperbee example](examples/autobee-simple.js) shows how this `apply` pattern can be used to build Hypercore-based indexing data structures using this approach.
 
 ### View Creation
 
-#### `const view = base.linearize(outputs, opts)`
-Creates a new linearized view. The `view` instance returned mirrors the Hypercore API wherever possible, meaning it can be used whereever you would normally use a Hypercore.
+#### `base.started`
+A Boolean indicating if `base.view` has been created.
+
+See the [linearized views section]() for details about the `apply` and `unwrap` options.
+
+Prior to calling `base.start()`, `base.view` will be `null`.
+
+#### `base.start({ apply, unwrap } = {})`
+Creates a new linearized view, and set it on `base.view`. The view mirrors the Hypercore API wherever possible, meaning it can be used whereever you would normally use a Hypercore.
+
+You can either call `base.start` manually when you want to start using `base.view`, or you can pass either `apply` or `autostart` options to the Autobase constructor. If these constructor options are present, Autobase will start immediately.
+
+If you choose to call `base.start` manually, it must only be called once.
 
 Options include:
 ```js
