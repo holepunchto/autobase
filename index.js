@@ -1,6 +1,6 @@
+const { EventEmitter } = require('events')
 const streamx = require('streamx')
 const codecs = require('codecs')
-const debounce = require('debounceify')
 const c = require('compact-encoding')
 
 const LinearizedView = require('./lib/linearize')
@@ -10,8 +10,9 @@ const { NodeHeader } = require('./lib/nodes/messages')
 const INPUT_PROTOCOL = '@autobase/input/v1'
 const OUTPUT_PROTOCOL = '@autobase/output/v1'
 
-module.exports = class Autobase {
+module.exports = class Autobase extends EventEmitter {
   constructor (inputs, opts = {}) {
+    super()
     this.inputs = null
     this.defaultOutputs = null
     this.defaultInput = null
@@ -22,13 +23,13 @@ module.exports = class Autobase {
     this._inputs = inputs || []
     this._defaultInput = opts.input
     this._inputsByKey = null
-    this._onappend = debounce(this._onInputAppended.bind(this))
 
     this._defaultOutputs = opts.outputs
     this._defaultOutputsByKey = null
     this._rebasersWithDefaultOutputs = []
 
     this._readStreams = []
+    this._views = []
 
     this.opened = false
     this._closing = null
@@ -36,6 +37,12 @@ module.exports = class Autobase {
 
     this._opening.catch(noop)
     this.ready = () => this._opening
+
+    const self = this
+    this._onappend = this._onInputAppended.bind(this)
+    this._ontruncate = function (length, forkId) {
+      self._onOutputTruncated(this, length, forkId)
+    }
   }
 
   async _open () {
@@ -131,7 +138,14 @@ module.exports = class Autobase {
     return node
   }
 
-  async _onInputAppended () {
+  _onOutputTruncated (output, length, forkId) {
+    for (const view of this._views) {
+      view._onOutputTruncated(output, length, forkId)
+    }
+  }
+
+  _onInputAppended () {
+    this.emit('append')
     this._bumpReadStreams()
     this._getLatestClock() // Updates this._clock
   }
@@ -213,6 +227,7 @@ module.exports = class Autobase {
     await output.ready()
 
     if (this._defaultOutputsByKey.has(output.key.toString('hex'))) return
+    output.on('truncate', this._ontruncate)
 
     this.defaultOutputs.push(output)
   }
@@ -224,6 +239,7 @@ module.exports = class Autobase {
     if (!this._defaultOutputsByKey.has(id)) return
 
     output = this._defaultOutputsByKey.get(id)
+    output.removeListener('truncate', this._ontruncate)
     const idx = this.defaultOutputs.indexOf(output)
 
     this.defaultOutputs.splice(idx, 1)
@@ -438,17 +454,26 @@ module.exports = class Autobase {
     if (opts.autocommit === undefined) {
       opts.autocommit = this._autocommit
     }
-    return new LinearizedView(this, outputs, {
+    const view = new LinearizedView(this, outputs, {
       ...opts,
       header: {
         protocol: OUTPUT_PROTOCOL
       }
     })
+    this._views.push(view)
+    view.once('close', () => {
+      const idx = this._views.indexOf(view)
+      if (idx !== -1) this._views.splice(idx, 1)
+    })
+    return view
   }
 
   close () {
     for (const input of this.inputs) {
       input.removeListener('append', this._onappend)
+    }
+    for (const output of this.outputs) {
+      output.removeListener('truncate', this._ontruncate)
     }
   }
 
