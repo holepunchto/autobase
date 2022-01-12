@@ -271,9 +271,9 @@ test('can parse headers', async t => {
     inputs: [writer],
     outputs: [output],
     localInput: writer,
-    localOutput: output
+    localOutput: output,
+    autostart: true
   })
-  base.start()
   await base.append('a0')
   await base.view.update()
 

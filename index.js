@@ -12,7 +12,7 @@ const INPUT_PROTOCOL = '@autobase/input/v1'
 const OUTPUT_PROTOCOL = '@autobase/output/v1'
 
 module.exports = class Autobase extends EventEmitter {
-  constructor ({ inputs, outputs, localInput, localOutput, apply, unwrap } = {}) {
+  constructor ({ inputs, outputs, localInput, localOutput, apply, unwrap, autostart } = {}) {
     super()
     this.inputs = inputs || []
     this.outputs = outputs || []
@@ -27,7 +27,7 @@ module.exports = class Autobase extends EventEmitter {
     this._readStreams = []
 
     this.view = null
-    if (apply) this.start({ apply, unwrap })
+    if (apply || autostart) this.start({ apply, unwrap })
 
     const self = this
     this._onappend = this._onInputAppended.bind(this)

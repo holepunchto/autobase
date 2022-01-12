@@ -13,9 +13,9 @@ test('linearizing - three independent forks', async t => {
 
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
-    localOutput: output
+    localOutput: output,
+    autostart: true
   })
-  base.start()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -62,9 +62,9 @@ test('linearizing - causal writes preserve clock', async t => {
 
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
-    localOutput: output
+    localOutput: output,
+    autostart: true
   })
-  base.start()
 
   // Create three causally-linked forks
   for (let i = 0; i < 1; i++) {
@@ -101,9 +101,9 @@ test('linearizing - does not over-truncate', async t => {
 
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
-    localOutput: output
+    localOutput: output,
+    autostart: true
   })
-  base.start()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -159,9 +159,9 @@ test('linearizing - can cut out a writer', async t => {
 
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
-    localOutput: output
+    localOutput: output,
+    autostart: true
   })
-  base.start()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -204,9 +204,9 @@ test('linearizing - can cut out a writer from the back', async t => {
 
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
-    localOutput: output
+    localOutput: output,
+    autostart: true
   })
-  base.start()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -245,9 +245,9 @@ test('linearizing - can cut out a writer from the front', async t => {
 
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
-    localOutput: output
+    localOutput: output,
+    autostart: true
   })
-  base.start()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -286,9 +286,9 @@ test('linearizing - can cut out a writer, causal writes', async t => {
 
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
-    localOutput: output
+    localOutput: output,
+    autostart: true
   })
-  base.start()
 
   // Create three causally-linked forks
   for (let i = 0; i < 1; i++) {
@@ -330,9 +330,9 @@ test('linearizing - can cut out a writer, causal writes interleaved', async t =>
 
   const base = new Autobase({
     inputs: [writerA, writerB],
-    localOutput: output
+    localOutput: output,
+    autostart: true
   })
-  base.start()
 
   for (let i = 0; i < 6; i++) {
     if (i % 2) {
@@ -377,9 +377,9 @@ test('linearizing - many writers, no causal writes', async t => {
 
   const base = new Autobase({
     inputs: writers,
-    localOutput: output
+    localOutput: output,
+    autostart: true
   })
-  base.start()
   for (let i = 1; i < NUM_WRITERS + 1; i++) {
     const writer = writers[i - 1]
     for (let j = 0; j < i; j++) {
@@ -419,9 +419,9 @@ test('linearizing - double-linearizing is a no-op', async t => {
 
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
-    localOutput: output
+    localOutput: output,
+    autostart: true
   })
-  base.start()
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
@@ -502,9 +502,9 @@ test('linearizing - selects longest remote output', async t => {
     // Should not have to modify output3
     const base = new Autobase({
       inputs,
-      outputs: [output3]
+      outputs: [output3],
+      autostart: true
     })
-    base.start()
     await base.view.update()
     t.same(base.view.status.added, 0)
     t.same(base.view.status.removed, 0)
@@ -515,9 +515,9 @@ test('linearizing - selects longest remote output', async t => {
     // Should not have to add B and C
     const base = new Autobase({
       inputs,
-      outputs: [output1]
+      outputs: [output1],
+      autostart: true
     })
-    base.start()
     await base.view.update()
     t.same(base.view.status.added, 3)
     t.same(base.view.status.removed, 0)
@@ -528,9 +528,9 @@ test('linearizing - selects longest remote output', async t => {
     // Should select output2
     const base = new Autobase({
       inputs,
-      outputs: [output1, output2]
+      outputs: [output1, output2],
+      autostart: true
     })
-    base.start()
     await base.view.update()
     t.same(base.view.status.added, 1)
     t.same(base.view.status.removed, 0)
@@ -541,9 +541,9 @@ test('linearizing - selects longest remote output', async t => {
     // Should select output3
     const base = new Autobase({
       inputs,
-      outputs: [output1, output2, output3]
+      outputs: [output1, output2, output3],
+      autostart: true
     })
-    base.start()
     await base.view.update()
     t.same(base.view.status.added, 0)
     t.same(base.view.status.removed, 0)
@@ -636,14 +636,14 @@ test('linearizing - can locally extend an out-of-date remote output', async t =>
   const inputs = [writerA, writerB, writerC]
   const writerBase = new Autobase({
     inputs,
-    localOutput: output1
+    localOutput: output1,
+    autostart: true
   })
   const readerBase = new Autobase({
     inputs,
-    outputs: [output1]
+    outputs: [output1],
+    autostart: true
   })
-  writerBase.start()
-  readerBase.start()
 
   for (let i = 0; i < 3; i++) {
     await writerBase.append(`a${i}`, [], writerA)
@@ -709,14 +709,14 @@ test('linearizing - will discard local in-memory view if remote is updated', asy
   const inputs = [writerA, writerB, writerC]
   const writerBase = new Autobase({
     inputs,
-    localOutput: output1
+    localOutput: output1,
+    autostart: true
   })
   const readerBase = new Autobase({
     inputs,
-    outputs: [output1]
+    outputs: [output1],
+    autostart: true
   })
-  writerBase.start()
-  readerBase.start()
 
   for (let i = 0; i < 3; i++) {
     await writerBase.append(`a${i}`, [], writerA)
@@ -756,9 +756,9 @@ test('linearizing - linearize operations are debounced', async t => {
 
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
-    localOutput: output
+    localOutput: output,
+    autostart: true
   })
-  base.start()
 
   for (let i = 0; i < 1; i++) {
     await base.append(`a${i}`, [], writerA)
