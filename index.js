@@ -103,7 +103,7 @@ module.exports = class Autobase extends EventEmitter {
   }
 
   _onOutputTruncated (output, length, forkId) {
-    if(!this.view) return
+    if (!this.view) return
 
     this.view._onOutputTruncated(output, length, forkId)
   }
