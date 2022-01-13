@@ -103,9 +103,9 @@ module.exports = class Autobase extends EventEmitter {
   }
 
   _onOutputTruncated (output, length, forkId) {
-    for (const view of this._views) {
-      view._onOutputTruncated(output, length, forkId)
-    }
+    if(!this.view) return
+
+    this.view._onOutputTruncated(output, length, forkId)
   }
 
   _onInputAppended () {
