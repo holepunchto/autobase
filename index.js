@@ -34,8 +34,8 @@ module.exports = class Autobase extends EventEmitter {
 
     const self = this
     this._onappend = this._onInputAppended.bind(this)
-    this._ontruncate = function (length, forkId) {
-      self._onOutputTruncated(this, length, forkId)
+    this._ontruncate = function (length) {
+      self._onOutputTruncated(this, length)
     }
 
     this._opening = this._open()
@@ -102,10 +102,10 @@ module.exports = class Autobase extends EventEmitter {
     this._outputsByKey.delete(id)
   }
 
-  _onOutputTruncated (output, length, forkId) {
-    for (const view of this._views) {
-      view._onOutputTruncated(output, length, forkId)
-    }
+  _onOutputTruncated (output, length) {
+    if (!this.view) return
+
+    this.view._onOutputTruncated(output, length)
   }
 
   _onInputAppended () {
