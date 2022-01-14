@@ -3,12 +3,14 @@ const { EventEmitter } = require('events')
 const safetyCatch = require('safety-catch')
 const streamx = require('streamx')
 const codecs = require('codecs')
+const mutexify = require('mutexify/promise')
 const c = require('compact-encoding')
+const b = require('b4a')
 
 const LinearizedView = require('./lib/linearize')
 const MemberBatch = require('./lib/batch')
 const { InputNode, OutputNode } = require('./lib/nodes')
-const { NodeHeader } = require('./lib/nodes/messages')
+const { Node: NodeSchema, decodeHeader, decodeKeys } = require('./lib/nodes/messages')
 
 const INPUT_PROTOCOL = '@autobase/input/v1'
 const OUTPUT_PROTOCOL = '@autobase/output/v1'
@@ -26,8 +28,10 @@ module.exports = class Autobase extends EventEmitter {
     this._outputs = outputs || []
     this._inputsByKey = new Map()
     this._outputsByKey = new Map()
+    this._keyCaches = new Map()
     this._readStreams = []
     this._batchId = 0
+    this._lock = mutexify()
 
     this.view = null
     if (apply || autostart) this.start({ apply, unwrap })
@@ -65,7 +69,7 @@ module.exports = class Autobase extends EventEmitter {
   _addInput (input) {
     this._validateInput(input)
 
-    const id = input.key.toString('hex')
+    const id = b.toString(input.key, 'hex')
     if (this._inputsByKey.has(id)) return
 
     this._inputsByKey.set(id, input)
@@ -74,7 +78,7 @@ module.exports = class Autobase extends EventEmitter {
 
   // Called by MemberBatch
   _addOutput (output) {
-    const id = output.key.toString('hex')
+    const id = b.toString(output.key, 'hex')
     if (this._outputsByKey.has(id)) return
 
     this.outputs.push(output)
@@ -84,7 +88,7 @@ module.exports = class Autobase extends EventEmitter {
 
   // Called by MemberBatch
   _removeInput (input) {
-    const id = Buffer.isBuffer(input) ? input.toString('hex') : input.key.toString('hex')
+    const id = b.isBuffer(input) ? b.toString(input, 'hex') : b.toString(input.key, 'hex')
     if (!this._inputsByKey.has(id)) return
 
     input = this._inputsByKey.get(id)
@@ -94,7 +98,7 @@ module.exports = class Autobase extends EventEmitter {
 
   // Called by MemberBatch
   _removeOutput (output) {
-    const id = Buffer.isBuffer(output) ? output.toString('hex') : output.key.toString('hex')
+    const id = b.isBuffer(output) ? b.toString(output, 'hex') : b.toString(output.key, 'hex')
     if (!this._outputsByKey.has(id)) return
 
     output = this._outputsByKey.get(id)
@@ -120,31 +124,81 @@ module.exports = class Autobase extends EventEmitter {
     }
   }
 
-  _createInputBatch (input, batch, clock) {
-    const nodes = []
-    for (let i = 0; i < batch.length; i++) {
-      const batchOffset = (batch.length !== 1) ? [i, batch.length - 1 - i] : null
-      const node = { key: input.key, value: batch[i], batch: batchOffset }
-      if (i === batch.length - 1) node.clock = clock
-      nodes.push(node)
-    }
-    if (input.length === 0) {
-      nodes[0].header = {
-        protocol: INPUT_PROTOCOL
-      }
-    }
-    return nodes.map(InputNode.encode)
-  }
-
   _validateInput (input) {
     if (input.valueEncoding && input.valueEncoding !== codecs.binary) {
       throw new Error('Hypercore inputs must be binary ones')
     }
   }
 
+  _getKeyCache (input) {
+    let keyCache = this._keyCaches.get(input)
+    if (!keyCache) {
+      keyCache = {
+        initialized: false,
+        bySeq: new Map(),
+        byKey: new Map()
+      }
+      this._keyCaches.set(input, keyCache)
+    }
+    return keyCache
+  }
+
+  async _decompressClock (input, seq, node) {
+    const clock = new Map()
+
+    const keyCache = this._getKeyCache(input)
+
+    const seqs = []
+    for (const { key: keyPointer } of node.clock) {
+      if (keyCache.bySeq.has(keyPointer.seq)) continue
+      seqs.push(keyPointer.seq)
+    }
+    const blocks = await Promise.all(seqs.map(seq => input.get(seq)))
+    for (let i = 0; i < blocks.length; i++) {
+      const keys = decodeKeys(blocks[i])
+      keyCache.bySeq.set(seqs[i], keys)
+      for (let i = 0; i < keys.length; i++) {
+        keyCache.byKey.set(b.toString(keys[i], 'hex'), { seq: seqs[i], offset: i })
+      }
+    }
+
+    for (const { key, length } of node.clock) {
+      const fullKey = keyCache.bySeq.get(key.seq)[key.offset]
+      clock.set(b.toString(fullKey, 'hex'), length)
+    }
+
+    if (!keyCache.initialized) {
+      keyCache.initialized = true
+    }
+
+    return clock
+  }
+
+  async _compressClock (input, seq, clock) {
+    const keys = []
+    const compressed = []
+
+    const keyCache = this._getKeyCache(input)
+    if (!keyCache.initialized && input.length > 0) {
+      // This will load the latest keys into the cache
+      await this._getInputNode(input, input.length - 1)
+    }
+
+    for (const [key, length] of clock) {
+      let keyPointer = keyCache.byKey.get(key)
+      if (!keyPointer) {
+        keys.push(b.from(key, 'hex'))
+        keyPointer = { seq, offset: keys.length - 1 }
+      }
+      compressed.push({ key: keyPointer, length })
+    }
+
+    return { keys, clock: compressed }
+  }
+
   async _getInputNode (input, seq, opts) {
     if (seq < 0) return null
-    if (Buffer.isBuffer(input)) input = input.toString('hex')
+    if (b.isBuffer(input)) input = b.toString(input, 'hex')
     if (typeof input === 'string') {
       if (!this._inputsByKey.has(input)) return null
       input = this._inputsByKey.get(input)
@@ -153,18 +207,18 @@ module.exports = class Autobase extends EventEmitter {
     const block = await input.get(seq, opts)
     if (!block) return null
 
-    let node = null
+    let decoded = null
     try {
-      node = InputNode.decode(block, { key: input.key, seq })
-    } catch {
-      // Decoding errors should be discarded.
-      return null
+      decoded = NodeSchema.decode({ start: 0, end: block.length, buffer: block })
+    } catch (err) {
+      return safetyCatch(err)
     }
 
+    const clock = await this._decompressClock(input, seq, decoded)
+    const node = new InputNode({ ...decoded, clock, key: input.key, seq })
     if (node.batch[1] === 0) return node
 
     const batchEnd = await this._getInputNode(input, seq + node.batch[1])
-
     node.clock = batchEnd.clock
     if (node.seq > 0) node.clock.set(node.id, node.seq - 1)
     else node.clock.delete(node.id)
@@ -207,7 +261,7 @@ module.exports = class Autobase extends EventEmitter {
 
     const clock = new Map()
     for (const input of inputs) {
-      const id = input.key.toString('hex')
+      const id = b.toString(input.key, 'hex')
       if (!this._inputsByKey.has(id)) throw new Error('Hypercore is not an input of the Autobase')
       if (input.length === 0) continue
       clock.set(id, input.length - 1)
@@ -424,31 +478,69 @@ module.exports = class Autobase extends EventEmitter {
     }
   }
 
-  async append (value, clock, input) {
-    if (!this.opened) await this._opening
+  async _createInputBatch (input, batch, clock) {
+    const nodes = []
+    // Only the last node in the batch contains the clock/keys
+    const compressed = await this._compressClock(input, input.length + batch.length - 1, clock)
+
+    for (let i = 0; i < batch.length; i++) {
+      const batchOffset = (batch.length !== 1) ? [i, batch.length - 1 - i] : null
+      const node = {
+        value: !b.isBuffer(batch[i]) ? b.from(batch[i]) : batch[i],
+        key: input.key,
+        batch: batchOffset,
+        clock: null,
+        keys: null
+      }
+      if (i === batch.length - 1) {
+        node.clock = compressed.clock
+        node.keys = compressed.keys
+      }
+      nodes.push(node)
+    }
+
+    if (input.length === 0) {
+      nodes[0].header = {
+        protocol: INPUT_PROTOCOL
+      }
+    }
+
+    return nodes.map(node => c.encode(NodeSchema, node))
+  }
+
+  async _append (value, clock, input) {
     if (clock !== null && !Array.isArray(clock) && !(clock instanceof Map)) {
       input = clock
       clock = null
     }
     if (!Array.isArray(value)) value = [value]
 
-    input = input || this.localInput
     clock = clockToMap(clock || this._getLatestClock())
+    input = input || this.localInput
 
     // Make sure that causal information propagates.
     // This is tracking inputs that were present in the previous append, but have since been removed.
-    // TODO: This should use an embedded index in the future.
     const head = await this._getInputNode(input, input.length - 1)
     if (head && head.clock) {
-      const inputId = input.key.toString('hex')
+      const inputId = b.toString(input.key, 'hex')
       for (const [id, seq] of head.clock) {
         if (id === inputId || clock.has(id)) continue
         clock.set(id, seq)
       }
     }
 
-    const batch = this._createInputBatch(input, value, clock)
+    const batch = await this._createInputBatch(input, value, clock)
     return input.append(batch)
+  }
+
+  async append (value, clock, input) {
+    if (!this.opened) await this._opening
+    const release = await this._lock()
+    try {
+      return await this._append(value, clock, input)
+    } finally {
+      release()
+    }
   }
 
   close () {
@@ -466,27 +558,12 @@ module.exports = class Autobase extends EventEmitter {
     if (core.length === 0) return false
     try {
       const block = await core.get(0, { valueEncoding: 'binary' })
-      const decoded = c.decode(NodeHeader, block)
-      const protocol = decoded && decoded.protocol
+      const header = decodeHeader(block)
+      const protocol = header && header.protocol
       return !!protocol && (protocol === INPUT_PROTOCOL || protocol === OUTPUT_PROTOCOL)
     } catch {
       return false
     }
-  }
-
-  // For testing
-  _decodeInput (input, decodeOpts = {}) {
-    const get = async (idx, opts) => {
-      const decoded = await this._getInputNode(input, idx)
-      if (!decodeOpts.unwrap) return decoded
-      return decoded.value
-    }
-    return new Proxy(input, {
-      get (target, prop) {
-        if (prop === 'get') return get
-        return target[prop]
-      }
-    })
   }
 }
 
