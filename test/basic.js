@@ -65,7 +65,6 @@ test('causal writes', async t => {
 
   {
     const output = await causalValues(base)
-    console.log('output is:', output.map(v => v.value.toString()))
     t.same(output.map(v => v.value), bufferize(['b1', 'b0', 'a0', 'c3', 'c2', 'c1', 'c0']))
   }
 
@@ -285,4 +284,27 @@ test('can parse headers', async t => {
   t.end()
 })
 
-// TODO: Add a test case that links directly to the links of a previous input node.
+test('equal-sized forks are deterministically ordered by key', async t => {
+  for (let i = 0; i < 5; i++) {
+    const input1 = new Hypercore(ram)
+    const input2 = new Hypercore(ram)
+    const base = new Autobase({
+      inputs: [input1, input2],
+      autostart: true
+    })
+
+    await base.append('i10', [], input1)
+    await base.append('i11', [], input1)
+    await base.append('i20', [], input2)
+    await base.append('i21', [], input2)
+
+    const values = (await causalValues(base)).map(v => v.value.toString())
+    if (input1.key > input2.key) {
+      t.same(values, ['i21', 'i20', 'i11', 'i10'])
+    } else {
+      t.same(values, ['i11', 'i10', 'i21', 'i20'])
+    }
+  }
+
+  t.end()
+})

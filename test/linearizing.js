@@ -30,7 +30,6 @@ test('linearizing - three independent forks', async t => {
 
   {
     const outputNodes = await linearizedValues(base.view)
-    console.log('values:', outputNodes.map(v => v.value.toString()))
     t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
     t.same(base.view.status.added, 6)
     t.same(base.view.status.removed, 0)
