@@ -59,23 +59,24 @@ test('causal writes', async t => {
   for (let i = 0; i < 2; i++) {
     await base.append(`b${i}`, await base.latest(writerA), writerB)
   }
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 4; i++) {
     await base.append(`c${i}`, await base.latest(writerC), writerC)
   }
 
   {
     const output = await causalValues(base)
-    t.same(output.map(v => v.value), bufferize(['b1', 'b0', 'a0', 'c2', 'c1', 'c0']))
+    console.log('output is:', output.map(v => v.value.toString()))
+    t.same(output.map(v => v.value), bufferize(['b1', 'b0', 'a0', 'c3', 'c2', 'c1', 'c0']))
   }
 
-  // Add 3 more records to A -- should switch fork ordering
-  for (let i = 1; i < 4; i++) {
+  // Add 4 more records to A -- should switch fork ordering
+  for (let i = 1; i < 5; i++) {
     await base.append(`a${i}`, await base.latest(writerA), writerA)
   }
 
   {
     const output = await causalValues(base)
-    t.same(output.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']))
+    t.same(output.map(v => v.value), bufferize(['b1', 'b0', 'c3', 'c2', 'c1', 'c0', 'a4', 'a3', 'a2', 'a1', 'a0']))
   }
 
   t.end()
