@@ -30,7 +30,7 @@ test('linearizing - three independent forks', async t => {
 
   {
     const outputNodes = await linearizedValues(base.view)
-
+    console.log('values:', outputNodes.map(v => v.value.toString()))
     t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
     t.same(base.view.status.added, 6)
     t.same(base.view.status.removed, 0)
@@ -44,7 +44,6 @@ test('linearizing - three independent forks', async t => {
 
   {
     const outputNodes = await linearizedValues(base.view)
-
     t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']))
     t.same(base.view.status.added, 9)
     t.same(base.view.status.removed, 6)
@@ -93,7 +92,7 @@ test('linearizing - causal writes preserve clock', async t => {
   t.end()
 })
 
-test.only('linearizing - does not over-truncate', async t => {
+test('linearizing - does not over-truncate', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
@@ -131,14 +130,11 @@ test.only('linearizing - does not over-truncate', async t => {
 
   {
     const outputNodes = await linearizedValues(base.view)
-    console.log('output nodes:', outputNodes.map(v => v.value.toString()))
     t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'a3', 'a2', 'a1', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0']))
     t.same(base.view.status.added, 6)
     t.same(base.view.status.removed, 3)
     t.same(output.length, 11)
   }
-
-  /*
 
   // Add 1 more record to B -- should not cause any reordering
   await base.append('b2', [], writerB)
@@ -150,8 +146,6 @@ test.only('linearizing - does not over-truncate', async t => {
     t.same(base.view.status.removed, 0)
     t.same(output.length, 12)
   }
-
-  */
 
   t.end()
 })
@@ -379,6 +373,7 @@ test('linearizing - many writers, no causal writes', async t => {
     const writer = new Hypercore(ram)
     writers.push(writer)
   }
+  const middleWriter = writers[Math.floor(writers.length / 2)]
 
   const base = new Autobase({
     inputs: writers,
@@ -397,9 +392,6 @@ test('linearizing - many writers, no causal writes', async t => {
     t.same(outputNodes.length, (NUM_WRITERS * (NUM_WRITERS + 1)) / 2)
   }
 
-  const middleWriter = writers[Math.floor(writers.length / 2)]
-  const decodedMiddleWriter = base._decodeInput(middleWriter)
-
   // Appending to the middle writer NUM_APPEND times should shift it to the back of the index.
   for (let i = 0; i < NUM_APPENDS; i++) {
     await base.append(`new entry ${i}`, [], middleWriter)
@@ -410,7 +402,7 @@ test('linearizing - many writers, no causal writes', async t => {
   for (let i = 0; i < NUM_APPENDS + Math.floor(writers.length / 2); i++) {
     const latestNode = await base.view.get(i)
     const val = latestNode.value.toString()
-    t.same(val, (await decodedMiddleWriter.get(i)).value.toString())
+    t.same(val, (await base._getInputNode(middleWriter, i)).value.toString())
   }
 
   t.end()

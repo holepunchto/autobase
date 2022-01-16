@@ -11,7 +11,7 @@ const LinearizedView = require('./lib/linearize')
 const MemberBatch = require('./lib/batch')
 const KeyCompressor = require('./lib/compression')
 const { InputNode, OutputNode } = require('./lib/nodes')
-const { Node: NodeSchema, decodeHeader, decodeKeys } = require('./lib/nodes/messages')
+const { Node: NodeSchema, decodeHeader } = require('./lib/nodes/messages')
 
 const INPUT_PROTOCOL = '@autobase/input/v1'
 const OUTPUT_PROTOCOL = '@autobase/output/v1'
@@ -168,12 +168,15 @@ module.exports = class Autobase extends EventEmitter {
       return safetyCatch(err)
     }
 
-    const clock = await this._decompressClock(input, seq, decoded.clock)
+    let clock = await this._decompressClock(input, seq, decoded.clock)
     const node = new InputNode({ ...decoded, clock, key: input.key, seq })
-    if (node.batch[1] === 0) return node
 
-    const batchEnd = await this._getInputNode(input, seq + node.batch[1])
-    node.clock = batchEnd.clock
+    if (node.batch[1] !== 0) {
+      const batchEnd = await this._getInputNode(input, seq + node.batch[1])
+      clock = batchEnd.clock
+    }
+
+    node.clock = clock
     if (node.seq > 0) node.clock.set(node.id, node.seq - 1)
     else node.clock.delete(node.id)
 
@@ -475,8 +478,12 @@ module.exports = class Autobase extends EventEmitter {
     // Make sure that causal information propagates.
     // This is tracking inputs that were present in the previous append, but have since been removed.
     const head = await this._getInputNode(input, input.length - 1)
+    const inputId = b.toString(input.key, 'hex')
+    if (clock.has(inputId)) {
+      // Remove self-links
+      clock.delete(inputId)
+    }
     if (head && head.clock) {
-      const inputId = b.toString(input.key, 'hex')
       for (const [id, seq] of head.clock) {
         if (id === inputId || clock.has(id)) continue
         clock.set(id, seq)
@@ -565,7 +572,7 @@ function forkInfo (heads) {
   const sizes = forks.map(forkSize)
   let smallest = 0
   for (let i = 1; i < sizes.length; i++) {
-    if (sizes[i] === sizes[smallest] && forks[i].key < forks[smallest].feed) {
+    if (sizes[i] === sizes[smallest] && forks[i].key < forks[smallest].key) {
       smallest = i
     } else if (sizes[i] < sizes[smallest]) {
       smallest = i
