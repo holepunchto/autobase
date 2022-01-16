@@ -9,6 +9,7 @@ const b = require('b4a')
 
 const LinearizedView = require('./lib/linearize')
 const MemberBatch = require('./lib/batch')
+const KeyCompressor = require('./lib/compression')
 const { InputNode, OutputNode } = require('./lib/nodes')
 const { Node: NodeSchema, decodeHeader, decodeKeys } = require('./lib/nodes/messages')
 
@@ -28,7 +29,7 @@ module.exports = class Autobase extends EventEmitter {
     this._outputs = outputs || []
     this._inputsByKey = new Map()
     this._outputsByKey = new Map()
-    this._keyCaches = new Map()
+    this._keyCompressors = new Map()
     this._readStreams = []
     this._batchId = 0
     this._lock = mutexify()
@@ -130,70 +131,23 @@ module.exports = class Autobase extends EventEmitter {
     }
   }
 
-  _getKeyCache (input) {
-    let keyCache = this._keyCaches.get(input)
-    if (!keyCache) {
-      keyCache = {
-        initialized: false,
-        bySeq: new Map(),
-        byKey: new Map()
-      }
-      this._keyCaches.set(input, keyCache)
+  _getKeyCompressor (input) {
+    let keyCompressor = this._keyCompressors.get(input)
+    if (!keyCompressor) {
+      keyCompressor = new KeyCompressor(input)
+      this._keyCompressors.set(input, keyCompressor)
     }
-    return keyCache
+    return keyCompressor
   }
 
-  async _decompressClock (input, seq, node) {
-    const clock = new Map()
-
-    const keyCache = this._getKeyCache(input)
-
-    const seqs = []
-    for (const { key: keyPointer } of node.clock) {
-      if (keyCache.bySeq.has(keyPointer.seq)) continue
-      seqs.push(keyPointer.seq)
-    }
-    const blocks = await Promise.all(seqs.map(seq => input.get(seq)))
-    for (let i = 0; i < blocks.length; i++) {
-      const keys = decodeKeys(blocks[i])
-      keyCache.bySeq.set(seqs[i], keys)
-      for (let i = 0; i < keys.length; i++) {
-        keyCache.byKey.set(b.toString(keys[i], 'hex'), { seq: seqs[i], offset: i })
-      }
-    }
-
-    for (const { key, length } of node.clock) {
-      const fullKey = keyCache.bySeq.get(key.seq)[key.offset]
-      clock.set(b.toString(fullKey, 'hex'), length)
-    }
-
-    if (!keyCache.initialized) {
-      keyCache.initialized = true
-    }
-
-    return clock
+  async _decompressClock (input, seq, clock) {
+    const keyCompressor = this._getKeyCompressor(input)
+    return keyCompressor.decompress(clock, seq)
   }
 
   async _compressClock (input, seq, clock) {
-    const keys = []
-    const compressed = []
-
-    const keyCache = this._getKeyCache(input)
-    if (!keyCache.initialized && input.length > 0) {
-      // This will load the latest keys into the cache
-      await this._getInputNode(input, input.length - 1)
-    }
-
-    for (const [key, length] of clock) {
-      let keyPointer = keyCache.byKey.get(key)
-      if (!keyPointer) {
-        keys.push(b.from(key, 'hex'))
-        keyPointer = { seq, offset: keys.length - 1 }
-      }
-      compressed.push({ key: keyPointer, length })
-    }
-
-    return { keys, clock: compressed }
+    const keyCompressor = this._getKeyCompressor(input)
+    return keyCompressor.compress(clock, seq)
   }
 
   async _getInputNode (input, seq, opts) {
@@ -214,7 +168,7 @@ module.exports = class Autobase extends EventEmitter {
       return safetyCatch(err)
     }
 
-    const clock = await this._decompressClock(input, seq, decoded)
+    const clock = await this._decompressClock(input, seq, decoded.clock)
     const node = new InputNode({ ...decoded, clock, key: input.key, seq })
     if (node.batch[1] === 0) return node
 
