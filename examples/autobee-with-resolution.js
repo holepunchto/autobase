@@ -1,4 +1,5 @@
 const Hyperbee = require('hyperbee')
+const b = require('b4a')
 
 /*
  * This version of Autobee does very limited conflict resolution:
@@ -28,11 +29,15 @@ module.exports = class Autobee {
   }
 
   _encode (value, change, seq) {
-    return JSON.stringify({ value, change: change.toString('hex'), seq })
+    return JSON.stringify({ value, change: b.toString(change, 'hex'), seq })
   }
 
   _decode (raw) {
-    return JSON.parse(raw)
+    const parsed = JSON.parse(raw)
+    if (parsed.change) {
+      parsed.change = b.from(parsed.change, 'hex')
+    }
+    return parsed
   }
 
   async _apply (batch, clocks, change) {
