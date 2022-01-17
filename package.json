@@ -13,7 +13,8 @@
     "debounceify": "^1.0.0",
     "mutexify": "^1.4.0",
     "safety-catch": "^1.0.1",
-    "streamx": "^2.10.0"
+    "streamx": "^2.10.0",
+    "turbo-hash-map": "^1.0.2"
   },
   "devDependencies": {
     "corestore": "next",

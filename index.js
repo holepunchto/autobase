@@ -4,6 +4,7 @@ const safetyCatch = require('safety-catch')
 const streamx = require('streamx')
 const codecs = require('codecs')
 const mutexify = require('mutexify/promise')
+const HashMap = require('turbo-hash-map')
 const c = require('compact-encoding')
 const b = require('b4a')
 
@@ -27,8 +28,8 @@ module.exports = class Autobase extends EventEmitter {
 
     this._inputs = inputs || []
     this._outputs = outputs || []
-    this._inputsByKey = new Map()
-    this._outputsByKey = new Map()
+    this._inputsByKey = new HashMap()
+    this._outputsByKey = new HashMap()
     this._keyCompressors = new Map()
     this._readStreams = []
     this._batchId = 0
@@ -69,42 +70,39 @@ module.exports = class Autobase extends EventEmitter {
   // Called by MemberBatch
   _addInput (input) {
     this._validateInput(input)
+    if (this._inputsByKey.has(input.key)) return
 
-    const id = b.toString(input.key, 'hex')
-    if (this._inputsByKey.has(id)) return
-
-    this._inputsByKey.set(id, input)
+    this._inputsByKey.set(input.key, input)
     input.on('append', this._onappend)
   }
 
   // Called by MemberBatch
   _addOutput (output) {
-    const id = b.toString(output.key, 'hex')
-    if (this._outputsByKey.has(id)) return
+    if (this._outputsByKey.has(output.key)) return
 
     this.outputs.push(output)
-    this._outputsByKey.set(id, output)
+    this._outputsByKey.set(output.key, output)
     output.on('truncate', this._ontruncate)
   }
 
   // Called by MemberBatch
   _removeInput (input) {
-    const id = b.isBuffer(input) ? b.toString(input, 'hex') : b.toString(input.key, 'hex')
-    if (!this._inputsByKey.has(id)) return
+    const key = b.isBuffer(input) ? input : input.key
+    if (!this._inputsByKey.has(key)) return
 
-    input = this._inputsByKey.get(id)
+    input = this._inputsByKey.get(key)
     input.removeListener('append', this._onappend)
-    this._inputsByKey.delete(id)
+    this._inputsByKey.delete(key)
   }
 
   // Called by MemberBatch
   _removeOutput (output) {
-    const id = b.isBuffer(output) ? b.toString(output, 'hex') : b.toString(output.key, 'hex')
-    if (!this._outputsByKey.has(id)) return
+    const key = b.isBuffer(output) ? output: output.key
+    if (!this._outputsByKey.has(key)) return
 
-    output = this._outputsByKey.get(id)
+    output = this._outputsByKey.get(key)
     output.removeListener('truncate', this._ontruncate)
-    this._outputsByKey.delete(id)
+    this._outputsByKey.delete(key)
   }
 
   _onOutputTruncated (output, length) {
@@ -152,8 +150,7 @@ module.exports = class Autobase extends EventEmitter {
 
   async _getInputNode (input, seq, opts) {
     if (seq < 0) return null
-    if (b.isBuffer(input)) input = b.toString(input, 'hex')
-    if (typeof input === 'string') {
+    if (b.isBuffer(input)) {
       if (!this._inputsByKey.has(input)) return null
       input = this._inputsByKey.get(input)
     }
@@ -177,8 +174,8 @@ module.exports = class Autobase extends EventEmitter {
     }
 
     node.clock = clock
-    if (node.seq > 0) node.clock.set(node.id, node.seq - 1)
-    else node.clock.delete(node.id)
+    if (node.seq > 0) node.clock.set(node.key, node.seq - 1)
+    else node.clock.delete(node.key)
 
     return node
   }
@@ -216,12 +213,11 @@ module.exports = class Autobase extends EventEmitter {
     if (!inputs) inputs = this.inputs
     if (!Array.isArray(inputs)) inputs = [inputs]
 
-    const clock = new Map()
+    const clock = new HashMap()
     for (const input of inputs) {
-      const id = b.toString(input.key, 'hex')
-      if (!this._inputsByKey.has(id)) throw new Error('Hypercore is not an input of the Autobase')
+      if (!this._inputsByKey.has(input.key)) throw new Error('Hypercore is not an input of the Autobase')
       if (input.length === 0) continue
-      clock.set(id, input.length - 1)
+      clock.set(input.key, input.length - 1)
     }
 
     this.clock = clock
@@ -294,7 +290,7 @@ module.exports = class Autobase extends EventEmitter {
         return cb(null)
       }
 
-      self._getInputNode(node.id, node.seq - 1).then(next => {
+      self._getInputNode(node.key, node.seq - 1).then(next => {
         heads[forkIndex] = next
         return cb(null)
       }, err => cb(err))
@@ -304,9 +300,9 @@ module.exports = class Autobase extends EventEmitter {
   createReadStream (opts = {}) {
     const self = this
 
-    const positionsByKey = opts.checkpoint || new Map()
-    const nodesByKey = new Map()
-    const snapshotLengthsByKey = new Map()
+    const positionsByKey = opts.checkpoint || new HashMap()
+    const nodesByKey = new HashMap()
+    const snapshotLengthsByKey = new HashMap()
 
     const wait = opts.wait !== false
     let running = false
@@ -363,9 +359,9 @@ module.exports = class Autobase extends EventEmitter {
             // If resolved is false, yield the unresolved node as usual
           }
 
-          const pos = positionsByKey.get(oldest.id)
-          nodesByKey.delete(oldest.id)
-          positionsByKey.set(oldest.id, pos + 1)
+          const pos = positionsByKey.get(oldest.key)
+          nodesByKey.delete(oldest.key)
+          positionsByKey.set(oldest.key, pos + 1)
 
           const mapped = opts.map ? opts.map(oldest) : oldest
           stream.push(mapped)
@@ -466,27 +462,26 @@ module.exports = class Autobase extends EventEmitter {
   }
 
   async _append (value, clock, input) {
-    if (clock !== null && !Array.isArray(clock) && !(clock instanceof Map)) {
+    if (clock !== null && !Array.isArray(clock) && !(clock instanceof HashMap)) {
       input = clock
       clock = null
     }
     if (!Array.isArray(value)) value = [value]
 
-    clock = clockToMap(clock || this._getLatestClock())
+    clock = clockToHashMap(clock || this._getLatestClock())
     input = input || this.localInput
 
     // Make sure that causal information propagates.
     // This is tracking inputs that were present in the previous append, but have since been removed.
     const head = await this._getInputNode(input, input.length - 1)
-    const inputId = b.toString(input.key, 'hex')
-    if (clock.has(inputId)) {
+    if (clock.has(input.key)) {
       // Remove self-links
-      clock.delete(inputId)
+      clock.delete(input.key)
     }
     if (head && head.clock) {
-      for (const [id, seq] of head.clock) {
-        if (id === inputId || clock.has(id)) continue
-        clock.set(id, seq)
+      for (const [key, seq] of head.clock) {
+        if (key === input.key || clock.has(key)) continue
+        clock.set(key, seq)
       }
     }
 
@@ -561,12 +556,12 @@ function forkSize (node, i, heads) {
 
 function forkInfo (heads) {
   const forks = []
-  const clock = new Map()
+  const clock = new HashMap()
 
   for (const head of heads) {
     if (!head) continue
     if (isFork(head, heads)) forks.push(head)
-    clock.set(head.id, head.seq)
+    clock.set(head.key, head.seq)
   }
 
   const sizes = forks.map(forkSize)
@@ -586,9 +581,13 @@ function forkInfo (heads) {
   }
 }
 
-function clockToMap (clock) {
+function clockToHashMap (clock) {
   if (!clock) return new Map()
-  if (clock instanceof Map) return clock
-  if (Array.isArray(clock)) return new Map(clock)
-  return new Map(Object.entries(clock))
+  if (clock instanceof HashMap) return clock
+  const m = new HashMap()
+  const arr = Array.isArray(clock) ? clock : Object.entries(clock)
+  for (const [key, value] of arr) {
+    m.set(key, value)
+  }
+  return m
 }
