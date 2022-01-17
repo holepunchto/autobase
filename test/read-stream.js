@@ -148,8 +148,8 @@ test('read stream - onresolve hook, resolvable', async t => {
     // With the onresolve hook, the read stream can be passed missing writers
     const output = await collect(base2.createReadStream({
       async onresolve (node) {
-        t.same(node.id, writerB.key.toString('hex'))
-        t.same(node.clock.get(writerA.key.toString('hex')), 0)
+        t.same(node.key, writerB.key)
+        t.same(node.clock.get(writerA.key), 0)
         await base2.addInput(writerA)
         return true
       }
@@ -192,8 +192,8 @@ test('read stream - onresolve hook, not resolvable', async t => {
     // With the onresolve hook, returning false should emit the unresolved nodes (same behavior as { onresolve: undefined } option)
     const output = await collect(base2.createReadStream({
       async onresolve (node) {
-        t.same(node.id, writerB.key.toString('hex'))
-        t.same(node.clock.get(writerA.key.toString('hex')), 0)
+        t.same(node.key, writerB.key)
+        t.same(node.clock.get(writerA.key), 0)
         return false
       }
     }))

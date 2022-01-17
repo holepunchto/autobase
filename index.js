@@ -97,7 +97,7 @@ module.exports = class Autobase extends EventEmitter {
 
   // Called by MemberBatch
   _removeOutput (output) {
-    const key = b.isBuffer(output) ? output: output.key
+    const key = b.isBuffer(output) ? output : output.key
     if (!this._outputsByKey.has(key)) return
 
     output = this._outputsByKey.get(key)

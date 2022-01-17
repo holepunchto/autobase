@@ -24,7 +24,6 @@ function debugInputNode (inputNode) {
   if (!inputNode) return null
   return {
     ...inputNode,
-    key: inputNode.id,
     value: inputNode.value.toString()
   }
 }
