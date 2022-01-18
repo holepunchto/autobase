@@ -25,6 +25,8 @@ module.exports = class Autobase extends EventEmitter {
     this.clock = null
     this.opened = false
     this.closed = false
+    this.inputs = []
+    this.outputs = []
 
     this._inputs = inputs || []
     this._outputs = outputs || []
@@ -64,6 +66,7 @@ module.exports = class Autobase extends EventEmitter {
       this._addOutput(output)
     }
 
+    this.inputs.sort((i1, i2) => b.compare(i1.key, i2.key))
     this.opened = true
   }
 
@@ -72,6 +75,7 @@ module.exports = class Autobase extends EventEmitter {
     this._validateInput(input)
     if (this._inputsByKey.has(input.key)) return
 
+    this.inputs.push(input)
     this._inputsByKey.set(input.key, input)
     input.on('append', this._onappend)
   }
@@ -91,8 +95,11 @@ module.exports = class Autobase extends EventEmitter {
     if (!this._inputsByKey.has(key)) return
 
     input = this._inputsByKey.get(key)
-    input.removeListener('append', this._onappend)
+    const idx = this.inputs.indexOf(input)
+    if (idx !== -1) this.inputs.splice(idx, 1)
     this._inputsByKey.delete(key)
+
+    input.removeListener('append', this._onappend)
   }
 
   // Called by MemberBatch
@@ -101,8 +108,11 @@ module.exports = class Autobase extends EventEmitter {
     if (!this._outputsByKey.has(key)) return
 
     output = this._outputsByKey.get(key)
-    output.removeListener('truncate', this._ontruncate)
+    const idx = this.outputs.indexOf(output)
+    if (idx !== -1) this.outputs.splice(idx, 1)
     this._outputsByKey.delete(key)
+
+    output.removeListener('truncate', this._ontruncate)
   }
 
   _onOutputTruncated (output, length) {
@@ -140,7 +150,7 @@ module.exports = class Autobase extends EventEmitter {
 
   async _decompressClock (input, seq, clock) {
     const keyCompressor = this._getKeyCompressor(input)
-    return keyCompressor.decompress(clock, seq)
+    return keyCompressor.decompress(clock, seq, { input: true })
   }
 
   async _compressClock (input, seq, clock) {
@@ -172,23 +182,12 @@ module.exports = class Autobase extends EventEmitter {
       const batchEnd = await this._getInputNode(input, seq + node.batch[1])
       clock = batchEnd.clock
     }
-
     node.clock = clock
-    if (node.seq > 0) node.clock.set(node.key, node.seq - 1)
-    else node.clock.delete(node.key)
 
     return node
   }
 
   // Public API
-
-  get inputs () {
-    return [...this._inputsByKey.values()]
-  }
-
-  get outputs () {
-    return [...this._outputsByKey.values()]
-  }
 
   get started () {
     return !!this.view
@@ -210,14 +209,21 @@ module.exports = class Autobase extends EventEmitter {
   }
 
   _getLatestClock (inputs) {
-    if (!inputs) inputs = this.inputs
-    if (!Array.isArray(inputs)) inputs = [inputs]
+    if (!inputs) {
+      inputs = this.inputs
+    } else {
+      if (!Array.isArray(inputs)) inputs = [inputs]
+      else inputs = [...inputs]
+      for (const input of inputs) {
+        if (!this._inputsByKey.has(input.key)) throw new Error('Hypercore is not an input of the Autobase')
+      }
+      inputs.sort((i1, i2) => b.compare(i1.key, i2.key))
+    }
 
-    const clock = new HashMap()
+    const clock = []
     for (const input of inputs) {
-      if (!this._inputsByKey.has(input.key)) throw new Error('Hypercore is not an input of the Autobase')
       if (input.length === 0) continue
-      clock.set(input.key, input.length - 1)
+      clock.push([input.key, input.length - 1])
     }
 
     this.clock = clock
@@ -424,7 +430,7 @@ module.exports = class Autobase extends EventEmitter {
     }
 
     function hasUnsatisfiedInputs (node, inputsByKey) {
-      for (const key of node.clock.keys()) {
+      for (const [key] of node.clock) {
         if (!inputsByKey.has(key)) return true
       }
       return false
@@ -458,34 +464,60 @@ module.exports = class Autobase extends EventEmitter {
       }
     }
 
+    console.log('APPENDING INPUT BATCH:', nodes)
     return nodes.map(node => c.encode(NodeSchema, node))
   }
 
   async _append (value, clock, input) {
-    if (clock !== null && !Array.isArray(clock) && !(clock instanceof HashMap)) {
+    if (clock !== null && !Array.isArray(clock)) {
       input = clock
       clock = null
     }
     if (!Array.isArray(value)) value = [value]
-
-    clock = clockToHashMap(clock || this._getLatestClock())
     input = input || this.localInput
+
+    if (clock) {
+      if (clock.length > 0) {
+        clock = [...clock]
+        clock.sort((c1, c2) => b.compare(c1[0], c2[0]))
+      }
+    } else {
+      clock = this._getLatestClock()
+    }
 
     // Make sure that causal information propagates.
     // This is tracking inputs that were present in the previous append, but have since been removed.
     const head = await this._getInputNode(input, input.length - 1)
-    if (clock.has(input.key)) {
-      // Remove self-links
-      clock.delete(input.key)
-    }
-    if (head && head.clock) {
-      for (const [key, seq] of head.clock) {
-        if (key === input.key || clock.has(key)) continue
-        clock.set(key, seq)
+    const headClock = (head && head.clock) || []
+    const fullClock = []
+
+    let headPos = 0
+    let clockPos = 0
+    while (headPos < headClock.length || clockPos < clock.length) {
+      if (headPos >= headClock.length) {
+        fullClock.push(clock[clockPos++])
+        continue
+      }
+      if (clockPos >= clock.length) {
+        fullClock.push(headClock[headPos++])
+        continue
+      }
+      switch (b.compare(headClock[headPos][0], clock[clockPos][0])) {
+        case -1:
+          fullClock.push(headClock[headPos++])
+          break
+        case 1:
+          fullClock.push(clock[clockPos++])
+          break
+        case 0:
+          fullClock.push(clock[clockPos])
+          clockPos++
+          headPos++
       }
     }
 
-    const batch = await this._createInputBatch(input, value, clock)
+    console.log('FULL CLOCK IS:', fullClock)
+    const batch = await this._createInputBatch(input, value, fullClock)
     return input.append(batch)
   }
 
@@ -556,18 +588,18 @@ function forkSize (node, i, heads) {
 
 function forkInfo (heads) {
   const forks = []
-  const clock = new HashMap()
+  const clock = []
 
   for (const head of heads) {
     if (!head) continue
     if (isFork(head, heads)) forks.push(head)
-    clock.set(head.key, head.seq)
+    clock.push([head.key, head.seq])
   }
 
   const sizes = forks.map(forkSize)
   let smallest = 0
   for (let i = 1; i < sizes.length; i++) {
-    if (sizes[i] === sizes[smallest] && forks[i].key < forks[smallest].key) {
+    if (sizes[i] === sizes[smallest] && (b.compare(forks[i].key, forks[smallest].key) < 0)) {
       smallest = i
     } else if (sizes[i] < sizes[smallest]) {
       smallest = i
@@ -579,15 +611,4 @@ function forkInfo (heads) {
     clock,
     smallest
   }
-}
-
-function clockToHashMap (clock) {
-  if (!clock) return new Map()
-  if (clock instanceof HashMap) return clock
-  const m = new HashMap()
-  const arr = Array.isArray(clock) ? clock : Object.entries(clock)
-  for (const [key, value] of arr) {
-    m.set(key, value)
-  }
-  return m
 }

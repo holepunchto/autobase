@@ -1,5 +1,6 @@
 const test = require('tape')
 const Hypercore = require('hypercore')
+const HashMap = require('turbo-hash-map')
 const ram = require('random-access-memory')
 
 const { collect } = require('./helpers')
@@ -149,7 +150,7 @@ test('read stream - onresolve hook, resolvable', async t => {
     const output = await collect(base2.createReadStream({
       async onresolve (node) {
         t.same(node.key, writerB.key)
-        t.same(node.clock.get(writerA.key), 0)
+        t.same(intoMap(node.clock).get(writerA.key), 0)
         await base2.addInput(writerA)
         return true
       }
@@ -193,7 +194,7 @@ test('read stream - onresolve hook, not resolvable', async t => {
     const output = await collect(base2.createReadStream({
       async onresolve (node) {
         t.same(node.key, writerB.key)
-        t.same(node.clock.get(writerA.key), 0)
+        t.same(intoMap(node.clock).get(writerA.key), 0)
         return false
       }
     }))
@@ -409,4 +410,12 @@ function validateReadOrder (t, nodes) {
 
 function lteOrIndependent (n1, n2) {
   return n1.lte(n2) || !n2.contains(n1)
+}
+
+function intoMap (clock) {
+  const map = new HashMap()
+  for (const [key, seq] of clock) {
+    map.set(key, seq)
+  }
+  return map
 }

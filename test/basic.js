@@ -1,6 +1,7 @@
 const test = require('tape')
 const Hypercore = require('hypercore')
 const ram = require('random-access-memory')
+const b = require('b4a')
 
 const { bufferize, causalValues } = require('./helpers')
 const Autobase = require('../')
@@ -299,7 +300,7 @@ test('equal-sized forks are deterministically ordered by key', async t => {
     await base.append('i21', [], input2)
 
     const values = (await causalValues(base)).map(v => v.value.toString())
-    if (input1.key > input2.key) {
+    if (b.compare(input1.key, input2.key) > 0) {
       t.same(values, ['i21', 'i20', 'i11', 'i10'])
     } else {
       t.same(values, ['i11', 'i10', 'i21', 'i20'])

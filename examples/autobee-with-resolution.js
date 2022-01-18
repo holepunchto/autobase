@@ -1,5 +1,5 @@
 const Hyperbee = require('hyperbee')
-const b = require('b4a')
+const b4a = require('b4a')
 
 /*
  * This version of Autobee does very limited conflict resolution:
@@ -29,20 +29,19 @@ module.exports = class Autobee {
   }
 
   _encode (value, change, seq) {
-    return JSON.stringify({ value, change: b.toString(change, 'hex'), seq })
+    return JSON.stringify({ value, change: b4a.toString(change, 'hex'), seq })
   }
 
   _decode (raw) {
     const parsed = JSON.parse(raw)
     if (parsed.change) {
-      parsed.change = b.from(parsed.change, 'hex')
+      parsed.change = b4a.from(parsed.change, 'hex')
     }
     return parsed
   }
 
   async _apply (batch, clocks, change) {
     const self = this
-    const localClock = clocks.local
     const b = this.bee.batch({ update: false })
 
     for (const node of batch) {
@@ -62,7 +61,17 @@ module.exports = class Autobee {
       // If the existing write is not causally contained in the current clock.
       // TODO: Write a helper for this.
       const conflictKey = ['_conflict', existing.key].join('/')
-      if (!localClock.has(existingChange) || (localClock.get(existingChange) < existingSeq)) {
+
+      let conflicting = true
+      for (let i = 0; i < clocks.local.length; i++) {
+        const [key, seq] = clocks.local[i]
+        if (b4a.equals(key, existingChange)) {
+          conflicting = seq < existingSeq
+          break
+        }
+      }
+
+      if (conflicting) {
         await b.put(conflictKey, existing.value)
       } else {
         await b.del(conflictKey)
@@ -71,7 +80,7 @@ module.exports = class Autobee {
   }
 
   async put (key, value, opts) {
-    const op = Buffer.from(JSON.stringify({ type: 'put', key, value }))
+    const op = b4a.from(JSON.stringify({ type: 'put', key, value }))
     return await this.autobase.append(op, opts)
   }
 

@@ -39,7 +39,7 @@ test('map with stateless mapper', async t => {
   t.end()
 })
 
-test('mapping into batches yields the correct clock on reads', async t => {
+test.only('mapping into batches yields the correct clock on reads', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
@@ -52,6 +52,7 @@ test('mapping into batches yields the correct clock on reads', async t => {
   base.start({
     apply (batch) {
       batch = batch.map(({ value }) => Buffer.from(value.toString('utf-8').toUpperCase(), 'utf-8'))
+      console.log('APPLYING BATCH:', batch)
       return base.view.append(batch)
     }
   })
@@ -62,6 +63,7 @@ test('mapping into batches yields the correct clock on reads', async t => {
   await base.append(['c0', 'c1', 'c2'], [], writerC)
 
   const outputNodes = await linearizedValues(base.view)
+  console.log('output nodes:', outputNodes.map(n => n.value.toString()))
   t.same(outputNodes.map(v => v.value), bufferize(['A0', 'B1', 'B0', 'C2', 'C1', 'C0']))
 
   t.end()
