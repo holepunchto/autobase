@@ -150,7 +150,7 @@ module.exports = class Autobase extends EventEmitter {
 
   async _decompressClock (input, seq, clock) {
     const keyCompressor = this._getKeyCompressor(input)
-    return keyCompressor.decompress(clock, seq, { input: true })
+    return keyCompressor.decompress(clock, seq)
   }
 
   async _compressClock (input, seq, clock) {
@@ -464,7 +464,6 @@ module.exports = class Autobase extends EventEmitter {
       }
     }
 
-    console.log('APPENDING INPUT BATCH:', nodes)
     return nodes.map(node => c.encode(NodeSchema, node))
   }
 
@@ -516,7 +515,6 @@ module.exports = class Autobase extends EventEmitter {
       }
     }
 
-    console.log('FULL CLOCK IS:', fullClock)
     const batch = await this._createInputBatch(input, value, fullClock)
     return input.append(batch)
   }
@@ -565,23 +563,30 @@ function isFork (head, heads) {
 }
 
 function forkSize (node, i, heads) {
-  const high = {}
+  const high = new HashMap()
 
   for (const head of heads) {
     if (head === node) continue
     for (const [key, seq] of head.clock) {
       const length = seq + 1
-      if (length > (high[key] || 0)) high[key] = length
+      if (length > (high.get(key) || 0)) high.set(key, length)
     }
+    const length = head.seq + 1
+    if (length > (high.get(head.key) || 0)) high.set(head.key, length)
   }
 
   let s = 0
 
   for (const [key, seq] of node.clock) {
     const length = seq + 1
-    const h = high[key] || 0
+    const h = high.get(key) || 0
     if (length > h) s += length - h
   }
+
+  const length = node.seq + 1
+  const highest = high.get(node.key) || 0
+  console.log('LENGTH:', length, 'HIGHEST:', highest)
+  if (length > highest) s += length - highest
 
   return s
 }
@@ -597,6 +602,7 @@ function forkInfo (heads) {
   }
 
   const sizes = forks.map(forkSize)
+  console.log('sizes:', sizes)
   let smallest = 0
   for (let i = 1; i < sizes.length; i++) {
     if (sizes[i] === sizes[smallest] && (b.compare(forks[i].key, forks[smallest].key) < 0)) {

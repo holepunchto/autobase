@@ -2,10 +2,10 @@ const test = require('tape')
 const Hypercore = require('hypercore')
 const ram = require('random-access-memory')
 
-const { bufferize, linearizedValues } = require('./helpers')
+const { bufferize, linearizedValues, causalValues } = require('./helpers')
 const Autobase = require('../')
 
-test.only('linearizing - three independent forks', async t => {
+test('linearizing - three independent forks', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
@@ -622,7 +622,7 @@ test('linearizing - can dynamically add/remove default outputs', async t => {
   t.end()
 })
 
-test('linearizing - can locally extend an out-of-date remote output', async t => {
+test.only('linearizing - can locally extend an out-of-date remote output', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
@@ -682,6 +682,8 @@ test('linearizing - can locally extend an out-of-date remote output', async t =>
   t.same(readerBase.view.status.removed, 0)
   t.same(readerBase.view.length, 9)
 
+  console.log('\n ==== \n')
+
   // Create a new B fork at the back (full reorg)
   for (let i = 1; i < 11; i++) {
     await writerBase.append(`b${i}`, [], writerB)
@@ -691,6 +693,8 @@ test('linearizing - can locally extend an out-of-date remote output', async t =>
   t.same(readerBase.view.status.added, 19)
   t.same(readerBase.view.status.removed, 9)
   t.same(readerBase.view.length, 19)
+
+  console.log('after:', (await linearizedValues(readerBase.view)).map(n => n.value.toString()))
 
   t.end()
 })
