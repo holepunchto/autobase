@@ -832,3 +832,42 @@ test('closing a view will cleanup event listeners', async t => {
 
   t.end()
 })
+
+test('can dynamically add a default output', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    autostart: true
+  })
+
+  t.false(base.view.writable)
+
+  base.localOutput = output
+
+  t.true(base.view.writable)
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, [], writerA)
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, [], writerB)
+  }
+  for (let i = 0; i < 3; i++) {
+    await base.append(`c${i}`, [], writerC)
+  }
+
+  {
+    const outputNodes = await linearizedValues(base.view)
+    t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
+    t.same(base.view.status.added, 6)
+    t.same(base.view.status.removed, 0)
+    t.same(output.length, 6)
+  }
+
+  t.end()
+})
