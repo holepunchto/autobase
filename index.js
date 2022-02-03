@@ -7,9 +7,10 @@ const mutexify = require('mutexify/promise')
 const c = require('compact-encoding')
 const b = require('b4a')
 
-const LinearizedView = require('./lib/linearize')
+const LinearizedCore = require('./lib/linearize')
 const MemberBatch = require('./lib/batch')
 const KeyCompressor = require('./lib/compression')
+const Output = require('./lib/output')
 const { InputNode, OutputNode } = require('./lib/nodes')
 const { Node: NodeSchema, decodeHeader } = require('./lib/nodes/messages')
 
@@ -78,13 +79,13 @@ module.exports = class Autobase extends EventEmitter {
   }
 
   // Called by MemberBatch
-  _addOutput (output) {
-    const id = b.toString(output.key, 'hex')
+  _addOutput (core) {
+    const id = b.toString(core.key, 'hex')
     if (this._outputsByKey.has(id)) return
 
+    const output = new Output(core)
     this.outputs.push(output)
     this._outputsByKey.set(id, output)
-    output.on('truncate', this._ontruncate)
   }
 
   // Called by MemberBatch
@@ -103,14 +104,7 @@ module.exports = class Autobase extends EventEmitter {
     if (!this._outputsByKey.has(id)) return
 
     output = this._outputsByKey.get(id)
-    output.removeListener('truncate', this._ontruncate)
     this._outputsByKey.delete(id)
-  }
-
-  _onOutputTruncated (output, length) {
-    if (!this.view) return
-
-    this.view._onOutputTruncated(output, length)
   }
 
   _onInputAppended () {
@@ -199,11 +193,12 @@ module.exports = class Autobase extends EventEmitter {
 
   start ({ apply, unwrap } = {}) {
     if (this.view) throw new Error('Start must only be called once')
-    this.view = new LinearizedView(this, {
+    const core = new LinearizedCore(this, {
       header: { protocol: OUTPUT_PROTOCOL },
       apply,
       unwrap
     })
+    this.view = core.view || core
   }
 
   async heads () {

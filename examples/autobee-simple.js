@@ -5,27 +5,17 @@ module.exports = class SimpleAutobee {
     this.autobase = autobase
     this.autobase.start({
       unwrap: true,
-      apply: this._apply.bind(this)
+      apply: applyAutobeeBatch,
+      view: core => new Hyperbee(core.unwrap(), {
+        ...opts,
+        extension: false
+      })
     })
-    this.bee = new Hyperbee(this.autobase.view, {
-      ...opts,
-      extension: false
-    })
+    this.bee = this.autobase.view
   }
 
   ready () {
     return this.autobase.ready()
-  }
-
-  // A real apply function would need to handle conflicts, beyond last-one-wins.
-  async _apply (batch) {
-    const b = this.bee.batch({ update: false })
-    for (const node of batch) {
-      const op = JSON.parse(node.value.toString())
-      // TODO: Handle deletions
-      if (op.type === 'put') await b.put(op.key, op.value)
-    }
-    await b.flush()
   }
 
   async put (key, value, opts = {}) {
@@ -36,4 +26,15 @@ module.exports = class SimpleAutobee {
   async get (key) {
     return await this.bee.get(key)
   }
+}
+
+// A real apply function would need to handle conflicts, beyond last-one-wins.
+async function applyAutobeeBatch (bee, batch) {
+  const b = this.bee.batch({ update: false })
+  for (const node of batch) {
+    const op = JSON.parse(node.value.toString())
+    // TODO: Handle deletions
+    if (op.type === 'put') await b.put(op.key, op.value)
+  }
+  await b.flush()
 }
