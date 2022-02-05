@@ -5,7 +5,7 @@ const ram = require('random-access-memory')
 const { bufferize, linearizedValues } = require('./helpers')
 const Autobase = require('../')
 
-test('linearizing - three independent forks', async t => {
+test.only('linearizing - three independent forks', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
@@ -35,6 +35,8 @@ test('linearizing - three independent forks', async t => {
     t.same(base.view.status.removed, 0)
     t.same(output.length, 6)
   }
+
+  console.log('*****')
 
   // Add 3 more records to A -- should switch fork ordering
   for (let i = 1; i < 4; i++) {

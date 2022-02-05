@@ -63,6 +63,9 @@ module.exports = class Autobase extends EventEmitter {
     for (const output of this._outputs) {
       this._addOutput(output)
     }
+    if (this.localOutput) {
+      this.localOutput = new Output(this.localOutput)
+    }
 
     this.opened = true
   }
