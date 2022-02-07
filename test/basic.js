@@ -261,7 +261,7 @@ test('dynamically adding inputs does not alter existing causal streams', async t
   t.end()
 })
 
-test('can parse headers', async t => {
+test.skip('can parse headers', async t => {
   const output = new Hypercore(ram)
   const writer = new Hypercore(ram)
   const notAutobase = new Hypercore(ram)
@@ -304,6 +304,52 @@ test('equal-sized forks are deterministically ordered by key', async t => {
     } else {
       t.same(values, ['i11', 'i10', 'i21', 'i20'])
     }
+  }
+
+  t.end()
+})
+
+test('causal stream with clock', async t => {
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC]
+  })
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
+  }
+
+  const clock1 = await base.latest()
+
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, await base.latest(writerB), writerB)
+  }
+
+  const clock2 = await base.latest()
+
+  for (let i = 0; i < 3; i++) {
+    await base.append(`c${i}`, await base.latest(writerC), writerC)
+  }
+
+  const clock3 = await base.latest()
+
+  {
+    const output = await causalValues(base, clock1)
+    t.same(output.map(v => v.value), bufferize(['a0']))
+  }
+
+  {
+    const output = await causalValues(base, clock2)
+    t.same(output.map(v => v.value), bufferize(['a0', 'b1', 'b0']))
+  }
+
+  {
+    const output = await causalValues(base, clock3)
+    t.same(output.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
   }
 
   t.end()

@@ -1,5 +1,5 @@
-async function causalValues (base) {
-  return collect(base.createCausalStream())
+async function causalValues (base, clock) {
+  return collect(base.createCausalStream({ clock }))
 }
 
 async function collect (stream, map) {

@@ -204,10 +204,15 @@ module.exports = class Autobase extends EventEmitter {
     this.view = core.view || core
   }
 
-  async heads () {
+  async heads (clock) {
     if (!this.opened) await this._opening
     await Promise.all(this.inputs.map(i => i.update()))
-    return Promise.all(this.inputs.map(i => this._getInputNode(i, i.length - 1)))
+    return Promise.all(this.inputs.map(i => {
+      if (!clock) return this._getInputNode(i, i.length - 1)
+      const id = b.toString(i.key, 'hex')
+      if (!clock.has(id)) return null
+      return this._getInputNode(i, clock.get(id))
+    }))
   }
 
   _getLatestClock (inputs) {
@@ -264,10 +269,10 @@ module.exports = class Autobase extends EventEmitter {
     const self = this
     let heads = null
 
-    return new streamx.Readable({ open, read })
+    return new streamx.Readable({open, read })
 
     function open (cb) {
-      self.heads()
+      self.heads(opts.clock)
         .then(h => { heads = h })
         .then(() => cb(null), err => cb(err))
     }
