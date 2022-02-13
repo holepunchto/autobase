@@ -12,6 +12,7 @@ const MemberBatch = require('./lib/batch')
 const KeyCompressor = require('./lib/compression')
 const Output = require('./lib/output')
 const { InputNode, OutputNode } = require('./lib/nodes')
+const { length } = require('./lib/clock')
 const { Node: NodeSchema, decodeHeader } = require('./lib/nodes/messages')
 
 const INPUT_PROTOCOL = '@autobase/input/v1'
@@ -287,7 +288,7 @@ module.exports = class Autobase extends EventEmitter {
 
       const node = forks[smallest]
       const forkIndex = heads.indexOf(node)
-      this.push(new OutputNode({ ...node, change: node.key, clock }))
+      this.push(new OutputNode({ ...node, change: node.key, clock, operations: length(clock) }))
 
       // TODO: When reading a batch node, parallel download them all (use batch[0])
       // TODO: Make a causal stream extension for faster reads
