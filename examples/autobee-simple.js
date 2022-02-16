@@ -30,7 +30,7 @@ module.exports = class SimpleAutobee {
 
 // A real apply function would need to handle conflicts, beyond last-one-wins.
 async function applyAutobeeBatch (bee, batch) {
-  const b = this.bee.batch({ update: false })
+  const b = bee.batch({ update: false })
   for (const node of batch) {
     const op = JSON.parse(node.value.toString())
     // TODO: Handle deletions

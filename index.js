@@ -19,7 +19,7 @@ const INPUT_PROTOCOL = '@autobase/input/v1'
 const OUTPUT_PROTOCOL = '@autobase/output/v1'
 
 module.exports = class Autobase extends EventEmitter {
-  constructor ({ inputs, outputs, localInput, localOutput, apply, unwrap, autostart } = {}) {
+  constructor ({ inputs, outputs, localInput, localOutput, apply, unwrap, view, autostart } = {}) {
     super()
     this.localInput = localInput
     this.localOutput = localOutput
@@ -37,7 +37,7 @@ module.exports = class Autobase extends EventEmitter {
     this._lock = mutexify()
 
     this.view = null
-    if (apply || autostart) this.start({ apply, unwrap })
+    if (apply || autostart) this.start({ apply, view, unwrap })
 
     const self = this
     this._onappend = this._onInputAppended.bind(this)
@@ -88,7 +88,6 @@ module.exports = class Autobase extends EventEmitter {
     if (this._outputsByKey.has(id)) return
 
     const output = new Output(core)
-    this.outputs.push(output)
     this._outputsByKey.set(id, output)
   }
 
@@ -195,10 +194,11 @@ module.exports = class Autobase extends EventEmitter {
     return !!this.view
   }
 
-  start ({ apply, unwrap } = {}) {
+  start ({ view, apply, unwrap } = {}) {
     if (this.view) throw new Error('Start must only be called once')
     const core = new LinearizedCore(this, {
       header: { protocol: OUTPUT_PROTOCOL },
+      view,
       apply,
       unwrap
     })

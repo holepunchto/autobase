@@ -16,9 +16,9 @@ test('map with stateless mapper', async t => {
     localOutput: output
   })
   base.start({
-    apply (batch) {
+    apply (view, batch) {
       batch = batch.map(({ value }) => Buffer.from(value.toString('utf-8').toUpperCase(), 'utf-8'))
-      return base.view.append(batch)
+      return view.append(batch)
     }
   })
 
@@ -50,9 +50,9 @@ test('mapping into batches yields the correct clock on reads', async t => {
     localOutput: output
   })
   base.start({
-    apply (batch) {
+    apply (view, batch) {
       batch = batch.map(({ value }) => Buffer.from(value.toString('utf-8').toUpperCase(), 'utf-8'))
-      return base.view.append(batch)
+      return view.append(batch)
     }
   })
 
