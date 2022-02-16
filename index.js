@@ -270,7 +270,7 @@ module.exports = class Autobase extends EventEmitter {
     const self = this
     let heads = null
 
-    return new streamx.Readable({open, read })
+    return new streamx.Readable({ open, read })
 
     function open (cb) {
       self.heads(opts.clock)
