@@ -91,7 +91,7 @@ test('local linearizing - causal writes preserve clock', async t => {
   t.end()
 })
 
-test('local linearizing - does not over-truncate', async t => {
+test.only('local linearizing - does not over-truncate', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
@@ -129,6 +129,7 @@ test('local linearizing - does not over-truncate', async t => {
 
   {
     const outputNodes = await linearizedValues(base.view)
+    console.log('nodes:', outputNodes.map(v => v.value.toString()))
     t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'a3', 'a2', 'a1', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0']))
     t.same(base.view.status.appended, 6)
     t.same(base.view.status.truncated, 3)

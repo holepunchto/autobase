@@ -1,5 +1,6 @@
 const { EventEmitter } = require('events')
 
+const isOptions = require('is-options')
 const safetyCatch = require('safety-catch')
 const streamx = require('streamx')
 const codecs = require('codecs')
