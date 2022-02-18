@@ -1,6 +1,5 @@
 const { EventEmitter } = require('events')
 
-const isOptions = require('is-options')
 const safetyCatch = require('safety-catch')
 const streamx = require('streamx')
 const codecs = require('codecs')
@@ -209,12 +208,14 @@ module.exports = class Autobase extends EventEmitter {
   async heads (clock) {
     if (!this.opened) await this._opening
     await Promise.all(this.inputs.map(i => i.update()))
-    return Promise.all(this.inputs.map(i => {
-      if (!clock) return this._getInputNode(i, i.length - 1)
-      const id = b.toString(i.key, 'hex')
-      if (!clock.has(id)) return null
-      return this._getInputNode(i, clock.get(id))
-    }))
+    const headPromises = []
+    const inputKeys = clock ? clock.keys() : this._inputsByKey.keys()
+    for (const key of inputKeys) {
+      const input = this._inputsByKey.get(key)
+      if (!input) return []
+      headPromises.push(this._getInputNode(input, clock ? clock.get(key) : input.length - 1))
+    }
+    return Promise.all(headPromises)
   }
 
   _getLatestClock (inputs) {

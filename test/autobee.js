@@ -6,7 +6,7 @@ const Autobase = require('..')
 const SimpleAutobee = require('../examples/autobee-simple')
 const AutobeeWithResolution = require('../examples/autobee-with-resolution')
 
-test.only('simple autobee', async t => {
+test('simple autobee', async t => {
   const firstUser = new Hypercore(ram)
   const firstOutput = new Hypercore(ram)
   const secondUser = new Hypercore(ram)
