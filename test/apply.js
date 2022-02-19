@@ -162,7 +162,7 @@ test('applying - one-to-many apply with reordering, remote output up-to-date', a
   t.end()
 })
 
-test.only('applying - one-to-many apply with reordering, remote output out-of-date', async t => {
+test('applying - one-to-many apply with reordering, remote output out-of-date', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
