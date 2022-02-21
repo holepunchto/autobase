@@ -202,7 +202,6 @@ test('applying - one-to-many apply with reordering, remote output out-of-date', 
 
   {
     const outputNodes = await linearizedValues(base2.view)
-    console.log(applyValues(['a0', 'b1', 'b0', 'c3', 'c2', 'c1', 'c0']).map(v => v.toString()))
     t.same(outputNodes.map(v => v.value), applyValues(['a0', 'b1', 'b0', 'c3', 'c2', 'c1', 'c0']))
   }
 
@@ -213,7 +212,6 @@ test('applying - one-to-many apply with reordering, remote output out-of-date', 
 
   {
     const outputNodes = await linearizedValues(base2.view)
-    console.log('actual:', outputNodes.map(v => v.value.toString()))
     t.same(outputNodes.map(v => v.value), applyValues(['b1', 'b0', 'a2', 'a1', 'a0', 'c3', 'c2', 'c1', 'c0']))
   }
 })
