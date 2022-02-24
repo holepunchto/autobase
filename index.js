@@ -7,7 +7,7 @@ const mutexify = require('mutexify/promise')
 const c = require('compact-encoding')
 const b = require('b4a')
 
-const LinearizedCore = require('./lib/linearize')
+const BranchSnapshot = require('./lib/linearize')
 const MemberBatch = require('./lib/batch')
 const KeyCompressor = require('./lib/compression')
 const Output = require('./lib/output')
@@ -196,13 +196,14 @@ module.exports = class Autobase extends EventEmitter {
 
   start ({ view, apply, unwrap } = {}) {
     if (this.view) throw new Error('Start must only be called once')
-    const core = new LinearizedCore(this, {
+    const snapshot = new BranchSnapshot(this, {
       header: { protocol: OUTPUT_PROTOCOL },
       view,
       apply,
       unwrap
     })
-    this.view = core.view || core
+    const core = snapshot.session()
+    this.view = view ? view(core) : core
   }
 
   async heads (clock) {

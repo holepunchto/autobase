@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "corestore": "next",
-    "hyperbee": "^1.5.3",
+    "hyperbee": "github:hypercore-protocol/hyperbee#snapshotting",
     "hypercore": "github:hypercore-protocol/hypercore-next",
     "latency-stream": "^1.0.0",
     "random-access-memory": "^3.1.2",
