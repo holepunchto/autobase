@@ -36,9 +36,6 @@ test('snapshotting - can snapshot a view', async t => {
   }
 
   const s1 = base.view.snapshot()
-  const s2 = base.view.snapshot()
-  const s3 = base.view.snapshot()
-  t.same(base.view._snapshots.size, 2)
 
   // Add 3 more records to A -- should switch fork ordering
   for (let i = 1; i < 4; i++) {
@@ -53,19 +50,14 @@ test('snapshotting - can snapshot a view', async t => {
     t.same(output.length, 9)
   }
 
+  t.same(s1.length, 6)
+
   // The snapshot should still be on the old branch
   {
-    const outputNodes = await linearizedValues(s1)
+    const outputNodes = await linearizedValues(s1, { update: false })
     t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
     t.same(s1.length, 6)
   }
-
-  await s1.close()
-  t.same(base.view._snapshots.size, 2)
-  await s2.close()
-  t.same(base.view._snapshots.size, 2)
-  await s3.close()
-  t.same(base.view._snapshots.size, 1)
 
   t.end()
 })
