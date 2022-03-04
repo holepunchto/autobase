@@ -149,7 +149,7 @@ test('local linearizing - does not over-truncate', async t => {
   t.end()
 })
 
-test('local linearizing - can purge a writer', async t => {
+test('local linearizing - can purge', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
@@ -186,9 +186,176 @@ test('local linearizing - can purge a writer', async t => {
   {
     const outputNodes = await linearizedValues(base.view)
     t.same(outputNodes.map(v => v.value), bufferize(['a0', 'c4', 'c3', 'c2', 'c1', 'c0']))
-    t.same(base.view.status.appended, 6) // the purge reindexes the entire output
-    t.same(base.view.status.truncated, 8)
+    t.same(base.view.status.appended, 1) // a0 is reindexed
+    t.same(base.view.status.truncated, 3) // a0 is popped and reindexed
     t.same(output.length, 6)
+  }
+
+  t.end()
+})
+
+test('local linearizing - can purge from the back', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output,
+    autostart: true
+  })
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, [], writerA)
+  }
+  for (let i = 0; i < 5; i++) {
+    await base.append(`b${i}`, [], writerB)
+  }
+
+  {
+    const outputNodes = await linearizedValues(base.view)
+    t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b4', 'b3', 'b2', 'b1', 'b0']))
+    t.same(base.view.status.appended, 6)
+    t.same(base.view.status.truncated, 0)
+    t.same(output.length, 6)
+  }
+
+  await base.removeInput(writerB)
+
+  {
+    const outputNodes = await linearizedValues(base.view)
+    t.same(outputNodes.map(v => v.value), bufferize(['a0']))
+    t.same(base.view.status.appended, 1) // a0 is reindexed
+    t.same(base.view.status.truncated, 6) // a0 is popped and reindexed
+    t.same(output.length, 1)
+  }
+
+  t.end()
+})
+
+test('local linearizing - can purge from the front', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output,
+    autostart: true
+  })
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, [], writerA)
+  }
+  for (let i = 0; i < 5; i++) {
+    await base.append(`b${i}`, [], writerB)
+  }
+
+  {
+    const outputNodes = await linearizedValues(base.view)
+    t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b4', 'b3', 'b2', 'b1', 'b0']))
+    t.same(base.view.status.appended, 6)
+    t.same(base.view.status.truncated, 0)
+    t.same(output.length, 6)
+  }
+
+  await base.removeInput(writerA)
+
+  {
+    const outputNodes = await linearizedValues(base.view)
+    t.same(outputNodes.map(v => v.value), bufferize(['b4', 'b3', 'b2', 'b1', 'b0']))
+    t.same(base.view.status.appended, 0) // a0 is removed
+    t.same(base.view.status.truncated, 1) // a0 is removed
+    t.same(output.length, 5)
+  }
+
+  t.end()
+})
+
+test('local linearizing - can purge, causal writes', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output,
+    autostart: true
+  })
+
+  // Create three causally-linked forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, await base.latest([writerB, writerA]), writerB)
+  }
+  for (let i = 0; i < 5; i++) {
+    await base.append(`c${i}`, await base.latest(writerC), writerC)
+  }
+
+  {
+    const outputNodes = await linearizedValues(base.view)
+    t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0']))
+    t.same(base.view.status.appended, 8)
+    t.same(base.view.status.truncated, 0)
+    t.same(output.length, 8)
+  }
+
+  // Cut out writer B. Should truncate 3
+  await base.removeInput(writerB)
+
+  {
+    const outputNodes = await linearizedValues(base.view)
+    t.same(outputNodes.map(v => v.value), bufferize(['a0', 'c4', 'c3', 'c2', 'c1', 'c0']))
+    t.same(base.view.status.appended, 0) // b1 and b0 are removed
+    t.same(base.view.status.truncated, 2) // b1 and b0 are removed
+    t.same(output.length, 6)
+  }
+
+  t.end()
+})
+
+test('local linearizing - can purge, causal writes interleaved', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA, writerB],
+    localOutput: output,
+    autostart: true
+  })
+
+  for (let i = 0; i < 6; i++) {
+    if (i % 2) {
+      await base.append(`a${i}`, await base.latest(), writerA)
+    } else {
+      await base.append(`b${i}`, await base.latest(), writerB)
+    }
+  }
+
+  {
+    const outputNodes = await linearizedValues(base.view)
+    t.same(outputNodes.map(v => v.value), bufferize(['a5', 'b4', 'a3', 'b2', 'a1', 'b0']))
+    t.same(base.view.status.appended, 6)
+    t.same(base.view.status.truncated, 0)
+    t.same(output.length, 6)
+  }
+
+  await base.removeInput(writerB)
+
+  {
+    const outputNodes = await linearizedValues(base.view)
+    t.same(outputNodes.map(v => v.value), bufferize(['a5', 'a3', 'a1']))
+    t.same(base.view.status.appended, 3)
+    t.same(base.view.status.truncated, 6)
+    t.same(output.length, 3)
   }
 
   t.end()
