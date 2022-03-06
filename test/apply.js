@@ -13,7 +13,8 @@ test('applying - apply with one-to-one apply function', async t => {
 
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
-    localOutput: output
+    localOutput: output,
+    eagerUpdate: false
   })
   base.start({
     apply (view, batch) {
@@ -47,7 +48,8 @@ test('applying - applying into batches yields the correct clock on reads', async
 
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
-    localOutput: output
+    localOutput: output,
+    eagerUpdate: false
   })
   base.start({
     apply (view, batch) {
@@ -75,7 +77,8 @@ test('applying - one-to-many apply with reordering, local output', async t => {
 
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
-    localOutput: output
+    localOutput: output,
+    eagerUpdate: false
   })
   base.start({
     async apply (view, batch) {
@@ -127,12 +130,14 @@ test('applying - one-to-many apply with reordering, remote output up-to-date', a
   const base1 = new Autobase({
     inputs: [writerA, writerB, writerC],
     localOutput: output,
-    apply: applyFunction
+    apply: applyFunction,
+    eagerUpdate: false
   })
   const base2 = new Autobase({
     inputs: [writerA, writerB, writerC],
     outputs: [output],
-    apply: applyFunction
+    apply: applyFunction,
+    eagerUpdate: false
   })
 
   // Create two independent forks
@@ -180,12 +185,14 @@ test('applying - one-to-many apply with reordering, remote output out-of-date', 
   const base1 = new Autobase({
     inputs: [writerA, writerB, writerC],
     localOutput: output,
-    apply: applyFunction
+    apply: applyFunction,
+    eagerUpdate: false
   })
   const base2 = new Autobase({
     inputs: [writerA, writerB, writerC],
     outputs: [output],
-    apply: applyFunction
+    apply: applyFunction,
+    eagerUpdate: false
   })
 
   // Create three independent forks

@@ -16,15 +16,18 @@ test('remote linearizing - selects longest remote output', async t => {
   const inputs = [writerA, writerB, writerC]
   const base1 = new Autobase({
     inputs,
-    localOutput: output1
+    localOutput: output1,
+    eagerUpdate: false
   })
   const base2 = new Autobase({
     inputs,
-    localOutput: output2
+    localOutput: output2,
+    eagerUpdate: false
   })
   const base3 = new Autobase({
     inputs,
-    localOutput: output3
+    localOutput: output3,
+    eagerUpdate: false
   })
   base1.start()
   base2.start()
@@ -54,7 +57,8 @@ test('remote linearizing - selects longest remote output', async t => {
     const base = new Autobase({
       inputs,
       outputs: [output3],
-      autostart: true
+      autostart: true,
+      eagerUpdate: false
     })
     await base.view.update()
     t.same(base.view.status.appended, 0)
@@ -67,7 +71,8 @@ test('remote linearizing - selects longest remote output', async t => {
     const base = new Autobase({
       inputs,
       outputs: [output1],
-      autostart: true
+      autostart: true,
+      eagerUpdate: false
     })
     await base.view.update()
     t.same(base.view.status.appended, 3)
@@ -80,7 +85,8 @@ test('remote linearizing - selects longest remote output', async t => {
     const base = new Autobase({
       inputs,
       outputs: [output1, output2],
-      autostart: true
+      autostart: true,
+      eagerUpdate: false
     })
     await base.view.update()
     t.same(base.view.status.appended, 1)
@@ -93,7 +99,8 @@ test('remote linearizing - selects longest remote output', async t => {
     const base = new Autobase({
       inputs,
       outputs: [output1, output2, output3],
-      autostart: true
+      autostart: true,
+      eagerUpdate: false
     })
     await base.view.update()
     t.same(base.view.status.appended, 0)
@@ -115,12 +122,14 @@ test('remote linearizing - can locally extend an out-of-date remote output', asy
   const writerBase = new Autobase({
     inputs,
     localOutput: output1,
-    autostart: true
+    autostart: true,
+    eagerUpdate: false
   })
   const readerBase = new Autobase({
     inputs,
     outputs: [output1],
-    autostart: true
+    autostart: true,
+    eagerUpdate: false
   })
 
   for (let i = 0; i < 3; i++) {
@@ -188,12 +197,14 @@ test('remote linearizing - will discard local in-memory view if remote is update
   const writerBase = new Autobase({
     inputs,
     localOutput: output1,
-    autostart: true
+    autostart: true,
+    eagerUpdate: false
   })
   const readerBase = new Autobase({
     inputs,
     outputs: [output1],
-    autostart: true
+    autostart: true,
+    eagerUpdate: false
   })
 
   for (let i = 0; i < 3; i++) {

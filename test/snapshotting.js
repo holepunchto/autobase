@@ -14,7 +14,8 @@ test('snapshotting - can snapshot a view', async t => {
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
     localOutput: output,
-    autostart: true
+    autostart: true,
+    eagerUpdate: false
   })
 
   for (let i = 0; i < 1; i++) {
@@ -58,6 +59,40 @@ test('snapshotting - can snapshot a view', async t => {
     t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
     t.same(s1.length, 6)
   }
+
+  t.end()
+})
+
+test('snapshotting - snapshot updates are locked', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output,
+    autostart: true
+  })
+
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, [], writerA)
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, [], writerB)
+  }
+  for (let i = 0; i < 3; i++) {
+    await base.append(`c${i}`, [], writerC)
+  }
+
+  const s1 = base.view.snapshot()
+  const s2 = base.view.snapshot()
+
+  await Promise.all([s1.update(), s2.update(), base.view.update()])
+
+  t.same(output.length, 6)
+  t.same(s1.length, 6)
+  t.same(s2.length, 6)
 
   t.end()
 })

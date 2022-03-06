@@ -19,7 +19,7 @@ const INPUT_PROTOCOL = '@autobase/input/v1'
 const OUTPUT_PROTOCOL = '@autobase/output/v1'
 
 module.exports = class Autobase extends EventEmitter {
-  constructor ({ inputs, outputs, localInput, localOutput, apply, unwrap, view, autostart } = {}) {
+  constructor ({ inputs, outputs, localInput, localOutput, apply, unwrap, view, autostart, eagerUpdate } = {}) {
     super()
     this.localInput = localInput
     this.localOutput = localOutput
@@ -35,6 +35,7 @@ module.exports = class Autobase extends EventEmitter {
     this._readStreams = []
     this._batchId = 0
     this._lock = mutexify()
+    this._eagerUpdate = eagerUpdate !== false
 
     this.view = null
     if (apply || autostart) this.start({ apply, view, unwrap })
@@ -114,6 +115,11 @@ module.exports = class Autobase extends EventEmitter {
     this.emit('append')
     this._bumpReadStreams()
     this._getLatestClock() // Updates this.clock
+    if (this._eagerUpdate && this.localOutput && this.view) {
+      // Eagerly update the primary view if there's a local output
+      // This will be debounced internally
+      this.view.update().catch(safetyCatch)
+    }
   }
 
   _bumpReadStreams () {

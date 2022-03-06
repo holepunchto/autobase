@@ -14,7 +14,8 @@ test('local linearizing - three independent forks', async t => {
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
     localOutput: output,
-    autostart: true
+    autostart: true,
+    eagerUpdate: false
   })
 
   // Create three independent forks
@@ -61,7 +62,8 @@ test('local linearizing - causal writes preserve clock', async t => {
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
     localOutput: output,
-    autostart: true
+    autostart: true,
+    eagerUpdate: false
   })
 
   // Create three causally-linked forks
@@ -100,7 +102,8 @@ test('local linearizing - does not over-truncate', async t => {
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
     localOutput: output,
-    autostart: true
+    autostart: true,
+    eagerUpdate: false
   })
 
   // Create three independent forks
@@ -158,7 +161,8 @@ test('local linearizing - can purge', async t => {
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
     localOutput: output,
-    autostart: true
+    autostart: true,
+    eagerUpdate: false
   })
 
   // Create three independent forks
@@ -203,7 +207,8 @@ test('local linearizing - can purge from the back', async t => {
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
     localOutput: output,
-    autostart: true
+    autostart: true,
+    eagerUpdate: false
   })
 
   // Create three independent forks
@@ -244,7 +249,8 @@ test('local linearizing - can purge from the front', async t => {
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
     localOutput: output,
-    autostart: true
+    autostart: true,
+    eagerUpdate: false
   })
 
   // Create three independent forks
@@ -285,7 +291,8 @@ test('local linearizing - can purge, causal writes', async t => {
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
     localOutput: output,
-    autostart: true
+    autostart: true,
+    eagerUpdate: false
   })
 
   // Create three causally-linked forks
@@ -329,7 +336,8 @@ test('local linearizing - can purge, causal writes interleaved', async t => {
   const base = new Autobase({
     inputs: [writerA, writerB],
     localOutput: output,
-    autostart: true
+    autostart: true,
+    eagerUpdate: false
   })
 
   for (let i = 0; i < 6; i++) {
@@ -377,7 +385,8 @@ test('local linearizing - many writers, no causal writes', async t => {
   const base = new Autobase({
     inputs: writers,
     localOutput: output,
-    autostart: true
+    autostart: true,
+    eagerUpdate: false
   })
   for (let i = 1; i < NUM_WRITERS + 1; i++) {
     const writer = writers[i - 1]
@@ -416,7 +425,8 @@ test('local linearizing - double-linearizing is a no-op', async t => {
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
     localOutput: output,
-    autostart: true
+    autostart: true,
+    eagerUpdate: false
   })
 
   // Create three independent forks
@@ -461,15 +471,18 @@ test('local linearizing - can dynamically add/remove default outputs', async t =
   const inputs = [writerA, writerB, writerC]
   const base1 = new Autobase({
     inputs,
-    localOutput: output1
+    localOutput: output1,
+    eagerUpdate: false
   })
   const base2 = new Autobase({
     inputs,
-    localOutput: output2
+    localOutput: output2,
+    eagerUpdate: false
   })
   const base3 = new Autobase({
     inputs,
-    localOutput: output3
+    localOutput: output3,
+    eagerUpdate: false
   })
   base1.start()
   base2.start()
@@ -496,7 +509,8 @@ test('local linearizing - can dynamically add/remove default outputs', async t =
 
   const base4 = new Autobase({
     inputs,
-    outputs: [output1]
+    outputs: [output1],
+    eagerUpdate: false
   })
   base4.start()
 
@@ -531,7 +545,8 @@ test('local linearizing - can dynamically add a default output', async t => {
 
   const base = new Autobase({
     inputs: [writerA, writerB, writerC],
-    autostart: true
+    autostart: true,
+    eagerUpdate: false
   })
   base.localOutput = output
 
