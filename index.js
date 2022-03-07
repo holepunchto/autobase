@@ -35,7 +35,7 @@ module.exports = class Autobase extends EventEmitter {
     this._readStreams = []
     this._batchId = 0
     this._lock = mutexify()
-    this._eagerUpdate = eagerUpdate !== false
+    this._eagerUpdate = eagerUpdate === undefined ? !!localOutput : eagerUpdate
 
     this.view = null
     if (apply || autostart) this.start({ apply, view, unwrap })
