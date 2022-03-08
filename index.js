@@ -522,9 +522,6 @@ module.exports = class Autobase extends EventEmitter {
     for (const input of this.inputs) {
       input.removeListener('append', this._onappend)
     }
-    for (const output of this.outputs) {
-      output.removeListener('truncate', this._ontruncate)
-    }
     this.closed = true
   }
 
