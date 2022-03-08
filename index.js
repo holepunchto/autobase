@@ -162,7 +162,7 @@ module.exports = class Autobase extends EventEmitter {
     }
 
     const block = await input.get(seq, opts)
-    if (!block) return null
+    if (!block && opts.wait === false) return null
 
     let decoded = null
     try {
