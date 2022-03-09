@@ -11,6 +11,7 @@ const BranchSnapshot = require('./lib/linearize')
 const MemberBatch = require('./lib/batch')
 const KeyCompressor = require('./lib/compression')
 const Output = require('./lib/output')
+const { length } = require('./lib/clock')
 const { InputNode, OutputNode } = require('./lib/nodes')
 const { Node: NodeSchema, decodeHeader } = require('./lib/nodes/messages')
 
@@ -166,17 +167,13 @@ module.exports = class Autobase extends EventEmitter {
       return safetyCatch(err)
     }
 
-    let clock = await this._decompressClock(input, seq, decoded.clock)
-    const node = new InputNode({ ...decoded, clock, key: input.key, seq })
+    const node = new InputNode({ ...decoded, key: input.key, seq })
 
-    if (node.batch[1] !== 0) {
-      const batchEnd = await this._getInputNode(input, seq + node.batch[1])
-      clock = batchEnd.clock
+    if (node.clock) {
+      node.clock = await this._decompressClock(input, seq, decoded.clock)
+      if (node.seq > 0) node.clock.set(node.id, node.seq - 1)
+      else node.clock.delete(node.id)
     }
-
-    node.clock = clock
-    if (node.seq > 0) node.clock.set(node.id, node.seq - 1)
-    else node.clock.delete(node.id)
 
     return node
   }
@@ -273,6 +270,8 @@ module.exports = class Autobase extends EventEmitter {
   createCausalStream (opts = {}) {
     const self = this
     let heads = null
+    let batchIndex = null
+    let batchClock = null
 
     return new streamx.Readable({ open, read })
 
@@ -283,27 +282,46 @@ module.exports = class Autobase extends EventEmitter {
     }
 
     function read (cb) {
-      const { forks, clock, smallest } = forkInfo(heads)
+      let node = null
+      let headIndex = null
+      let clock = null
 
-      if (!forks.length) {
-        this.push(null)
-        return cb(null)
+      if (batchIndex !== null) {
+        node = heads[batchIndex]
+        headIndex = batchIndex
+        clock = batchClock
+        if (node.batch[0] === 0) {
+          batchIndex = null
+          batchClock = null
+        }
+      } else {
+        const info = forkInfo(heads)
+        if (!info.forks.length) {
+          this.push(null)
+          return cb(null)
+        }
+        node = info.forks[info.smallest]
+        headIndex = heads.indexOf(node)
+        clock = info.clock
       }
 
-      const node = forks[smallest]
-      const forkIndex = heads.indexOf(node)
-      this.push(new OutputNode({ ...node, change: node.key, clock }))
+      if (node.batch[1] === 0 && node.batch[0] > 0) {
+        batchIndex = headIndex
+        batchClock = clock
+      }
+
+      this.push(new OutputNode({ ...node, change: node.key, clock, operations: length(clock) }))
 
       // TODO: When reading a batch node, parallel download them all (use batch[0])
       // TODO: Make a causal stream extension for faster reads
 
       if (node.seq === 0) {
-        heads.splice(forkIndex, 1)
+        heads.splice(headIndex, 1)
         return cb(null)
       }
 
       self._getInputNode(node.id, node.seq - 1).then(next => {
-        heads[forkIndex] = next
+        heads[headIndex] = next
         return cb(null)
       }, err => cb(err))
     }
@@ -368,7 +386,7 @@ module.exports = class Autobase extends EventEmitter {
           if (unsatisfied && opts.onresolve) {
             const resolved = await opts.onresolve(oldest)
             if (resolved !== false) continue
-            // If resolved is false, yield the unresolved node as usual
+            // If resolved is false, yield he unresolved node as usual
           }
 
           const pos = positionsByKey.get(oldest.id)
@@ -445,6 +463,7 @@ module.exports = class Autobase extends EventEmitter {
 
   async _createInputBatch (input, batch, clock) {
     const nodes = []
+
     // Only the last node in the batch contains the clock/keys
     const compressed = await this._compressClock(input, input.length + batch.length - 1, clock)
 
@@ -487,10 +506,7 @@ module.exports = class Autobase extends EventEmitter {
     // This is tracking inputs that were present in the previous append, but have since been removed.
     const head = await this._getInputNode(input, input.length - 1)
     const inputId = b.toString(input.key, 'hex')
-    if (clock.has(inputId)) {
-      // Remove self-links
-      clock.delete(inputId)
-    }
+
     if (head && head.clock) {
       for (const [id, seq] of head.clock) {
         if (id === inputId || clock.has(id)) continue
@@ -570,6 +586,10 @@ function forkInfo (heads) {
 
   for (const head of heads) {
     if (!head) continue
+    if (head.batch[1] > 0) {
+      // If the stream is in the middle of yielding a batch, short-circuit by continuing the batch.
+      return { forks: [head], smallest: 0, clock: head.clock }
+    }
     if (isFork(head, heads)) forks.push(head)
     clock.set(head.id, head.seq)
   }

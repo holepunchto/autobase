@@ -5,7 +5,7 @@ const ram = require('random-access-memory')
 const { bufferize, causalValues } = require('./helpers')
 const Autobase = require('../')
 
-test('batches array-valued appends using partial input nodes', async t => {
+test('batches - array-valued appends using partial input nodes', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
   const writerC = new Hypercore(ram)
@@ -37,7 +37,7 @@ test('batches array-valued appends using partial input nodes', async t => {
   t.end()
 })
 
-test('batched appends produce correct operation values', async t => {
+test('batches - appends produce correct operation values', async t => {
   const writerA = new Hypercore(ram)
 
   const base = new Autobase({
@@ -49,12 +49,50 @@ test('batched appends produce correct operation values', async t => {
   await base.append(['a1', 'a2'])
   await base.append(['a3', 'a4', 'a5'])
 
-  const expected = [1, 2, 3, 4, 5, 6]
+  const expected = [1, 3, 3, 6, 6, 6]
+  const actual = []
 
   for await (const node of base.createCausalStream()) {
+    actual.push(node.operations)
     t.same(node.operations, expected.pop())
   }
   t.same(expected.length, 0)
+
+  t.end()
+})
+
+test('batches - autobee-style batching gives correct operations', async t => {
+  const writerA = new Hypercore(ram)
+  const output = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA],
+    localInput: writerA,
+    localOutput: output
+  })
+  base.start({
+    apply: async (view, batch) => {
+      // Two batched nodes regardless of the input batch size
+      await view.append(Buffer.from('a'))
+      await view.append(Buffer.from('b'))
+    }
+  })
+
+  // Should trigger 4 output blocks for the 3 input operations
+  await base.append('a0')
+  await base.view.update()
+
+  await base.append(['a1', 'a2'])
+  await base.view.update()
+
+  t.same(output.length, 4)
+  t.same(base.view.length, 4)
+
+  const expected = [1, 1, 3, 3]
+  for (let i = 0; i < base.view.length; i++) {
+    const node = await base.view.get(i)
+    t.same(node.operations, expected[i])
+  }
 
   t.end()
 })
