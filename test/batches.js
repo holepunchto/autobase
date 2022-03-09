@@ -36,3 +36,25 @@ test('batches array-valued appends using partial input nodes', async t => {
 
   t.end()
 })
+
+test('batched appends produce correct operation values', async t => {
+  const writerA = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA],
+    localInput: writerA
+  })
+
+  await base.append('a0')
+  await base.append(['a1', 'a2'])
+  await base.append(['a3', 'a4', 'a5'])
+
+  const expected = [1, 2, 3, 4, 5, 6]
+
+  for await (const node of base.createCausalStream()) {
+    t.same(node.operations, expected.pop())
+  }
+  t.same(expected.length, 0)
+
+  t.end()
+})
