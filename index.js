@@ -169,6 +169,11 @@ module.exports = class Autobase extends EventEmitter {
 
     const node = new InputNode({ ...decoded, key: input.key, seq })
 
+    if (node.batch[1] !== 0) {
+      const batchEnd = await this._getInputNode(input, seq + node.batch[1], opts)
+      node.clock = batchEnd.clock
+    }
+
     if (node.clock) {
       node.clock = await this._decompressClock(input, seq, decoded.clock)
       if (node.seq > 0) node.clock.set(node.id, node.seq - 1)
