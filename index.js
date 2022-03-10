@@ -63,6 +63,7 @@ module.exports = class Autobase extends EventEmitter {
       this._addOutput(output)
     }
     if (this.localOutput) {
+      await this.localOutput.ready()
       this._addOutput(this.localOutput, { local: true })
     }
 
