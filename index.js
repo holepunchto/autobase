@@ -591,10 +591,6 @@ function forkInfo (heads) {
 
   for (const head of heads) {
     if (!head) continue
-    if (head.batch[1] > 0) {
-      // If the stream is in the middle of yielding a batch, short-circuit by continuing the batch.
-      return { forks: [head], smallest: 0, clock: head.clock }
-    }
     if (isFork(head, heads)) forks.push(head)
     clock.set(head.id, head.seq)
   }
