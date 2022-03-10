@@ -27,6 +27,7 @@ module.exports = class Autobase extends EventEmitter {
     this.opened = false
     this.closed = false
 
+    this._closing = null
     this._inputs = inputs || []
     this._outputs = outputs || []
     this._inputsByKey = new Map()
@@ -62,7 +63,7 @@ module.exports = class Autobase extends EventEmitter {
       this._addOutput(output)
     }
     if (this.localOutput) {
-      this.localOutput = new Output(this.localOutput)
+      this._addOutput(this.localOutput, { local: true })
     }
 
     this.opened = true
@@ -80,16 +81,18 @@ module.exports = class Autobase extends EventEmitter {
   }
 
   // Called by MemberBatch
-  _addOutput (core) {
+  _addOutput (core, opts) {
     const id = b.toString(core.key, 'hex')
     if (this._outputsByKey.has(id)) return
 
     const output = new Output(core)
     this._outputsByKey.set(id, output)
+
+    if (opts && opts.local) this.localOutput = output
   }
 
   // Called by MemberBatch
-  _removeInput (input) {
+  _removeInput (input, opts) {
     const id = b.isBuffer(input) ? b.toString(input, 'hex') : b.toString(input.key, 'hex')
     if (!this._inputsByKey.has(id)) return
 
@@ -99,12 +102,14 @@ module.exports = class Autobase extends EventEmitter {
   }
 
   // Called by MemberBatch
-  _removeOutput (output) {
+  _removeOutput (output, opts) {
     const id = b.isBuffer(output) ? b.toString(output, 'hex') : b.toString(output.key, 'hex')
     if (!this._outputsByKey.has(id)) return
 
     output = this._outputsByKey.get(id)
     this._outputsByKey.delete(id)
+
+    if (opts && opts.local) this.localOutput = null
   }
 
   _onInputAppended () {
@@ -248,27 +253,27 @@ module.exports = class Autobase extends EventEmitter {
     return new MemberBatch(this)
   }
 
-  async addInput (input) {
+  async addInput (input, opts) {
     const batch = new MemberBatch(this)
-    batch.addInput(input)
+    batch.addInput(input, opts)
     return batch.commit()
   }
 
-  async removeInput (input) {
+  async removeInput (input, opts) {
     const batch = new MemberBatch(this)
-    batch.removeInput(input)
+    batch.removeInput(input, opts)
     return batch.commit()
   }
 
-  async addOutput (output) {
+  async addOutput (output, opts) {
     const batch = new MemberBatch(this)
-    batch.addOutput(output)
+    batch.addOutput(output, opts)
     return batch.commit()
   }
 
-  async removeOutput (output) {
+  async removeOutput (output, opts) {
     const batch = new MemberBatch(this)
-    batch.removeOutput(output)
+    batch.removeOutput(output, opts)
     return batch.commit()
   }
 
@@ -533,12 +538,21 @@ module.exports = class Autobase extends EventEmitter {
     }
   }
 
-  close () {
+  async _close () {
     if (this.closed) return
-    for (const input of this.inputs) {
-      input.removeListener('append', this._onappend)
-    }
+    await Promise.all([
+      ...this.inputs.map(i => i.close()),
+      ...this.outputs.map(o => o.close())
+    ])
     this.closed = true
+  }
+
+  close () {
+    if (this.closed) return Promise.resolve()
+    if (this._closing) return this._closing
+    this._closing = this._close()
+    this._closing.catch(safetyCatch)
+    return this._closing
   }
 
   static async isAutobase (core) {
