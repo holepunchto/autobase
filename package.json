@@ -16,7 +16,6 @@
     "streamx": "^2.10.0"
   },
   "devDependencies": {
-    "corestore": "next",
     "hyperbee": "github:hypercore-protocol/hyperbee#snapshotting",
     "hypercore": "github:hypercore-protocol/hypercore-next",
     "latency-stream": "^1.0.0",
