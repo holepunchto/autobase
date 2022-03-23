@@ -475,8 +475,8 @@ module.exports = class Autobase extends EventEmitter {
   async _createInputBatch (input, batch, clock) {
     const nodes = []
 
-    // Only the last node in the batch contains the clock/keys
-    const compressed = await this._compressClock(input, input.length + batch.length - 1, clock)
+    // Only the first block in the batch stores the keys, and only the last stores the clock
+    const compressed = await this._compressClock(input, input.length, clock)
 
     for (let i = 0; i < batch.length; i++) {
       const batchOffset = (batch.length !== 1) ? [i, batch.length - 1 - i] : null
@@ -487,9 +487,11 @@ module.exports = class Autobase extends EventEmitter {
         clock: null,
         keys: null
       }
+      if (i === 0) {
+        node.keys = compressed.keys
+      }
       if (i === batch.length - 1) {
         node.clock = compressed.clock
-        node.keys = compressed.keys
       }
       nodes.push(node)
     }

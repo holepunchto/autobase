@@ -96,3 +96,35 @@ test('batches - autobee-style batching gives correct operations', async t => {
 
   t.end()
 })
+
+test('batches - batches store compressed clocks correctly', async t => {
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const output = new Hypercore(ram)
+
+  let base = new Autobase({
+    inputs: [writerA, writerB],
+    localOutput: output,
+    autostart: true
+  })
+
+  await base.append(['a0', 'a1'], await base.latest(), writerA)
+  await base.append(['b0', 'b1', 'b2'], await base.latest(), writerB)
+  await base.view.update()
+
+  // Recreate the Autobase so that the key compressors are uninitialized
+  base = new Autobase({
+    inputs: [writerA, writerB],
+    localOutput: output,
+    autostart: true
+  })
+  await base.ready()
+
+  // Can independently load the first block of the second batch
+  const b0 = await base.localOutput.get(2)
+
+  t.same(b0.change, writerB.key)
+  t.same(b0.clock.size, 2) // The clock is the full batch clock
+
+  t.end()
+})
