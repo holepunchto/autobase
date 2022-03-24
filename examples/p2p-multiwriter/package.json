@@ -1,0 +1,19 @@
+{
+  "name": "autobase-example-p2p-multiwriter",
+  "version": "1.0.0",
+  "description": "",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Jared Grippe",
+  "license": "MIT",
+  "root": true,
+  "dependencies": {
+    "autobase": "file:../../",
+    "blessed": "^0.1.81",
+    "corestore": "^6.0.1-alpha.9",
+    "hyperswarm": "git+https://github.com/hyperswarm/hyperswarm#v3.0.2"
+  }
+}
