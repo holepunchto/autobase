@@ -3,6 +3,7 @@ const Hypercore = require('hypercore')
 const ram = require('random-access-memory')
 
 const { bufferize, linearizedValues } = require('./helpers')
+const { decodeKeys } = require('../lib/nodes/messages')
 const Autobase = require('../')
 
 test('local linearizing - three independent forks', async t => {
@@ -567,6 +568,55 @@ test('local linearizing - can dynamically add a default output', async t => {
     t.same(base.view.status.appended, 6)
     t.same(base.view.status.truncated, 0)
     t.same(output.length, 6)
+  }
+
+  t.end()
+})
+
+test('local linearizing - truncation does not break key compression', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output,
+    autostart: true,
+    eagerUpdate: false
+  })
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, [], writerA)
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, [], writerB)
+  }
+  for (let i = 0; i < 3; i++) {
+    await base.append(`c${i}`, [], writerC)
+  }
+
+  {
+    // A's key initially should be stored in the 6th block
+    await base.view.update()
+    const keys = decodeKeys(await output.get(5))
+    t.same(keys.length, 1)
+    t.same(keys[0], writerA.key)
+  }
+
+  // Add 3 more records to A -- should switch fork ordering
+  // A's key should be re-recorded into the 0th block after truncation
+  for (let i = 1; i < 4; i++) {
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
+  }
+
+  {
+    // A's key should now be stored in the 0th block
+    await base.view.update()
+    const keys = decodeKeys(await output.get(0))
+    t.same(keys.length, 1)
+    t.same(keys[0], writerA.key)
   }
 
   t.end()
