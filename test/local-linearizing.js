@@ -621,3 +621,60 @@ test('local linearizing - truncation does not break key compression', async t =>
 
   t.end()
 })
+
+test('local linearizing - creating two branch snapshots with a common update clones core snapshots', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output,
+    autostart: true,
+    eagerUpdate: false
+  })
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, [], writerA)
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, [], writerB)
+  }
+  for (let i = 0; i < 3; i++) {
+    await base.append(`c${i}`, [], writerC)
+  }
+
+  await base.view.update()
+
+  // Both snapshots will be non-writable
+  const snapshot1 = base.view.snapshot()
+  const snapshot2 = base.view.snapshot()
+
+  {
+    const outputNodes = await linearizedValues(snapshot1)
+    t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
+    t.same(snapshot1.status.appended, 0)
+    t.same(snapshot1.status.truncated, 0)
+    t.same(output.length, 6)
+  }
+
+  // Add 3 more records to A -- should switch fork ordering
+  for (let i = 1; i < 4; i++) {
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
+  }
+
+  {
+    const outputNodes = await linearizedValues(snapshot2)
+    t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']))
+    t.same(snapshot2.status.appended, 9)
+    t.same(snapshot2.status.truncated, 6)
+    t.same(output.length, 6)
+  }
+
+  await base.view.update()
+  t.same(output.length, 9)
+
+  t.end()
+})
