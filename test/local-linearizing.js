@@ -678,3 +678,31 @@ test('local linearizing - creating two branch snapshots with a common update clo
 
   t.end()
 })
+
+test('local linearizing - consistent reads with a pre-update snapshot', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA, writerB],
+    localOutput: output,
+    autostart: true,
+    eagerUpdate: false
+  })
+
+  await base.append('a0', await base.latest(), writerA)
+  await base.append('b0', await base.latest(), writerB)
+  await base.view.update()
+
+  const snapshot = base.view.snapshot().unwrap()
+  t.same(snapshot.length, 2)
+
+  const nodes = []
+  for (let i = 0; i < snapshot.length; i++) {
+    nodes.push(await snapshot.get(i))
+  }
+  t.same(nodes, bufferize(['a0', 'b0']))
+
+  t.end()
+})
