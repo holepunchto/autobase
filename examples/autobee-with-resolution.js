@@ -16,10 +16,12 @@ module.exports = class Autobee {
     this.autobase.start({
       unwrap: true,
       apply: applyAutobeeBatch,
-      view: core => new Hyperbee(core.unwrap(), {
-        ...opts,
-        extension: false
-      })
+      view: core => {
+        return new Hyperbee(core.unwrap(), {
+          ...opts,
+          extension: false
+        })
+      }
     })
     this.bee = this.autobase.view
   }

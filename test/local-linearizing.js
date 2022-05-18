@@ -646,17 +646,28 @@ test('local linearizing - creating two branch snapshots with a common update clo
     await base.append(`c${i}`, [], writerC)
   }
 
-  await base.view.update()
-
-  // Both snapshots will be non-writable
   const snapshot1 = base.view.snapshot()
+  await base.view.update()
   const snapshot2 = base.view.snapshot()
+  const snapshot3 = base.view.snapshot()
 
   {
-    const outputNodes = await linearizedValues(snapshot1)
+    const outputNodes = await linearizedValues(snapshot1, { update: false })
+    t.same(outputNodes.map(v => v.value), bufferize([]))
+    t.same(output.length, 6)
+  }
+
+  await snapshot1.update()
+
+  {
+    const outputNodes = await linearizedValues(snapshot1, { update: false })
     t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
-    t.same(snapshot1.status.appended, 0)
-    t.same(snapshot1.status.truncated, 0)
+    t.same(output.length, 6)
+  }
+
+  {
+    const outputNodes = await linearizedValues(snapshot2, { update: false })
+    t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
     t.same(output.length, 6)
   }
 
@@ -665,16 +676,19 @@ test('local linearizing - creating two branch snapshots with a common update clo
     await base.append(`a${i}`, await base.latest(writerA), writerA)
   }
 
+  await snapshot3.update()
+
   {
-    const outputNodes = await linearizedValues(snapshot2)
+    const outputNodes = await linearizedValues(snapshot3, { update: false })
     t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']))
-    t.same(snapshot2.status.appended, 9)
-    t.same(snapshot2.status.truncated, 6)
-    t.same(output.length, 6)
+    t.same(output.length, 9)
   }
 
-  await base.view.update()
-  t.same(output.length, 9)
+  {
+    const outputNodes = await linearizedValues(snapshot2, { update: false })
+    t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
+    t.same(output.length, 9)
+  }
 
   t.end()
 })
