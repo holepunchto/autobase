@@ -109,6 +109,9 @@ test('snapshotting - basic snapshot close', async t => {
     autostart: true
   })
 
+  const s1 = base.view.snapshot()
+  const s2 = base.view.session()
+
   for (let i = 0; i < 1; i++) {
     await base.append(`a${i}`, [], writerA)
   }
@@ -119,18 +122,36 @@ test('snapshotting - basic snapshot close', async t => {
     await base.append(`c${i}`, [], writerC)
   }
 
-  const s1 = base.view.snapshot()
-  const s2 = base.view.snapshot()
-  const s3 = base.view.session()
-
-  console.log('base.view core:', base.view._core._sessions.length)
-  console.log('s1 core:', s1._core._sessions.length)
-  console.log('s2 core:', s2._core._sessions.length)
+  const s3 = base.view.snapshot()
 
   t.same(s1._sessionIdx, 0)
-  t.same(s2._sessionIdx, 0)
-  t.same(s3._sessionIdx, 1)
+  t.same(s2._sessionIdx, 1)
+  t.same(s3._sessionIdx, 0)
   t.same(base.view._sessionIdx, 0)
+  // One for s2, one for base.view, and one for the internal view session.
+  t.same(base.view._core._sessions.length, 3)
 
+  await s2.close()
+  t.same(base.view._sessionIdx, 0)
+  t.same(base.view._core._sessions.length, 2)
+
+  await s1.close()
+  t.same(s1._core._sessions.length, 0)
+
+  await s3.close()
+  t.same(s3._core._sessions.length, 0)
+  t.true(s3._core._sessions !== s2._core._sessions)
+
+  {
+    const outputNodes = await linearizedValues(base.view)
+    t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
+    t.same(output.length, 6)
+  }
+
+  t.end()
+})
+
+test('snapshotting - snapshot session close', async t => {
+  // TODO: implement
   t.end()
 })
