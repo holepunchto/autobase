@@ -96,3 +96,41 @@ test('snapshotting - snapshot updates are locked', async t => {
 
   t.end()
 })
+
+test('snapshotting - basic snapshot close', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output,
+    autostart: true
+  })
+
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, [], writerA)
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, [], writerB)
+  }
+  for (let i = 0; i < 3; i++) {
+    await base.append(`c${i}`, [], writerC)
+  }
+
+  const s1 = base.view.snapshot()
+  const s2 = base.view.snapshot()
+  const s3 = base.view.session()
+
+  console.log('base.view core:', base.view._core._sessions.length)
+  console.log('s1 core:', s1._core._sessions.length)
+  console.log('s2 core:', s2._core._sessions.length)
+
+  t.same(s1._sessionIdx, 0)
+  t.same(s2._sessionIdx, 0)
+  t.same(s3._sessionIdx, 1)
+  t.same(base.view._sessionIdx, 0)
+
+  t.end()
+})
