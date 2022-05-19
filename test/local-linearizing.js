@@ -530,7 +530,7 @@ test('local linearizing - can dynamically add/remove default outputs', async t =
   await base4.addOutput(output3)
 
   await base4.view.update()
-  t.same(base4.view.status.nodes.length, 0) // Should switch to output3
+  t.same(base4.view._core.nodes.length, 0) // Should switch to output3
   t.same(base4.view.status.appended, 0)
   t.same(base4.view.status.truncated, 0)
   t.same(base4.view.length, 6)
