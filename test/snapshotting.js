@@ -121,33 +121,50 @@ test('snapshotting - basic snapshot close', async t => {
   for (let i = 0; i < 3; i++) {
     await base.append(`c${i}`, [], writerC)
   }
+  await base.view.update()
 
   const s3 = base.view.snapshot()
 
-  t.same(s1._sessionIdx, 0)
-  t.same(s2._sessionIdx, 1)
-  t.same(s3._sessionIdx, 0)
   t.same(base.view._sessionIdx, 0)
-  // One for s2, one for base.view, and one for the internal view session.
-  t.same(base.view._core._sessions.length, 3)
+  t.same(s1._sessionIdx, 0) // s1 should be migrated to a clone
+  t.same(s2._sessionIdx, 1)
+  t.same(s3._sessionIdx, 3) // s3 should still be on the root core
+  // One for s2, one for s3, one for base.view, and one for the internal view session.
+  t.same(base.view._core._sessions.length, 4)
 
   await s2.close()
   t.same(base.view._sessionIdx, 0)
-  t.same(base.view._core._sessions.length, 2)
+  t.same(base.view._core._sessions.length, 3)
 
   await s1.close()
-  t.same(s1._core._sessions.length, 0)
+  t.same(s1._core._sessions.length, 0) // s1 was on a different core snapshot
 
-  await s3.close()
-  t.same(s3._core._sessions.length, 0)
-  t.true(s3._core._sessions !== s2._core._sessions)
+  t.true(s3._core === base.view._core)
 
-  {
-    const outputNodes = await linearizedValues(base.view)
-    t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
-    t.same(output.length, 6)
-  }
+  await base.append('a1', [], writerA)
+  await base.view.update() // s3 should migrate to a clone now
 
+  t.true(s3._core !== base.view._core)
+
+  t.same(output.length, 7)
+
+  t.end()
+})
+
+test('snapshotting - creating a snapshot does not eagerly clone', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output,
+    autostart: true
+  })
+
+  const s1 = base.view.snapshot()
+  t.true(s1._core === base.view._core)
   t.end()
 })
 
