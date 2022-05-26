@@ -41,7 +41,10 @@ module.exports = class Autobase extends EventEmitter {
     this.view = null
     if (apply || autostart) this.start({ apply, view, unwrap })
 
-    this._onappend = this._onInputAppended.bind(this)
+    this._onappend = () => {
+      this.emit('append')
+      this._onInputsChanged()
+    }
 
     this._opening = this._open()
     this._opening.catch(safetyCatch)
@@ -77,8 +80,10 @@ module.exports = class Autobase extends EventEmitter {
     const id = b.toString(input.key, 'hex')
     if (this._inputsByKey.has(id)) return
 
-    this._inputsByKey.set(id, input)
     input.on('append', this._onappend)
+    this._inputsByKey.set(id, input)
+
+    this._onInputsChanged()
   }
 
   // Called by MemberBatch
@@ -100,6 +105,8 @@ module.exports = class Autobase extends EventEmitter {
     input = this._inputsByKey.get(id)
     input.removeListener('append', this._onappend)
     this._inputsByKey.delete(id)
+
+    this._onInputsChanged()
   }
 
   // Called by MemberBatch
@@ -113,11 +120,10 @@ module.exports = class Autobase extends EventEmitter {
     if (opts && opts.local) this.localOutput = null
   }
 
-  _onInputAppended () {
-    this.emit('append')
+  _onInputsChanged () {
     this._bumpReadStreams()
     this._getLatestClock() // Updates this.clock
-    if (this._eagerUpdate && this.localOutput && this.view) {
+    if (this._eagerUpdate && this.view) {
       // Eagerly update the primary view if there's a local output
       // This will be debounced internally
       this.view.update().catch(safetyCatch)
