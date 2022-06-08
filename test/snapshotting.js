@@ -168,6 +168,33 @@ test('snapshotting - creating a snapshot does not eagerly clone', async t => {
   t.end()
 })
 
+test('snapshotting - concurrent snapshot updates will only migrate once', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output,
+    autostart: true
+  })
+
+  const s1 = base.view.snapshot()
+
+  await base.append('hello', await base.latest(), writerA)
+  await base.view.update()
+
+  const oldCore = s1._core
+
+  await Promise.all([s1.update(), s1.update()])
+
+  t.same(s1._core, base.view._core)
+  t.same(oldCore._sessions.length, 0)
+
+  t.end()
+})
+
 test('snapshotting - snapshot session close', async t => {
   // TODO: implement
   t.end()
