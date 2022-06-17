@@ -38,6 +38,8 @@ module.exports = class Autobase extends EventEmitter {
     this._lock = mutexify()
     this._eagerUpdate = eagerUpdate === undefined ? !!localOutput : eagerUpdate
     this._sparse = (sparse !== false) && (FORCE_NON_SPARSE !== 1)
+    this._loadingInputsCount = 0
+    this._pendingUpdates = []
 
     this.view = null
     if (apply || autostart) this.start({ apply, view, unwrap })
@@ -189,6 +191,12 @@ module.exports = class Autobase extends EventEmitter {
     return node
   }
 
+  _waitForInputs () {
+    return new Promise(resolve => {
+      this._pendingUpdates.push(resolve)
+    })
+  }
+
   // Public API
 
   get inputs () {
@@ -201,6 +209,17 @@ module.exports = class Autobase extends EventEmitter {
 
   get started () {
     return !!this.view
+  }
+
+  loadingInputs () {
+    this._loadingInputsCount++
+    return () => {
+      if (--this._loadingInputsCount === 0) {
+        for (const resolve of this._pendingUpdates) {
+          resolve()
+        }
+      }
+    }
   }
 
   start ({ view, apply, unwrap } = {}) {
