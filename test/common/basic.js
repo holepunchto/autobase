@@ -2,8 +2,8 @@ const test = require('tape')
 const Hypercore = require('hypercore')
 const ram = require('random-access-memory')
 
-const { bufferize, causalValues } = require('./helpers')
-const Autobase = require('../')
+const { bufferize, causalValues } = require('../helpers')
+const Autobase = require('../..')
 
 test('linearizes short branches on long branches', async t => {
   const writerA = new Hypercore(ram)

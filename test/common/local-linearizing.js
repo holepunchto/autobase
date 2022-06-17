@@ -2,9 +2,9 @@ const test = require('tape')
 const Hypercore = require('hypercore')
 const ram = require('random-access-memory')
 
-const { bufferize, linearizedValues } = require('./helpers')
-const { decodeKeys } = require('../lib/nodes/messages')
-const Autobase = require('../')
+const { bufferize, linearizedValues } = require('../helpers')
+const { decodeKeys } = require('../../lib/nodes/messages')
+const Autobase = require('../..')
 
 test('local linearizing - three independent forks', async t => {
   const output = new Hypercore(ram)

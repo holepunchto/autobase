@@ -2,8 +2,8 @@ const test = require('tape')
 const Hypercore = require('hypercore')
 const ram = require('random-access-memory')
 
-const { collect } = require('./helpers')
-const Autobase = require('../')
+const { collect } = require('../helpers')
+const Autobase = require('../..')
 
 test('read stream -- not live, causally-linked writes', async t => {
   const writerA = new Hypercore(ram)

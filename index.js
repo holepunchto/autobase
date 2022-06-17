@@ -56,6 +56,7 @@ module.exports = class Autobase extends EventEmitter {
 
   async _open () {
     for (const input of this._inputs) {
+      await input.ready()
       const session = input.session({ sparse: this._sparse })
       await session.ready()
       this._addInput(session)
@@ -251,6 +252,8 @@ module.exports = class Autobase extends EventEmitter {
   async _getLatestNonSparseClock (clock) {
     const allHeads = await this._loadClockNodes(clock)
     const availableClock = new Map()
+
+    // If the latest node in an input is in the middle of a batch, shift the clock back to before that batch.
     let wasAdjusted = false
     for (const [id, node] of allHeads) {
       if (node.batch[1] === 0) {
@@ -262,6 +265,9 @@ module.exports = class Autobase extends EventEmitter {
         availableClock.set(id, adjusted)
       }
     }
+
+    // If any head links to a node that's after a current head, then it can't be satisfied.
+    // If not satisfiable, find the latest satisfiable head for that input.
     const heads = wasAdjusted ? await this._loadClockNodes(availableClock) : allHeads
     while (heads.length) {
       const [id, node] = heads[heads.length - 1]

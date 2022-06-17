@@ -2,9 +2,9 @@ const test = require('tape')
 const ram = require('random-access-memory')
 const Hypercore = require('hypercore')
 
-const Autobase = require('..')
-const SimpleAutobee = require('../examples/autobee-simple')
-const AutobeeWithResolution = require('../examples/autobee-with-resolution')
+const Autobase = require('../..')
+const SimpleAutobee = require('../../examples/autobee-simple')
+const AutobeeWithResolution = require('../../examples/autobee-with-resolution')
 
 test('simple autobee', async t => {
   const firstUser = new Hypercore(ram)

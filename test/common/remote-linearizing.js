@@ -2,7 +2,7 @@ const test = require('tape')
 const Hypercore = require('hypercore')
 const ram = require('random-access-memory')
 
-const Autobase = require('../')
+const Autobase = require('../..')
 
 test('remote linearizing - selects longest remote output', async t => {
   const writerA = new Hypercore(ram)

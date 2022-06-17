@@ -2,8 +2,8 @@ const test = require('tape')
 const Hypercore = require('hypercore')
 const ram = require('random-access-memory')
 
-const { bufferize, linearizedValues } = require('./helpers')
-const Autobase = require('../')
+const { bufferize, linearizedValues } = require('../helpers')
+const Autobase = require('../..')
 
 test('applying - apply with one-to-one apply function', async t => {
   const output = new Hypercore(ram)

@@ -4,7 +4,8 @@
   "description": "Autobase lets you write concise multiwriter data structures with Hypercore",
   "main": "index.js",
   "scripts": {
-    "test": "standard && tape test/*.js && NON_SPARSE=1 tape test/*.js"
+    "test": "standard && tape test/common/*.js && npm run test:non-sparse",
+    "test:non-sparse": "NON_SPARSE=1 tape test/common/*.js test/non-sparse/*.js"
   },
   "dependencies": {
     "b4a": "^1.3.1",

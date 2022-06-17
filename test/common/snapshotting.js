@@ -2,8 +2,8 @@ const test = require('tape')
 const Hypercore = require('hypercore')
 const ram = require('random-access-memory')
 
-const { bufferize, linearizedValues } = require('./helpers')
-const Autobase = require('../')
+const { bufferize, linearizedValues } = require('../helpers')
+const Autobase = require('../..')
 
 test('snapshotting - can snapshot a view', async t => {
   const output = new Hypercore(ram)
