@@ -2,7 +2,6 @@ const { EventEmitter } = require('events')
 
 const safetyCatch = require('safety-catch')
 const streamx = require('streamx')
-const codecs = require('codecs')
 const mutexify = require('mutexify/promise')
 const c = require('compact-encoding')
 const b = require('b4a')
@@ -18,12 +17,13 @@ const { Node: NodeSchema, decodeHeader } = require('./lib/nodes/messages')
 const INPUT_PROTOCOL = '@autobase/input/v1'
 const OUTPUT_PROTOCOL = '@autobase/output/v1'
 
+const FORCE_NON_SPARSE = +process.env['NON_SPARSE'] // eslint-disable-line
+
 module.exports = class Autobase extends EventEmitter {
-  constructor ({ inputs, outputs, localInput, localOutput, apply, unwrap, view, autostart, eagerUpdate } = {}) {
+  constructor ({ inputs, outputs, localInput, localOutput, apply, unwrap, view, autostart, eagerUpdate, sparse } = {}) {
     super()
     this.localInput = localInput
     this.localOutput = localOutput
-    this.clock = null
     this.opened = false
     this.closed = false
 
@@ -37,6 +37,7 @@ module.exports = class Autobase extends EventEmitter {
     this._batchId = 0
     this._lock = mutexify()
     this._eagerUpdate = eagerUpdate === undefined ? !!localOutput : eagerUpdate
+    this._sparse = (sparse !== false) && (FORCE_NON_SPARSE !== 1)
 
     this.view = null
     if (apply || autostart) this.start({ apply, view, unwrap })
@@ -54,15 +55,13 @@ module.exports = class Autobase extends EventEmitter {
   // Private Methods
 
   async _open () {
-    await Promise.all([
-      ...this._inputs.map(i => i.ready()),
-      ...this._outputs.map(o => o.ready())
-    ])
-
     for (const input of this._inputs) {
-      this._addInput(input)
+      const session = input.session({ sparse: this._sparse })
+      await session.ready()
+      this._addInput(session)
     }
     for (const output of this._outputs) {
+      await output.ready()
       this._addOutput(output)
     }
     if (this.localOutput) {
@@ -75,8 +74,6 @@ module.exports = class Autobase extends EventEmitter {
 
   // Called by MemberBatch
   _addInput (input) {
-    this._validateInput(input)
-
     const id = b.toString(input.key, 'hex')
     if (this._inputsByKey.has(id)) return
 
@@ -122,7 +119,6 @@ module.exports = class Autobase extends EventEmitter {
 
   _onInputsChanged () {
     this._bumpReadStreams()
-    this._getLatestClock() // Updates this.clock
     if (this._eagerUpdate && this.view) {
       // Eagerly update the primary view if there's a local output
       // This will be debounced internally
@@ -133,12 +129,6 @@ module.exports = class Autobase extends EventEmitter {
   _bumpReadStreams () {
     for (const stream of this._readStreams) {
       stream.bump()
-    }
-  }
-
-  _validateInput (input) {
-    if (input.valueEncoding && input.valueEncoding !== codecs.binary) {
-      throw new Error('Hypercore inputs must be binary ones')
     }
   }
 
@@ -181,9 +171,11 @@ module.exports = class Autobase extends EventEmitter {
 
     const node = new InputNode({ ...decoded, key: input.key, seq })
 
-    if (node.batch[1] !== 0) {
-      const batchEnd = await this._getInputNode(input, seq + node.batch[1], opts)
-      node.clock = batchEnd.clock
+    if (opts && opts.loadBatchClock !== false) {
+      if (node.batch[1] !== 0) {
+        const batchEnd = await this._getInputNode(input, seq + node.batch[1], opts)
+        node.clock = batchEnd.clock
+      }
     }
 
     if (node.clock) {
@@ -223,18 +215,25 @@ module.exports = class Autobase extends EventEmitter {
 
   async heads (clock) {
     if (!this.opened) await this._opening
-    await Promise.all(this.inputs.map(i => i.update()))
+    clock = clock || await this.latest()
+
     const headPromises = []
-    const inputKeys = clock ? clock.keys() : this._inputsByKey.keys()
-    for (const key of inputKeys) {
+    for (const key of clock.keys()) {
       const input = this._inputsByKey.get(key)
       if (!input) return []
       headPromises.push(this._getInputNode(input, clock ? clock.get(key) : input.length - 1))
     }
+
     return Promise.all(headPromises)
   }
 
-  _getLatestClock (inputs) {
+  _loadClockNodes (clock) {
+    return Promise.all([...clock].map(([id, seq]) => {
+      return this._getInputNode(id, seq, { loadBatchClock: false }).then(node => [id, node])
+    }))
+  }
+
+  _getLatestSparseClock (inputs) {
     if (!inputs) inputs = this.inputs
     if (!Array.isArray(inputs)) inputs = [inputs]
 
@@ -246,14 +245,61 @@ module.exports = class Autobase extends EventEmitter {
       clock.set(id, input.length - 1)
     }
 
-    this.clock = clock
     return clock
+  }
+
+  async _getLatestNonSparseClock (clock) {
+    const allHeads = await this._loadClockNodes(clock)
+    const availableClock = new Map()
+    let wasAdjusted = false
+    for (const [id, node] of allHeads) {
+      if (node.batch[1] === 0) {
+        availableClock.set(id, node.seq)
+      } else {
+        wasAdjusted = true
+        const adjusted = node.seq - node.batch[0] - 1
+        if (adjusted < 0) continue
+        availableClock.set(id, adjusted)
+      }
+    }
+    const heads = wasAdjusted ? await this._loadClockNodes(availableClock) : allHeads
+    while (heads.length) {
+      const [id, node] = heads[heads.length - 1]
+      let satisfied = true
+      let available = true
+      for (const [clockId, clockSeq] of node.clock) {
+        if (availableClock.has(clockId) && clockSeq <= availableClock.get(clockId)) continue
+        satisfied = false
+        const next = node.seq - node.batch[0] - 1
+        if (next < 0) {
+          available = false
+          break
+        }
+        heads[heads.length - 1][1] = await this._getInputNode(id, next, { loadBatchClock: false })
+        break
+      }
+      if (satisfied) {
+        console.log('SATISFIED')
+        availableClock.set(id, node.seq)
+        heads.pop()
+      } else if (!available) {
+        console.log('UNAVAILABLE')
+        availableClock.delete(id)
+        heads.pop()
+      }
+    }
+
+    console.log('after modification, available clock:', availableClock)
+
+    return availableClock
   }
 
   async latest (inputs) {
     if (!this.opened) await this._opening
     await Promise.all(this.inputs.map(i => i.update()))
-    return this._getLatestClock(inputs)
+    const sparseClock = this._getLatestSparseClock(inputs)
+    if (this._sparse) return sparseClock
+    return this._getLatestNonSparseClock(sparseClock)
   }
 
   memberBatch () {
@@ -518,7 +564,7 @@ module.exports = class Autobase extends EventEmitter {
     }
     if (!Array.isArray(value)) value = [value]
 
-    clock = clockToMap(clock || this._getLatestClock())
+    clock = clockToMap(clock || await this.latest())
     input = input || this.localInput
 
     // Make sure that causal information propagates.
@@ -553,6 +599,7 @@ module.exports = class Autobase extends EventEmitter {
       input.removeListener('append', this._onappend)
     }
     await Promise.all([
+      ...this._inputs.map(i => i.close()),
       ...this.inputs.map(i => i.close()),
       ...this.outputs.map(o => o.close())
     ])

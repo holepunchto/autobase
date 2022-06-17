@@ -81,6 +81,7 @@ test('causal writes', async t => {
   t.end()
 })
 
+// TODO: The sparse version of this test is currently failing and requires a fix.
 test('manually specifying clocks', async t => {
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
@@ -92,7 +93,7 @@ test('manually specifying clocks', async t => {
   await base.append('a0', await base.latest(writerA), writerA)
   await base.append('a1', await base.latest(writerA), writerA)
   await base.append('b0', [
-    [writerA.key.toString('hex'), 2] // Links to a1
+    [writerA.key.toString('hex'), 40] // Links to a1
   ], writerB)
   await base.append('b1', await base.latest(writerB), writerB)
   await base.append('b2', await base.latest(writerB), writerB)

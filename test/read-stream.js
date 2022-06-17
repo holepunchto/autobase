@@ -322,48 +322,51 @@ test('read stream - resume from empty checkpoint', async t => {
   t.end()
 })
 
-test('read stream - { wait: false } will not download remote blocks', async t => {
-  const writerA = new Hypercore(ram)
-  await writerA.ready()
-  const writerB = new Hypercore(ram)
-  const remoteWriterA = new Hypercore(ram, writerA.key)
+// Skipped in non-sparse mode because all input blocks will be downloaded eagerly.
+if (+process.env['NON_SPARSE'] !== 1) { // eslint-disable-line
+  test('read stream - { wait: false } will not download remote blocks', async t => {
+    const writerA = new Hypercore(ram)
+    await writerA.ready()
+    const writerB = new Hypercore(ram)
+    const remoteWriterA = new Hypercore(ram, writerA.key)
 
-  const base1 = new Autobase({
-    inputs: [writerA],
-    localInput: writerA
+    const base1 = new Autobase({
+      inputs: [writerA],
+      localInput: writerA
+    })
+    const base2 = new Autobase({
+      inputs: [remoteWriterA, writerB],
+      localInput: writerB
+    })
+
+    const s1 = writerA.replicate(true, { live: true })
+    const s2 = remoteWriterA.replicate(false, { live: true })
+    s1.pipe(s2).pipe(s1)
+
+    await base1.append('a0')
+    await base2.append('b0')
+    await base1.append('a1')
+    await base2.append('b1')
+
+    await remoteWriterA.get(0) // Download the first block
+
+    {
+      // With wait: false, the read stream should only yield locally-available nodes
+      const output = await collect(base2.createReadStream({ wait: false }))
+      t.same(output.length, 3)
+      validateReadOrder(t, output)
+    }
+
+    {
+      // The normal read stream should download all blocks.
+      const output = await collect(base2.createReadStream())
+      t.same(output.length, 4)
+      validateReadOrder(t, output)
+    }
+
+    t.end()
   })
-  const base2 = new Autobase({
-    inputs: [remoteWriterA, writerB],
-    localInput: writerB
-  })
-
-  const s1 = writerA.replicate(true, { live: true })
-  const s2 = remoteWriterA.replicate(false, { live: true })
-  s1.pipe(s2).pipe(s1)
-
-  await base1.append('a0')
-  await base2.append('b0')
-  await base1.append('a1')
-  await base2.append('b1')
-
-  await remoteWriterA.get(0) // Download the first block
-
-  {
-    // With wait: false, the read stream should only yield locally-available nodes
-    const output = await collect(base2.createReadStream({ wait: false }))
-    t.same(output.length, 3)
-    validateReadOrder(t, output)
-  }
-
-  {
-    // The normal read stream should download all blocks.
-    const output = await collect(base2.createReadStream())
-    t.same(output.length, 4)
-    validateReadOrder(t, output)
-  }
-
-  t.end()
-})
+}
 
 test('read stream - tail option will start at the latest clock', async t => {
   const writerA = new Hypercore(ram)
