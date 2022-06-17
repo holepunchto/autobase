@@ -55,14 +55,14 @@ module.exports = class Autobase extends EventEmitter {
   // Private Methods
 
   async _open () {
+    await Promise.all([
+      ...this._inputs.map(i => i.ready()),
+      ...this._outputs.map(o => o.ready())
+    ])
     for (const input of this._inputs) {
-      await input.ready()
-      const session = input.session({ sparse: this._sparse })
-      await session.ready()
-      this._addInput(session)
+      this._addInput(input)
     }
     for (const output of this._outputs) {
-      await output.ready()
       this._addOutput(output)
     }
     if (this.localOutput) {
@@ -78,8 +78,9 @@ module.exports = class Autobase extends EventEmitter {
     const id = b.toString(input.key, 'hex')
     if (this._inputsByKey.has(id)) return
 
+    const session = input.session({ sparse: this._sparse })
     input.on('append', this._onappend)
-    this._inputsByKey.set(id, input)
+    this._inputsByKey.set(id, session)
 
     this._onInputsChanged()
   }
