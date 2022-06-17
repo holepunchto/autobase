@@ -285,17 +285,13 @@ module.exports = class Autobase extends EventEmitter {
         break
       }
       if (satisfied) {
-        console.log('SATISFIED')
         availableClock.set(id, node.seq)
         heads.pop()
       } else if (!available) {
-        console.log('UNAVAILABLE')
         availableClock.delete(id)
         heads.pop()
       }
     }
-
-    console.log('after modification, available clock:', availableClock)
 
     return availableClock
   }
