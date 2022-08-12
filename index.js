@@ -3,10 +3,11 @@ const { EventEmitter } = require('events')
 const safetyCatch = require('safety-catch')
 const streamx = require('streamx')
 const mutexify = require('mutexify/promise')
+const tweak = require('hypercore-crypto-tweak')
 const c = require('compact-encoding')
 const b = require('b4a')
 
-const LinearizedCore = require('./lib/linearize')
+const LinearizedView = require('./lib/linearize')
 const MemberBatch = require('./lib/batch')
 const KeyCompressor = require('./lib/compression')
 const Output = require('./lib/output')
@@ -16,14 +17,15 @@ const { Node: NodeSchema, decodeHeader } = require('./lib/nodes/messages')
 
 const INPUT_PROTOCOL = '@autobase/input/v1'
 const OUTPUT_PROTOCOL = '@autobase/output/v1'
+const INPUT_KEYPAIR_NAME = 'input'
+const OUTPUT_KEYPAIR_NAME = 'output'
 
 const FORCE_NON_SPARSE = +process.env['NON_SPARSE'] // eslint-disable-line
 
 module.exports = class Autobase extends EventEmitter {
-  constructor ({ inputs, outputs, localInput, localOutput, apply, unwrap, view, autostart, eagerUpdate, sparse } = {}) {
+  constructor (corestore, { inputs, outputs, autostart, apply, open, views, unwrap, eagerUpdate, sparse } = {}) {
     super()
-    this.localInput = localInput
-    this.localOutput = localOutput
+    this.corestore = corestore
     this.opened = false
     this.closed = false
 
@@ -33,16 +35,21 @@ module.exports = class Autobase extends EventEmitter {
     this._inputsByKey = new Map()
     this._outputsByKey = new Map()
     this._keyCompressors = new Map()
-    this._readStreams = []
-    this._batchId = 0
     this._lock = mutexify()
-    this._eagerUpdate = eagerUpdate === undefined ? !!localOutput : eagerUpdate
+    this._eagerUpdate = eagerUpdate !== false
     this._sparse = (sparse !== false) && (FORCE_NON_SPARSE !== 1)
+
+    this._inputKeyPair = null
+    this._outputKeyPair = null
+
+    this._batchId = 0
+    this._readStreams = []
     this._loadingInputsCount = 0
     this._pendingUpdates = []
 
     this.view = null
-    if (apply || autostart) this.start({ apply, view, unwrap })
+    this._viewCount = views || 0
+    if (apply || autostart) this.start({ views, apply, open, unwrap })
 
     this._onappend = () => {
       this.emit('append')
@@ -54,71 +61,92 @@ module.exports = class Autobase extends EventEmitter {
     this.ready = () => this._opening
   }
 
+  get localInputKey () {
+    return this._inputKeyPair && this._inputKeyPair.publicKey
+  }
+
+  get localOutputKey () {
+    return this._outputKeyPair && this._outputKeyPair.publicKey
+  }
+
+  get outputKeys () {
+    if (!this._outputKeyPair) return []
+    const outputs = this._outputsByKey.get(b.toString(this._outputKeyPair.publicKey, 'hex'))
+    return outputs.map(o => o.key)
+  }
+
   // Private Methods
 
   async _open () {
-    await Promise.all([
-      ...this._inputs.map(i => i.ready()),
-      ...this._outputs.map(o => o.ready())
-    ])
+    await this.corestore.ready()
+
+    this._inputKeyPair = await this.corestore.createKeyPair(INPUT_KEYPAIR_NAME)
+    this._outputKeyPair = tweak(this._inputKeyPair, OUTPUT_KEYPAIR_NAME)
+
     for (const input of this._inputs) {
       this._addInput(input)
     }
     for (const output of this._outputs) {
       this._addOutput(output)
     }
-    if (this.localOutput) {
-      await this.localOutput.ready()
-      this._addOutput(this.localOutput, { local: true })
-    }
 
     this.opened = true
   }
 
+  _deriveOutputs (key) {
+    const outputs = []
+    let keyPair = key.equals(this.outputKey) ? this._outputKeyPair : { publicKey: key }
+    for (let i = 0; i < this._viewCount; i++) {
+      outputs.push(new Output(this.corestore.get(keyPair)))
+      keyPair = tweak(keyPair, OUTPUT_KEYPAIR_NAME)
+    }
+    return outputs
+  }
+
   // Called by MemberBatch
-  _addInput (input) {
-    const id = b.toString(input.key, 'hex')
+  _addInput (key) {
+    const id = b.toString(key, 'hex')
     if (this._inputsByKey.has(id)) return
 
-    const session = input.session({ sparse: this._sparse })
+    const input = this.corestore.get({ key, sparse: this._sparse })
     input.on('append', this._onappend)
-    this._inputsByKey.set(id, session)
+    this._inputsByKey.set(id, input)
 
     this._onInputsChanged()
   }
 
   // Called by MemberBatch
-  _addOutput (core, opts) {
-    const id = b.toString(core.key, 'hex')
+  _addOutput (key) {
+    const id = b.toString(key, 'hex')
     if (this._outputsByKey.has(id)) return
 
-    const output = new Output(core)
-    this._outputsByKey.set(id, output)
-
-    if (opts && opts.local) this.localOutput = output
+    const outputs = this._deriveOutputs(key)
+    this._outputsByKey.set(id, outputs)
   }
 
   // Called by MemberBatch
-  _removeInput (input, opts) {
-    const id = b.isBuffer(input) ? b.toString(input, 'hex') : b.toString(input.key, 'hex')
+  _removeInput (key) {
+    const id = b.toString(key, 'hex')
     if (!this._inputsByKey.has(id)) return
 
-    input = this._inputsByKey.get(id)
+    const input = this._inputsByKey.get(id)
     input.removeListener('append', this._onappend)
     this._inputsByKey.delete(id)
 
     this._onInputsChanged()
+
+    return () => input.close()
   }
 
   // Called by MemberBatch
-  _removeOutput (output, opts) {
-    const id = b.isBuffer(output) ? b.toString(output, 'hex') : b.toString(output.key, 'hex')
+  _removeOutput (key) {
+    const id = b.toString(key, 'hex')
     if (!this._outputsByKey.has(id)) return
 
-    output = this._outputsByKey.get(id)
+    const outputs = this._outputsByKey.get(id)
     this._outputsByKey.delete(id)
 
-    if (opts && opts.local) this.localOutput = null
+    return () => Promise.all(outputs.map(o => o.close()))
   }
 
   _onInputsChanged () {
@@ -126,7 +154,7 @@ module.exports = class Autobase extends EventEmitter {
     if (this._eagerUpdate && this.view) {
       // Eagerly update the primary view if there's a local output
       // This will be debounced internally
-      this.view.update().catch(safetyCatch)
+      this._internalView.update().catch(safetyCatch)
     }
   }
 
@@ -222,16 +250,17 @@ module.exports = class Autobase extends EventEmitter {
     }
   }
 
-  start ({ view, apply, unwrap } = {}) {
+  start ({ views, open, apply, unwrap } = {}) {
     if (this.view) throw new Error('Start must only be called once')
-    const core = new LinearizedCore(this, {
+    this._viewCount = views
+    const view = new LinearizedView(this, {
       header: { protocol: OUTPUT_PROTOCOL },
-      view,
+      open,
       apply,
       unwrap
     })
-    const session = core.session()
-    this.view = view ? view(session) : session
+    this._internalView = view
+    this.view = view.userView
   }
 
   async heads (clock) {
