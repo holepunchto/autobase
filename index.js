@@ -34,6 +34,7 @@ module.exports = class Autobase extends EventEmitter {
     this._outputs = outputs || []
     this._inputsByKey = new Map()
     this._outputsByKey = new Map()
+    this._localOutputsByKey = new Map()
     this._keyCompressors = new Map()
     this._lock = mutexify()
     this._eagerUpdate = eagerUpdate !== false
@@ -75,6 +76,10 @@ module.exports = class Autobase extends EventEmitter {
     return outputs.map(o => o.key)
   }
 
+  get isIndexing () {
+    return this._outputsByKey.has(b.toString(this.localOutputKey, 'hex'))
+  }
+
   // Private Methods
 
   async _open () {
@@ -95,9 +100,14 @@ module.exports = class Autobase extends EventEmitter {
 
   _deriveOutputs (key) {
     const outputs = []
-    let keyPair = key.equals(this.outputKey) ? this._outputKeyPair : { publicKey: key }
+    const isLocal = key.equals(this.outputKey)
+    let keyPair = isLocal ? this._outputKeyPair : { publicKey: key }
     for (let i = 0; i < this._viewCount; i++) {
-      outputs.push(new Output(this.corestore.get(keyPair)))
+      const output = new Output(this.corestore.get(keyPair))
+      outputs.push(output)
+      if (isLocal) {
+        this._localOutputsByKey.set(b.toString(keyPair.publicKey, 'hex'), output)
+      }
       keyPair = tweak(keyPair, OUTPUT_KEYPAIR_NAME)
     }
     return outputs
@@ -255,6 +265,7 @@ module.exports = class Autobase extends EventEmitter {
     this._viewCount = views
     const view = new LinearizedView(this, {
       header: { protocol: OUTPUT_PROTOCOL },
+      writable: true,
       open,
       apply,
       unwrap
