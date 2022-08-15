@@ -34,7 +34,6 @@ module.exports = class Autobase extends EventEmitter {
     this._outputs = outputs || []
     this._inputsByKey = new Map()
     this._outputsByKey = new Map()
-    this._localOutputsByKey = new Map()
     this._keyCompressors = new Map()
     this._lock = mutexify()
     this._eagerUpdate = eagerUpdate !== false
@@ -70,10 +69,8 @@ module.exports = class Autobase extends EventEmitter {
     return this._outputKeyPair && this._outputKeyPair.publicKey
   }
 
-  get outputKeys () {
-    if (!this._outputKeyPair) return []
-    const outputs = this._outputsByKey.get(b.toString(this._outputKeyPair.publicKey, 'hex'))
-    return outputs.map(o => o.key)
+  get localOutputs () {
+    return this._outputsByKey.get(b.toString(this.localOutputKey, 'hex'))
   }
 
   get isIndexing () {
