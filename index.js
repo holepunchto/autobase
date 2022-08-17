@@ -7,7 +7,7 @@ const tweak = require('hypercore-crypto-tweak')
 const c = require('compact-encoding')
 const b = require('b4a')
 
-const LinearizedView = require('./lib/linearize')
+const LinearizedView = require('./lib/view')
 const MemberBatch = require('./lib/batch')
 const KeyCompressor = require('./lib/compression')
 const Output = require('./lib/output')
@@ -41,6 +41,8 @@ module.exports = class Autobase extends EventEmitter {
 
     this._inputKeyPair = null
     this._outputKeyPair = null
+    this._localInput = null
+    this._localOutput = null
 
     this._batchId = 0
     this._readStreams = []
@@ -48,7 +50,7 @@ module.exports = class Autobase extends EventEmitter {
     this._pendingUpdates = []
 
     this.view = null
-    this._viewCount = views || 0
+    this._viewCount = views || 1
     if (apply || autostart) this.start({ views, apply, open, unwrap })
 
     this._onappend = () => {
@@ -74,7 +76,8 @@ module.exports = class Autobase extends EventEmitter {
   }
 
   get isIndexing () {
-    return this._outputsByKey.has(b.toString(this.localOutputKey, 'hex'))
+    const localOutputs = this.localOutputs
+    return localOutputs && localOutputs.length
   }
 
   // Private Methods
@@ -84,6 +87,9 @@ module.exports = class Autobase extends EventEmitter {
 
     this._inputKeyPair = await this.corestore.createKeyPair(INPUT_KEYPAIR_NAME)
     this._outputKeyPair = tweak(this._inputKeyPair, OUTPUT_KEYPAIR_NAME)
+    this._localInput = this.corestore.get(this._inputKeyPair)
+    this._localOutput = this.corestore.get(this._outputKeyPair)
+    await Promise.all([this._localInput.ready(), this._localOutput.ready()])
 
     for (const input of this._inputs) {
       this._addInput(input)
@@ -97,14 +103,11 @@ module.exports = class Autobase extends EventEmitter {
 
   _deriveOutputs (key) {
     const outputs = []
-    const isLocal = key.equals(this.outputKey)
+    const isLocal = key.equals(this.localOutputKey)
     let keyPair = isLocal ? this._outputKeyPair : { publicKey: key }
     for (let i = 0; i < this._viewCount; i++) {
       const output = new Output(this.corestore.get(keyPair))
       outputs.push(output)
-      if (isLocal) {
-        this._localOutputsByKey.set(b.toString(keyPair.publicKey, 'hex'), output)
-      }
       keyPair = tweak(keyPair, OUTPUT_KEYPAIR_NAME)
     }
     return outputs
@@ -125,8 +128,12 @@ module.exports = class Autobase extends EventEmitter {
   // Called by MemberBatch
   _addOutput (key) {
     const id = b.toString(key, 'hex')
-    if (this._outputsByKey.has(id)) return
+    if (this._outputsByKey.has(id)) {
+      console.log('OUTPUT IS ALREADY IN THE MAP')
+      return
+    }
 
+    console.log('DERIVING OUTPUTS FOR KEY:', key)
     const outputs = this._deriveOutputs(key)
     this._outputsByKey.set(id, outputs)
   }
@@ -259,7 +266,9 @@ module.exports = class Autobase extends EventEmitter {
 
   start ({ views, open, apply, unwrap } = {}) {
     if (this.view) throw new Error('Start must only be called once')
-    this._viewCount = views
+    if (views) {
+      this._viewCount = views
+    }
     const view = new LinearizedView(this, {
       header: { protocol: OUTPUT_PROTOCOL },
       writable: true,
@@ -353,9 +362,10 @@ module.exports = class Autobase extends EventEmitter {
     return availableClock
   }
 
-  async latest (inputs) {
+  async latest (opts = {}) {
     if (!this.opened) await this._opening
     await Promise.all(this.inputs.map(i => i.update()))
+    const inputs = opts.fork !== true ? this.inputs : [this._localInput]
     const sparseClock = this._getLatestSparseClock(inputs)
     if (this._sparse) return sparseClock
     return this._getLatestNonSparseClock(sparseClock)
@@ -616,20 +626,14 @@ module.exports = class Autobase extends EventEmitter {
     return nodes.map(node => c.encode(NodeSchema, node))
   }
 
-  async _append (value, clock, input) {
-    if (clock !== null && !Array.isArray(clock) && !(clock instanceof Map)) {
-      input = clock
-      clock = null
-    }
+  async _append (value, clock) {
     if (!Array.isArray(value)) value = [value]
-
     clock = clockToMap(clock || await this.latest())
-    input = input || this.localInput
 
     // Make sure that causal information propagates.
     // This is tracking inputs that were present in the previous append, but have since been removed.
-    const head = await this._getInputNode(input, input.length - 1)
-    const inputId = b.toString(input.key, 'hex')
+    const head = await this._getInputNode(this._localInput, this._localInput.length - 1)
+    const inputId = b.toString(this._localInput.key, 'hex')
 
     if (head && head.clock) {
       for (const [id, seq] of head.clock) {
@@ -638,8 +642,8 @@ module.exports = class Autobase extends EventEmitter {
       }
     }
 
-    const batch = await this._createInputBatch(input, value, clock)
-    return input.append(batch)
+    const batch = await this._createInputBatch(this._localInput, value, clock)
+    return this._localInput.append(batch)
   }
 
   async append (value, clock, input) {
