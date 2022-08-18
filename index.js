@@ -106,7 +106,7 @@ module.exports = class Autobase extends EventEmitter {
     const isLocal = key.equals(this.localOutputKey)
     let keyPair = isLocal ? this._outputKeyPair : { publicKey: key }
     for (let i = 0; i < this._viewCount; i++) {
-      const output = new Output(this.corestore.get(keyPair))
+      const output = new Output(i, this.corestore.get(keyPair))
       outputs.push(output)
       keyPair = tweak(keyPair, OUTPUT_KEYPAIR_NAME)
     }
@@ -442,7 +442,7 @@ module.exports = class Autobase extends EventEmitter {
         batchClock = clock
       }
 
-      this.push(new OutputNode({ ...node, change: node.key, clock, operations: length(clock) }))
+      this.push(new OutputNode({ ...node, change: node.key, clock, operations: length(clock) }, null))
 
       // TODO: When reading a batch node, parallel download them all (use batch[0])
       // TODO: Make a causal stream extension for faster reads

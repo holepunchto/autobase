@@ -18,16 +18,16 @@ test.only('local linearizing - three independent forks', async t => {
     await baseC.append(`c${i}`, [])
   }
 
+  console.log(0)
   {
     const outputNodes = await linearizedValues(baseA.view)
     console.log('view length here:', baseA.view.length)
     t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
     t.same(baseA.view.status.appended, 6)
     t.same(baseA.view.status.truncated, 0)
-    t.same(baseA.localOutput.length, 6)
+    t.same(baseA.localOutputs[0].length, 6)
   }
-
-  /*
+  console.log(1)
 
   // Add 3 more records to A -- should switch fork ordering
   for (let i = 1; i < 4; i++) {
@@ -35,13 +35,12 @@ test.only('local linearizing - three independent forks', async t => {
   }
 
   {
-    const outputNodes = await linearizedValues(base.view)
+    const outputNodes = await linearizedValues(baseA.view)
     t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']))
     t.same(baseA.view.status.appended, 9)
     t.same(baseA.view.status.truncated, 6)
-    t.same(baseA.localOutput.length, 9)
+    t.same(baseA.localOutputs[0].length, 9)
   }
-  */
 
   t.end()
 })
