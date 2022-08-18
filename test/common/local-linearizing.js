@@ -4,7 +4,7 @@ const { create, bufferize, linearizedValues } = require('../helpers')
 const { decodeKeys } = require('../../lib/nodes/messages')
 const Autobase = require('../..')
 
-test.only('local linearizing - three independent forks', async t => {
+test('local linearizing - three independent forks', async t => {
   const [baseA, baseB, baseC] = await create(3, { view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
 
   // Create three independent forks
@@ -18,16 +18,13 @@ test.only('local linearizing - three independent forks', async t => {
     await baseC.append(`c${i}`, [])
   }
 
-  console.log(0)
   {
     const outputNodes = await linearizedValues(baseA.view)
-    console.log('view length here:', baseA.view.length)
     t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
     t.same(baseA.view.status.appended, 6)
     t.same(baseA.view.status.truncated, 0)
     t.same(baseA.localOutputs[0].length, 6)
   }
-  console.log(1)
 
   // Add 3 more records to A -- should switch fork ordering
   for (let i = 1; i < 4; i++) {
@@ -45,32 +42,23 @@ test.only('local linearizing - three independent forks', async t => {
   t.end()
 })
 
-test('local linearizing - causal writes preserve clock', async t => {
-  const output = new Hypercore(ram)
-  const writerA = new Hypercore(ram)
-  const writerB = new Hypercore(ram)
-  const writerC = new Hypercore(ram)
-
-  const base = new Autobase({
-    inputs: [writerA, writerB, writerC],
-    localOutput: output,
-    autostart: true,
-    eagerUpdate: false
-  })
+test.only('local linearizing - causal writes preserve clock', async t => {
+  const [baseA, baseB, baseC] = await create(3, { view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
 
   // Create three causally-linked forks
   for (let i = 0; i < 1; i++) {
-    await base.append(`a${i}`, writerA)
+    await baseA.append(`a${i}`)
   }
   for (let i = 0; i < 2; i++) {
-    await base.append(`b${i}`, writerB)
+    await baseB.append(`b${i}`)
   }
   for (let i = 0; i < 3; i++) {
-    await base.append(`c${i}`, writerC)
+    await baseC.append(`c${i}`)
   }
 
   const outputNodes = await linearizedValues(base.view)
 
+  // TODO: RESUME HERE
   t.same(outputNodes.map(v => v.value), bufferize(['c2', 'c1', 'c0', 'b1', 'b0', 'a0']))
   t.same(base.view.status.appended, 6)
   t.same(base.view.status.truncated, 0)

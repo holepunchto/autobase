@@ -51,12 +51,14 @@ module.exports = class Autobase extends EventEmitter {
 
     this.view = null
     this._viewCount = views || 1
-    if (apply || autostart) this.start({ views, apply, open, unwrap })
+    if (apply || autostart) this.start({ views: this._viewCount, apply, open, unwrap })
 
     this._onappend = () => {
       this.emit('append')
       this._onInputsChanged()
     }
+
+    this.__debugTag = Math.floor(Math.random() * 1e6)
 
     this._opening = this._open()
     this._opening.catch(safetyCatch)
@@ -86,7 +88,9 @@ module.exports = class Autobase extends EventEmitter {
     await this.corestore.ready()
 
     this._inputKeyPair = await this.corestore.createKeyPair(INPUT_KEYPAIR_NAME)
+    console.log('INPUT KEY PAIR:', this._inputKeyPair)
     this._outputKeyPair = tweak(this._inputKeyPair, OUTPUT_KEYPAIR_NAME)
+    console.log('OUTPUT KEY PAIR:', this._outputKeyPair)
     this._localInput = this.corestore.get(this._inputKeyPair)
     this._localOutput = this.corestore.get(this._outputKeyPair)
     await Promise.all([this._localInput.ready(), this._localOutput.ready()])
@@ -108,7 +112,7 @@ module.exports = class Autobase extends EventEmitter {
     for (let i = 0; i < this._viewCount; i++) {
       const output = new Output(i, this.corestore.get(keyPair))
       outputs.push(output)
-      keyPair = tweak(keyPair, OUTPUT_KEYPAIR_NAME)
+      keyPair = tweak({ ...keyPair, scalar: keyPair.keyPair?.scalar }, OUTPUT_KEYPAIR_NAME)
     }
     return outputs
   }
@@ -128,14 +132,17 @@ module.exports = class Autobase extends EventEmitter {
   // Called by MemberBatch
   _addOutput (key) {
     const id = b.toString(key, 'hex')
+    let closeExisting = null
     if (this._outputsByKey.has(id)) {
-      console.log('OUTPUT IS ALREADY IN THE MAP')
-      return
+      const outputs = this._outputsByKey.get(id)
+      closeExisting = Promise.all(outputs.map(o => o.close()))
+    } else {
+      closeExisting = noop
     }
-
-    console.log('DERIVING OUTPUTS FOR KEY:', key)
+    // Rederive the outputs whenever addOutput is called
     const outputs = this._deriveOutputs(key)
     this._outputsByKey.set(id, outputs)
+    return closeExisting
   }
 
   // Called by MemberBatch
@@ -269,6 +276,11 @@ module.exports = class Autobase extends EventEmitter {
     if (views) {
       this._viewCount = views
     }
+    for (const [key, outputs] of this._outputsByKey) {
+      if (outputs.length === this._viewCount) continue
+      // TODO: How should the output close errors here be handled?
+      this._addOutput(b.from(key, 'hex')).catch(safetyCatch)
+    }
     const view = new LinearizedView(this, {
       header: { protocol: OUTPUT_PROTOCOL },
       writable: true,
@@ -278,6 +290,7 @@ module.exports = class Autobase extends EventEmitter {
     })
     this._internalView = view
     this.view = view.userView
+    return this.view
   }
 
   async heads (clock) {
@@ -754,3 +767,5 @@ function clockToMap (clock) {
   if (Array.isArray(clock)) return new Map(clock)
   return new Map(Object.entries(clock))
 }
+
+function noop () {}
