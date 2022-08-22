@@ -51,7 +51,7 @@ module.exports = class Autobase extends EventEmitter {
 
     this.view = null
     this._viewCount = views || 1
-    if (apply || autostart) this.start({ views: this._viewCount, apply, open, unwrap })
+    if (apply || autostart) this.start({ apply, open, unwrap })
 
     this._onappend = () => {
       this.emit('append')
