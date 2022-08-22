@@ -1,5 +1,6 @@
 const Corestore = require('corestore')
 const ram = require('random-access-memory')
+const b4a = require('b4a')
 
 const Autobase = require('../..')
 
@@ -46,7 +47,7 @@ async function linearizedValues (index, opts = {}) {
   if (opts.update !== false) await index.update()
   for (let i = index.length - 1; i >= 0; i--) {
     const indexNode = await index.get(i)
-    buf.push(indexNode)
+    buf.push(b4a.toString(indexNode))
   }
   return buf
 }

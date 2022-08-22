@@ -1,4 +1,4 @@
-const test = require('tape')
+const test = require('brittle')
 
 const { create, bufferize, linearizedValues } = require('../helpers')
 const { decodeKeys } = require('../../lib/nodes/messages')
@@ -18,31 +18,23 @@ test('local linearizing - three independent forks', async t => {
     await baseC.append(`c${i}`, [])
   }
 
-  {
-    const outputNodes = await linearizedValues(baseA.view)
-    t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
-    t.same(baseA.view.status.appended, 6)
-    t.same(baseA.view.status.truncated, 0)
-    t.same(baseA.localOutputs[0].length, 6)
-  }
+  t.alike(await linearizedValues(baseA.view), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
+  t.is(baseA.view.status.appended, 6)
+  t.is(baseA.view.status.truncated, 0)
+  t.is(baseA.localOutputs[0].length, 6)
 
   // Add 3 more records to A -- should switch fork ordering
   for (let i = 1; i < 4; i++) {
     await baseA.append(`a${i}`, await baseA.latest({ fork: true }))
   }
 
-  {
-    const outputNodes = await linearizedValues(baseA.view)
-    t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']))
-    t.same(baseA.view.status.appended, 9)
-    t.same(baseA.view.status.truncated, 6)
-    t.same(baseA.localOutputs[0].length, 9)
-  }
-
-  t.end()
+  t.alike(await linearizedValues(baseA.view), ['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0'])
+  t.is(baseA.view.status.appended, 9)
+  t.is(baseA.view.status.truncated, 6)
+  t.is(baseA.localOutputs[0].length, 9)
 })
 
-test.only('local linearizing - causal writes preserve clock', async t => {
+test('local linearizing - causal writes preserve clock', async t => {
   const [baseA, baseB, baseC] = await create(3, { view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
 
   // Create three causally-linked forks
@@ -56,68 +48,61 @@ test.only('local linearizing - causal writes preserve clock', async t => {
     await baseC.append(`c${i}`)
   }
 
-  const outputNodes = await linearizedValues(base.view)
+  t.alike(await linearizedValues(baseA.view), ['c2', 'c1', 'c0', 'b1', 'b0', 'a0'])
+  t.is(baseA.view.status.appended, 6)
+  t.is(baseA.view.status.truncated, 0)
+  t.is(baseA.view.length, 6)
 
-  // TODO: RESUME HERE
-  t.same(outputNodes.map(v => v.value), bufferize(['c2', 'c1', 'c0', 'b1', 'b0', 'a0']))
-  t.same(base.view.status.appended, 6)
-  t.same(base.view.status.truncated, 0)
-  t.same(output.length, 6)
+  const wrapped = baseA.view.wrap()
+  t.is(wrapped.length, baseA.view.length)
 
-  for (let i = 1; i < base.view.length; i++) {
-    const prev = await base.view.get(i - 1)
-    const node = await base.view.get(i)
-    t.false(node.lt(prev))
+  for (let i = 1; i < wrapped.length; i++) {
+    const prev = await wrapped.get(i - 1)
+    const node = await wrapped.get(i)
+    t.not(node.lt(prev), true)
   }
-
-  t.end()
 })
 
-test('local linearizing - does not over-truncate', async t => {
-  const output = new Hypercore(ram)
-  const writerA = new Hypercore(ram)
-  const writerB = new Hypercore(ram)
-  const writerC = new Hypercore(ram)
-
-  const base = new Autobase({
-    inputs: [writerA, writerB, writerC],
-    localOutput: output,
-    autostart: true,
-    eagerUpdate: false
-  })
+test.solo('local linearizing - does not over-truncate', async t => {
+  const [baseA, baseB, baseC] = await create(3, { view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
-    await base.append(`a${i}`, [], writerA)
+    await baseA.append(`a${i}`, [])
   }
   for (let i = 0; i < 2; i++) {
-    await base.append(`b${i}`, [], writerB)
+    await baseB.append(`b${i}`, [])
   }
   for (let i = 0; i < 5; i++) {
-    await base.append(`c${i}`, [], writerC)
+    await baseC.append(`c${i}`, [])
   }
 
-  {
-    const outputNodes = await linearizedValues(base.view)
-    t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c4', 'c3', 'c2', 'c1', 'c0']))
-    t.same(base.view.status.appended, 8)
-    t.same(base.view.status.truncated, 0)
-    t.same(output.length, 8)
+  t.alike(await linearizedValues(baseA.view), ['a0', 'b1', 'b0', 'c4', 'c3', 'c2', 'c1', 'c0'])
+  t.is(baseA.view.status.appended, 8)
+  t.is(baseA.view.status.truncated, 0)
+  t.is(baseA.localOutputs[0].length, 8)
+
+  const output = baseA.localOutputs[0]
+  for (let i = output.length - 1; i >= 0; i--) {
+    const node = await output.get(i)
+    console.log('CLOCK:', node.clock, 'VALUE:', node.value.toString())
   }
 
   // Add 3 more records to A -- should switch fork ordering (A after C)
   for (let i = 1; i < 4; i++) {
-    await base.append(`a${i}`, [], writerA)
+    await baseA.append(`a${i}`, [])
   }
 
-  {
-    const outputNodes = await linearizedValues(base.view)
-    t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'a3', 'a2', 'a1', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0']))
-    t.same(base.view.status.appended, 6)
-    t.same(base.view.status.truncated, 3)
-    t.same(output.length, 11)
-  }
+  console.log('\n====\n')
 
+  t.alike(await linearizedValues(baseA.view), ['b1', 'b0', 'a3', 'a2', 'a1', 'a0', 'c4', 'c3', 'c2', 'c1', 'c0'])
+  console.log('I AM HEREREE')
+  t.is(baseA.view.status.appended, 6)
+  t.is(baseA.view.status.truncated, 3)
+  t.is(baseA.localOutputs[0].length, 11)
+  console.log('I AM HERE')
+
+  /*
   // Add 1 more record to B -- should not cause any reordering
   await base.append('b2', [], writerB)
 
@@ -128,8 +113,7 @@ test('local linearizing - does not over-truncate', async t => {
     t.same(base.view.status.truncated, 0)
     t.same(output.length, 12)
   }
-
-  t.end()
+  */
 })
 
 test('local linearizing - can purge', async t => {

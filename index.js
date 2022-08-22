@@ -289,7 +289,7 @@ module.exports = class Autobase extends EventEmitter {
       unwrap
     })
     this._internalView = view
-    this.view = view.userView
+    this.view = view.userView.length === 1 ? view.userView[0] : view.userView
     return this.view
   }
 
