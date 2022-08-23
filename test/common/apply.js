@@ -1,86 +1,54 @@
-const test = require('tape')
-const Hypercore = require('hypercore')
-const ram = require('random-access-memory')
+const test = require('brittle')
+const b4a = require('b4a')
 
-const { bufferize, linearizedValues } = require('../helpers')
-const Autobase = require('../..')
+const { create, linearizedValues } = require('../helpers')
 
 test('applying - apply with one-to-one apply function', async t => {
-  const output = new Hypercore(ram)
-  const writerA = new Hypercore(ram)
-  const writerB = new Hypercore(ram)
-  const writerC = new Hypercore(ram)
+  const [baseA, baseB, baseC] = await create(3, { view: { localOnly: true }, opts: { autostart: false, eagerUpdate: false } })
 
-  const base = new Autobase({
-    inputs: [writerA, writerB, writerC],
-    localOutput: output,
-    eagerUpdate: false
-  })
-  base.start({
+  const view = baseA.start({
     apply (view, batch) {
-      batch = batch.map(({ value }) => Buffer.from(value.toString('utf-8').toUpperCase(), 'utf-8'))
+      batch = batch.map(({ value }) => b4a.from(b4a.toString(value).toUpperCase()))
       return view.append(batch)
     }
   })
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
-    await base.append(`a${i}`, await base.latest(writerA), writerA)
+    await baseA.append(`a${i}`, [])
   }
   for (let i = 0; i < 2; i++) {
-    await base.append(`b${i}`, await base.latest(writerB), writerB)
+    await baseB.append(`b${i}`, [])
   }
   for (let i = 0; i < 3; i++) {
-    await base.append(`c${i}`, await base.latest(writerC), writerC)
+    await baseC.append(`c${i}`, [])
   }
 
-  const outputNodes = await linearizedValues(base.view)
-  t.same(outputNodes.map(v => v.value), bufferize(['A0', 'B1', 'B0', 'C2', 'C1', 'C0']))
-
-  t.end()
+  t.alike(await linearizedValues(view), ['A0', 'B1', 'B0', 'C2', 'C1', 'C0'])
 })
 
 test('applying - applying into batches yields the correct clock on reads', async t => {
-  const output = new Hypercore(ram)
-  const writerA = new Hypercore(ram)
-  const writerB = new Hypercore(ram)
-  const writerC = new Hypercore(ram)
+  const [baseA, baseB, baseC] = await create(3, { view: { localOnly: true }, opts: { autostart: false, eagerUpdate: false } })
 
-  const base = new Autobase({
-    inputs: [writerA, writerB, writerC],
-    localOutput: output,
-    eagerUpdate: false
-  })
-  base.start({
+  const view = baseA.start({
     apply (view, batch) {
-      batch = batch.map(({ value }) => Buffer.from(value.toString('utf-8').toUpperCase(), 'utf-8'))
+      batch = batch.map(({ value }) => b4a.from(b4a.toString(value).toUpperCase()))
       return view.append(batch)
     }
   })
 
-  // Create three independent forks
-  await base.append(['a0'], [], writerA)
-  await base.append(['b0', 'b1'], [], writerB)
-  await base.append(['c0', 'c1', 'c2'], [], writerC)
+  // Create three independent forks with batches
+  await baseA.append(['a0'], [])
+  await baseB.append(['b0', 'b1'], [])
+  await baseC.append(['c0', 'c1', 'c2'], [])
 
-  const outputNodes = await linearizedValues(base.view)
-  t.same(outputNodes.map(v => v.value), bufferize(['A0', 'B1', 'B0', 'C2', 'C1', 'C0']))
-
-  t.end()
+  t.alike(await linearizedValues(view), ['A0', 'B1', 'B0', 'C2', 'C1', 'C0'])
 })
 
 test('applying - one-to-many apply with reordering, local output', async t => {
-  const output = new Hypercore(ram)
-  const writerA = new Hypercore(ram)
-  const writerB = new Hypercore(ram)
-  const writerC = new Hypercore(ram)
+  const [baseA, baseB] = await create(2, { view: { localOnly: true }, opts: { autostart: false, eagerUpdate: false } })
 
-  const base = new Autobase({
-    inputs: [writerA, writerB, writerC],
-    localOutput: output,
-    eagerUpdate: false
-  })
-  base.start({
+  const view = baseA.start({
     async apply (view, batch) {
       for (const node of batch) {
         await view.append(Buffer.from(node.value.toString() + '-0'))
@@ -91,134 +59,85 @@ test('applying - one-to-many apply with reordering, local output', async t => {
 
   // Create two independent forks
   for (let i = 0; i < 1; i++) {
-    await base.append(`a${i}`, await base.latest(writerA), writerA)
+    await baseA.append(`a${i}`, [])
   }
   for (let i = 0; i < 2; i++) {
-    await base.append(`b${i}`, await base.latest(writerB), writerB)
+    await baseB.append(`b${i}`, [])
   }
 
-  {
-    const outputNodes = await linearizedValues(base.view)
-    t.same(outputNodes.map(v => v.value), bufferize(['a0-1', 'a0-0', 'b1-1', 'b1-0', 'b0-1', 'b0-0']))
-  }
+  t.alike(await linearizedValues(view), ['a0-1', 'a0-0', 'b1-1', 'b1-0', 'b0-1', 'b0-0'])
 
   // Shift A's fork to the back
-  await base.append('a1', await base.latest(writerA), writerA)
-  await base.append('a2', await base.latest(writerA), writerA)
+  await baseA.append('a1', [])
+  await baseA.append('a2', [])
 
-  {
-    const outputNodes = await linearizedValues(base.view)
-    t.same(outputNodes.map(v => v.value), bufferize(['b1-1', 'b1-0', 'b0-1', 'b0-0', 'a2-1', 'a2-0', 'a1-1', 'a1-0', 'a0-1', 'a0-0']))
-  }
-
-  t.end()
+  t.alike(await linearizedValues(view), ['b1-1', 'b1-0', 'b0-1', 'b0-0', 'a2-1', 'a2-0', 'a1-1', 'a1-0', 'a0-1', 'a0-0'])
 })
 
 test('applying - one-to-many apply with reordering, remote output up-to-date', async t => {
-  const output = new Hypercore(ram)
-  const writerA = new Hypercore(ram)
-  const writerB = new Hypercore(ram)
-  const writerC = new Hypercore(ram)
-
-  const applyFunction = async (view, batch) => {
-    for (const node of batch) {
-      await view.append(Buffer.from(node.value.toString() + '-0'))
-      await view.append(Buffer.from(node.value.toString() + '-1'))
-    }
-  }
-
-  const base1 = new Autobase({
-    inputs: [writerA, writerB, writerC],
-    localOutput: output,
-    apply: applyFunction,
-    eagerUpdate: false
-  })
-  const base2 = new Autobase({
-    inputs: [writerA, writerB, writerC],
-    outputs: [output],
-    apply: applyFunction,
-    eagerUpdate: false
-  })
+  const [baseA, baseB] = await create(2, { view: { oneRemote: true }, opts: { apply, eagerUpdate: false } })
 
   // Create two independent forks
   for (let i = 0; i < 1; i++) {
-    await base1.append(`a${i}`, await base1.latest(writerA), writerA)
+    await baseA.append(`a${i}`, [])
   }
   for (let i = 0; i < 2; i++) {
-    await base1.append(`b${i}`, await base1.latest(writerB), writerB)
+    await baseB.append(`b${i}`, [])
   }
-  await base1.view.update()
+  await baseA.view.update()
 
-  {
-    const outputNodes = await linearizedValues(base2.view)
-    t.same(outputNodes.map(v => v.value), bufferize(['a0-1', 'a0-0', 'b1-1', 'b1-0', 'b0-1', 'b0-0']))
-  }
+  t.alike(await linearizedValues(baseB.view), ['a0-1', 'a0-0', 'b1-1', 'b1-0', 'b0-1', 'b0-0'])
 
   // Shift A's fork to the back
-  await base1.append('a1', await base1.latest(writerA), writerA)
-  await base1.append('a2', await base1.latest(writerA), writerA)
-  await base1.view.update()
+  await baseA.append('a1', [])
+  await baseA.append('a2', [])
 
-  {
-    const outputNodes = await linearizedValues(base2.view)
-    t.same(outputNodes.map(v => v.value), bufferize(['b1-1', 'b1-0', 'b0-1', 'b0-0', 'a2-1', 'a2-0', 'a1-1', 'a1-0', 'a0-1', 'a0-0']))
+  await baseA.view.update()
+
+  console.log('\n\n === \n\n')
+  t.alike(await linearizedValues(baseB.view), ['b1-1', 'b1-0', 'b0-1', 'b0-0', 'a2-1', 'a2-0', 'a1-1', 'a1-0', 'a0-1', 'a0-0'])
+
+  async function apply (view, batch) {
+    for (const node of batch) {
+      await view.append(b4a.from(b4a.toString(node.value) + '-0'))
+      await view.append(b4a.from(b4a.toString(node.value) + '-1'))
+    }
   }
-
-  t.end()
 })
 
 test('applying - one-to-many apply with reordering, remote output out-of-date', async t => {
-  const output = new Hypercore(ram)
-  const writerA = new Hypercore(ram)
-  const writerB = new Hypercore(ram)
-  const writerC = new Hypercore(ram)
+  const [baseA, baseB, baseC] = await create(3, { view: { oneRemote: true }, opts: { apply, eagerUpdate: false } })
 
-  const applyValues = (values) => values.flatMap(v => [Buffer.from(v + '-0'), Buffer.from(v + '-1')])
-  const applyFunction = async (view, batch) => {
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await baseA.append(`a${i}`, [])
+  }
+  for (let i = 0; i < 2; i++) {
+    await baseB.append(`b${i}`, [])
+  }
+  for (let i = 0; i < 4; i++) {
+    await baseC.append(`c${i}`, [])
+  }
+  await baseA.view.update()
+
+  t.alike(await linearizedValues(baseB.view), applyValues(['a0', 'b1', 'b0', 'c3', 'c2', 'c1', 'c0']).map(v => b4a.toString(v)))
+
+  // Shift A's fork to the middle
+  await baseA.append('a1', [])
+  await baseA.append('a2', [])
+  // baseA's local output is not updated with the latest reordering here
+
+  t.alike(await linearizedValues(baseB.view), applyValues(['b1', 'b0', 'a2', 'a1', 'a0', 'c3', 'c2', 'c1', 'c0']).map(v => b4a.toString(v)))
+
+  function applyValues (values) {
+    return values.flatMap(v => [b4a.from(v + '-0'), b4a.from(v + '-1')])
+  }
+
+  async function apply (view, batch) {
     const values = batch.map(n => n.value.toString())
     const vals = applyValues(values)
     for (let i = vals.length - 1; i >= 0; i--) {
       await view.append(vals[i])
     }
-  }
-
-  const base1 = new Autobase({
-    inputs: [writerA, writerB, writerC],
-    localOutput: output,
-    apply: applyFunction,
-    eagerUpdate: false
-  })
-  const base2 = new Autobase({
-    inputs: [writerA, writerB, writerC],
-    outputs: [output],
-    apply: applyFunction,
-    eagerUpdate: false
-  })
-
-  // Create three independent forks
-  for (let i = 0; i < 1; i++) {
-    await base1.append(`a${i}`, await base1.latest(writerA), writerA)
-  }
-  for (let i = 0; i < 2; i++) {
-    await base1.append(`b${i}`, await base1.latest(writerB), writerB)
-  }
-  for (let i = 0; i < 4; i++) {
-    await base1.append(`c${i}`, await base1.latest(writerC), writerC)
-  }
-  await base1.view.update()
-
-  {
-    const outputNodes = await linearizedValues(base2.view)
-    t.same(outputNodes.map(v => v.value), applyValues(['a0', 'b1', 'b0', 'c3', 'c2', 'c1', 'c0']))
-  }
-
-  // Shift A's fork to the middle
-  await base1.append('a1', await base1.latest(writerA), writerA)
-  await base1.append('a2', await base1.latest(writerA), writerA)
-  // output is not updated with the latest reordering here
-
-  {
-    const outputNodes = await linearizedValues(base2.view)
-    t.same(outputNodes.map(v => v.value), applyValues(['b1', 'b0', 'a2', 'a1', 'a0', 'c3', 'c2', 'c1', 'c0']))
   }
 })

@@ -22,8 +22,15 @@ async function create (n, opts = {}) {
   if (opts.view) {
     if (opts.view.localOnly) {
       for (let i = 0; i < n; i++) {
-        console.log('ADDING OUTPUT HERE')
         await bases[i].addOutput(bases[i].localOutputKey)
+      }
+    } else if (opts.view.oneRemote) {
+      for (let i = 0; i < n; i++) {
+        if (i === 0) {
+          await bases[i].addOutput(bases[i].localOutputKey)
+        } else {
+          await bases[i].addOutput(bases[0].localOutputKey)
+        }
       }
     }
   }

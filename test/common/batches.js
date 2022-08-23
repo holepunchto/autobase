@@ -1,9 +1,8 @@
 const Corestore = require('corestore')
 const ram = require('random-access-memory')
 const test = require('brittle')
-const b4a = require('b4a')
 
-const { create, causalValues, linearizedValues, bufferize } = require('../helpers')
+const { create, causalValues, bufferize } = require('../helpers')
 
 test('batches - array-valued appends using partial input nodes', async t => {
   const [baseA, baseB, baseC] = await create(3, { view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
