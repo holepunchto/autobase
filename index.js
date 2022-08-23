@@ -79,7 +79,7 @@ module.exports = class Autobase extends EventEmitter {
 
   get isIndexing () {
     const localOutputs = this.localOutputs
-    return localOutputs && localOutputs.length
+    return !!(localOutputs && localOutputs.length)
   }
 
   // Private Methods

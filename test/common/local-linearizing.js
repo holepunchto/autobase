@@ -203,6 +203,8 @@ test('local linearizing - can purge, causal writes', async t => {
   // Cut out writer B. Should truncate 3
   await baseA.removeInput(baseA.localInputKey)
 
+  console.log('\n\n === \n\n')
+
   t.alike(await linearizedValues(baseA.view), ['b1', 'b0', 'c4', 'c3', 'c2', 'c1', 'c0'])
   t.is(baseA.view.status.appended, 2) // b1 and b0 are reappended
   t.is(baseA.view.status.truncated, 3) // a0, b1, and b0 are removed
@@ -318,7 +320,7 @@ test('local linearizing - can dynamically add a local output', async t => {
   t.is(baseA.localOutputs[0].length, 6)
 })
 
-test.solo('local linearizing - truncation does not break key compression', async t => {
+test('local linearizing - truncation does not break key compression', async t => {
   const [baseA, baseB, baseC] = await create(3, { view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
 
   // Create three independent forks
@@ -356,100 +358,63 @@ test.solo('local linearizing - truncation does not break key compression', async
 })
 
 test('local linearizing - creating two branch snapshots with a common update clones core snapshots', async t => {
-  const output = new Hypercore(ram)
-  const writerA = new Hypercore(ram)
-  const writerB = new Hypercore(ram)
-  const writerC = new Hypercore(ram)
-
-  const base = new Autobase({
-    inputs: [writerA, writerB, writerC],
-    localOutput: output,
-    autostart: true,
-    eagerUpdate: false
-  })
+  const [baseA, baseB, baseC] = await create(3, { view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
 
   // Create three independent forks
   for (let i = 0; i < 1; i++) {
-    await base.append(`a${i}`, [], writerA)
+    await baseA.append(`a${i}`, [])
   }
   for (let i = 0; i < 2; i++) {
-    await base.append(`b${i}`, [], writerB)
+    await baseB.append(`b${i}`, [])
   }
   for (let i = 0; i < 3; i++) {
-    await base.append(`c${i}`, [], writerC)
+    await baseC.append(`c${i}`, [])
   }
 
-  const snapshot1 = base.view.snapshot()
-  await base.view.update()
-  const snapshot2 = base.view.snapshot()
-  const snapshot3 = base.view.snapshot()
+  const snapshot1 = baseA.view.snapshot()
+  await baseA.view.update()
+  const snapshot2 = baseA.view.snapshot()
+  const snapshot3 = baseA.view.snapshot()
 
-  {
-    const outputNodes = await linearizedValues(snapshot1, { update: false })
-    t.same(outputNodes.map(v => v.value), bufferize([]))
-    t.same(output.length, 6)
-  }
+  t.alike(await linearizedValues(snapshot1, { update: false }), [])
+  t.is(baseA.localOutputs[0].length, 6)
 
   await snapshot1.update()
 
-  {
-    const outputNodes = await linearizedValues(snapshot1, { update: false })
-    t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
-    t.same(output.length, 6)
-  }
+  t.alike(await linearizedValues(snapshot1, { update: false }), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
+  t.is(baseA.localOutputs[0].length, 6)
 
-  {
-    const outputNodes = await linearizedValues(snapshot2, { update: false })
-    t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
-    t.same(output.length, 6)
-  }
+  t.alike(await linearizedValues(snapshot2, { update: false }), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
+  t.is(baseA.localOutputs[0].length, 6)
 
   // Add 3 more records to A -- should switch fork ordering
   for (let i = 1; i < 4; i++) {
-    await base.append(`a${i}`, await base.latest(writerA), writerA)
+    await baseA.append(`a${i}`, [])
   }
 
   await snapshot3.update()
 
-  {
-    const outputNodes = await linearizedValues(snapshot3, { update: false })
-    t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']))
-    t.same(output.length, 9)
-  }
+  t.alike(await linearizedValues(snapshot3, { update: false }), ['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0'])
+  t.is(baseA.localOutputs[0].length, 9)
 
-  {
-    const outputNodes = await linearizedValues(snapshot2, { update: false })
-    t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
-    t.same(output.length, 9)
-  }
-
-  t.end()
+  t.alike(await linearizedValues(snapshot2, { update: false }), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
+  t.is(baseA.localOutputs[0].length, 9)
 })
 
 test('local linearizing - consistent reads with a pre-update snapshot', async t => {
-  const output = new Hypercore(ram)
-  const writerA = new Hypercore(ram)
-  const writerB = new Hypercore(ram)
+  const [baseA, baseB] = await create(2, { view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
 
-  const base = new Autobase({
-    inputs: [writerA, writerB],
-    localOutput: output,
-    autostart: true,
-    eagerUpdate: false
-  })
+  await baseA.append('a0')
+  await baseB.append('b0')
 
-  await base.append('a0', await base.latest(), writerA)
-  await base.append('b0', await base.latest(), writerB)
-  await base.view.update()
+  await baseA.view.update()
+  const snapshot = baseA.view.snapshot()
 
-  const snapshot = base.view.snapshot().unwrap()
-  t.same(snapshot.length, 2)
+  t.is(snapshot.length, 2)
 
   const nodes = []
   for (let i = 0; i < snapshot.length; i++) {
     nodes.push(await snapshot.get(i))
   }
-  t.same(nodes, bufferize(['a0', 'b0']))
-
-  t.end()
+  t.alike(nodes.map(n => b4a.toString(n)), ['a0', 'b0'])
 })

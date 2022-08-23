@@ -18,8 +18,8 @@
     "streamx": "^2.10.0"
   },
   "devDependencies": {
-    "corestore": "^6.0.2",
     "brittle": "^3.0.4",
+    "corestore": "^6.0.2",
     "hyperbee": "^2.0.0",
     "hypercore": "^10.0.0",
     "latency-stream": "^1.0.0",
