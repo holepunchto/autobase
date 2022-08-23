@@ -6,7 +6,7 @@ const b = require('b4a')
 const { create } = require('../helpers')
 
 test('multi-view - two views, hyperbee and raw', async t => {
-  const [baseA, baseB] = await create(2, { view: { localOnly: true }, opts: { autostart: false, eagerUpdate: false } })
+  const [baseA, baseB] = await create(2, { view: { localOnly: true }, opts: { autostart: false, eagerUpdate: true } })
 
   const viewOptions = {
     views: 2,
@@ -38,8 +38,6 @@ test('multi-view - two views, hyperbee and raw', async t => {
   await baseB.append('hey how is it going')
   await baseA.append('it is good')
   await baseB.append('ah nice that is hey')
-
-  await baseA._internalView.update()
 
   // Find the latest occurrence of 'hey'
   for await (const node of bee1.createReadStream({ gt: 'hey-', lt: 'hey-~', reverse: true })) {
