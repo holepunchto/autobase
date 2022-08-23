@@ -5,7 +5,7 @@ const b4a = require('b4a')
 const Autobase = require('../..')
 
 async function create (n, opts = {}) {
-  const store = new Corestore(ram)
+  const store = opts.store || new Corestore(ram)
   const bases = []
   for (let i = 0; i < n; i++) {
     bases.push(new Autobase(store.namespace('base-' + i), opts.opts))

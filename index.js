@@ -674,10 +674,12 @@ module.exports = class Autobase extends EventEmitter {
     for (const input of this.inputs) {
       input.removeListener('append', this._onappend)
     }
+    const inputsClosing = [...this._inputsByKey.values()].map(i => i.close())
+    const outputsClosing = [...this._outputsByKey.values()].map(os => os.map(o => o.close()))
+    console.log('outputs closing:', outputsClosing)
     await Promise.all([
-      ...this._inputs.map(i => i.close()),
-      ...this.inputs.map(i => i.close()),
-      ...this.outputs.map(o => o.close())
+      ...inputsClosing,
+      ...outputsClosing.flat()
     ])
     this.closed = true
   }

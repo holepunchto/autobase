@@ -1,9 +1,8 @@
 const test = require('brittle')
 const b4a = require('b4a')
 
-const { create, bufferize, linearizedValues } = require('../helpers')
+const { create, linearizedValues } = require('../helpers')
 const { decodeKeys } = require('../../lib/nodes/messages')
-const Autobase = require('../..')
 
 test('local linearizing - three independent forks', async t => {
   const [baseA, baseB, baseC] = await create(3, { view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
