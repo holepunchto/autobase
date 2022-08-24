@@ -83,7 +83,7 @@ test('remote linearizing - selects longest remote output', async t => {
   }
 })
 
-test.solo('remote linearizing - can locally extend an out-of-date remote output', async t => {
+test('remote linearizing - can locally extend an out-of-date remote output', async t => {
   const [baseA, baseB, baseC] = await create(3, { view: { oneRemote: true }, opts: { autostart: true, eagerUpdate: false } })
 
   for (let i = 0; i < 3; i++) {
@@ -126,63 +126,44 @@ test.solo('remote linearizing - can locally extend an out-of-date remote output'
     await baseB.append(`b${i}`, [])
   }
 
-  console.log('\n ============ \n')
   await baseB.view.update()
   t.is(baseB.view.length, 19)
   t.is(baseB._internalView.nodes[0].length, 19)
 })
 
-test('remote linearizing - will discard local in-memory view if remote is updated', async t => {
-  const writerA = new Hypercore(ram)
-  const writerB = new Hypercore(ram)
-  const writerC = new Hypercore(ram)
-
-  const output1 = new Hypercore(ram)
-
-  const inputs = [writerA, writerB, writerC]
-  const writerBase = new Autobase({
-    inputs,
-    localOutput: output1,
-    autostart: true,
-    eagerUpdate: false
-  })
-  const readerBase = new Autobase({
-    inputs,
-    outputs: [output1],
-    autostart: true,
-    eagerUpdate: false
-  })
+test.solo('remote linearizing - will discard local in-memory view if remote is updated', async t => {
+  const [baseA, baseB, baseC] = await create(3, { view: { oneRemote: true }, opts: { autostart: true, eagerUpdate: false } })
 
   for (let i = 0; i < 3; i++) {
-    await writerBase.append(`a${i}`, [], writerA)
+    await baseA.append(`a${i}`, [])
   }
 
-  await writerBase.view.update() // Pull the first 3 nodes into output1
-  await readerBase.view.update()
-  t.same(readerBase.view.status.nodes.length, 0) // It should start up-to-date
+  await baseA.view.update() // Pull the first 3 nodes into output1
+  await baseB.view.update()
+  t.absent(baseB._internalView.nodes[0]) // It should start up-to-date
 
   for (let i = 0; i < 2; i++) {
-    await writerBase.append(`b${i}`, [], writerB)
+    await baseB.append(`b${i}`, [])
   }
 
-  await readerBase.view.update() // view extends output1 in memory
-  t.same(readerBase.view.status.nodes.length, 2)
+  await baseB.view.update() // view extends Base A's output in memory
+  t.is(baseB._internalView.nodes[0].length, 2)
 
   for (let i = 0; i < 1; i++) {
-    await writerBase.append(`c${i}`, [], writerC)
+    await baseC.append(`c${i}`, [])
   }
 
-  await readerBase.view.update()
-  t.same(readerBase.view.status.nodes.length, 3)
+  await baseB.view.update()
+  t.is(baseB._internalView.nodes[0].length, 3)
+  t.alike(await linearizedValues(baseB.view), ['c0', 'b1', 'b0', 'a2', 'a1', 'a0'])
+
+  await baseC.append('c1')
 
   // Pull the latest changes into the output1
-  await writerBase.view.update()
-  await readerBase.view.update()
-  t.same(readerBase.view.status.nodes.length, 0)
+  await baseA.view.update()
+  await baseB.view.update()
+  t.absent(baseB._internalView.nodes[0])
 
-  t.end()
-})
-
-test('remote linearizing - can purge a writer', async t => {
-
+  t.is(baseB.view.length, 7)
+  t.alike(await linearizedValues(baseB.view), ['c1', 'c0', 'b1', 'b0', 'a2', 'a1', 'a0'])
 })
