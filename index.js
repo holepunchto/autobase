@@ -58,11 +58,13 @@ module.exports = class Autobase extends EventEmitter {
       this._onInputsChanged()
     }
 
-    this.__debugTag = Math.floor(Math.random() * 1e6)
-
     this._opening = this._open()
     this._opening.catch(safetyCatch)
     this.ready = () => this._opening
+  }
+
+  get localInput () {
+    return this._localInput
   }
 
   get localInputKey () {
@@ -95,6 +97,7 @@ module.exports = class Autobase extends EventEmitter {
     this._localOutput = this.corestore.get(this._outputKeyPair)
     await Promise.all([this._localInput.ready(), this._localOutput.ready()])
 
+    this._addInput(this.localInputKey)
     for (const input of this._inputs) {
       this._addInput(input)
     }
@@ -676,7 +679,6 @@ module.exports = class Autobase extends EventEmitter {
     }
     const inputsClosing = [...this._inputsByKey.values()].map(i => i.close())
     const outputsClosing = [...this._outputsByKey.values()].map(os => os.map(o => o.close()))
-    console.log('outputs closing:', outputsClosing)
     await Promise.all([
       ...inputsClosing,
       ...outputsClosing.flat()

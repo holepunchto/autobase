@@ -40,12 +40,12 @@ test('multi-view - two views, hyperbee and raw', async t => {
   await baseB.append('ah nice that is hey')
 
   // Find the latest occurrence of 'hey'
-  for await (const node of bee1.createReadStream({ gt: 'hey-', lt: 'hey-~', reverse: true })) {
+  for await (const node of bee1.createReadStream({ gt: 'hey-', lt: 'hey-~', reverse: true })) { // eslint-disable-line
     t.is(b.toString(await core2.get(lexint.unpack(node.value, 'hex'))), 'ah nice that is hey')
     break
   }
   // Find the latest occurrence of 'good'
-  for await (const node of bee2.createReadStream({ gt: 'good-', lt: 'good-~', reverse: true })) {
+  for await (const node of bee2.createReadStream({ gt: 'good-', lt: 'good-~', reverse: true })) { // eslint-disable-line
     t.is(b.toString(await core1.get(lexint.unpack(node.value, 'hex'))), 'it is good')
     break
   }

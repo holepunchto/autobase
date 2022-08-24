@@ -1,10 +1,8 @@
 const Corestore = require('corestore')
 const ram = require('random-access-memory')
 const test = require('brittle')
-const b4a = require('b4a')
 
 const { create, linearizedValues } = require('../helpers')
-const { decodeKeys } = require('../../lib/nodes/messages')
 const Autobase = require('../..')
 
 test('remote linearizing - selects longest remote output', async t => {
@@ -131,7 +129,7 @@ test('remote linearizing - can locally extend an out-of-date remote output', asy
   t.is(baseB._internalView.nodes[0].length, 19)
 })
 
-test.solo('remote linearizing - will discard local in-memory view if remote is updated', async t => {
+test('remote linearizing - will discard local in-memory view if remote is updated', async t => {
   const [baseA, baseB, baseC] = await create(3, { view: { oneRemote: true }, opts: { autostart: true, eagerUpdate: false } })
 
   for (let i = 0; i < 3; i++) {
