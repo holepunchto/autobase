@@ -1,3 +1,5 @@
+const Corestore = require('corestore')
+const ram = require('random-access-memory')
 const test = require('brittle')
 const b4a = require('b4a')
 
@@ -416,4 +418,32 @@ test('local linearizing - consistent reads with a pre-update snapshot', async t 
     nodes.push(await snapshot.get(i))
   }
   t.alike(nodes.map(n => b4a.toString(n)), ['a0', 'b0'])
+})
+
+test('local linearizing - does not truncate on restart', async t => {
+  const store = new Corestore(ram)
+
+  {
+    const [baseA, baseB] = await create(2, { store, view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
+
+    await baseA.append('a0')
+    await baseB.append('b0')
+    await baseA.view.update()
+
+    t.is(baseA.view.status.appended, 2)
+    t.is(baseA.localOutputs[0].length, 2)
+    t.is(baseA.localOutputs[0].fork, 0)
+
+    await Promise.all([baseA.close(), baseB.close()])
+  }
+
+  {
+    const [baseA] = await create(2, { store, view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
+
+    await baseA.view.update()
+
+    t.is(baseA.view.status.appended, 2) // TODO: Will currently emit a faulty append on restart
+    t.is(baseA.localOutputs[0].length, 2)
+    t.is(baseA.localOutputs[0].fork, 0)
+  }
 })
