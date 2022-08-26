@@ -1,4 +1,4 @@
-const test = require('tape')
+const test = require('brittle')
 const Hyperbee = require('hyperbee')
 const lexint = require('lexicographic-integer')
 const b = require('b4a')

@@ -1,9 +1,9 @@
-const test = require('tape')
+const test = require('brittle')
 const Hypercore = require('hypercore')
 const ram = require('random-access-memory')
 const c = require('compact-encoding')
 
-const HypercoreBisector = require('../lib/view/bisect')
+const HypercoreBisector = require('../../lib/view/bisect')
 
 const BatchBlock = {
   preencode (state, b) {
@@ -42,7 +42,7 @@ test('bisector - simple incrementing core', async t => {
     values.push(await bisect.search())
   }
 
-  t.same(values, expected)
+  t.alike(values, expected)
 })
 
 test('bisector - incrementing core with batch skipping', async t => {
@@ -76,7 +76,7 @@ test('bisector - incrementing core with batch skipping', async t => {
     values.push((await bisect.search()).value)
   }
 
-  t.same(values, expected)
+  t.alike(values, expected)
 })
 
 test('bisector - short-circuit with invalid head', async t => {
@@ -93,7 +93,8 @@ test('bisector - short-circuit with invalid head', async t => {
       return block !== 4
     }
   })
-  t.same(await bisect.search(), null)
+
+  t.is(await bisect.search(), null)
 })
 
 test('bisector - searching for a value larger than the larget value in the core', async t => {
@@ -106,7 +107,8 @@ test('bisector - searching for a value larger than the larget value in the core'
       return target - block
     }
   })
-  t.same(await bisect.search(), null)
+
+  t.is(await bisect.search(), null)
 })
 
 test('bisector - searching for a value smaller than the smallest value in the core', async t => {
@@ -119,7 +121,8 @@ test('bisector - searching for a value smaller than the smallest value in the co
       return target - block
     }
   })
-  t.same(await bisect.search(), null)
+
+  t.is(await bisect.search(), null)
 })
 
 test('bisector - searching for a value in a gap', async t => {
@@ -132,7 +135,8 @@ test('bisector - searching for a value in a gap', async t => {
       return target - block
     }
   })
-  t.same(await bisect.search(), null)
+
+  t.is(await bisect.search(), null)
 })
 
 function encoding (enc) {
