@@ -18,7 +18,7 @@ module.exports = class SimpleAutobee {
     return this.autobase.ready()
   }
 
-  async put (key, value, opts = {}) {
+  async put (key, value) {
     const op = Buffer.from(JSON.stringify({ type: 'put', key, value }))
     return await this.autobase.append(op)
   }

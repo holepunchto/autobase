@@ -1,7 +1,5 @@
 # Autobase
 
-*⚠️ Alpha Warning ⚠️ - Autobase only works with the alpha release of [Hypercore 10](https://github.com/hypercore-protocol/hypercore-next)*
-
 Automatically rebase multiple causally-linked Hypercores into a single, linearized Hypercore.
 
 The output of an Autobase is "just a Hypercore", which means it can be used to transform higher-level data structures (like Hyperbee) into multiwriter data structures with minimal additional work.
@@ -22,7 +20,7 @@ An Autobase is constructed from a known set of trusted input Hypercores. Authori
 
 Here's how you would create an Autobase from 3 known inputs, and a locally-available (writable) default input:
 ``` js
-const autobase = require('autobase')
+const Autobase = require('autobase')
 
 // Assuming inputA, inputB, and inputC are Hypercore 10 instances
 // inputA will be used during append operations
@@ -225,7 +223,7 @@ More sophisticated indexing might require multiple appends per input node, or re
 #### `base.started`
 A Boolean indicating if `base.view` has been created.
 
-See the [linearized views section]() for details about the `apply` and `unwrap` options.
+See the [linearized views section](#api---linearized-views) for details about the `apply` option.
 
 Prior to calling `base.start()`, `base.view` will be `null`.
 
