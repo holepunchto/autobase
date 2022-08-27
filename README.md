@@ -225,7 +225,7 @@ More sophisticated indexing might require multiple appends per input node, or re
 #### `base.started`
 A Boolean indicating if `base.view` has been created.
 
-See the [linearized views section]() for details about the `apply` and `unwrap` options.
+See the [linearized views section](https://github.com/hypercore-protocol/autobase#api---linearized-views) for details about the `apply` option.
 
 Prior to calling `base.start()`, `base.view` will be `null`.
 
