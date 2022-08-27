@@ -22,7 +22,7 @@ An Autobase is constructed from a known set of trusted input Hypercores. Authori
 
 Here's how you would create an Autobase from 3 known inputs, and a locally-available (writable) default input:
 ``` js
-const autobase = require('autobase')
+const Autobase = require('autobase')
 
 // Assuming inputA, inputB, and inputC are Hypercore 10 instances
 // inputA will be used during append operations
