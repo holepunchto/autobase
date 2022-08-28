@@ -1,7 +1,5 @@
 # Autobase
 
-*⚠️ Alpha Warning ⚠️ - Autobase only works with the alpha release of [Hypercore 10](https://github.com/hypercore-protocol/hypercore-next)*
-
 Automatically rebase multiple causally-linked Hypercores into a single, linearized Hypercore.
 
 The output of an Autobase is "just a Hypercore", which means it can be used to transform higher-level data structures (like Hyperbee) into multiwriter data structures with minimal additional work.
