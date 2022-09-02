@@ -73,7 +73,57 @@ test('multi-view - two identical views, remote indexing, no rebasing', async t =
 })
 
 test('multi-view - two identical views, remote indexing, one rebase', async t => {
+  const [baseA, baseB] = await create(2, { view: { oneRemote: true }, opts: { autostart: false, eagerUpdate: false } })
 
+  const viewOptions = {
+    views: 2,
+    open: (core1, core2) => [core1, core2],
+    apply: (core1, core2, batch) => Promise.all([
+      core1.append(batch.map(n => n.value)),
+      core2.append(batch.map(n => n.value))
+    ])
+  }
+  const [coreA1, coreA2] = baseA.start(viewOptions)
+  const [coreB1, coreB2] = baseB.start(viewOptions)
+
+  await baseA.append('a0', [])
+  await baseA.append('a1', [])
+  await baseB.append('b0', [])
+
+  await coreA1.update() // Will update both A1 and A2
+  await Promise.all([coreB1.update(), coreB2.update()]) // Should use Base A's index
+  t.absent(baseB._internalView.nodes[0])
+  t.absent(baseB._internalView.nodes[1])
+
+  t.alike(await linearizedValues(coreB1), ['b0', 'a1', 'a0'])
+  t.alike(await linearizedValues(coreB2), ['b0', 'a1', 'a0'])
+
+  t.is(coreA1.length, 3)
+  t.is(coreA2.length, 3)
+  t.is(coreB1.length, 3)
+  t.is(coreB2.length, 3)
+
+  await baseB.append('b1', [])
+  await baseB.append('b2', []) // will trigger a reorder
+
+  t.alike(await linearizedValues(coreB1), ['a1', 'a0', 'b2', 'b1', 'b0'])
+  t.alike(await linearizedValues(coreB2), ['a1', 'a0', 'b2', 'b1', 'b0'])
+
+  // Since A has not updated to include the reorder, B must rebuild from scratch
+  t.is(baseB._internalView.nodes[0].length, 5)
+  t.is(baseB._internalView.nodes[1].length, 5)
+
+  await baseB.append('b3', [])
+
+  await coreA1.update()
+  await Promise.all([coreB1.update(), coreB2.update()])
+
+  t.alike(await linearizedValues(coreB1), ['a1', 'a0', 'b3', 'b2', 'b1', 'b0'])
+  t.alike(await linearizedValues(coreB2), ['a1', 'a0', 'b3', 'b2', 'b1', 'b0'])
+
+  // Once A updates, B can discard its in-memory view
+  t.absent(baseB._internalView.nodes[0])
+  t.absent(baseB._internalView.nodes[1])
 })
 
 test('multi-view - two identical views, remote indexing, two rebases', async t => {
