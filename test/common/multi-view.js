@@ -118,7 +118,44 @@ test('multi-view - different-length views, local-only indexing, no rebasing', as
 })
 
 test('multi-view - different-length views, remote indexing, no rebasing', async t => {
+  const [baseA, baseB] = await create(2, { view: { oneRemote: true }, opts: { autostart: false, eagerUpdate: false } })
 
+  const viewOptions = {
+    views: 2,
+    open: (core1, core2) => [core1, core2],
+    apply: async (core1, core2, batch) => {
+      for (const node of batch) {
+        if (b.toString(node.value).startsWith('a')) {
+          await core1.append(node.value)
+        } else {
+          await core2.append(node.value)
+        }
+      }
+    }
+  }
+  const [coreA1, coreA2] = baseA.start(viewOptions)
+  const [coreB1, coreB2] = baseB.start(viewOptions)
+
+  await baseA.append('a0')
+  await baseB.append('b0')
+  await baseA.append('a1')
+  await baseB.append('b1')
+
+  await coreA1.update()
+  await coreB1.update()
+
+  t.is(coreA1.length, 2)
+  t.is(coreA2.length, 2)
+  t.is(coreB1.length, 2)
+  t.is(coreB2.length, 2)
+
+  t.alike(await linearizedValues(coreA1), ['a1', 'a0'])
+  t.alike(await linearizedValues(coreA2), ['b1', 'b0'])
+  t.alike(await linearizedValues(coreB1), ['a1', 'a0'])
+  t.alike(await linearizedValues(coreB2), ['b1', 'b0'])
+
+  t.absent(baseB._internalView.nodes[0])
+  t.absent(baseB._internalView.nodes[1])
 })
 
 test('multi-view - different-length views, remote indexing, one rebase', async t => {
