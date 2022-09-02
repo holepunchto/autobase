@@ -125,7 +125,7 @@ test('multi-view - different-length views, remote indexing, one rebase', async t
 
 })
 
-test.solo('multi-view - uneven views, local-only indexing, no rebasing', async t => {
+test('multi-view - uneven views, local-only indexing, no rebasing', async t => {
   const [baseA, baseB] = await create(2, { view: { localOnly: true }, opts: { autostart: false, eagerUpdate: false } })
 
   const viewOptions = {
@@ -162,7 +162,7 @@ test.solo('multi-view - uneven views, local-only indexing, no rebasing', async t
   t.alike(await linearizedValues(coreB2), ['b0'])
 })
 
-test.solo('multi-view - double-appending view, local-only indexing, no rebasing', async t => {
+test('multi-view - double-appending view, local-only indexing, no rebasing', async t => {
   const [baseA, baseB] = await create(2, { view: { localOnly: true }, opts: { autostart: false, eagerUpdate: false } })
 
   const viewOptions = {
@@ -198,8 +198,8 @@ test.solo('multi-view - double-appending view, local-only indexing, no rebasing'
   t.alike(await linearizedValues(coreB2), ['b1', 'a1', 'b0', 'a0'])
 })
 
-test.solo('multi-view - two views, hyperbee and raw', async t => {
-  const [baseA, baseB] = await create(2, { view: { localOnly: true }, opts: { autostart: false, eagerUpdate: true } })
+test('multi-view - two views, hyperbee and raw', async t => {
+  const [baseA, baseB] = await create(2, { view: { localOnly: true }, opts: { autostart: false, eagerUpdate: false } })
 
   const viewOptions = {
     views: 2,
@@ -232,10 +232,8 @@ test.solo('multi-view - two views, hyperbee and raw', async t => {
   await baseA.append('it is good')
   await baseB.append('ah nice that is hey')
 
-  console.log('\n++++++\n')
   await baseA._internalView.update()
   await baseB._internalView.update()
-  console.log('\n=====\n')
 
   // Find the latest occurrence of 'hey'
   for await (const node of bee1.createReadStream({ gt: 'hey-', lt: 'hey-~', reverse: true })) { // eslint-disable-line

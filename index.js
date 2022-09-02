@@ -51,7 +51,7 @@ module.exports = class Autobase extends EventEmitter {
 
     this.view = null
     this._viewCount = views || 1
-    this._viewVersion = version || '1'
+    this._viewVersion = version || 1
     if (apply || autostart) this.start({ apply, open, unwrap })
 
     this._onappend = () => {

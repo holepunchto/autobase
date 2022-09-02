@@ -1,3 +1,5 @@
+const Corestore = require('corestore')
+const ram = require('random-access-memory')
 const test = require('brittle')
 const b4a = require('b4a')
 
@@ -139,5 +141,47 @@ test('applying - one-to-many apply with reordering, remote output out-of-date', 
     for (let i = vals.length - 1; i >= 0; i--) {
       await view.append(vals[i])
     }
+  }
+})
+
+test('applying - full truncation if view version changes', async t => {
+  const store = new Corestore(ram)
+  const [baseA1, baseB, baseC] = await create(3, { store, view: { localOnly: true }, opts: { autostart: false, eagerUpdate: false } })
+
+  const view1 = baseA1.start({ version: 1, apply: apply1 })
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await baseA1.append(`a${i}`, [])
+  }
+  for (let i = 0; i < 2; i++) {
+    await baseB.append(`b${i}`, [])
+  }
+  for (let i = 0; i < 3; i++) {
+    await baseC.append(`c${i}`, [])
+  }
+
+  t.alike(await linearizedValues(view1), ['A0', 'B1', 'B0', 'C2', 'C1', 'C0'])
+
+  const [baseA2] = await create(3, { store, view: { localOnly: true }, opts: { autostart: false, eagerUpdate: false } })
+  const view2 = baseA2.start({ version: 2, apply: apply2 })
+
+  t.is(baseA1.localOutputs[0].length, 6)
+  t.is(baseA1.localOutputs[0].fork, 0)
+
+  t.alike(await linearizedValues(view2), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
+
+  t.is(baseA2.localOutputs[0].length, 6)
+  t.is(baseA2.localOutputs[0].fork, 1)
+  t.alike(baseA1.localOutputs[0].key, baseA2.localOutputs[0].key)
+
+  function apply1 (view, batch) {
+    batch = batch.map(({ value }) => b4a.from(b4a.toString(value).toUpperCase()))
+    return view.append(batch)
+  }
+
+  function apply2 (view, batch) {
+    batch = batch.map(({ value }) => b4a.from(b4a.toString(value)))
+    return view.append(batch)
   }
 })
