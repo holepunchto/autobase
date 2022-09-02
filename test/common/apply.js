@@ -144,7 +144,7 @@ test('applying - one-to-many apply with reordering, remote output out-of-date', 
   }
 })
 
-test('applying - full truncation if view version changes', async t => {
+test('applying - full truncation if indexing and view version changes', async t => {
   const store = new Corestore(ram)
   const [baseA1, baseB, baseC] = await create(3, { store, view: { localOnly: true }, opts: { autostart: false, eagerUpdate: false } })
 
@@ -174,6 +174,50 @@ test('applying - full truncation if view version changes', async t => {
   t.is(baseA2.localOutputs[0].length, 6)
   t.is(baseA2.localOutputs[0].fork, 1)
   t.alike(baseA1.localOutputs[0].key, baseA2.localOutputs[0].key)
+
+  function apply1 (view, batch) {
+    batch = batch.map(({ value }) => b4a.from(b4a.toString(value).toUpperCase()))
+    return view.append(batch)
+  }
+
+  function apply2 (view, batch) {
+    batch = batch.map(({ value }) => b4a.from(b4a.toString(value)))
+    return view.append(batch)
+  }
+})
+
+test('applying - remote output is invalid if on an old version', async t => {
+  const store = new Corestore(ram)
+  const [baseA1, baseB, baseC] = await create(3, { store, view: { oneRemote: true }, opts: { autostart: false, eagerUpdate: false } })
+
+  const viewA1 = baseA1.start({ version: 1, apply: apply1 })
+  const viewB = baseB.start({ version: 1, apply: apply1 })
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await baseA1.append(`a${i}`, [])
+  }
+  for (let i = 0; i < 2; i++) {
+    await baseB.append(`b${i}`, [])
+  }
+  for (let i = 0; i < 3; i++) {
+    await baseC.append(`c${i}`, [])
+  }
+
+  // B can now use A's remote output (on version 1)
+  await viewA1.update()
+
+  t.alike(await linearizedValues(viewB), ['A0', 'B1', 'B0', 'C2', 'C1', 'C0'])
+  t.absent(baseB._internalView.nodes[0]) // should use A's output
+
+  const [baseA2] = await create(3, { store, view: { localOnly: true }, opts: { autostart: false, eagerUpdate: false } })
+  const viewA2 = baseA2.start({ version: 2, apply: apply2 })
+
+  // Will invalidate A's output from B's perspective
+  await viewA2.update()
+
+  t.alike(await linearizedValues(viewB), ['A0', 'B1', 'B0', 'C2', 'C1', 'C0'])
+  t.is(baseB._internalView.nodes[0].length, 6)
 
   function apply1 (view, batch) {
     batch = batch.map(({ value }) => b4a.from(b4a.toString(value).toUpperCase()))
