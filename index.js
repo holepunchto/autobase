@@ -23,7 +23,7 @@ const OUTPUT_KEYPAIR_NAME = 'output'
 const FORCE_NON_SPARSE = +process.env['NON_SPARSE'] // eslint-disable-line
 
 module.exports = class Autobase extends EventEmitter {
-  constructor (corestore, { inputs, outputs, autostart, apply, open, views, unwrap, eagerUpdate, sparse } = {}) {
+  constructor (corestore, { inputs, outputs, autostart, apply, open, views, version, unwrap, eagerUpdate, sparse } = {}) {
     super()
     this.corestore = corestore
     this.opened = false
@@ -51,6 +51,7 @@ module.exports = class Autobase extends EventEmitter {
 
     this.view = null
     this._viewCount = views || 1
+    this._viewVersion = version || '1'
     if (apply || autostart) this.start({ apply, open, unwrap })
 
     this._onappend = () => {
@@ -272,10 +273,13 @@ module.exports = class Autobase extends EventEmitter {
     }
   }
 
-  start ({ views, open, apply, unwrap } = {}) {
+  start ({ version, views, open, apply, unwrap } = {}) {
     if (this.view) throw new Error('Start must only be called once')
     if (views) {
       this._viewCount = views
+    }
+    if (version) {
+      this._viewVersion = version
     }
     for (const [key, outputs] of this._outputsByKey) {
       if (outputs.length === this._viewCount) continue
@@ -283,7 +287,7 @@ module.exports = class Autobase extends EventEmitter {
       this._addOutput(b.from(key, 'hex')).catch(safetyCatch)
     }
     const view = new LinearizedView(this, {
-      header: { protocol: OUTPUT_PROTOCOL },
+      header: { version: this._viewVersion, protocol: OUTPUT_PROTOCOL },
       writable: true,
       open,
       apply,
