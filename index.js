@@ -90,9 +90,7 @@ module.exports = class Autobase extends EventEmitter {
     await this.corestore.ready()
 
     this._inputKeyPair = await this.corestore.createKeyPair(INPUT_KEYPAIR_NAME)
-    console.log('INPUT KEY PAIR:', this._inputKeyPair)
     this._outputKeyPair = tweak(this._inputKeyPair, OUTPUT_KEYPAIR_NAME)
-    console.log('OUTPUT KEY PAIR:', this._outputKeyPair)
     this._localInput = this.corestore.get(this._inputKeyPair)
     this._localOutput = this.corestore.get(this._outputKeyPair)
     await Promise.all([this._localInput.ready(), this._localOutput.ready()])
