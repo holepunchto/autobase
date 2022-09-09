@@ -33,6 +33,7 @@ module.exports = class Autobase extends EventEmitter {
     this._inputsByKey = new Map()
     this._outputsByKey = new Map()
     this._keyCompressors = new Map()
+    this._viewSessions = new Set()
     this._readStreams = []
     this._batchId = 0
     this._lock = mutexify()
@@ -231,6 +232,7 @@ module.exports = class Autobase extends EventEmitter {
       unwrap
     })
     const session = core.session()
+    this._viewSessions.add(session)
     this.view = view ? view(session) : session
   }
 
@@ -620,7 +622,9 @@ module.exports = class Autobase extends EventEmitter {
     for (const input of this.inputs) {
       input.removeListener('append', this._onappend)
     }
+    const views = [...this._viewSessions]
     await Promise.all([
+      ...views.map(s => s.close()),
       ...this._inputs.map(i => i.close()),
       ...this.inputs.map(i => i.close()),
       ...this.outputs.map(o => o.close())
