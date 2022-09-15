@@ -6,8 +6,7 @@
   "scripts": {
     "test": "standard && NON_SPARSE=1 npm run test:non-sparse && NON_SPARSE=0 npm run test:sparse",
     "test:non-sparse": "node test/common/index.js && node test/non-sparse/*.js",
-    "test:sparse":"node test/common/index.js && node test/sparse/*.js"
-
+    "test:sparse": "node test/common/index.js && node test/sparse/*.js"
   },
   "dependencies": {
     "b4a": "^1.3.1",
@@ -16,6 +15,7 @@
     "debounceify": "^1.0.0",
     "hypercore-crypto-tweak": "github:holepunchto/hypercore-crypto-tweak",
     "mutexify": "^1.4.0",
+    "ready-resource": "^1.0.0",
     "safety-catch": "^1.0.1",
     "streamx": "^2.10.0"
   },

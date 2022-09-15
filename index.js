@@ -1,4 +1,4 @@
-const { EventEmitter } = require('events')
+const ReadyResource = require('ready-resource')
 
 const safetyCatch = require('safety-catch')
 const streamx = require('streamx')
@@ -22,14 +22,11 @@ const OUTPUT_KEYPAIR_NAME = 'output'
 
 const FORCE_NON_SPARSE = +process.env['NON_SPARSE'] // eslint-disable-line
 
-module.exports = class Autobase extends EventEmitter {
+module.exports = class Autobase extends ReadyResource {
   constructor (corestore, { inputs, outputs, autostart, apply, open, views, version, unwrap, eagerUpdate, sparse } = {}) {
     super()
     this.corestore = corestore
-    this.opened = false
-    this.closed = false
 
-    this._closing = null
     this._inputs = inputs || []
     this._outputs = outputs || []
     this._inputsByKey = new Map()
@@ -58,10 +55,6 @@ module.exports = class Autobase extends EventEmitter {
       this.emit('append')
       this._onInputsChanged()
     }
-
-    this._opening = this._open()
-    this._opening.catch(safetyCatch)
-    this.ready = () => this._opening
   }
 
   get localInput () {
@@ -103,8 +96,6 @@ module.exports = class Autobase extends EventEmitter {
     for (const output of this._outputs) {
       this._addOutput(output)
     }
-
-    this.opened = true
   }
 
   _deriveOutputs (key) {
@@ -675,7 +666,6 @@ module.exports = class Autobase extends EventEmitter {
   }
 
   async _close () {
-    if (this.closed) return
     for (const input of this.inputs) {
       input.removeListener('append', this._onappend)
     }
@@ -685,15 +675,6 @@ module.exports = class Autobase extends EventEmitter {
       ...inputsClosing,
       ...outputsClosing.flat()
     ])
-    this.closed = true
-  }
-
-  close () {
-    if (this.closed) return Promise.resolve()
-    if (this._closing) return this._closing
-    this._closing = this._close()
-    this._closing.catch(safetyCatch)
-    return this._closing
   }
 
   static async isAutobase (core) {
