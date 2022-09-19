@@ -478,12 +478,14 @@ module.exports = class Autobase extends ReadyResource {
     const wait = opts.wait !== false
     let running = false
     let bumped = false
+    let opened = false
 
     const stream = new streamx.Readable({
       open: cb => _open().then(cb, cb),
       read: cb => _read().then(cb, cb)
     })
     stream.bump = () => {
+      if (!opened) return
       bumped = true
       _read().catch(err => stream.destroy(err))
     }
@@ -498,10 +500,11 @@ module.exports = class Autobase extends ReadyResource {
 
     return stream
 
-    async function _open (cb) {
-      if (!self.opened) await self._opening
+    async function _open () {
+      if (!self.opened) await self.ready()
       await maybeSnapshot()
       await updateAll()
+      opened = true
     }
 
     async function _read () {
