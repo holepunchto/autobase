@@ -1,4 +1,5 @@
 const Corestore = require('corestore')
+const Keychain = require('keypear')
 const ram = require('random-access-memory')
 const test = require('brittle')
 
@@ -7,7 +8,8 @@ const Autobase = require('../..')
 
 test('remote linearizing - selects longest remote output', async t => {
   const store = new Corestore(ram)
-  const [baseA, baseB, baseC] = await create(3, { store, view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
+  const keychain = new Keychain()
+  const [baseA, baseB, baseC] = await create(3, { store, keychain, view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
 
   // Create three independent forks and linearize them into separate outputs
   for (let i = 0; i < 3; i++) {
@@ -30,7 +32,7 @@ test('remote linearizing - selects longest remote output', async t => {
 
   {
     // Base C's output should be fully up-to-date
-    const base = new Autobase(store.namespace('base-1'), {
+    const base = new Autobase(store, keychain.sub('base-1'), {
       inputs: [baseA.localInputKey, baseB.localInputKey, baseC.localInputKey],
       outputs: [baseC.localOutputKey],
       autostart: true,
@@ -43,7 +45,7 @@ test('remote linearizing - selects longest remote output', async t => {
 
   {
     // Should not have to add B and C
-    const base = new Autobase(store.namespace('base-2'), {
+    const base = new Autobase(store, keychain.sub('base-2'), {
       inputs: [baseA.localInputKey, baseB.localInputKey, baseC.localInputKey],
       outputs: [baseA.localOutputKey],
       autostart: true,
@@ -56,7 +58,7 @@ test('remote linearizing - selects longest remote output', async t => {
 
   {
     // Should select Base B's output
-    const base = new Autobase(store.namespace('base-3'), {
+    const base = new Autobase(store, keychain.sub('base-3'), {
       inputs: [baseA.localInputKey, baseB.localInputKey, baseC.localInputKey],
       outputs: [baseA.localOutputKey, baseB.localOutputKey],
       autostart: true,
@@ -69,7 +71,7 @@ test('remote linearizing - selects longest remote output', async t => {
 
   {
     // Should select Base C's output
-    const base = new Autobase(store.namespace('base-3'), {
+    const base = new Autobase(store, keychain.sub('base-3'), {
       inputs: [baseA.localInputKey, baseB.localInputKey, baseC.localInputKey],
       outputs: [baseA.localOutputKey, baseB.localOutputKey, baseC.localOutputKey],
       autostart: true,

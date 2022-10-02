@@ -1,5 +1,8 @@
+const p = require('path')
+const os = require('os')
+
 const Corestore = require('corestore')
-const ram = require('random-access-memory')
+const Keychain = require('keypear')
 const test = require('brittle')
 const b4a = require('b4a')
 
@@ -124,7 +127,7 @@ test('local linearizing - can purge', async t => {
   t.is(baseA.localOutputs[0].length, 8)
 
   // Cut out writer B. Should truncate 3
-  await baseA.removeInput(baseB.localInputKey)
+  await baseA.removeInput(baseB.localInputKeyPair.publicKey)
 
   t.alike(await linearizedValues(baseA.view), ['a0', 'c4', 'c3', 'c2', 'c1', 'c0'])
   t.is(baseA.view.status.appended, 1) // a0 is reindexed
@@ -149,7 +152,7 @@ test('local linearizing - can purge from the back', async t => {
   t.is(baseA.localOutputs[0].length, 6)
 
   // Cut out writer B. Should truncate 3
-  await baseA.removeInput(baseB.localInputKey)
+  await baseA.removeInput(baseB.localInputKeyPair.publicKey)
 
   t.alike(await linearizedValues(baseA.view), ['a0'])
   t.is(baseA.view.status.appended, 1) // a0 is reindexed
@@ -174,7 +177,7 @@ test('local linearizing - can purge from the front', async t => {
   t.is(baseA.localOutputs[0].length, 6)
 
   // Cut out writer A. Should truncate 1
-  await baseA.removeInput(baseA.localInputKey)
+  await baseA.removeInput(baseA.localInputKeyPair.publicKey)
 
   t.alike(await linearizedValues(baseA.view), ['b4', 'b3', 'b2', 'b1', 'b0'])
   t.is(baseA.view.status.appended, 0) // a0 is reindexed
@@ -258,7 +261,7 @@ test('local linearizing - can dynamically add a local output', async t => {
   t.is(baseA.view.status.truncated, 0)
   t.absent(baseA.localOutputs)
 
-  await baseA.addOutput(baseA.localOutputKey)
+  await baseA.addOutput(baseA.localOutputKeyPair.publicKey)
 
   t.alike(await linearizedValues(baseA.view), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
   // TODO: Fix these, they should both be 0
@@ -286,7 +289,7 @@ test('local linearizing - truncation does not break key compression', async t =>
     await baseA.view.update()
     const keys = decodeKeys(await baseA.localOutputs[0].core.get(5))
     t.is(keys.length, 1)
-    t.alike(keys[0], baseA.localInputKey)
+    t.alike(keys[0], baseA.localInputKeyPair.publicKey)
   }
 
   // Add 3 more records to A -- should switch fork ordering
@@ -300,7 +303,7 @@ test('local linearizing - truncation does not break key compression', async t =>
     await baseA.view.update()
     const keys = decodeKeys(await baseA.localOutputs[0].core.get(0))
     t.is(keys.length, 1)
-    t.alike(keys[0], baseA.localInputKey)
+    t.alike(keys[0], baseA.localInputKeyPair.publicKey)
   }
 })
 
@@ -367,10 +370,12 @@ test('local linearizing - consistent reads with a pre-update snapshot', async t 
 })
 
 test('local linearizing - does not truncate on restart', async t => {
-  const store = new Corestore(ram)
+  const tmpdir = p.join(os.tmpdir(), 'autobase-test-' + process.pid)
+  const store = new Corestore(tmpdir)
+  const keychain = new Keychain()
 
   {
-    const [baseA, baseB] = await create(2, { store, view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
+    const [baseA, baseB] = await create(2, { store, keychain, view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
 
     await baseA.append('a0')
     await baseB.append('b0')
@@ -384,7 +389,7 @@ test('local linearizing - does not truncate on restart', async t => {
   }
 
   {
-    const [baseA] = await create(2, { store, view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
+    const [baseA] = await create(2, { store, keychain, view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
 
     await baseA.view.update()
 

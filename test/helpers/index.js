@@ -1,4 +1,5 @@
 const Corestore = require('corestore')
+const Keychain = require('keypear')
 const ram = require('random-access-memory')
 const b4a = require('b4a')
 
@@ -6,30 +7,36 @@ const Autobase = require('../..')
 
 async function create (n, opts = {}) {
   const store = opts.store || new Corestore(ram)
+  const keychain = opts.keychain || new Keychain()
+  await store.ready()
+
   const bases = []
   for (let i = 0; i < n; i++) {
-    bases.push(new Autobase(store.namespace('base-' + i), opts.opts))
+    const name = 'base-' + i
+    bases.push(new Autobase(store, keychain.sub(name), opts.opts))
   }
   await Promise.all(bases.map(b => b.ready()))
+
   if (opts.noInputs === true) return bases
+
   for (let i = 0; i < n; i++) {
     const batch = bases[i].memberBatch()
     for (let j = 0; j < n; j++) {
-      batch.addInput(bases[j].localInputKey)
+      batch.addInput(bases[j].localInputKeyPair)
     }
     await batch.commit()
   }
   if (opts.view) {
     if (opts.view.localOnly) {
       for (let i = 0; i < n; i++) {
-        await bases[i].addOutput(bases[i].localOutputKey)
+        await bases[i].addOutput(bases[i].localOutputKeyPair)
       }
     } else if (opts.view.oneRemote) {
       for (let i = 0; i < n; i++) {
         if (i === 0) {
-          await bases[i].addOutput(bases[i].localOutputKey)
+          await bases[i].addOutput(bases[i].localOutputKeyPair)
         } else {
-          await bases[i].addOutput(bases[0].localOutputKey)
+          await bases[i].addOutput(bases[0].localOutputKeyPair)
         }
       }
     }

@@ -1,9 +1,9 @@
 const ReadyResource = require('ready-resource')
 
+const Keychain = require('keypear')
 const safetyCatch = require('safety-catch')
 const streamx = require('streamx')
 const mutexify = require('mutexify/promise')
-const tweak = require('hypercore-crypto-tweak')
 const c = require('compact-encoding')
 const b = require('b4a')
 
@@ -18,14 +18,15 @@ const { Node: NodeSchema, decodeHeader } = require('./lib/nodes/messages')
 const INPUT_PROTOCOL = '@autobase/input/v1'
 const OUTPUT_PROTOCOL = '@autobase/output/v1'
 const INPUT_KEYPAIR_NAME = 'input'
-const OUTPUT_KEYPAIR_NAME = 'output'
+const OUTPUTS_SUB_NAME = 'outputs'
 
 const FORCE_NON_SPARSE = +process.env['NON_SPARSE'] // eslint-disable-line
 
 module.exports = class Autobase extends ReadyResource {
-  constructor (corestore, { inputs, outputs, autostart, apply, open, views, version, unwrap, eagerUpdate, sparse } = {}) {
+  constructor (corestore, keychain, { inputs, outputs, autostart, apply, open, views, version, unwrap, eagerUpdate, sparse } = {}) {
     super()
     this.corestore = corestore
+    this.keychain = Keychain.from(keychain)
 
     this._inputs = inputs || []
     this._outputs = outputs || []
@@ -36,10 +37,9 @@ module.exports = class Autobase extends ReadyResource {
     this._eagerUpdate = eagerUpdate !== false
     this._sparse = (sparse !== false) && (FORCE_NON_SPARSE !== 1)
 
-    this._inputKeyPair = null
-    this._outputKeyPair = null
-    this._localInput = null
-    this._localOutput = null
+    this._outputsKeychain = this.keychain.sub(OUTPUTS_SUB_NAME)
+    this.localInputKeyPair = this.keychain.get(INPUT_KEYPAIR_NAME)
+    this.localOutputKeyPair = this._outputsKeychain.get()
 
     this._batchId = 0
     this._readStreams = []
@@ -57,20 +57,12 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  get localInput () {
-    return this._localInput
-  }
-
-  get localInputKey () {
-    return this._inputKeyPair && this._inputKeyPair.publicKey
-  }
-
-  get localOutputKey () {
-    return this._outputKeyPair && this._outputKeyPair.publicKey
-  }
-
   get localOutputs () {
-    return this._outputsByKey.get(b.toString(this.localOutputKey, 'hex'))
+    return this._outputsByKey.get(b.toString(this.localOutputKeyPair.publicKey, 'hex'))
+  }
+
+  get localInput () {
+    return this._inputsByKey.get(b.toString(this.localInputKeyPair.publicKey, 'hex'))
   }
 
   get isIndexing () {
@@ -82,40 +74,38 @@ module.exports = class Autobase extends ReadyResource {
 
   async _open () {
     await this.corestore.ready()
-
-    this._inputKeyPair = await this.corestore.createKeyPair(INPUT_KEYPAIR_NAME)
-    this._outputKeyPair = tweak(this._inputKeyPair, OUTPUT_KEYPAIR_NAME)
-    this._localInput = this.corestore.get(this._inputKeyPair)
-    this._localOutput = this.corestore.get(this._outputKeyPair)
-    await Promise.all([this._localInput.ready(), this._localOutput.ready()])
-
-    this._addInput(this.localInputKey)
+    this._addInput(this.localInputKeyPair)
     for (const input of this._inputs) {
       this._addInput(input)
     }
     for (const output of this._outputs) {
       this._addOutput(output)
     }
+    await Promise.all([
+      ...[...this._inputsByKey.values()].map(i => i.ready()),
+      ...[...this._outputsByKey.values()].flatMap(outputs => outputs.map(o => o.ready()))
+    ])
   }
 
   _deriveOutputs (key) {
+    const keychain = key.equals(this.localOutputKeyPair.publicKey) ? this._outputsKeychain : this.keychain.checkout(key)
     const outputs = []
-    const isLocal = key.equals(this.localOutputKey)
-    let keyPair = isLocal ? this._outputKeyPair : { publicKey: key }
     for (let i = 0; i < this._viewCount; i++) {
-      const output = new Output(i, this.corestore.get(keyPair))
+      const key = i === 0 ? keychain.get() : keychain.get('' + i)
+      const output = new Output(i, this.corestore.get(key)) // TODO: Figure out actual name
       outputs.push(output)
-      keyPair = tweak({ ...keyPair, scalar: keyPair.keyPair?.scalar }, OUTPUT_KEYPAIR_NAME)
     }
     return outputs
   }
 
   // Called by MemberBatch
-  _addInput (key) {
-    const id = b.toString(key, 'hex')
+  _addInput (keyPair) {
+    const opts = b.isBuffer(keyPair) ? { publicKey: keyPair } : keyPair
+    const id = b.toString(opts.publicKey, 'hex')
+
     if (this._inputsByKey.has(id)) return
 
-    const input = this.corestore.get({ key, sparse: this._sparse })
+    const input = this.corestore.get({ ...opts, sparse: this._sparse })
     input.on('append', this._onappend)
     this._inputsByKey.set(id, input)
 
@@ -123,8 +113,10 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // Called by MemberBatch
-  _addOutput (key) {
-    const id = b.toString(key, 'hex')
+  _addOutput (keyPair) {
+    const publicKey = b.isBuffer(keyPair) ? keyPair : keyPair.publicKey
+    const id = b.toString(publicKey, 'hex')
+
     let closeExisting = null
     if (this._outputsByKey.has(id)) {
       const outputs = this._outputsByKey.get(id)
@@ -133,13 +125,14 @@ module.exports = class Autobase extends ReadyResource {
       closeExisting = noop
     }
     // Rederive the outputs whenever addOutput is called
-    const outputs = this._deriveOutputs(key)
+    const outputs = this._deriveOutputs(publicKey)
     this._outputsByKey.set(id, outputs)
     return closeExisting
   }
 
   // Called by MemberBatch
-  _removeInput (key) {
+  _removeInput (keyPair) {
+    const key = b.isBuffer(keyPair) ? keyPair : keyPair.publicKey
     const id = b.toString(key, 'hex')
     if (!this._inputsByKey.has(id)) return
 
@@ -290,7 +283,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async heads (clock) {
-    if (!this.opened) await this._opening
+    if (!this.opened) await this.ready()
     clock = clock || await this.latest()
 
     const headPromises = []
@@ -374,7 +367,7 @@ module.exports = class Autobase extends ReadyResource {
   async latest (opts = {}) {
     if (!this.opened) await this._opening
     await Promise.all(this.inputs.map(i => i.update()))
-    const inputs = opts.fork !== true ? this.inputs : [this._localInput]
+    const inputs = opts.fork !== true ? this.inputs : [this.localInput]
     const sparseClock = this._getLatestSparseClock(inputs)
     if (this._sparse) return sparseClock
     return this._getLatestNonSparseClock(sparseClock)
@@ -644,8 +637,8 @@ module.exports = class Autobase extends ReadyResource {
 
     // Make sure that causal information propagates.
     // This is tracking inputs that were present in the previous append, but have since been removed.
-    const head = await this._getInputNode(this._localInput, this._localInput.length - 1)
-    const inputId = b.toString(this._localInput.key, 'hex')
+    const head = await this._getInputNode(this.localInput, this.localInput.length - 1)
+    const inputId = b.toString(this.localInput.key, 'hex')
 
     if (head && head.clock) {
       for (const [id, seq] of head.clock) {
@@ -654,8 +647,8 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
-    const batch = await this._createInputBatch(this._localInput, value, clock)
-    return this._localInput.append(batch)
+    const batch = await this._createInputBatch(this.localInput, value, clock)
+    return this.localInput.append(batch)
   }
 
   async append (value, clock, input) {
