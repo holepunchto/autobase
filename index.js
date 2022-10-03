@@ -88,14 +88,13 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _deriveOutputs (key) {
-    const keychain = key.equals(this.localOutputKeyPair.publicKey) ? this._outputsKeychain : this.keychain.checkout(key)
-    const outputs = []
-    for (let i = 0; i < this._viewCount; i++) {
-      const key = i === 0 ? keychain.get() : keychain.get('' + i)
-      const output = new Output(i, this.corestore.get(key)) // TODO: Figure out actual name
+    const keychain = b.equals(key, this.localOutputKeyPair.publicKey) ? this._outputsKeychain : this.keychain.checkout(key)
+    const outputs = this._outputsByKey.get(b.toString(key, 'hex'))
+    for (let i = outputs.length; i < this._viewCount; i++) {
+      const nextKey = i === 0 ? keychain.get() : keychain.get('' + i)
+      const output = new Output(i, this.corestore.get(nextKey))
       outputs.push(output)
     }
-    return outputs
   }
 
   // Called by MemberBatch
@@ -117,17 +116,14 @@ module.exports = class Autobase extends ReadyResource {
     const publicKey = b.isBuffer(keyPair) ? keyPair : keyPair.publicKey
     const id = b.toString(publicKey, 'hex')
 
-    let closeExisting = null
-    if (this._outputsByKey.has(id)) {
-      const outputs = this._outputsByKey.get(id)
-      closeExisting = Promise.all(outputs.map(o => o.close()))
-    } else {
-      closeExisting = noop
+    const existing = this._outputsByKey.get(id)
+    if (existing && existing.length === this._viewCount) return
+
+    if (!existing) {
+      this._outputsByKey.set(id, [])
     }
-    // Rederive the outputs whenever addOutput is called
-    const outputs = this._deriveOutputs(publicKey)
-    this._outputsByKey.set(id, outputs)
-    return closeExisting
+
+    this._deriveOutputs(publicKey)
   }
 
   // Called by MemberBatch
@@ -265,10 +261,8 @@ module.exports = class Autobase extends ReadyResource {
     if (version) {
       this._viewVersion = version
     }
-    for (const [key, outputs] of this._outputsByKey) {
-      if (outputs.length === this._viewCount) continue
-      // TODO: How should the output close errors here be handled?
-      this._addOutput(b.from(key, 'hex')).catch(safetyCatch)
+    for (const key of this._outputsByKey.keys()) {
+      this._deriveOutputs(b.from(key, 'hex'))
     }
     const view = new LinearizedView(this, {
       header: { version: this._viewVersion, protocol: OUTPUT_PROTOCOL },
@@ -750,5 +744,3 @@ function clockToMap (clock) {
   if (Array.isArray(clock)) return new Map(clock)
   return new Map(Object.entries(clock))
 }
-
-function noop () {}

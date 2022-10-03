@@ -58,6 +58,7 @@ test('multi-view - two identical views, remote indexing, no rebasing', async t =
 
   await coreA1.update() // Will update both A1 and A2
   await Promise.all([coreB1.update(), coreB2.update()]) // Should use Base A's index
+
   t.absent(baseB._internalView.nodes[0])
   t.absent(baseB._internalView.nodes[1])
 

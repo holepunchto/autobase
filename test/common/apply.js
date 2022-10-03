@@ -1,4 +1,5 @@
 const Corestore = require('corestore')
+const Keychain = require('keypear')
 const ram = require('random-access-memory')
 const test = require('brittle')
 const b4a = require('b4a')
@@ -96,7 +97,6 @@ test('applying - one-to-many apply with reordering, remote output up-to-date', a
 
   await baseA.view.update()
 
-  console.log('\n\n === \n\n')
   t.alike(await linearizedValues(baseB.view), ['b1-1', 'b1-0', 'b0-1', 'b0-0', 'a2-1', 'a2-0', 'a1-1', 'a1-0', 'a0-1', 'a0-0'])
 
   async function apply (view, batch) {
@@ -146,7 +146,9 @@ test('applying - one-to-many apply with reordering, remote output out-of-date', 
 
 test('applying - full truncation if indexing and view version changes', async t => {
   const store = new Corestore(ram)
-  const [baseA1, baseB, baseC] = await create(3, { store, view: { localOnly: true }, opts: { autostart: false, eagerUpdate: false } })
+  const keychain = new Keychain()
+
+  const [baseA1, baseB, baseC] = await create(3, { store, keychain, view: { localOnly: true }, opts: { autostart: false, eagerUpdate: false } })
 
   const view1 = baseA1.start({ version: 1, apply: apply1 })
 
@@ -163,7 +165,7 @@ test('applying - full truncation if indexing and view version changes', async t 
 
   t.alike(await linearizedValues(view1), ['A0', 'B1', 'B0', 'C2', 'C1', 'C0'])
 
-  const [baseA2] = await create(3, { store, view: { localOnly: true }, opts: { autostart: false, eagerUpdate: false } })
+  const [baseA2] = await create(3, { store, keychain, view: { localOnly: true }, opts: { autostart: false, eagerUpdate: false } })
   const view2 = baseA2.start({ version: 2, apply: apply2 })
 
   t.is(baseA1.localOutputs[0].length, 6)
@@ -188,7 +190,9 @@ test('applying - full truncation if indexing and view version changes', async t 
 
 test('applying - remote output is invalid if on an old version', async t => {
   const store = new Corestore(ram)
-  const [baseA1, baseB, baseC] = await create(3, { store, view: { oneRemote: true }, opts: { autostart: false, eagerUpdate: false } })
+  const keychain = new Keychain()
+
+  const [baseA1, baseB, baseC] = await create(3, { store, keychain, view: { oneRemote: true }, opts: { autostart: false, eagerUpdate: false } })
 
   const viewA1 = baseA1.start({ version: 1, apply: apply1 })
   const viewB = baseB.start({ version: 1, apply: apply1 })
@@ -210,7 +214,7 @@ test('applying - remote output is invalid if on an old version', async t => {
   t.alike(await linearizedValues(viewB), ['A0', 'B1', 'B0', 'C2', 'C1', 'C0'])
   t.absent(baseB._internalView.nodes[0]) // should use A's output
 
-  const [baseA2] = await create(3, { store, view: { localOnly: true }, opts: { autostart: false, eagerUpdate: false } })
+  const [baseA2] = await create(3, { store, keychain, view: { localOnly: true }, opts: { autostart: false, eagerUpdate: false } })
   const viewA2 = baseA2.start({ version: 2, apply: apply2 })
 
   // Will invalidate A's output from B's perspective

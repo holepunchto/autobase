@@ -22,7 +22,7 @@ test('sparse local linearizing - can purge, causal writes', async t => {
   t.is(baseA.localOutputs[0].length, 8)
 
   // Cut out writer A. Should truncate 3
-  await baseA.removeInput(baseA.localInputKey)
+  await baseA.removeInput(baseA.localInputKeyPair.publicKey)
 
   t.alike(await linearizedValues(baseA.view), ['b1', 'b0', 'c4', 'c3', 'c2', 'c1', 'c0'])
   t.is(baseA.view.status.appended, 2) // b1 and b0 are reappended
@@ -46,7 +46,7 @@ test('sparse local linearizing - can purge, causal writes interleaved', async t 
   t.is(baseA.view.status.truncated, 0)
   t.is(baseA.localOutputs[0].length, 6)
 
-  await baseA.removeInput(baseB.localInputKey)
+  await baseA.removeInput(baseB.localInputKeyPair.publicKey)
 
   t.alike(await linearizedValues(baseA.view), ['a5', 'a3', 'a1'])
   t.is(baseA.view.status.appended, 3)

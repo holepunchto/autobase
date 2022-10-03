@@ -1,4 +1,5 @@
 const Corestore = require('corestore')
+const Keychain = require('keypear')
 const ram = require('random-access-memory')
 const test = require('brittle')
 const b = require('b4a')
@@ -40,7 +41,9 @@ test('read stream -- not live, causally-linked writes', async t => {
 
 test('read stream -- not live, inputs snapshotted', async t => {
   const store = new Corestore(ram)
-  const [baseA, baseB] = await create(2, { store, view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
+  const keychain = new Keychain()
+
+  const [baseA, baseB] = await create(2, { store, keychain, view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
 
   for (let i = 0; i < 1; i++) {
     await baseA.append(`a${i}`)
@@ -52,12 +55,12 @@ test('read stream -- not live, inputs snapshotted', async t => {
   const stream = baseA.createReadStream()
   await new Promise(resolve => stream.once('readable', resolve))
 
-  const baseC = new Autobase(store.namespace('base-c'), {
-    inputs: [baseA.localInputKey, baseB.localInputKey]
+  const baseC = new Autobase(store, keychain.sub('base-c'), {
+    inputs: [baseA.localInputKeyPair.publicKey, baseB.localInputKeyPair.publicKey]
   })
   await baseC.ready()
 
-  await baseA.addInput(baseC.localInputKey)
+  await baseA.addInput(baseC.localInputKeyPair)
   for (let i = 0; i < 3; i++) {
     await baseC.append(`c${i}`, [])
   }
@@ -71,7 +74,9 @@ test('read stream -- not live, inputs snapshotted', async t => {
 
 test('read stream -- live, causally-linked writes', async t => {
   const store = new Corestore(ram)
-  const [baseA, baseB] = await create(2, { store, view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
+  const keychain = new Keychain()
+
+  const [baseA, baseB] = await create(2, { store, keychain, view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
 
   for (let i = 0; i < 1; i++) {
     await baseA.append(`a${i}`)
@@ -89,12 +94,12 @@ test('read stream -- live, causally-linked writes', async t => {
   // Delay to ensure stream doesn't end after inputs are exhausted
   await new Promise(resolve => setTimeout(resolve, 50))
 
-  const baseC = new Autobase(store.namespace('base-c'), {
-    inputs: [baseA.localInputKey, baseB.localInputKey]
+  const baseC = new Autobase(store, keychain.sub('base-c'), {
+    inputs: [baseA.localInputKeyPair.publicKey, baseB.localInputKeyPair.publicKey]
   })
   await baseC.ready()
 
-  await baseA.addInput(baseC.localInputKey)
+  await baseA.addInput(baseC.localInputKeyPair.publicKey)
   for (let i = 0; i < 3; i++) {
     await baseC.append(`c${i}`, [])
   }
@@ -108,17 +113,19 @@ test('read stream -- live, causally-linked writes', async t => {
 
 test('read stream - onresolve hook, resolvable', async t => {
   const store = new Corestore(ram)
-  const baseA = new Autobase(store.namespace('base-a'))
-  const baseB = new Autobase(store.namespace('base-b'))
-  const baseC = new Autobase(store.namespace('base-c'))
+  const keychain = new Keychain()
+
+  const baseA = new Autobase(store, keychain.sub('base-a'))
+  const baseB = new Autobase(store, keychain.sub('base-b'))
+  const baseC = new Autobase(store, keychain.sub('base-c'))
   await Promise.all([baseA.ready(), baseB.ready()])
 
   // A and B both acknowledge each other's writes
-  await baseA.addInput(baseB.localInputKey)
-  await baseB.addInput(baseA.localInputKey)
+  await baseA.addInput(baseB.localInputKeyPair.publicKey)
+  await baseB.addInput(baseA.localInputKeyPair.publicKey)
 
   // C does not initially know about A
-  await baseC.addInput(baseB.localInputKey)
+  await baseC.addInput(baseB.localInputKeyPair.publicKey)
 
   // Create two dependent branches
   for (let i = 0; i < 1; i++) {
@@ -140,9 +147,9 @@ test('read stream - onresolve hook, resolvable', async t => {
     // With the onresolve hook, the read stream can be passed missing writers
     const output = await collect(baseC.createReadStream({
       async onresolve (node) {
-        t.is(node.id, b.toString(baseB.localInputKey, 'hex'))
-        t.is(node.clock.get(b.toString(baseA.localInputKey, 'hex')), 0)
-        await baseC.addInput(baseA.localInputKey)
+        t.is(node.id, b.toString(baseB.localInputKeyPair.publicKey, 'hex'))
+        t.is(node.clock.get(b.toString(baseA.localInputKeyPair.publicKey, 'hex')), 0)
+        await baseC.addInput(baseA.localInputKeyPair.publicKey)
         return true
       }
     }))
@@ -160,11 +167,11 @@ test('read stream - onresolve hook, not resolvable', async t => {
   await Promise.all([baseA.ready(), baseB.ready()])
 
   // A and B both acknowledge each other's writes
-  await baseA.addInput(baseB.localInputKey)
-  await baseB.addInput(baseA.localInputKey)
+  await baseA.addInput(baseB.localInputKeyPair.publicKey)
+  await baseB.addInput(baseA.localInputKeyPair.publicKey)
 
   // C does not initially know about A
-  await baseC.addInput(baseB.localInputKey)
+  await baseC.addInput(baseB.localInputKeyPair.publicKey)
 
   // Create two dependent branches
   for (let i = 0; i < 1; i++) {
@@ -186,8 +193,8 @@ test('read stream - onresolve hook, not resolvable', async t => {
     // With the onresolve hook, returning false should emit the unresolved nodes (same behavior as { onresolve: undefined } option)
     const output = await collect(baseC.createReadStream({
       async onresolve (node) {
-        t.is(node.id, b.toString(baseB.localInputKey, 'hex'))
-        t.is(node.clock.get(b.toString(baseA.localInputKey, 'hex')), 0)
+        t.is(node.id, b.toString(baseB.localInputKeyPair.publicKey, 'hex'))
+        t.is(node.clock.get(b.toString(baseA.localInputKeyPair.publicKey, 'hex')), 0)
         return false
       }
     }))
@@ -206,11 +213,11 @@ test('read stream - onwait hook', async t => {
   await Promise.all([baseA.ready(), baseB.ready()])
 
   // A and B both acknowledge each other's writes
-  await baseA.addInput(baseB.localInputKey)
-  await baseB.addInput(baseA.localInputKey)
+  await baseA.addInput(baseB.localInputKeyPair.publicKey)
+  await baseB.addInput(baseA.localInputKeyPair.publicKey)
 
   // C does not initially know about A
-  await baseC.addInput(baseB.localInputKey)
+  await baseC.addInput(baseB.localInputKeyPair.publicKey)
 
   // Create two dependent branches
   for (let i = 0; i < 1; i++) {
@@ -233,7 +240,7 @@ test('read stream - onwait hook', async t => {
     const output = await collect(baseC.createReadStream({
       async onwait (node) {
         if (b.toString(node.value) !== 'b1') return
-        await baseC.addInput(baseA.localInputKey)
+        await baseC.addInput(baseA.localInputKeyPair.publicKey)
       }
     }))
     t.is(output.length, 3)
@@ -243,7 +250,9 @@ test('read stream - onwait hook', async t => {
 
 test('read stream - resume from checkpoint', async t => {
   const store = new Corestore(ram)
-  const [baseA, baseB, baseC] = await create(3, { store })
+  const keychain = new Keychain()
+
+  const [baseA, baseB, baseC] = await create(3, { store, keychain })
 
   for (let i = 0; i < 1; i++) {
     await baseA.append(`a${i}`)
@@ -255,8 +264,8 @@ test('read stream - resume from checkpoint', async t => {
     await baseC.append(`c${i}`, [])
   }
 
-  const fullBase = new Autobase(store.namespace('full-base'), {
-    inputs: [baseA.localInputKey, baseB.localInputKey, baseC.localInputKey]
+  const fullBase = new Autobase(store, keychain.sub('full-base'), {
+    inputs: [baseA.localInputKeyPair.publicKey, baseB.localInputKeyPair.publicKey, baseC.localInputKeyPair.publicKey]
   })
 
   const firstStream = fullBase.createReadStream()
@@ -281,10 +290,12 @@ test('read stream - resume from checkpoint', async t => {
 
 test('read stream - resume from empty checkpoint', async t => {
   const store = new Corestore(ram)
-  const [baseA, baseB, baseC] = await create(3, { store })
+  const keychain = new Keychain()
 
-  const fullBase = new Autobase(store.namespace('full-base'), {
-    inputs: [baseA.localInputKey, baseB.localInputKey, baseC.localInputKey]
+  const [baseA, baseB, baseC] = await create(3, { store, keychain })
+
+  const fullBase = new Autobase(store, keychain.sub('full-base'), {
+    inputs: [baseA.localInputKeyPair.publicKey, baseB.localInputKeyPair.publicKey, baseC.localInputKeyPair.publicKey]
   })
 
   const firstStream = fullBase.createReadStream()
@@ -316,23 +327,24 @@ if (+process.env['NON_SPARSE'] !== 1) { // eslint-disable-line
   test('read stream - { wait: false } will not download remote blocks', async t => {
     const storeA = new Corestore(ram)
     const storeB = new Corestore(ram)
+    const keychain = new Keychain()
 
     const r = storeA.replicate(true)
     r.pipe(storeB.replicate(false)).pipe(r)
 
-    const baseA = new Autobase(storeA)
-    const baseB = new Autobase(storeB)
+    const baseA = new Autobase(storeA, keychain.sub('store-a'))
+    const baseB = new Autobase(storeB, keychain.sub('store-b'))
     await Promise.all([baseA.ready(), baseB.ready()])
 
-    await baseA.addInput(baseB.localInputKey)
-    await baseB.addInput(baseA.localInputKey)
+    await baseA.addInput(baseB.localInputKeyPair.publicKey)
+    await baseB.addInput(baseA.localInputKeyPair.publicKey)
 
     await baseA.append('a0')
     await baseB.append('b0')
     await baseA.append('a1')
     await baseB.append('b1')
 
-    await baseB._inputsByKey.get(b.toString(baseA.localInputKey, 'hex')).get(0) // Download the first block
+    await baseB._inputsByKey.get(b.toString(baseA.localInputKeyPair.publicKey, 'hex')).get(0) // Download the first block
 
     {
       // With wait: false, the read stream should only yield locally-available nodes

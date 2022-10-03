@@ -25,7 +25,7 @@ test('non-sparse local linearizing - can purge, causal writes', async t => {
   t.is(baseA.localOutputs[0].length, 8)
 
   // Cut out writer A. B should no longer be satisfiable
-  await baseA.removeInput(baseA.localInputKey)
+  await baseA.removeInput(baseA.localInputKeyPair.publicKey)
 
   t.alike(await linearizedValues(baseA.view), ['c4', 'c3', 'c2', 'c1', 'c0'])
   t.is(baseA.view.status.appended, 0)
@@ -50,7 +50,7 @@ test('non-sparse local linearizing - can purge, causal writes interleaved', asyn
   t.is(baseA.localOutputs[0].length, 6)
 
   // a5 is no longer satisfiable, so the causal stream cannot continue
-  await baseA.removeInput(baseB.localInputKey)
+  await baseA.removeInput(baseB.localInputKeyPair.publicKey)
 
   t.alike(await linearizedValues(baseA.view), [])
   t.is(baseA.view.status.appended, 0)

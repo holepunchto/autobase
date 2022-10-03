@@ -1,4 +1,5 @@
 const Corestore = require('corestore')
+const Keychain = require('keypear')
 const ram = require('random-access-memory')
 const test = require('brittle')
 
@@ -30,9 +31,10 @@ test('batches - array-valued appends using partial input nodes', async t => {
 
 test('batches - batches store compressed clocks correctly', async t => {
   const store = new Corestore(ram)
+  const keychain = new Keychain()
 
   {
-    const [baseA, baseB] = await create(2, { store, view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
+    const [baseA, baseB] = await create(2, { store, keychain, view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
 
     await baseA.append(['a0', 'a1'])
     await baseB.append(['b0', 'b1', 'b2'])
@@ -42,13 +44,13 @@ test('batches - batches store compressed clocks correctly', async t => {
   }
 
   {
-    const [baseA, baseB] = await create(2, { store, view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
+    const [baseA, baseB] = await create(2, { store, keychain, view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
     await baseA.ready()
 
     // Can independently load the first block of the second batch
     const b0 = await baseA.localOutputs[0].get(2)
 
-    t.alike(b0.change, baseB.localInputKey)
+    t.alike(b0.change, baseB.localInputKeyPair.publicKey)
     t.is(b0.clock.size, 2) // The clock is the full batch clock
   }
 })
