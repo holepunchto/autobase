@@ -13,7 +13,7 @@
     "codecs": "^3.0.0",
     "compact-encoding": "^2.0.0",
     "debounceify": "^1.0.0",
-    "keypear": "github:holepunchto/keypear",
+    "keypear": "^1.1.1",
     "mutexify": "^1.4.0",
     "ready-resource": "^1.0.0",
     "safety-catch": "^1.0.1",
