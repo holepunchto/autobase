@@ -17,12 +17,10 @@ const { Node: NodeSchema, decodeHeader } = require('./lib/nodes/messages')
 
 const INPUT_PROTOCOL = '@autobase/input/v1'
 const OUTPUT_PROTOCOL = '@autobase/output/v1'
-const INPUT_KEYPAIR_NAME = 'input'
-const OUTPUTS_SUB_NAME = 'outputs'
 
 const FORCE_NON_SPARSE = +process.env['NON_SPARSE'] // eslint-disable-line
 
-module.exports = class Autobase extends ReadyResource {
+class Autobase extends ReadyResource {
   constructor (corestore, keychain, { inputs, outputs, autostart, apply, open, views, version, unwrap, eagerUpdate, sparse } = {}) {
     super()
     this.corestore = corestore
@@ -37,9 +35,9 @@ module.exports = class Autobase extends ReadyResource {
     this._eagerUpdate = eagerUpdate !== false
     this._sparse = (sparse !== false) && (FORCE_NON_SPARSE !== 1)
 
-    this._outputsKeychain = this.keychain.sub(OUTPUTS_SUB_NAME)
-    this.localInputKeyPair = this.keychain.get(INPUT_KEYPAIR_NAME)
-    this.localOutputKeyPair = this._outputsKeychain.get()
+    this._outputsKeychain = this.keychain.sub(Autobase.OUTPUTS)
+    this.localInputKeyPair = Autobase.getInputKey(this.keychain)
+    this.localOutputKeyPair = Autobase.getOutputKey(this.keychain, 0, { sub: this._outputsKeychain })
 
     this._batchId = 0
     this._readStreams = []
@@ -55,6 +53,15 @@ module.exports = class Autobase extends ReadyResource {
       this.emit('append')
       this._onInputsChanged()
     }
+  }
+
+  static getInputKey (keychain) {
+    return keychain.get(Autobase.INPUT)
+  }
+
+  static getOutputKey (keychain, i, opts) {
+    const sub = (opts && opts.sub) || keychain.sub(Autobase.OUTPUTS)
+    return i === 0 ? sub.get() : sub.get('' + i)
   }
 
   get localOutputs () {
@@ -91,7 +98,7 @@ module.exports = class Autobase extends ReadyResource {
     const keychain = b.equals(key, this.localOutputKeyPair.publicKey) ? this._outputsKeychain : this.keychain.checkout(key)
     const outputs = this._outputsByKey.get(b.toString(key, 'hex'))
     for (let i = outputs.length; i < this._viewCount; i++) {
-      const nextKey = i === 0 ? keychain.get() : keychain.get('' + i)
+      const nextKey = Autobase.getOutputKey(keychain, i, { sub: keychain })
       const output = new Output(i, this.corestore.get(nextKey))
       outputs.push(output)
     }
@@ -679,6 +686,10 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 }
+Autobase.INPUT = 'input'
+Autobase.OUTPUTS = 'outputs'
+
+module.exports = Autobase
 
 function isFork (head, heads) {
   if (!head) return false
