@@ -21,8 +21,10 @@ const OUTPUT_PROTOCOL = '@autobase/output/v1'
 const FORCE_NON_SPARSE = +process.env['NON_SPARSE'] // eslint-disable-line
 
 class Autobase extends ReadyResource {
-  constructor (corestore, keychain, { inputs, outputs, autostart, apply, open, views, version, unwrap, eagerUpdate, sparse } = {}) {
+  constructor (corestore, keychain, opts = {}) {
     super()
+    const { inputs, outputs, autostart, apply, open, views, version, unwrap, eagerUpdate, sparse, localInput } = opts
+
     this.corestore = corestore
     this.keychain = Keychain.from(keychain)
 
@@ -34,6 +36,7 @@ class Autobase extends ReadyResource {
     this._lock = mutexify()
     this._eagerUpdate = eagerUpdate !== false
     this._sparse = (sparse !== false) && (FORCE_NON_SPARSE !== 1)
+    this._localInput = localInput
 
     this._outputsKeychain = this.keychain.sub(Autobase.OUTPUTS)
     this.localInputKeyPair = Autobase.getInputKey(this.keychain)
@@ -81,7 +84,7 @@ class Autobase extends ReadyResource {
 
   async _open () {
     await this.corestore.ready()
-    this._addInput(this.localInputKeyPair)
+    if (this._localInput) this._addInput(this.localInputKeyPair)
     for (const input of this._inputs) {
       this._addInput(input)
     }
@@ -116,6 +119,8 @@ class Autobase extends ReadyResource {
     this._inputsByKey.set(id, input)
 
     this._onInputsChanged()
+
+    return input
   }
 
   // Called by MemberBatch
@@ -131,6 +136,8 @@ class Autobase extends ReadyResource {
     }
 
     this._deriveOutputs(publicKey)
+
+    return this._outputsByKey.get(id)
   }
 
   // Called by MemberBatch
@@ -183,14 +190,14 @@ class Autobase extends ReadyResource {
     return keyCompressor
   }
 
-  async _decompressClock (input, seq, clock) {
+  async _decompressClock (input, seq, clock, opts) {
     const keyCompressor = this._getKeyCompressor(input)
-    return keyCompressor.decompress(clock, seq)
+    return keyCompressor.decompress(clock, seq, opts)
   }
 
-  async _compressClock (input, seq, clock) {
+  async _compressClock (input, seq, clock, opts) {
     const keyCompressor = this._getKeyCompressor(input)
-    return keyCompressor.compress(clock, seq)
+    return keyCompressor.compress(clock, seq, opts)
   }
 
   async _getInputNode (input, seq, opts) {
@@ -221,7 +228,7 @@ class Autobase extends ReadyResource {
     }
 
     if (node.clock) {
-      node.clock = await this._decompressClock(input, seq, decoded.clock)
+      node.clock = await this._decompressClock(input, seq, decoded.clock, opts)
       if (node.seq > 0) node.clock.set(node.id, node.seq - 1)
       else node.clock.delete(node.id)
     }
@@ -283,15 +290,15 @@ class Autobase extends ReadyResource {
     return this.view
   }
 
-  async heads (clock) {
+  async heads (clock, opts) {
     if (!this.opened) await this.ready()
-    clock = clock || await this.latest()
+    clock = clock || await this.latest(opts)
 
     const headPromises = []
     for (const key of clock.keys()) {
       const input = this._inputsByKey.get(key)
       if (!input) return []
-      headPromises.push(this._getInputNode(input, clock ? clock.get(key) : input.length - 1))
+      headPromises.push(this._getInputNode(input, clock ? clock.get(key) : input.length - 1, opts))
     }
 
     return Promise.all(headPromises)
@@ -411,7 +418,7 @@ class Autobase extends ReadyResource {
     return new streamx.Readable({ open, read })
 
     function open (cb) {
-      self.heads(opts.clock)
+      self.heads(opts.clock, opts)
         .then(h => { heads = h })
         .then(() => cb(null), err => cb(err))
     }
@@ -455,7 +462,7 @@ class Autobase extends ReadyResource {
         return cb(null)
       }
 
-      self._getInputNode(node.id, node.seq - 1).then(next => {
+      self._getInputNode(node.id, node.seq - 1, opts).then(next => {
         heads[headIndex] = next
         return cb(null)
       }, err => cb(err))
@@ -633,6 +640,8 @@ class Autobase extends ReadyResource {
   }
 
   async _append (value, clock) {
+    if (!this.opened) await this.ready()
+    if (!this.localInput) throw new Error('Must be an Autobase input to append')
     if (!Array.isArray(value)) value = [value]
     clock = clockToMap(clock || await this.latest())
 

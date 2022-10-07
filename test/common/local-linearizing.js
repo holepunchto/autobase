@@ -321,15 +321,11 @@ test('local linearizing - creating two branch snapshots with a common update clo
     await baseC.append(`c${i}`, [])
   }
 
-  const snapshot1 = baseA.view.snapshot()
   await baseA.view.update()
+  const snapshot1 = baseA.view.snapshot()
   const snapshot2 = baseA.view.snapshot()
-  const snapshot3 = baseA.view.snapshot()
 
-  t.alike(await linearizedValues(snapshot1, { update: false }), [])
   t.is(baseA.localOutputs[0].length, 6)
-
-  await snapshot1.update()
 
   t.alike(await linearizedValues(snapshot1, { update: false }), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
   t.is(baseA.localOutputs[0].length, 6)
@@ -342,12 +338,12 @@ test('local linearizing - creating two branch snapshots with a common update clo
     await baseA.append(`a${i}`, [])
   }
 
-  await snapshot3.update()
+  await snapshot2.update()
 
-  t.alike(await linearizedValues(snapshot3, { update: false }), ['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0'])
+  t.alike(await linearizedValues(snapshot2, { update: false }), ['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0'])
   t.is(baseA.localOutputs[0].length, 9)
 
-  t.alike(await linearizedValues(snapshot2, { update: false }), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
+  t.alike(await linearizedValues(snapshot1, { update: false }), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
   t.is(baseA.localOutputs[0].length, 9)
 })
 

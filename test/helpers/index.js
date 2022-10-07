@@ -17,7 +17,12 @@ async function create (n, opts = {}) {
   }
   await Promise.all(bases.map(b => b.ready()))
 
-  if (opts.noInputs === true) return bases
+  if (opts.noInputs === true) {
+    for (const base of bases) {
+      await base.addInput(base.localInputKeyPair)
+    }
+    return bases
+  }
 
   for (let i = 0; i < n; i++) {
     const batch = bases[i].memberBatch()

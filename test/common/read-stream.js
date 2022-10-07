@@ -55,8 +55,13 @@ test('read stream -- not live, inputs snapshotted', async t => {
   const stream = baseA.createReadStream()
   await new Promise(resolve => stream.once('readable', resolve))
 
-  const baseC = new Autobase(store, keychain.sub('base-c'), {
-    inputs: [baseA.localInputKeyPair.publicKey, baseB.localInputKeyPair.publicKey]
+  const baseCKeychain = keychain.sub('base-c')
+  const baseC = new Autobase(store, baseCKeychain, {
+    inputs: [
+      baseA.localInputKeyPair.publicKey,
+      baseB.localInputKeyPair.publicKey,
+      Autobase.getInputKey(baseCKeychain)
+    ]
   })
   await baseC.ready()
 
@@ -94,8 +99,13 @@ test('read stream -- live, causally-linked writes', async t => {
   // Delay to ensure stream doesn't end after inputs are exhausted
   await new Promise(resolve => setTimeout(resolve, 50))
 
-  const baseC = new Autobase(store, keychain.sub('base-c'), {
-    inputs: [baseA.localInputKeyPair.publicKey, baseB.localInputKeyPair.publicKey]
+  const baseCKeychain = keychain.sub('base-c')
+  const baseC = new Autobase(store, baseCKeychain, {
+    inputs: [
+      baseA.localInputKeyPair.publicKey,
+      baseB.localInputKeyPair.publicKey,
+      Autobase.getInputKey(baseCKeychain)
+    ]
   })
   await baseC.ready()
 
@@ -115,9 +125,9 @@ test('read stream - onresolve hook, resolvable', async t => {
   const store = new Corestore(ram)
   const keychain = new Keychain()
 
-  const baseA = new Autobase(store, keychain.sub('base-a'))
-  const baseB = new Autobase(store, keychain.sub('base-b'))
-  const baseC = new Autobase(store, keychain.sub('base-c'))
+  const baseA = new Autobase(store, keychain.sub('base-a'), { localInput: true })
+  const baseB = new Autobase(store, keychain.sub('base-b'), { localInput: true } )
+  const baseC = new Autobase(store, keychain.sub('base-c'), { localInput: true })
   await Promise.all([baseA.ready(), baseB.ready()])
 
   // A and B both acknowledge each other's writes
@@ -161,9 +171,11 @@ test('read stream - onresolve hook, resolvable', async t => {
 
 test('read stream - onresolve hook, not resolvable', async t => {
   const store = new Corestore(ram)
-  const baseA = new Autobase(store.namespace('base-a'))
-  const baseB = new Autobase(store.namespace('base-b'))
-  const baseC = new Autobase(store.namespace('base-c'))
+  const keychain = new Keychain()
+
+  const baseA = new Autobase(store, keychain.sub('base-a'), { localInput: true })
+  const baseB = new Autobase(store, keychain.sub('base-b'), { localInput: true })
+  const baseC = new Autobase(store, keychain.sub('base-c'), { localInput: true })
   await Promise.all([baseA.ready(), baseB.ready()])
 
   // A and B both acknowledge each other's writes
@@ -207,9 +219,11 @@ test('read stream - onresolve hook, not resolvable', async t => {
 
 test('read stream - onwait hook', async t => {
   const store = new Corestore(ram)
-  const baseA = new Autobase(store.namespace('base-a'))
-  const baseB = new Autobase(store.namespace('base-b'))
-  const baseC = new Autobase(store.namespace('base-c'))
+  const keychain = new Keychain()
+
+  const baseA = new Autobase(store, keychain.sub('base-a'), { localInput: true })
+  const baseB = new Autobase(store, keychain.sub('base-b'), { localInput: true })
+  const baseC = new Autobase(store, keychain.sub('base-c'), { localInput: true })
   await Promise.all([baseA.ready(), baseB.ready()])
 
   // A and B both acknowledge each other's writes
@@ -332,8 +346,8 @@ if (+process.env['NON_SPARSE'] !== 1) { // eslint-disable-line
     const r = storeA.replicate(true)
     r.pipe(storeB.replicate(false)).pipe(r)
 
-    const baseA = new Autobase(storeA, keychain.sub('store-a'))
-    const baseB = new Autobase(storeB, keychain.sub('store-b'))
+    const baseA = new Autobase(storeA, keychain.sub('store-a'), { localInput: true })
+    const baseB = new Autobase(storeB, keychain.sub('store-b'), { localInput: true })
     await Promise.all([baseA.ready(), baseB.ready()])
 
     await baseA.addInput(baseB.localInputKeyPair.publicKey)
