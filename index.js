@@ -61,7 +61,7 @@ class Autobase extends ReadyResource {
 
   static getOutputKey (keychain, i, opts) {
     const sub = (opts && opts.sub) || keychain.sub(Autobase.OUTPUTS)
-    return i === 0 ? sub.get() : sub.get('' + i)
+    return !i ? sub.get() : sub.get('' + i)
   }
 
   get localOutputs () {
