@@ -671,9 +671,10 @@ class Autobase extends ReadyResource {
     }
   }
 
-  async update () {
+  async update (opts = {}) {
     if (!this.opened) await this._opening
     if (!this._internalView) throw new Error('Must create a view before updating it')
+    if (opts.local) return this._internalView.ready()
     return this._internalView.update()
   }
 
