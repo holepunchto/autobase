@@ -671,6 +671,12 @@ class Autobase extends ReadyResource {
     }
   }
 
+  async update () {
+    if (!this.opened) await this._opening
+    if (!this._internalView) throw new Error('Must create a view before updating it')
+    return this._internalView.update()
+  }
+
   async _close () {
     for (const input of this.inputs) {
       input.removeListener('append', this._onappend)
