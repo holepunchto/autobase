@@ -19,7 +19,7 @@ async function create (n, opts = {}) {
 
   if (opts.noInputs === true) {
     for (const base of bases) {
-      await base.addInput(base.localInputKeyPair)
+      await base.addInput(base.localInputKey)
     }
     return bases
   }
@@ -27,21 +27,21 @@ async function create (n, opts = {}) {
   for (let i = 0; i < n; i++) {
     const batch = bases[i].memberBatch()
     for (let j = 0; j < n; j++) {
-      batch.addInput(bases[j].localInputKeyPair)
+      batch.addInput(bases[j].localInputKey)
     }
     await batch.commit()
   }
   if (opts.view) {
     if (opts.view.localOnly) {
       for (let i = 0; i < n; i++) {
-        await bases[i].addOutput(bases[i].localOutputKeyPair)
+        await bases[i].addOutput(bases[i].localOutputKey)
       }
     } else if (opts.view.oneRemote) {
       for (let i = 0; i < n; i++) {
         if (i === 0) {
-          await bases[i].addOutput(bases[i].localOutputKeyPair)
+          await bases[i].addOutput(bases[i].localOutputKey)
         } else {
-          await bases[i].addOutput(bases[0].localOutputKeyPair)
+          await bases[i].addOutput(bases[0].localOutputKey)
         }
       }
     }

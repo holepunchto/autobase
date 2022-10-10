@@ -37,7 +37,7 @@ test('multi-view - two identical views, local-only indexing, no rebasing', async
   t.alike(await linearizedValues(coreB2), ['b1', 'a1', 'b0', 'a0'])
 })
 
-test('multi-view - two identical views, remote indexing, no rebasing', async t => {
+test.solo('multi-view - two identical views, remote indexing, no rebasing', async t => {
   const [baseA, baseB] = await create(2, { view: { oneRemote: true }, opts: { autostart: false, eagerUpdate: false } })
 
   const viewOptions = {
@@ -59,6 +59,7 @@ test('multi-view - two identical views, remote indexing, no rebasing', async t =
   await coreA1.update() // Will update both A1 and A2
   await Promise.all([coreB1.update(), coreB2.update()]) // Should use Base A's index
 
+  console.log('base B outputs:', baseB.outputs)
   t.absent(baseB._internalView.nodes[0])
   t.absent(baseB._internalView.nodes[1])
 

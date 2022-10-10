@@ -127,7 +127,7 @@ test('local linearizing - can purge', async t => {
   t.is(baseA.localOutputs[0].length, 8)
 
   // Cut out writer B. Should truncate 3
-  await baseA.removeInput(baseB.localInputKeyPair.publicKey)
+  await baseA.removeInput(baseB.localInputKey)
 
   t.alike(await linearizedValues(baseA.view), ['a0', 'c4', 'c3', 'c2', 'c1', 'c0'])
   t.is(baseA.view.status.appended, 1) // a0 is reindexed
@@ -152,7 +152,7 @@ test('local linearizing - can purge from the back', async t => {
   t.is(baseA.localOutputs[0].length, 6)
 
   // Cut out writer B. Should truncate 3
-  await baseA.removeInput(baseB.localInputKeyPair.publicKey)
+  await baseA.removeInput(baseB.localInputKey)
 
   t.alike(await linearizedValues(baseA.view), ['a0'])
   t.is(baseA.view.status.appended, 1) // a0 is reindexed
@@ -177,7 +177,7 @@ test('local linearizing - can purge from the front', async t => {
   t.is(baseA.localOutputs[0].length, 6)
 
   // Cut out writer A. Should truncate 1
-  await baseA.removeInput(baseA.localInputKeyPair.publicKey)
+  await baseA.removeInput(baseA.localInputKey)
 
   t.alike(await linearizedValues(baseA.view), ['b4', 'b3', 'b2', 'b1', 'b0'])
   t.is(baseA.view.status.appended, 0) // a0 is reindexed
@@ -259,9 +259,9 @@ test('local linearizing - can dynamically add a local output', async t => {
   t.alike(await linearizedValues(baseA.view), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
   t.is(baseA.view.status.appended, 6)
   t.is(baseA.view.status.truncated, 0)
-  t.absent(baseA.localOutputs)
+  t.absent(baseA._localOutputs())
 
-  await baseA.addOutput(baseA.localOutputKeyPair.publicKey)
+  await baseA.addOutput(baseA.localOutputKey)
 
   t.alike(await linearizedValues(baseA.view), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
   // TODO: Fix these, they should both be 0
@@ -287,9 +287,9 @@ test('local linearizing - truncation does not break key compression', async t =>
   {
     // A's key initially should be stored in the 6th block
     await baseA.view.update()
-    const keys = decodeKeys(await baseA.localOutputs[0].core.get(5))
+    const keys = decodeKeys(await baseA.localOutputs[0].get(5))
     t.is(keys.length, 1)
-    t.alike(keys[0], baseA.localInputKeyPair.publicKey)
+    t.alike(keys[0], baseA.localInputKey)
   }
 
   // Add 3 more records to A -- should switch fork ordering
@@ -301,9 +301,9 @@ test('local linearizing - truncation does not break key compression', async t =>
   {
     // A's key should be stored in the 0th block
     await baseA.view.update()
-    const keys = decodeKeys(await baseA.localOutputs[0].core.get(0))
+    const keys = decodeKeys(await baseA.localOutputs[0].get(0))
     t.is(keys.length, 1)
-    t.alike(keys[0], baseA.localInputKeyPair.publicKey)
+    t.alike(keys[0], baseA.localInputKey)
   }
 })
 

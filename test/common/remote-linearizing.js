@@ -33,8 +33,8 @@ test('remote linearizing - selects longest remote output', async t => {
   {
     // Base C's output should be fully up-to-date
     const base = new Autobase(store, keychain.sub('base-1'), {
-      inputs: [baseA.localInputKeyPair.publicKey, baseB.localInputKeyPair.publicKey, baseC.localInputKeyPair.publicKey],
-      outputs: [baseC.localOutputKeyPair.publicKey],
+      inputs: [baseA.localInputKey, baseB.localInputKey, baseC.localInputKey],
+      outputs: [baseC.localOutputKey],
       autostart: true,
       eagerUpdate: false
     })
@@ -46,8 +46,8 @@ test('remote linearizing - selects longest remote output', async t => {
   {
     // Should not have to add B and C
     const base = new Autobase(store, keychain.sub('base-2'), {
-      inputs: [baseA.localInputKeyPair.publicKey, baseB.localInputKeyPair.publicKey, baseC.localInputKeyPair.publicKey],
-      outputs: [baseA.localOutputKeyPair.publicKey],
+      inputs: [baseA.localInputKey, baseB.localInputKey, baseC.localInputKey],
+      outputs: [baseA.localOutputKey],
       autostart: true,
       eagerUpdate: false
     })
@@ -59,8 +59,8 @@ test('remote linearizing - selects longest remote output', async t => {
   {
     // Should select Base B's output
     const base = new Autobase(store, keychain.sub('base-3'), {
-      inputs: [baseA.localInputKeyPair.publicKey, baseB.localInputKeyPair.publicKey, baseC.localInputKeyPair.publicKey],
-      outputs: [baseA.localOutputKeyPair.publicKey, baseB.localOutputKeyPair.publicKey],
+      inputs: [baseA.localInputKey, baseB.localInputKey, baseC.localInputKey],
+      outputs: [baseA.localOutputKey, baseB.localOutputKey],
       autostart: true,
       eagerUpdate: false
     })
@@ -72,8 +72,8 @@ test('remote linearizing - selects longest remote output', async t => {
   {
     // Should select Base C's output
     const base = new Autobase(store, keychain.sub('base-3'), {
-      inputs: [baseA.localInputKeyPair.publicKey, baseB.localInputKeyPair.publicKey, baseC.localInputKeyPair.publicKey],
-      outputs: [baseA.localOutputKeyPair.publicKey, baseB.localOutputKeyPair.publicKey, baseC.localOutputKeyPair.publicKey],
+      inputs: [baseA.localInputKey, baseB.localInputKey, baseC.localInputKey],
+      outputs: [baseA.localOutputKey, baseB.localOutputKey, baseC.localOutputKey],
       autostart: true,
       eagerUpdate: false
     })

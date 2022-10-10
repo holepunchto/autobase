@@ -73,7 +73,7 @@ test.skip('manually specifying clocks, unavailable blocks', async t => {
   await baseA.append('a0')
   await baseA.append('a1')
   await baseB.append('b0', [
-    [b4a.toString(baseA.localInputKeyPair.publicKey, 'hex'), 40] // Links to a1
+    [b4a.toString(baseA.localInputKey, 'hex'), 40] // Links to a1
   ])
   await baseB.append('b1', [])
   await baseB.append('b2', [])
@@ -88,7 +88,7 @@ test('manually specifying clocks, available blocks', async t => {
   await baseA.append('a0')
   await baseA.append('a1')
   await baseB.append('b0', [
-    [b4a.toString(baseA.localInputKeyPair.publicKey, 'hex'), 1] // Links to a1
+    [b4a.toString(baseA.localInputKey, 'hex'), 1] // Links to a1
   ])
   await baseB.append('b1', [])
   await baseB.append('b2', [])
@@ -109,15 +109,15 @@ test('supports a local input and default latest clocks', async t => {
 
   const output = await causalValues(baseA)
   t.alike(output.map(v => b4a.toString(v.value)), ['a3', 'b1', 'a2', 'b0', 'a1', 'a0'])
-  t.alike(output[0].change, baseA.localInputKeyPair.publicKey)
-  t.alike(output[1].change, baseB.localInputKeyPair.publicKey)
+  t.alike(output[0].change, baseA.localInputKey)
+  t.alike(output[1].change, baseB.localInputKey)
 })
 
 test('adding duplicate inputs is a no-op', async t => {
   const [baseA, baseB] = await create(2)
 
-  await baseA.addInput(baseB.localInputKeyPair.publicKey)
-  await baseA.addInput(baseA.localInputKeyPair.publicKey)
+  await baseA.addInput(baseB.localInputKey)
+  await baseA.addInput(baseA.localInputKey)
 
   t.is(baseA.inputs.length, 2)
 
@@ -130,8 +130,8 @@ test('adding duplicate inputs is a no-op', async t => {
 
   const output = await causalValues(baseA)
   t.alike(output.map(v => b4a.toString(v.value)), ['a3', 'b1', 'a2', 'b0', 'a1', 'a0'])
-  t.alike(output[0].change, baseA.localInputKeyPair.publicKey)
-  t.alike(output[1].change, baseB.localInputKeyPair.publicKey)
+  t.alike(output[0].change, baseA.localInputKey)
+  t.alike(output[1].change, baseB.localInputKey)
 })
 
 test('dynamically adding/removing inputs', async t => {
@@ -146,14 +146,14 @@ test('dynamically adding/removing inputs', async t => {
     t.is(output.length, 1)
   }
 
-  await baseA.addInput(baseA.localInputKeyPair.publicKey)
+  await baseA.addInput(baseA.localInputKey)
 
   {
     const output = await causalValues(baseA)
     t.alike(output.map(v => b4a.toString(v.value)), ['a0'])
   }
 
-  await baseA.addInput(baseB.localInputKeyPair.publicKey)
+  await baseA.addInput(baseB.localInputKey)
 
   for (let i = 0; i < 2; i++) {
     await baseB.append(`b${i}`)
@@ -164,7 +164,7 @@ test('dynamically adding/removing inputs', async t => {
     t.alike(output.map(v => b4a.toString(v.value)), ['a0', 'b1', 'b0'])
   }
 
-  await baseA.addInput(baseC.localInputKeyPair.publicKey)
+  await baseA.addInput(baseC.localInputKey)
 
   for (let i = 0; i < 3; i++) {
     await baseC.append(`c${i}`)
@@ -185,7 +185,7 @@ test('dynamically adding/removing inputs', async t => {
     t.alike(output.map(v => b4a.toString(v.value)), ['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0'])
   }
 
-  await baseA.removeInput(baseC.localInputKeyPair.publicKey)
+  await baseA.removeInput(baseC.localInputKey)
 
   {
     const output = await causalValues(baseA)
@@ -204,7 +204,7 @@ test('dynamically adding inputs does not alter existing causal streams', async t
     t.alike(output.map(v => b4a.toString(v.value)), ['a0'])
   }
 
-  await baseA.addInput(baseB.localInputKeyPair.publicKey)
+  await baseA.addInput(baseB.localInputKey)
 
   for (let i = 0; i < 2; i++) {
     await baseB.append(`b${i}`, [])
@@ -214,7 +214,7 @@ test('dynamically adding inputs does not alter existing causal streams', async t
   const stream = baseA.createCausalStream()
   await new Promise(resolve => stream.once('readable', resolve)) // Once the stream is opened, its heads are locked
 
-  await baseA.addInput(baseC.localInputKeyPair.publicKey)
+  await baseA.addInput(baseC.localInputKey)
 
   for await (const node of stream) { // The stream should not have writerC's nodes
     output.push(node)
@@ -232,7 +232,7 @@ test('can parse headers', async t => {
   await baseA.view.update()
 
   t.ok(await Autobase.isAutobase(baseA.localInput))
-  t.ok(await Autobase.isAutobase(baseA.localOutputs[0].core))
+  t.ok(await Autobase.isAutobase(baseA.localOutputs[0]))
   t.absent(await Autobase.isAutobase(notAutobase))
 })
 
@@ -245,7 +245,7 @@ test('equal-sized forks are deterministically ordered by key', async t => {
     await baseB.append('i21', [])
 
     const values = (await causalValues(baseA)).map(v => b4a.toString(v.value))
-    if (baseA.localInputKeyPair.publicKey > baseB.localInputKeyPair.publicKey) {
+    if (baseA.localInputKey > baseB.localInputKey) {
       t.alike(values, ['i21', 'i20', 'i11', 'i10'])
     } else {
       t.alike(values, ['i11', 'i10', 'i21', 'i20'])

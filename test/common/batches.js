@@ -48,9 +48,9 @@ test('batches - batches store compressed clocks correctly', async t => {
     await baseA.ready()
 
     // Can independently load the first block of the second batch
-    const b0 = await baseA.localOutputs[0].get(2)
+    const b0 = await baseA._localOutputs()[0].get(2)
 
-    t.alike(b0.change, baseB.localInputKeyPair.publicKey)
+    t.alike(b0.change, baseB.localInputKey)
     t.is(b0.clock.size, 2) // The clock is the full batch clock
   }
 })

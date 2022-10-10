@@ -39,8 +39,6 @@ class Autobase extends ReadyResource {
     this._localInput = localInput
 
     this._outputsKeychain = this.keychain.sub(Autobase.OUTPUTS)
-    this.localInputKeyPair = Autobase.getInputKey(this.keychain)
-    this.localOutputKeyPair = Autobase.getOutputKey(this.keychain, 0, { sub: this._outputsKeychain })
 
     this._batchId = 0
     this._readStreams = []
@@ -58,33 +56,41 @@ class Autobase extends ReadyResource {
     }
   }
 
-  static getInputKey (keychain) {
-    return keychain.get(Autobase.INPUT)
+  static getOutputKeys (keychain, n) {
+    const keys = []
+    for (let i = 0; i < n; i++) {
+      keys.push(!i ? keychain.get() : keychain.get('' + i))
+    }
+    return keys
   }
 
-  static getOutputKey (keychain, i, opts) {
-    const sub = (opts && opts.sub) || keychain.sub(Autobase.OUTPUTS)
-    return !i ? sub.get() : sub.get('' + i)
+  get localInputKey () {
+    return this.keychain.publicKey
+  }
+
+  get localOutputKey () {
+    return this._outputsKeychain.publicKey
   }
 
   get localOutputs () {
-    return this._outputsByKey.get(b.toString(this.localOutputKeyPair.publicKey, 'hex'))
+    const outputs = this._localOutputs()
+    return outputs.map(o => o.core)
   }
 
   get localInput () {
-    return this._inputsByKey.get(b.toString(this.localInputKeyPair.publicKey, 'hex'))
+    return this._inputsByKey.get(b.toString(this.keychain.publicKey, 'hex'))
   }
 
   get isIndexing () {
-    const localOutputs = this.localOutputs
-    return !!(localOutputs && localOutputs.length)
+    const outputs = this._localOutputs()
+    return !!(outputs && outputs.length)
   }
 
   // Private Methods
 
   async _open () {
     await this.corestore.ready()
-    if (this._localInput) this._addInput(this.localInputKeyPair)
+    if (this._localInput) this._addInput(this.keychain)
     for (const input of this._inputs) {
       this._addInput(input)
     }
@@ -97,24 +103,35 @@ class Autobase extends ReadyResource {
     ])
   }
 
-  _deriveOutputs (key) {
-    const keychain = b.equals(key, this.localOutputKeyPair.publicKey) ? this._outputsKeychain : this.keychain.checkout(key)
-    const outputs = this._outputsByKey.get(b.toString(key, 'hex'))
-    for (let i = outputs.length; i < this._viewCount; i++) {
-      const nextKey = Autobase.getOutputKey(keychain, i, { sub: keychain })
-      const output = new Output(i, this.corestore.get(nextKey))
-      outputs.push(output)
+  _deriveOutputs (keychain) {
+    keychain = this._toKeychain(keychain)
+    const outputs = this._outputsByKey.get(b.toString(keychain.publicKey, 'hex'))
+    const keypairs = Autobase.getOutputKeys(keychain, this._viewCount)
+    for (let i = 0; i < this._viewCount; i++) {
+      outputs.push(new Output(i, this.corestore.get(keypairs[i])))
     }
   }
 
+  _localOutputs () {
+    return this._outputsByKey.get(b.toString(this.localOutputKey, 'hex'))
+  }
+
+  _toKeychain (keychain) {
+    if (!b.isBuffer(keychain)) return keychain
+    if (b.equals(keychain, this.keychain.publicKey)) return this.keychain
+    if (b.equals(keychain, this._outputsKeychain.publicKey)) return this._outputsKeychain
+    return this.keychain.checkout(keychain)
+  }
+
   // Called by MemberBatch
-  _addInput (keyPair) {
-    const opts = b.isBuffer(keyPair) ? { publicKey: keyPair } : keyPair
-    const id = b.toString(opts.publicKey, 'hex')
+  _addInput (keychain) {
+    keychain = this._toKeychain(keychain)
+    const id = b.toString(keychain.publicKey, 'hex')
 
     if (this._inputsByKey.has(id)) return
 
-    const input = this.corestore.get({ ...opts, sparse: this._sparse })
+    // TODO: If we ever want the keypair instance to be a class, this will need updating
+    const input = this.corestore.get({ ...keychain.get(), sparse: this._sparse })
     input.on('append', this._onappend)
     this._inputsByKey.set(id, input)
 
@@ -124,9 +141,9 @@ class Autobase extends ReadyResource {
   }
 
   // Called by MemberBatch
-  _addOutput (keyPair) {
-    const publicKey = b.isBuffer(keyPair) ? keyPair : keyPair.publicKey
-    const id = b.toString(publicKey, 'hex')
+  _addOutput (keychain) {
+    keychain = this._toKeychain(keychain)
+    const id = b.toString(keychain.publicKey, 'hex')
 
     const existing = this._outputsByKey.get(id)
     if (existing && existing.length === this._viewCount) return
@@ -134,16 +151,16 @@ class Autobase extends ReadyResource {
     if (!existing) {
       this._outputsByKey.set(id, [])
     }
-
-    this._deriveOutputs(publicKey)
+    this._deriveOutputs(keychain)
 
     return this._outputsByKey.get(id)
   }
 
   // Called by MemberBatch
-  _removeInput (keyPair) {
-    const key = b.isBuffer(keyPair) ? keyPair : keyPair.publicKey
-    const id = b.toString(key, 'hex')
+  _removeInput (keychain) {
+    keychain = this._toKeychain(keychain)
+
+    const id = b.toString(keychain.publicKey, 'hex')
     if (!this._inputsByKey.has(id)) return
 
     const input = this._inputsByKey.get(id)
@@ -156,8 +173,10 @@ class Autobase extends ReadyResource {
   }
 
   // Called by MemberBatch
-  _removeOutput (key) {
-    const id = b.toString(key, 'hex')
+  _removeOutput (keychain) {
+    keychain = this._toKeychain(keychain)
+
+    const id = b.toString(keychain.publicKey, 'hex')
     if (!this._outputsByKey.has(id)) return
 
     const outputs = this._outputsByKey.get(id)
@@ -385,27 +404,33 @@ class Autobase extends ReadyResource {
     return new MemberBatch(this)
   }
 
-  async addInput (input, opts) {
+  async addInput (keychain, opts) {
     const batch = new MemberBatch(this)
-    batch.addInput(input, opts)
+    batch.addInput(keychain, opts)
+    if (opts && opts.output) {
+      batch.addOutput(keychain.sub(Autobase.OUTPUTS))
+    }
     return batch.commit()
   }
 
-  async removeInput (input, opts) {
+  async removeInput (keychain, opts) {
     const batch = new MemberBatch(this)
-    batch.removeInput(input, opts)
+    batch.removeInput(keychain, opts)
+    if (opts && opts.output) {
+      batch.removeOutput(keychain.sub(Autobase.OUTPUTS))
+    }
     return batch.commit()
   }
 
-  async addOutput (output, opts) {
+  async addOutput (keychain, opts) {
     const batch = new MemberBatch(this)
-    batch.addOutput(output, opts)
+    batch.addOutput(keychain, opts)
     return batch.commit()
   }
 
-  async removeOutput (output, opts) {
+  async removeOutput (keychain, opts) {
     const batch = new MemberBatch(this)
-    batch.removeOutput(output, opts)
+    batch.removeOutput(keychain, opts)
     return batch.commit()
   }
 
