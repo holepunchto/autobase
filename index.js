@@ -107,7 +107,7 @@ class Autobase extends ReadyResource {
     keychain = this._toKeychain(keychain)
     const outputs = this._outputsByKey.get(b.toString(keychain.publicKey, 'hex'))
     const keypairs = Autobase.getOutputKeys(keychain, this._viewCount)
-    for (let i = 0; i < this._viewCount; i++) {
+    for (let i = outputs.length; i < this._viewCount; i++) {
       outputs.push(new Output(i, this.corestore.get(keypairs[i])))
     }
   }
