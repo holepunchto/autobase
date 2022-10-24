@@ -39,6 +39,36 @@ test('local linearizing - three independent forks', async t => {
   t.is(baseA.localOutputs[0].length, 9)
 })
 
+test('local linearizing - three independent forks, not persisted', async t => {
+  const [baseA, baseB, baseC] = await create(3, { view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false, persist: false } })
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await baseA.append(`a${i}`, [])
+  }
+  for (let i = 0; i < 2; i++) {
+    await baseB.append(`b${i}`, [])
+  }
+  for (let i = 0; i < 3; i++) {
+    await baseC.append(`c${i}`, [])
+  }
+
+  t.alike(await linearizedValues(baseA.view), ['a0', 'b1', 'b0', 'c2', 'c1', 'c0'])
+  t.is(baseA.view.status.appended, 6)
+  t.is(baseA.view.status.truncated, 0)
+  t.is(baseA.localOutputs[0].length, 0)
+
+  // Add 3 more records to A -- should switch fork ordering
+  for (let i = 1; i < 4; i++) {
+    await baseA.append(`a${i}`, await baseA.latest({ fork: true }))
+  }
+
+  t.alike(await linearizedValues(baseA.view), ['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0'])
+  t.is(baseA.view.status.appended, 9)
+  t.is(baseA.view.status.truncated, 6)
+  t.is(baseA.localOutputs[0].length, 0)
+})
+
 test('local linearizing - causal writes preserve clock', async t => {
   const [baseA, baseB, baseC] = await create(3, { view: { localOnly: true }, opts: { autostart: true, eagerUpdate: false } })
 

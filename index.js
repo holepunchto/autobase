@@ -23,7 +23,7 @@ const FORCE_NON_SPARSE = +process.env['NON_SPARSE'] // eslint-disable-line
 class Autobase extends ReadyResource {
   constructor (corestore, keychain, opts = {}) {
     super()
-    const { inputs, outputs, autostart, apply, open, views, version, unwrap, eagerUpdate, sparse, localInput } = opts
+    const { inputs, outputs, autostart, apply, open, views, version, unwrap, eagerUpdate, sparse, localInput, persist } = opts
 
     this.corestore = corestore
     this.keychain = Keychain.from(keychain)
@@ -35,9 +35,11 @@ class Autobase extends ReadyResource {
     this._keyCompressors = new Map()
     this._lock = mutexify()
     this._eagerUpdate = eagerUpdate !== false
-    this._sparse = (sparse !== false) && (FORCE_NON_SPARSE !== 1)
-    this._localInput = localInput
 
+    this._sparse = (sparse !== false) && (FORCE_NON_SPARSE !== 1)
+    this._persist = persist !== false
+
+    this._localInput = localInput
     this._outputsKeychain = this.keychain.sub(Autobase.OUTPUTS)
 
     this._batchId = 0
@@ -55,12 +57,8 @@ class Autobase extends ReadyResource {
     }
   }
 
-  static getOutputKeys (keychain, n) {
-    const keys = []
-    for (let i = 0; i < n; i++) {
-      keys.push(!i ? keychain.get() : keychain.get('' + i))
-    }
-    return keys
+  get localInput () {
+    return this._inputsByKey.get(b.toString(this.keychain.publicKey, 'hex'))
   }
 
   get localInputKey () {
@@ -76,8 +74,12 @@ class Autobase extends ReadyResource {
     return outputs.map(o => o.core)
   }
 
-  get localInput () {
-    return this._inputsByKey.get(b.toString(this.keychain.publicKey, 'hex'))
+  static getOutputKeys (keychain, n) {
+    const keys = []
+    for (let i = 0; i < n; i++) {
+      keys.push(!i ? keychain.get() : keychain.get('' + i))
+    }
+    return keys
   }
 
   get isIndexing () {
@@ -291,7 +293,7 @@ class Autobase extends ReadyResource {
     }
     const view = new LinearizedView(this, {
       header: { version: this._viewVersion, protocol: OUTPUT_PROTOCOL },
-      writable: true,
+      writable: this._persist !== false,
       open,
       apply,
       unwrap
