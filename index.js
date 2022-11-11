@@ -43,6 +43,7 @@ class Autobase extends ReadyResource {
     this._outputsKeychain = this.keychain.sub(Autobase.OUTPUTS)
 
     this._batchId = 0
+    this._readStreams = []
     this._loadingInputsCount = 0
     this._pendingUpdates = []
 
@@ -187,10 +188,17 @@ class Autobase extends ReadyResource {
   }
 
   _onInputsChanged () {
+    this._bumpReadStreams()
     if (this._eagerUpdate && this.view) {
       // Eagerly update the primary view if there's a local output
       // This will be debounced internally
       this._internalView.update().catch(safetyCatch)
+    }
+  }
+
+  _bumpReadStreams () {
+    for (const stream of this._readStreams) {
+      stream.bump()
     }
   }
 
@@ -485,6 +493,143 @@ class Autobase extends ReadyResource {
         heads[headIndex] = next
         return cb(null)
       }, err => cb(err))
+    }
+  }
+
+  createReadStream (opts = {}) {
+    const self = this
+
+    const positionsByKey = opts.checkpoint || new Map()
+    const nodesByKey = new Map()
+    const snapshotLengthsByKey = new Map()
+
+    const wait = opts.wait !== false
+    let running = false
+    let bumped = false
+    let opened = false
+
+    const stream = new streamx.Readable({
+      open: cb => _open().then(cb, cb),
+      read: cb => _read().then(cb, cb)
+    })
+    stream.bump = () => {
+      if (!opened) return
+      bumped = true
+      _read().catch(err => stream.destroy(err))
+    }
+    stream.checkpoint = positionsByKey
+
+    this._readStreams.push(stream)
+    stream.once('close', () => {
+      const idx = this._readStreams.indexOf(stream)
+      if (idx === -1) return
+      this._readStreams.splice(idx, 1)
+    })
+
+    return stream
+
+    async function _open () {
+      if (!self.opened) await self.ready()
+      await maybeSnapshot()
+      await updateAll()
+      opened = true
+    }
+
+    async function _read () {
+      if (running) return
+      running = true
+      try {
+        while (!streamx.Readable.isBackpressured(stream)) {
+          await updateAll()
+          while (bumped) {
+            bumped = false
+            await updateAll()
+          }
+
+          const oldest = findOldestNode(nodesByKey)
+
+          if (!oldest) {
+            if (opts.live) return
+            stream.push(null)
+            return
+          }
+
+          const unsatisfied = hasUnsatisfiedInputs(oldest, self._inputsByKey)
+          if (unsatisfied && opts.onresolve) {
+            const resolved = await opts.onresolve(oldest)
+            if (resolved !== false) continue
+            // If resolved is false, yield he unresolved node as usual
+          }
+
+          const pos = positionsByKey.get(oldest.id)
+          nodesByKey.delete(oldest.id)
+          positionsByKey.set(oldest.id, pos + 1)
+
+          const mapped = opts.map ? opts.map(oldest) : oldest
+          stream.push(mapped)
+
+          if (opts.onwait) await opts.onwait(mapped)
+        }
+      } finally {
+        running = false
+      }
+    }
+
+    async function maybeSnapshot () {
+      for (const [key, input] of self._inputsByKey) {
+        await input.update()
+        if (!opts.live) snapshotLengthsByKey.set(key, input.length)
+      }
+    }
+
+    async function updateAll () {
+      const allowUpdates = opts.live || opts.onresolve || opts.onwait // TODO: Make this behavior more customizable
+      const inputKeys = allowUpdates ? self._inputsByKey.keys() : snapshotLengthsByKey.keys()
+
+      const loadPromises = []
+      for (const key of inputKeys) {
+        const input = self._inputsByKey.get(key)
+
+        let pos = positionsByKey.get(key)
+        if (pos === undefined) {
+          pos = opts.tail === true ? input.length : 0
+          positionsByKey.set(key, pos)
+        }
+
+        const snapshotLength = snapshotLengthsByKey.get(key)
+        if (snapshotLength) {
+          if (pos >= snapshotLength) continue
+        } else {
+          if (pos >= input.length && wait) await input.update()
+          if (pos >= input.length) continue
+        }
+
+        loadPromises.push(self._getInputNode(input, pos, { wait }).then(node => [key, node]))
+      }
+
+      for (const [key, node] of await Promise.all(loadPromises)) {
+        nodesByKey.set(key, node)
+      }
+    }
+
+    function findOldestNode (nodesByKey) {
+      for (const node of nodesByKey.values()) {
+        if (!node) continue
+        let oldest = true
+        for (const n2 of nodesByKey.values()) {
+          if (!n2 || n2 === node) continue
+          if (n2.lte(node)) oldest = false
+        }
+        if (oldest) return node
+      }
+      return null
+    }
+
+    function hasUnsatisfiedInputs (node, inputsByKey) {
+      for (const key of node.clock.keys()) {
+        if (!inputsByKey.has(key)) return true
+      }
+      return false
     }
   }
 
