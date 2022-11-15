@@ -1,5 +1,7 @@
 const b4a = require('b4a')
 const debounceify = require('debounceify')
+const ReadyResource = require('ready-resource')
+const Hyperbee = require('hyperbee')
 
 class Clock {
   constructor () {
@@ -39,12 +41,14 @@ class Clock {
 }
 
 class Writer {
-  constructor (id, core) {
+  constructor (base, id, core) {
+    this.base = base
     this.id = id
     this.core = core
     this.nodes = []
     this.length = 0
     this.next = null
+    this.checkpointAt = 0
   }
 
   compare (writer) {
@@ -73,30 +77,52 @@ class Writer {
     const blk = await this.core.get(seq)
     return toNode(blk, seq, this)
   }
+
+  async latestCheckpoint () {
+    await this.core.update()
+    if (this.core.length === 0) return null
+    const seq = this.core.length - 1
+    const blk = await this.core.get(seq)
+    if (blk.checkpointOffset === 0) return blk.checkpoint
+    return (await this.core.get(seq - blk.checkpointOffset)).checkpoint
+  }
 }
 
-module.exports = class Autobase {
-  constructor (store, { apply } = {}) {
+module.exports = class Autobase extends ReadyResource {
+  constructor (store, key, opts) {
+    super()
+
     this.sparse = false
     this.store = store
+
     this.locked = store.get({ name: 'locked', valueEncoding: 'json' })
     this.local = store.get({ name: 'local', valueEncoding: 'json' })
+    this.system = new Hyperbee(store.get({ name: 'system' }), { valueEncoding: 'json' })
 
     this.heads = []
     this.tails = []
 
     this._appending = []
-    this._checkpoint = null
+    this._checkpoint = true
     this._checkpointOffset = 0
-    this._indexClock = new Clock()
-    this._indexBatch = []
+    this._checkpointClock = new Clock()
+    this._checkpointBatch = []
+
+    this._systemNeedsUpdate = true
+
     this._writers = []
+    this._writersQuorum = new Set()
     this._writersByKey = new Map()
     this._localWriter = null
     this._quorum = 0
 
     this._linearizeCache = null
     this._bump = debounceify(this._advance.bind(this))
+    this._bootstrapKey = key || null
+
+    this._apply = (opts && opts.apply) || null
+
+    this.ready().catch(noop)
   }
 
   async update () {
@@ -109,7 +135,7 @@ module.exports = class Autobase {
     await this._bump()
   }
 
-  async ready () {
+  async _open () {
     await this.store.ready()
 
     await this.locked.ready()
@@ -123,6 +149,8 @@ module.exports = class Autobase {
         break
       }
     }
+
+    this._addWriter(this._bootstrapKey || this.local.key, true)
 
     // TODO: build initial heads/tails here
   }
@@ -162,34 +190,82 @@ module.exports = class Autobase {
     return clock
   }
 
+  addWriter (key) {
+    this._addWriter(key, false)
+    this._systemNeedsUpdate = true
+  }
+
+  _addWriter (key, bootstrap = false) {
+    const hex = b4a.toString(key, 'hex')
+
+    if (this._writersByKey.has(hex)) return
+
+    const core = this.store.get({ key, valueEncoding: 'json', sparse: this.sparse })
+    const w = new Writer(this, this._writers.length, core)
+
+    this._writersByKey.set(hex, w)
+    this._writers.push(w)
+
+    if (b4a.equals(this.local.key, key)) {
+      this._localWriter = w
+    }
+
+    if (bootstrap) {
+      w.checkpointAt = 1
+
+      this._writersQuorum.add(w)
+      this._updateQuorum()
+    }
+  }
+
+  removeWriter (key) {
+
+  }
+
+  async latestCheckpoint () {
+    let latest = null
+    let len = 0
+
+    for (const w of this._writers) {
+      const c = await w.latestCheckpoint()
+      if (c === null) continue
+
+      let l = 0
+      for (const { length } of c.clock) l += length
+
+      if (latest === null || l > len) {
+        latest = c
+        len = l
+      }
+    }
+
+    return latest
+  }
+
+  _updateQuorum () {
+    this._quorum = Math.floor(this._writersQuorum.size / 2) + 1
+  }
+
   setWriters (writers) {
     this._writers = []
     this._writersByKey.clear()
     this._localWriter = null
-    this._quorum = Math.floor(writers.length / 2) + 1
+    this._quorum = 0
 
     for (const key of writers) {
-      const core = this.store.get({ key, valueEncoding: 'json', sparse: this.sparse })
-      const w = new Writer(this._writers.length, core)
-
-      this._writersByKey.set(b4a.toString(key, 'hex'), w)
-      this._writers.push(w)
-
-      if (b4a.equals(this.local.key, key)) {
-        this._localWriter = w
-      }
+      this._addWriter(key)
     }
   }
 
   async append (value) {
-    await this.ready()
+    if (!this.opened) await this.ready()
 
     const blk = {
       value,
       heads: this.heads.map(toLink),
+      quorumable: this._localWriter.checkpointAt > 0,
       checkpointOffset: 0,
-      checkpoint: null,
-      clock: null
+      checkpoint: null
     }
 
     const node = toNode(blk, this.local.length + this._appending.length, this._localWriter)
@@ -239,8 +315,26 @@ module.exports = class Autobase {
 
       if (node.clock.size >= this._quorum) {
         this._shiftQuorum(node.clock)
-        if (this._indexBatch.length) await this._flushIndex()
       }
+    }
+
+    if (this._checkpointBatch.length) {
+      await this._apply(this._checkpointBatch, this)
+
+      this._checkpointBatch = []
+      this._checkpoint = true
+
+      await this._updateSystem()
+    }
+
+    if (this.tails.length) {
+      if (this._linearizeCache === null) {
+        this._linearizeCache = this._linearize(this._latestClock())
+      }
+
+      await this._apply(this._linearizeCache, this)
+    } else {
+      this._linearizeCache = null
     }
 
     // TODO: fix error handling here (ie _checkpointOffset/checkout resets)
@@ -259,40 +353,67 @@ module.exports = class Autobase {
       if (this._checkpoint) {
         const head = batch[batch.length - 1]
 
-        head.checkpoint = this._checkpoint
+        head.checkpoint = {
+          clock: [...this._checkpointClock.seen].map(([writer, length]) => ({ key: writer.core.key.toString('hex'), length })),
+          system: snapshot(this.system.feed),
+          user: []
+        }
+
         head.checkpointOffset = 0
 
-        this._checkpoint = null
+        this._checkpoint = false
         this._checkpointOffset = 1
       }
 
       await this.local.append(batch)
     }
-
-    if (this._indexBatch.length) {
-      await this._flushIndex()
-    }
   }
 
-  async _flushIndex () {
-    await this.locked.append(this._indexBatch)
+  async _updateSystem () {
+    const b = this.system.batch()
+    const checkpoints = []
 
-    this._indexBatch = []
-    this._checkpoint = {
-      system: null,
-      user: [{
-        length: this.locked.core.tree.length,
-        treeHash: this.locked.core.tree.hash()
-      }]
+    for (const w of this._writers) {
+      if (w.checkpointAt === 0) {
+        await w.core.ready()
+        await b.put(b4a.toString(w.core.key, 'hex'), null)
+        checkpoints.push(b.length)
+      }
     }
+
+    await b.flush()
+
+    // TODO: do a diff instead eventually...
+    let i = 0
+    for (const w of this._writers) {
+      if (w.checkpointAt === 0) {
+        w.checkpointAt = checkpoints[i++]
+        this._writersQuorum.add(w)
+      }
+    }
+
+    this._updateQuorum()
   }
+
+  // async _flushIndex () {
+  //   await this.locked.append(this._checkpointBatch)
+
+  //   this._checkpointBatch = []
+  //   this._checkpoint = {
+  //     system: null,
+  //     user: [{
+  //       length: this.locked.core.tree.length,
+  //       treeHash: this.locked.core.tree.hash()
+  //     }]
+  //   }
+  // }
 
   _seenBy (node, clock) {
     let cnt = 0
 
     for (const [writer, length] of clock.seen) {
       const head = writer.getCached(length - 1)
-      if (head.clock.contains(node.writer, node.seq)) cnt++
+      if (head.block.quorumable && head.clock.contains(node.writer, node.seq)) cnt++
     }
 
     return cnt
@@ -369,14 +490,14 @@ module.exports = class Autobase {
         else d.dependencies.pop()
       }
 
-      this._indexBatch.push(best.block)
-      this._indexClock.add(best.clock)
+      this._checkpointBatch.push(best.block)
+      this._checkpointClock.add(best.clock)
     }
   }
 
   _isTail (node) {
     for (const d of node.dependencies) {
-      if (!this._indexClock.contains(d.writer, d.seq)) return false
+      if (!this._checkpointClock.contains(d.writer, d.seq)) return false
     }
     return true
   }
@@ -400,7 +521,7 @@ module.exports = class Autobase {
     node.clock.set(node.writer, node.seq + 1)
 
     for (const dep of node.dependencies) {
-      node.clock.add(dep.clock, this._indexClock)
+      node.clock.add(dep.clock, this._checkpointClock)
       dep.dependents.push(node)
 
       // TODO: track this index on dep itself for constant time but also might not matter
@@ -421,6 +542,13 @@ module.exports = class Autobase {
   }
 }
 
+function snapshot (core) {
+  return {
+    length: core.core.tree.length,
+    treeHash: core.core.tree.hash().toString('hex')
+  }
+}
+
 function toNode (block, seq, writer) {
   return {
     writer,
@@ -438,3 +566,5 @@ function toLink (node) {
     length: node.seq + 1
   }
 }
+
+function noop () {}

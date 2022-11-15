@@ -5,50 +5,97 @@ import util from 'util'
 
 util.inspect.defaultOptions.depth = 10
 
-const a = new Autobase(new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill('a') }))
-const b = new Autobase(new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill('b') }))
+async function apply (batch, base) {
+  // console.log('apply batch...', batch)
+  for (const { value } of batch) {
+    if (value.add) {
+      await base.addWriter(Buffer.from(value.add, 'hex'))
+    }
+  }
+}
+
+const a = new Autobase(new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill('a') }), null, {
+  apply
+})
 
 await a.ready()
+
+const b = new Autobase(new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill('b') }), a.local.key, {
+  apply
+})
+
+const c = new Autobase(new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill('c') }), a.local.key, {
+  apply
+})
+
 await b.ready()
+await c.ready()
 
-console.log('a', a.local)
-console.log('b', b.local)
+// console.log('a', a.local)
+// console.log('b', b.local)
 
-a.setWriters([a.local.key, b.local.key])
-b.setWriters([a.local.key, b.local.key])
+console.log('appending...')
+
+await a.append({
+  add: b.local.key.toString('hex'),
+  debug: 'this is a adding b'
+})
+
+await syncAll()
+
+await b.update()
+
+console.log('nu')
+
+await b.append({
+  add: c.local.key.toString('hex'),
+  debug: 'this is b adding c'
+})
+
+console.log(b._writersQuorum.size, b._writers.length)
+console.log('whatsup')
+
+console.log(await a.latestCheckpoint())
+console.log(await b.latestCheckpoint())
+
+
+// a.addWriter(b.local.key)
+
+// a.setWriters([a.local.key, b.local.key])
+// b.setWriters([a.local.key, b.local.key])
 
 // a.setWriters([a.local.key])
 
-await a.append('a0')
-await a.append('a1')
+// await a.append('a0')
+// await a.append('a1')
 
-await syncAll()
+// await syncAll()
 
-console.log('appending b0')
+// console.log('appending b0')
 
-await b.append('b0')
+// await b.append('b0')
 
-console.log('appending b1')
+// console.log('appending b1')
 
-await b.append('b1')
+// await b.append('b1')
 
-await syncAll()
+// await syncAll()
 
-await a.append('a3')
+// await a.append('a3')
 
-await syncAll()
+// await syncAll()
 
-await b.append('b2')
+// await b.append('b2')
 
-await a.append('a4')
+// await a.append('a4')
 
-await list('a', a)
-await list('b', b)
+// await list('a', a)
+// await list('b', b)
 
-await syncAll()
+// await syncAll()
 
-await list('a', a)
-await list('b', b)
+// await list('a', a)
+// await list('b', b)
 // await a.update()
 
 async function list (name, base) {
