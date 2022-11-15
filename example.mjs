@@ -1,6 +1,9 @@
 import Autobase from './index.js'
 import Corestore from 'corestore'
 import RAM from 'random-access-memory'
+import util from 'util'
+
+util.inspect.defaultOptions.depth = 10
 
 const a = new Autobase(new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill('a') }))
 const b = new Autobase(new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill('b') }))
@@ -21,8 +24,6 @@ await a.append('a1')
 
 await syncAll()
 
-await b.bump()
-
 console.log('appending b0')
 
 await b.append('b0')
@@ -30,6 +31,33 @@ await b.append('b0')
 console.log('appending b1')
 
 await b.append('b1')
+
+await syncAll()
+
+await a.append('a3')
+
+await syncAll()
+
+await b.append('b2')
+
+await a.append('a4')
+
+await list('a', a)
+await list('b', b)
+
+await syncAll()
+
+await list('a', a)
+await list('b', b)
+// await a.update()
+
+async function list (name, base) {
+  console.log('**** list ' + name + ' ****')
+  for (let i = 0; i < base.length; i++) {
+    console.log(i, (await base.get(i)).value)
+  }
+  console.log('')
+}
 
 async function sync (a, b) {
   const s1 = a.store.replicate(true)
@@ -48,6 +76,8 @@ async function sync (a, b) {
 }
 
 async function syncAll () {
+  console.log('**** sync all ****')
+  console.log()
   await sync(a, b)
   // await sync(b, a)
   // await sync(a, c)
