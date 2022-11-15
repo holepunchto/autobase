@@ -289,7 +289,8 @@ module.exports = class Autobase {
         if (!this._containsTail(d)) this.tails.push(d)
 
         const i = d.dependencies.indexOf(best)
-        d.dependencies.splice(i, 1)
+        if (i < d.dependencies.length - 1) d.dependencies[i] = d.dependencies.pop()
+        else d.dependencies.pop()
       }
 
       this._indexBatch.push(best.block)
