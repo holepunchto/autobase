@@ -1,0 +1,25 @@
+{
+  "name": "autobase-next",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/holepunchto/autobase-next.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/holepunchto/autobase-next/issues"
+  },
+  "homepage": "https://github.com/holepunchto/autobase-next#readme",
+  "dependencies": {
+    "b4a": "^1.6.1",
+    "corestore": "^6.2.0",
+    "debounceify": "^1.0.0",
+    "random-access-memory": "^6.0.0"
+  }
+}
