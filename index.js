@@ -47,6 +47,10 @@ class Writer {
     this.next = null
   }
 
+  compare (writer) {
+    return b4a.compare(this.core.key, writer.core.key)
+  }
+
   getCached (seq) {
     return this.nodes[seq]
   }
@@ -82,15 +86,17 @@ module.exports = class Autobase {
     this.tails = []
 
     this._appending = []
-    this._latestIndex = null
-    this._latestCheckpoint = 0
+    this._checkpoint = null
+    this._checkpointOffset = 0
     this._indexClock = new Clock()
     this._indexBatch = []
     this._writers = []
     this._writersByKey = new Map()
     this._localWriter = null
     this._quorum = 0
-    this._advanceDebounced = debounceify(this._advance.bind(this))
+
+    this._linearizeCache = null
+    this._bump = debounceify(this._advance.bind(this))
   }
 
   async update () {
@@ -99,6 +105,8 @@ module.exports = class Autobase {
     for (const w of this._writers) {
       await w.core.update()
     }
+
+    await this._bump()
   }
 
   async ready () {
@@ -117,6 +125,41 @@ module.exports = class Autobase {
     }
 
     // TODO: build initial heads/tails here
+  }
+
+  get length () {
+    // TODO: kinda silly but whatevs
+    if (this._linearizeCache === null) {
+      this._linearizeCache = this._linearize(this._latestClock())
+    }
+
+    return this.locked.length + this._linearizeCache.length
+  }
+
+  async get (seq) {
+    await this._bump()
+
+    if (seq < this.locked.length) return this.locked.get(seq)
+
+    seq -= this.locked.length
+
+    if (this._linearizeCache === null) {
+      this._linearizeCache = this._linearize(this._latestClock())
+    }
+
+    if (seq >= this._linearizeCache.length) throw new Error('Out of bounds')
+
+    return this._linearizeCache[seq]
+  }
+
+  _latestClock () {
+    const clock = new Clock()
+
+    for (const head of this.heads) {
+      clock.add(head.clock, null)
+    }
+
+    return clock
   }
 
   setWriters (writers) {
@@ -138,18 +181,14 @@ module.exports = class Autobase {
     }
   }
 
-  async bump () {
-    await this._advanceDebounced()
-  }
-
   async append (value) {
     await this.ready()
 
     const blk = {
       value,
       heads: this.heads.map(toLink),
-      checkpoint: 0,
-      index: null,
+      checkpointOffset: 0,
+      checkpoint: null,
       clock: null
     }
 
@@ -157,7 +196,7 @@ module.exports = class Autobase {
 
     this._appending.push(node)
 
-    await this._advanceDebounced()
+    await this._bump()
   }
 
   _ensureAll () {
@@ -204,24 +243,27 @@ module.exports = class Autobase {
       }
     }
 
+    // TODO: fix error handling here (ie _checkpointOffset/checkout resets)
+
     if (this._appending.length) {
       const batch = new Array(this._appending.length)
 
       for (let i = 0; i < this._appending.length; i++) {
         const blk = this._appending[i].block
-        blk.checkpoint = this._latestCheckpoint
+        blk.checkpointOffset = this._checkpointOffset === 0 ? 0 : this._checkpointOffset++
         batch[i] = blk
       }
 
       this._appending = []
 
-      if (this._latestIndex) {
+      if (this._checkpoint) {
         const head = batch[batch.length - 1]
 
-        head.index = this._latestIndex
-        head.checkpoint = this._latestCheckpoint = this.local.length + batch.length
+        head.checkpoint = this._checkpoint
+        head.checkpointOffset = 0
 
-        this._latestIndex = null
+        this._checkpoint = null
+        this._checkpointOffset = 1
       }
 
       await this.local.append(batch)
@@ -230,15 +272,13 @@ module.exports = class Autobase {
     if (this._indexBatch.length) {
       await this._flushIndex()
     }
-
-    console.log('done', this._indexBatch, this._latestIndex)
   }
 
   async _flushIndex () {
     await this.locked.append(this._indexBatch)
 
     this._indexBatch = []
-    this._latestIndex = {
+    this._checkpoint = {
       system: null,
       user: [{
         length: this.locked.core.tree.length,
@@ -258,11 +298,45 @@ module.exports = class Autobase {
     return cnt
   }
 
-  _containsTail (node) {
-    for (const tail of this.tails) {
+  _containsTail (node, tails) {
+    for (const tail of tails) {
       if (node.clock.contains(tail.writer, tail.seq)) return true
     }
     return false
+  }
+
+  _linearize (clock) {
+    console.log('rebuliding _linearizeCache')
+    const tails = [...this.tails]
+    const result = []
+
+    while (tails.length) {
+      let b = 0
+      let best = tails[0]
+      let bestAcks = this._seenBy(best, clock)
+
+      for (let i = 1; i < tails.length; i++) {
+        const node = tails[i]
+        const nodeAcks = this._seenBy(node, clock)
+
+        if (nodeAcks > bestAcks || (bestAcks === nodeAcks && node.writer.compare(best.writer) < 0)) {
+          b = i
+          best = tails[i]
+          bestAcks = nodeAcks
+        }
+      }
+
+      result.push(best.block)
+
+      tails[b] = tails[tails.length - 1]
+      tails.pop()
+
+      for (const d of best.dependents) {
+        if (!this._containsTail(d, tails)) tails.push(d)
+      }
+    }
+
+    return result
   }
 
   _shiftQuorum (clock) {
@@ -275,8 +349,10 @@ module.exports = class Autobase {
         const node = this.tails[i]
         const nodeAcks = this._seenBy(node, clock)
 
-        if (nodeAcks > bestAcks || (bestAcks === nodeAcks && node.key < best.key)) {
+        if (nodeAcks > bestAcks || (bestAcks === nodeAcks && node.writer.compare(best.writer) < 0)) {
           b = i
+          best = this.tails[i]
+          bestAcks = nodeAcks
         }
       }
 
@@ -286,7 +362,7 @@ module.exports = class Autobase {
       this.tails.pop()
 
       for (const d of best.dependents) {
-        if (!this._containsTail(d)) this.tails.push(d)
+        if (!this._containsTail(d, this.tails)) this.tails.push(d)
 
         const i = d.dependencies.indexOf(best)
         if (i < d.dependencies.length - 1) d.dependencies[i] = d.dependencies.pop()
@@ -332,6 +408,13 @@ module.exports = class Autobase {
       if (i === -1) continue
 
       this.heads[i] = this.heads.pop()
+    }
+
+    if (this.heads.length !== 1) {
+      console.log('forks exists')
+      this._linearizeCache = null
+    } else if (this._linearizeCache !== null) {
+      this._linearizeCache.push(node.block)
     }
 
     return true
