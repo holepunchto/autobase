@@ -1,9 +1,9 @@
-import Autobase from './index.js'
+import Autobase from './index2.js'
 import Corestore from 'corestore'
 import RAM from 'random-access-memory'
 import util from 'util'
 
-util.inspect.defaultOptions.depth = 10
+// util.inspect.defaultOptions.depth = 10
 
 async function apply (batch, base) {
   // console.log('apply batch...', batch)
@@ -14,38 +14,86 @@ async function apply (batch, base) {
   }
 }
 
-const a = new Autobase(new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill('a') }), null, {
-  apply
-})
+const genesis = [
+  'f0978c6d7a9ff36cdf600d85134550a4e1ebaef541203c2f119ed53b6f294990',
+  '34431d2aa1a0474a6c8e9e96b114b589ef74b94917fa52064c4aadad942bda1f',
+  '10b2d42ea4e3933450d1fb204bd3f33debebffd81b4020631623cce8260d3c15'
+]
+
+const a = new Autobase(new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill('a') }), genesis, { apply })
 
 await a.ready()
 
-const b = new Autobase(new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill('b') }), a.local.key, {
-  apply
-})
+const b = new Autobase(new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill('b') }), genesis, { apply })
 
-const c = new Autobase(new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill('c') }), a.local.key, {
-  apply
-})
+const c = new Autobase(new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill('c') }), genesis, { apply })
 
 await b.ready()
 await c.ready()
 
+// console.log(b.local.key.toString('hex'))
+
 // console.log('a', a.local)
 // console.log('b', b.local)
 
-console.log('appending...')
+console.log('appending...', c.local.key.toString('hex'))
 
 await a.append({
-  add: b.local.key.toString('hex'),
-  debug: 'this is a adding b'
+  debug: 'a0'
+})
+
+await a.append({
+  debug: 'a1'
+})
+
+await b.append({
+  debug: 'b0'
+})
+
+await b.append({
+  debug: 'b1'
 })
 
 await syncAll()
 
-await b.update()
+console.log('------------------------\n\n\n')
 
-console.log('nu')
+console.log('a', a.pending.unindexed.map(v => v.value))
+console.log('b', b.pending.unindexed.map(v => v.value))
+
+// await c.append({
+//   debug: 'c0'
+// })
+
+process.exit()
+
+// console.log(b.pending.tails[0].writer.core)
+
+await syncAll()
+
+// console.log('preappend')
+
+// console.log(a.pending.heads.length)
+await a.append({
+  debug: 'a1'
+})
+
+process.exit()
+
+// console.log(a.pending.indexers[1].getCached(0))
+
+await syncAll()
+
+await b.append({
+  debug: 'b1'
+})
+
+console.log('after append')
+
+await syncAll()
+
+console.log('nununununu')
+process.exit()
 
 await b.append({
   add: c.local.key.toString('hex'),
@@ -124,8 +172,11 @@ async function sync (a, b) {
 
 async function syncAll () {
   console.log('**** sync all ****')
-  console.log()
   await sync(a, b)
+
+  console.log('**** synced a and b ****')
   // await sync(b, a)
   // await sync(a, c)
+  console.log('**** sync all done ****')
+  console.log()
 }

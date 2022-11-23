@@ -11,6 +11,12 @@ class Clock {
     return this.seen.size
   }
 
+  get length () {
+    let length = 0
+    for (const len of this.seen.values()) length += len
+    return length
+  }
+
   has (w) {
     return this.seen.has(w)
   }
@@ -35,6 +41,7 @@ class Writer {
     this.core = core
     this.nodes = []
     this.length = 0
+    this.offset = 0
 
     this.next = null
     this.nextCache = null
@@ -45,11 +52,18 @@ class Writer {
   }
 
   head () {
-    return this.length === 0 ? null : this.nodes[this.length - 1]
+    const len = this.length - this.offset
+    return len === 0 ? null : this.nodes[len - 1]
+  }
+
+  shift () {
+    if (this.offset === this.length) return null
+    this.offset++
+    return this.nodes.shift()
   }
 
   getCached (seq) {
-    return this.nodes[seq]
+    return seq >= this.offset ? this.nodes[seq - this.offset] : null
   }
 
   advance (node = this.next) {
@@ -65,7 +79,6 @@ class Writer {
 
     for (const head of heads) {
       this._addClock(node.clock, head)
-      if (head.writer === this) continue
       node.rawHeads.push({
         key: b4a.toString(head.writer.core.key, 'hex'),
         length: head.length
@@ -114,8 +127,7 @@ class Writer {
       const headNode = headWriter.getCached(rawHead.length - 1)
 
       if (headNode === null) { // already yielded
-        const last = node.rawHeads.pop()
-        if (last !== rawHead) node.rawHeads[node.heads.length] = last
+        popAndSwap(node.rawHeads, node.heads.length)
         continue
       }
 
@@ -143,6 +155,166 @@ class PendingNodes {
     this.heads = []
     this.clock = new Clock()
     this.indexers = indexers
+
+    this.indexed = []
+    this.unindexed = []
+
+    this.pushed = 0
+    this.popped = 0
+  }
+
+  update () {
+    const node = this.shift()
+    if (node) {
+      console.log('TODO')
+      process.exit()
+    }
+
+    let sharedClock = new Clock()
+    let sharedLength = 0
+    let diffedLength = 0
+
+    addClock(sharedClock, this.clock)
+
+    const old = this.unindexed
+    const visited = new Set()
+    const pushed = []
+
+    console.log('\n\npre')
+    visit(this.heads)
+    console.log('post\n\n', sharedLength)
+
+    const popped = old.length - sharedLength
+
+    if (popped) {
+      old.splice(sharedLength, popped)
+    }
+
+    console.log('NU', pushed.length, sharedLength, this.heads.map(h => h.value))
+
+    for (const node of pushed) {
+      old.push(node)
+    }
+
+    return {
+      popped,
+      pushed: pushed.length,
+      unindexed: this.unindexed
+    }
+
+    process.exit()
+
+    function getExpectedLength (node, clock, sharedLength) {
+      for (const [writer, length] of node.clock) {
+        sharedLength += (length - clock.get(writer))
+      }
+
+      return sharedLength
+    }
+
+    function addClock (a, b) {
+      for (const [writer, length] of b) {
+        if (a.get(writer) < length) a.set(writer, length)
+      }
+    }
+
+    function sortHeads (nodes) {
+      return nodes.sort((a, b) => a.writer.compare(b.writer))
+    }
+
+    function visit (heads) {
+      for (const best of sortHeads(heads)) {
+        if (visited.has(best)) continue
+        visited.add(best)
+
+        const expectedLength = getExpectedLength(best, sharedClock, sharedLength)
+
+        if (expectedLength > old.length || diffedLength >= expectedLength) {
+          pushed.push(best)
+          visit(best.heads)
+          return
+        }
+
+        if (old[expectedLength - 1] === best) {
+          // all the save <= expectedIndex
+          if (expectedLength > sharedLength) {
+            sharedLength = expectedLength
+            addClock(sharedClock, best.clock)
+          }
+        } else {
+          pushed.push(best)
+          if (diffedLength < expectedLength) diffedLength = expectedLength
+          visit(best.heads)
+        }
+      }
+    }
+
+    /*
+
+
+    console.log('linearlize')
+
+    let popped = 0
+    let pushed = 0
+
+    const indexed = this.indexed
+
+    this.indexed = []
+
+    const stack = [this.heads.slice()]
+    const pushing = []
+    let minClock =
+
+    while (stack.length) {
+      const heads = stack[stack.length - 1]
+
+      if (!heads.length) {
+        stack.pop()
+        continue
+      }
+
+      let best = null
+      for (const h of heads) {
+        if (best === null || h.writer.compare(best.writer) < 0) {
+          best = h
+        }
+      }
+
+      let l = 0
+      for (const [writer, length] of best.clock) {
+        l += length - this.clock.get(writer)
+      }
+
+      if (l > this.unindexed.length) {
+        pushing.push(best)
+        if (best.heads.length) stack.push(best.heads.slice())
+      } else {
+        const node = this.unindexed[l - 1]
+
+        if (node !== best) {
+          console.log('different', this.unindexed.length, l)
+          while (l <= this.unindexed.length) {
+            console.log('reordered!!!', node.value, best.value)
+            this.unindexed.pop()
+            popped++
+          }
+
+          pushing.push(best)
+          if (best.heads.length) stack.push(best.heads.slice())
+        }
+      }
+
+      popAndSwap(heads, heads.indexOf(best))
+    }
+
+    console.log('pusing', pushing.length)
+
+    for (; pushed < pushing.length; pushed++) {
+      this.unindexed.push(pushing[pushing.length - pushed - 1])
+    }
+
+    return { pushed, popped, indexed, unindexed: this.unindexed }
+    */
   }
 
   setIndexers (indexers) {
@@ -150,26 +322,23 @@ class PendingNodes {
   }
 
   addHead (node) {
-    let tail = true
-
-    for (let i = 0; i < node.heads.length; i++) {
-      if (node.heads[i].length) {
-        tail = false
-        break
-      }
-    }
-
     for (let i = 0; i < this.heads.length; i++) {
       const head = this.heads[i]
 
       if (node.clock.get(head.writer) >= head.length) {
-        if (i === this.heads.length - 1) this.heads.pop()
-        else this.heads[i--] = this.heads.pop()
+        if (popAndSwap(this.heads, i)) i--
       }
     }
 
-    if (tail) this.tails.push(node)
+    if (this._isTail(node)) this.tails.push(node)
     this.heads.push(node)
+  }
+
+  _isTail (node) {
+    for (let i = 0; i < node.heads.length; i++) {
+      if (node.heads[i].length) return false
+    }
+    return true
   }
 
   shift () {
@@ -186,12 +355,31 @@ class PendingNodes {
     }
 
     for (const [writer, total] of all) {
-      if (total >= majority) return writer
+      if (total >= majority) return this._shiftWriter(writer)
     }
 
     return null
   }
 
+  _shiftWriter (writer) {
+    const node = writer.shift()
+
+    this.clock.set(writer, node.length)
+
+    popAndSwap(this.tails, this.tails.indexOf(node))
+    clearNode(node)
+
+    for (const w of this.indexers) {
+      const first = w.getCached(w.offset)
+      if (!first) continue
+      const i = first.heads.indexOf(node)
+      if (i === -1) continue
+      popAndSwap(first.heads, i)
+      this.tails.push(first)
+    }
+
+    return node
+  }
 
   _votesFor (writer) {
     const h = writer.head()
@@ -200,6 +388,9 @@ class PendingNodes {
     let best = null
 
     for (const [cand] of h.clock) {
+      const first = cand.getCached(cand.offset)
+      if (!first || !this._isTail(first)) continue
+
       const c = this._countVotes(writer, cand)
 
       if (best === null || c > best.votes || (c === best.votes && best.writer.compare(cand) > 0)) {
@@ -227,6 +418,20 @@ class PendingNodes {
   }
 }
 
+class LinearizedCore {
+  constructor () {
+    this.nodes = []
+  }
+
+  get length () {
+    return this.nodes.length
+  }
+
+  get (seq) {
+    return this.nodes[seq]
+  }
+}
+
 module.exports = class Autobase extends ReadyResource {
   constructor (store, bootstraps) {
     super()
@@ -241,6 +446,8 @@ module.exports = class Autobase extends ReadyResource {
 
     this._appending = []
     this._bump = debounceify(this._advance.bind(this))
+
+    this._update = null
 
     this.ready().catch(noop)
   }
@@ -282,7 +489,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async append (value) {
     if (!this.opened) await this.ready()
-console.log('append', value.debug)
+
     this._appending.push(value)
 
     await this._bump()
@@ -324,13 +531,11 @@ console.log('append', value.debug)
         active = true
         break
       }
-
-      const node = this.pending.shift()
-      if (node) {
-        console.log('node', !!node)
-      }
     }
 
+    const u = this.pending.update()
+
+    console.log({ ...u, unindexed: null, indexed: null })
 
     if (this.localWriter.length > this.local.length) {
       await this._flushLocal()
@@ -355,6 +560,13 @@ console.log('append', value.debug)
 
 function noop () {}
 
+function clearNode (node) {
+  node.length = 0
+  node.heads = null
+  node.clock = null
+  node.writer = null
+}
+
 function toKey (k) {
   return b4a.isBuffer(k) ? k : b4a.from(k, 'hex')
 }
@@ -364,4 +576,11 @@ function toLink (node) {
     key: b4a.toString(node.writer.core.key, 'hex'),
     length: node.length
   }
+}
+
+function popAndSwap (list, i) {
+  const pop = list.pop()
+  if (i >= list.length) return false
+  list[i] = pop
+  return true
 }
