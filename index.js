@@ -1,7 +1,6 @@
 const b4a = require('b4a')
-const debounceify = require('debounceify')
 const ReadyResource = require('ready-resource')
-const Hyperbee = require('hyperbee')
+const debounceify = require('debounceify')
 
 class Clock {
   constructor () {
@@ -12,8 +11,14 @@ class Clock {
     return this.seen.size
   }
 
-  contains (w, seq) {
-    return this.get(w) > seq
+  get length () {
+    let length = 0
+    for (const len of this.seen.values()) length += len
+    return length
+  }
+
+  has (w) {
+    return this.seen.has(w)
   }
 
   get (w) {
@@ -25,546 +30,499 @@ class Clock {
     return len
   }
 
-  subtract (clock) {
-    for (const [w, len] of this.seen) {
-      if (clock.get(w) >= len) this.seen.delete(w)
-    }
-  }
-
-  add (clock, minClock = null) {
-    for (const [w, len] of clock.seen) {
-      if (this.get(w) < len && (minClock === null || minClock.get(w) < len)) {
-        this.seen.set(w, len)
-      }
-    }
+  [Symbol.iterator] () {
+    return this.seen[Symbol.iterator]()
   }
 }
 
 class Writer {
-  constructor (base, id, core) {
+  constructor (base, core) {
     this.base = base
-    this.id = id
     this.core = core
     this.nodes = []
     this.length = 0
+    this.offset = 0
+
     this.next = null
-    this.checkpointAt = 0
+    this.nextCache = null
   }
 
   compare (writer) {
     return b4a.compare(this.core.key, writer.core.key)
   }
 
+  head () {
+    const len = this.length - this.offset
+    return len === 0 ? null : this.nodes[len - 1]
+  }
+
+  shift () {
+    if (this.offset === this.length) return null
+    this.offset++
+    return this.nodes.shift()
+  }
+
   getCached (seq) {
-    return this.nodes[seq]
+    return seq >= this.offset ? this.nodes[seq - this.offset] : null
   }
 
   advance (node = this.next) {
     this.nodes.push(node)
     this.next = null
+    this.nextCache = null
     this.length++
+    return node
+  }
+
+  append (value, heads) {
+    const node = this._createNode(this.length + 1, value, [], heads)
+
+    for (const head of heads) {
+      this._addClock(node.clock, head)
+      node.rawHeads.push({
+        key: b4a.toString(head.writer.core.key, 'hex'),
+        length: head.length
+      })
+    }
+
+    node.clock.set(node.writer, node.length)
+
+    this.advance(node)
+    return node
   }
 
   async ensureNext () {
+    if (this.length >= this.core.length || this.core.length === 0) return null
     if (this.next !== null || !(await this.core.has(this.length))) return this.next
-    this.next = await this.get(this.length)
+
+    if (this.nextCache === null) {
+      const block = await this.core.get(this.length)
+      this.nextCache = this._createNode(this.length + 1, block.value, block.heads, [])
+    }
+
+    this.next = await this.ensureNode(this.nextCache)
     return this.next
   }
 
-  async get (seq) {
-    if (seq >= this.core.length || seq < 0) return null
-
-    const blk = await this.core.get(seq)
-    return toNode(blk, seq, this)
+  _createNode (length, value, rawHeads, dependencies) {
+    return {
+      writer: this,
+      length,
+      rawHeads,
+      dependents: [],
+      dependencies,
+      value,
+      clock: new Clock()
+    }
   }
 
-  async latestCheckpoint () {
-    await this.core.update()
-    if (this.core.length === 0) return null
-    const seq = this.core.length - 1
-    const blk = await this.core.get(seq)
-    if (blk.checkpointOffset === 0) return blk.checkpoint
-    return (await this.core.get(seq - blk.checkpointOffset)).checkpoint
+  async ensureNode (node) {
+    while (node.dependencies.length < node.rawHeads.length) {
+      const rawHead = node.rawHeads[node.dependencies.length]
+
+      const headWriter = await this.base._getWriterByKey(rawHead.key)
+      if (headWriter.length < rawHead.length) {
+        return null
+      }
+
+      const headNode = headWriter.getCached(rawHead.length - 1)
+
+      if (headNode === null) { // already yielded
+        popAndSwap(node.rawHeads, node.dependencies.length)
+        continue
+      }
+
+      node.dependencies.push(headNode)
+
+      this._addClock(node.clock, headNode)
+    }
+
+    node.clock.set(node.writer, node.length)
+
+    return node
+  }
+
+  _addClock (clock, node) {
+    for (const [writer, length] of node.clock) {
+      if (clock.get(writer) < length && this.base.pending.clock.get(writer) < length) {
+        clock.set(writer, length)
+      }
+    }
+  }
+}
+
+class PendingNodes {
+  constructor (indexers) {
+    this.tails = []
+    this.heads = []
+    this.clock = new Clock()
+    this.indexers = indexers
+
+    this.tip = []
+
+    this.pushed = 0
+    this.popped = 0
+  }
+
+  update () {
+    const indexed = []
+
+    while (true) {
+      const node = this.shift()
+
+      if (node) {
+        indexed.push(node)
+      } else {
+        break
+      }
+    }
+
+    let pushed = 0
+    let popped = 0
+
+    const tails = this.tails.slice(0)
+    const list = []
+
+    while (tails.length) {
+      let best = null
+
+      for (const t of tails) {
+        if (best === null || best.writer.compare(t.writer) > 0) {
+          best = t
+        }
+      }
+
+      list.push(best)
+
+      popAndSwap(tails, tails.indexOf(best))
+
+      for (const node of best.dependents) {
+        let isTail = true
+
+        for (const t of tails) {
+          if (t.clock.get(node.writer) >= node.length) {
+            isTail = false
+            break
+          }
+        }
+
+        if (isTail) tails.push(node)
+      }
+    }
+
+    const dirtyList = indexed.length ? indexed.concat(list) : list
+    const min = Math.min(dirtyList.length, this.tip.length)
+
+    let same = true
+
+    for (let i = 0; i < min; i++) {
+      if (dirtyList[i] === this.tip[i]) {
+        continue
+      }
+
+      same = false
+      popped = this.tip.length - i
+      pushed = dirtyList.length - i
+      break
+    }
+
+    if (same) {
+      pushed = dirtyList.length - this.tip.length
+    }
+
+    this.tip = list
+
+    return {
+      popped,
+      pushed,
+      indexed,
+      tip: list
+    }
+  }
+
+  setIndexers (indexers) {
+    this.indexers = indexers
+  }
+
+  addHead (node) {
+    for (let i = 0; i < this.heads.length; i++) {
+      const head = this.heads[i]
+
+      if (node.clock.get(head.writer) >= head.length) {
+        if (popAndSwap(this.heads, i)) i--
+      }
+    }
+
+    for (let i = 0; i < node.dependencies.length; i++) {
+      const dep = node.dependencies[i]
+
+      if (dep.length > 0) dep.dependents.push(node)
+      else if (popAndSwap(node.dependencies, i)) i--
+    }
+
+    if (node.dependencies.length === 0) this.tails.push(node)
+    this.heads.push(node)
+  }
+
+  _isTail (node) {
+    for (let i = 0; i < node.dependencies.length; i++) {
+      if (node.dependencies[i].length) return false
+    }
+
+    return true
+  }
+
+  _votes (tails) {
+    for (const node of tails) {
+
+    }
+  }
+
+  shift () {
+    const all = new Map()
+    const majority = Math.floor(this.indexers.length / 2) + 1
+
+    for (const writer of this.indexers) {
+      const tally = this._votesFor(writer)
+
+      if (tally && tally.votes >= majority) {
+        const cnt = all.get(tally.writer) || 0
+        all.set(tally.writer, cnt + 1)
+      }
+    }
+
+    for (const [writer, total] of all) {
+      if (total >= majority) return this._shiftWriter(writer)
+    }
+
+    return null
+  }
+
+  _shiftWriter (writer) {
+    const node = writer.shift()
+    const dependents = node.dependents
+
+    this.clock.set(writer, node.length)
+
+    clearNode(node)
+    popAndSwap(this.tails, this.tails.indexOf(node))
+
+    for (const next of dependents) {
+      for (let i = 0; i < next.dependencies.length; i++) {
+        const depDep = next.dependencies[i]
+        if (depDep.length === 0 && popAndSwap(next.dependencies, i)) i--
+      }
+
+      if (next.dependencies.length === 0) this.tails.push(next)
+    }
+
+    return node
+  }
+
+  _votesFor (writer) {
+    const h = writer.head()
+    if (!h) return null
+
+    let best = null
+
+    for (const [cand] of h.clock) {
+      const first = cand.getCached(cand.offset)
+      if (!first || !this._isTail(first)) continue
+
+      const c = this._countVotes(writer, cand)
+
+      if (best === null || c > best.votes || (c === best.votes && best.writer.compare(cand) > 0)) {
+        best = { writer: cand, votes: c }
+      }
+    }
+
+    return best
+  }
+
+  _countVotes (writer, cand) {
+    let votes = 0
+
+    const h = writer.head()
+
+    if (!h) return 0
+
+    for (const [writer, length] of h.clock) {
+      const node = writer.getCached(length - 1)
+
+      if (node !== null && node.clock.has(cand)) votes++
+    }
+
+    return votes
+  }
+}
+
+class LinearizedCore {
+  constructor () {
+    this.nodes = []
+  }
+
+  get length () {
+    return this.nodes.length
+  }
+
+  get (seq) {
+    return this.nodes[seq]
   }
 }
 
 module.exports = class Autobase extends ReadyResource {
-  constructor (store, key, opts) {
+  constructor (store, bootstraps) {
     super()
 
     this.sparse = false
+
     this.store = store
-
-    this.locked = store.get({ name: 'locked', valueEncoding: 'json' })
+    this.pending = new PendingNodes([])
     this.local = store.get({ name: 'local', valueEncoding: 'json' })
-    this.system = new Hyperbee(store.get({ name: 'system' }), { valueEncoding: 'json' })
-
-    this.heads = []
-    this.tails = []
+    this.localWriter = new Writer(this, this.local)
+    this.bootstraps = [].concat(bootstraps || []).map(toKey)
 
     this._appending = []
-    this._checkpoint = true
-    this._checkpointOffset = 0
-    this._checkpointClock = new Clock()
-    this._checkpointBatch = []
-
-    this._systemNeedsUpdate = true
-
-    this._writers = []
-    this._writersQuorum = new Set()
-    this._writersByKey = new Map()
-    this._localWriter = null
-    this._quorum = 0
-
-    this._linearizeCache = null
     this._bump = debounceify(this._advance.bind(this))
-    this._bootstrapKey = key || null
 
-    this._apply = (opts && opts.apply) || null
+    this._update = null
 
     this.ready().catch(noop)
   }
 
-  async update () {
-    await this.ready()
+  async _open () {
+    await this.store.ready()
+    await this.local.ready()
 
-    for (const w of this._writers) {
+    let writers = []
+    for (const key of this.bootstraps) {
+      if (b4a.equals(key, this.local.key)) {
+        writers.push(this.localWriter)
+        continue
+      }
+
+      const core = this.store.get({ key, valueEncoding: 'json', sparse: this.sparse })
+
+      await core.ready()
+
+      writers.push(new Writer(this, core))
+    }
+
+    if (writers.length === 0) {
+      writers.push(this.localWriter)
+    }
+
+    this.pending.setIndexers(writers)
+  }
+
+  async update () {
+    if (!this.opened) await this.ready()
+
+    for (const w of this.pending.indexers) {
       await w.core.update()
     }
 
     await this._bump()
   }
 
-  async _open () {
-    await this.store.ready()
-
-    await this.locked.ready()
-    await this.local.ready()
-
-    for (const w of this._writers) {
-      await w.core.ready()
-
-      if (b4a.equals(this.local.key, w.core.key)) {
-        this._localWriter = w
-        break
-      }
-    }
-
-    this._addWriter(this._bootstrapKey || this.local.key, true)
-
-    // TODO: build initial heads/tails here
-  }
-
-  get length () {
-    // TODO: kinda silly but whatevs
-    if (this._linearizeCache === null) {
-      this._linearizeCache = this._linearize(this._latestClock())
-    }
-
-    return this.locked.length + this._linearizeCache.length
-  }
-
-  async get (seq) {
-    await this._bump()
-
-    if (seq < this.locked.length) return this.locked.get(seq)
-
-    seq -= this.locked.length
-
-    if (this._linearizeCache === null) {
-      this._linearizeCache = this._linearize(this._latestClock())
-    }
-
-    if (seq >= this._linearizeCache.length) throw new Error('Out of bounds')
-
-    return this._linearizeCache[seq]
-  }
-
-  _latestClock () {
-    const clock = new Clock()
-
-    for (const head of this.heads) {
-      clock.add(head.clock, null)
-    }
-
-    return clock
-  }
-
-  addWriter (key) {
-    this._addWriter(key, false)
-    this._systemNeedsUpdate = true
-  }
-
-  _addWriter (key, bootstrap = false) {
-    const hex = b4a.toString(key, 'hex')
-
-    if (this._writersByKey.has(hex)) return
-
-    const core = this.store.get({ key, valueEncoding: 'json', sparse: this.sparse })
-    const w = new Writer(this, this._writers.length, core)
-
-    this._writersByKey.set(hex, w)
-    this._writers.push(w)
-
-    if (b4a.equals(this.local.key, key)) {
-      this._localWriter = w
-    }
-
-    if (bootstrap) {
-      w.checkpointAt = 1
-
-      this._writersQuorum.add(w)
-      this._updateQuorum()
-    }
-  }
-
-  removeWriter (key) {
-
-  }
-
-  async latestCheckpoint () {
-    let latest = null
-    let len = 0
-
-    for (const w of this._writers) {
-      const c = await w.latestCheckpoint()
-      if (c === null) continue
-
-      let l = 0
-      for (const { length } of c.clock) l += length
-
-      if (latest === null || l > len) {
-        latest = c
-        len = l
-      }
-    }
-
-    return latest
-  }
-
-  _updateQuorum () {
-    this._quorum = Math.floor(this._writersQuorum.size / 2) + 1
-  }
-
-  setWriters (writers) {
-    this._writers = []
-    this._writersByKey.clear()
-    this._localWriter = null
-    this._quorum = 0
-
-    for (const key of writers) {
-      this._addWriter(key)
-    }
-  }
-
   async append (value) {
     if (!this.opened) await this.ready()
 
-    const blk = {
-      value,
-      heads: this.heads.map(toLink),
-      quorumable: this._localWriter.checkpointAt > 0,
-      checkpointOffset: 0,
-      checkpoint: null
-    }
-
-    const node = toNode(blk, this.local.length + this._appending.length, this._localWriter)
-
-    this._appending.push(node)
+    this._appending.push(value)
 
     await this._bump()
+  }
+
+  _getWriterByKey (key) {
+    for (const w of this.pending.indexers) {
+      if (b4a.toString(w.core.key, 'hex') === key) return w
+    }
+
+    throw new Error('Unknown writer')
   }
 
   _ensureAll () {
     const p = []
-    for (const w of this._writers) {
+    for (const w of this.pending.indexers) {
       if (w.next === null) p.push(w.ensureNext())
     }
-    return Promise.allSettled(p)
+    return Promise.all(p)
   }
 
   async _advance () {
-    await this.ready()
+    if (this._appending.length) {
+      for (const value of this._appending) {
+        const node = this.localWriter.append(value, this.pending.heads.slice(0))
+        this.pending.addHead(node)
+      }
+      this._appending = []
+    }
 
     let active = true
 
     while (active) {
-      active = false
-
       await this._ensureAll()
 
-      for (const w of this._writers) {
-        const node = w.next
-        if (node === null || !this._addNext(node)) continue
-
-        w.advance()
+      active = false
+      for (const w of this.pending.indexers) {
+        if (!w.next) continue
+        this.pending.addHead(w.advance())
         active = true
-
-        if (node.clock.size >= this._quorum) {
-          this._shiftQuorum(node.clock)
-        }
+        break
       }
     }
 
-    // Locally appending blocks...
-    for (let i = 0; i < this._appending.length; i++) {
-      const node = this._appending[i]
+    const u = this.pending.update()
 
-      this._addNext(node)
-      this._localWriter.advance(node)
-
-      if (node.clock.size >= this._quorum) {
-        this._shiftQuorum(node.clock)
-      }
+    if (this.debug) {
+      console.log('debug', { ...u, tip: u.tip.map(u => u.value), indexed: u.indexed.map(u => u.value) })
     }
 
-    if (this._checkpointBatch.length) {
-      await this._apply(this._checkpointBatch, this)
-
-      this._checkpointBatch = []
-      this._checkpoint = true
-
-      await this._updateSystem()
-    }
-
-    if (this.tails.length) {
-      if (this._linearizeCache === null) {
-        this._linearizeCache = this._linearize(this._latestClock())
-      }
-
-      await this._apply(this._linearizeCache, this)
-    } else {
-      this._linearizeCache = null
-    }
-
-    // TODO: fix error handling here (ie _checkpointOffset/checkout resets)
-
-    if (this._appending.length) {
-      const batch = new Array(this._appending.length)
-
-      for (let i = 0; i < this._appending.length; i++) {
-        const blk = this._appending[i].block
-        blk.checkpointOffset = this._checkpointOffset === 0 ? 0 : this._checkpointOffset++
-        batch[i] = blk
-      }
-
-      this._appending = []
-
-      if (this._checkpoint) {
-        const head = batch[batch.length - 1]
-
-        head.checkpoint = {
-          clock: [...this._checkpointClock.seen].map(([writer, length]) => ({ key: writer.core.key.toString('hex'), length })),
-          system: snapshot(this.system.feed),
-          user: []
-        }
-
-        head.checkpointOffset = 0
-
-        this._checkpoint = false
-        this._checkpointOffset = 1
-      }
-
-      await this.local.append(batch)
+    if (this.localWriter.length > this.local.length) {
+      await this._flushLocal()
     }
   }
 
-  async _updateSystem () {
-    const b = this.system.batch()
-    const checkpoints = []
+  _flushLocal () {
+    const batch = new Array(this.localWriter.length - this.local.length)
 
-    for (const w of this._writers) {
-      if (w.checkpointAt === 0) {
-        await w.core.ready()
-        await b.put(b4a.toString(w.core.key, 'hex'), null)
-        checkpoints.push(b.length)
+    for (let i = 0; i < batch.length; i++) {
+      const { value, rawHeads } = this.localWriter.getCached(this.local.length + i)
+
+      batch[i] = {
+        value,
+        heads: rawHeads
       }
     }
 
-    await b.flush()
-
-    // TODO: do a diff instead eventually...
-    let i = 0
-    for (const w of this._writers) {
-      if (w.checkpointAt === 0) {
-        w.checkpointAt = checkpoints[i++]
-        this._writersQuorum.add(w)
-      }
-    }
-
-    this._updateQuorum()
-  }
-
-  // async _flushIndex () {
-  //   await this.locked.append(this._checkpointBatch)
-
-  //   this._checkpointBatch = []
-  //   this._checkpoint = {
-  //     system: null,
-  //     user: [{
-  //       length: this.locked.core.tree.length,
-  //       treeHash: this.locked.core.tree.hash()
-  //     }]
-  //   }
-  // }
-
-  _seenBy (node, clock) {
-    let cnt = 0
-
-    for (const [writer, length] of clock.seen) {
-      const head = writer.getCached(length - 1)
-      if (head.block.quorumable && head.clock.contains(node.writer, node.seq)) cnt++
-    }
-
-    return cnt
-  }
-
-  _containsTail (node, tails) {
-    for (const tail of tails) {
-      if (node.clock.contains(tail.writer, tail.seq)) return true
-    }
-    return false
-  }
-
-  _linearize (clock) {
-    console.log('rebuliding _linearizeCache')
-    const tails = [...this.tails]
-    const result = []
-
-    while (tails.length) {
-      let b = 0
-      let best = tails[0]
-      let bestAcks = this._seenBy(best, clock)
-
-      for (let i = 1; i < tails.length; i++) {
-        const node = tails[i]
-        const nodeAcks = this._seenBy(node, clock)
-
-        if (nodeAcks > bestAcks || (bestAcks === nodeAcks && node.writer.compare(best.writer) < 0)) {
-          b = i
-          best = tails[i]
-          bestAcks = nodeAcks
-        }
-      }
-
-      result.push(best.block)
-
-      tails[b] = tails[tails.length - 1]
-      tails.pop()
-
-      for (const d of best.dependents) {
-        if (!this._containsTail(d, tails)) tails.push(d)
-      }
-    }
-
-    return result
-  }
-
-  _shiftQuorum (clock) {
-    while (this.tails.length) {
-      let b = 0
-      let best = this.tails[0]
-      let bestAcks = this._seenBy(best, clock)
-
-      for (let i = 1; i < this.tails.length; i++) {
-        const node = this.tails[i]
-        const nodeAcks = this._seenBy(node, clock)
-
-        if (nodeAcks > bestAcks || (bestAcks === nodeAcks && node.writer.compare(best.writer) < 0)) {
-          b = i
-          best = this.tails[i]
-          bestAcks = nodeAcks
-        }
-      }
-
-      if (bestAcks < this._quorum) return
-
-      this.tails[b] = this.tails[this.tails.length - 1]
-      this.tails.pop()
-
-      for (const d of best.dependents) {
-        if (!this._containsTail(d, this.tails)) this.tails.push(d)
-
-        const i = d.dependencies.indexOf(best)
-        if (i < d.dependencies.length - 1) d.dependencies[i] = d.dependencies.pop()
-        else d.dependencies.pop()
-      }
-
-      this._checkpointBatch.push(best.block)
-      this._checkpointClock.add(best.clock)
-    }
-  }
-
-  _isTail (node) {
-    for (const d of node.dependencies) {
-      if (!this._checkpointClock.contains(d.writer, d.seq)) return false
-    }
-    return true
-  }
-
-  _addNext (node) {
-    for (let i = node.dependencies.length; i < node.block.heads.length; i++) {
-      const link = node.block.heads[i]
-      const writer = this._writersByKey.get(link.key)
-
-      if (writer.length < link.length) {
-        return false
-      }
-
-      node.dependencies.push(writer.getCached(link.length - 1))
-    }
-
-    this.heads.push(node)
-    if (this._isTail(node)) this.tails.push(node)
-
-    node.clock = new Clock()
-    node.clock.set(node.writer, node.seq + 1)
-
-    for (const dep of node.dependencies) {
-      node.clock.add(dep.clock, this._checkpointClock)
-      dep.dependents.push(node)
-
-      // TODO: track this index on dep itself for constant time but also might not matter
-      const i = this.heads.indexOf(dep)
-      if (i === -1) continue
-
-      this.heads[i] = this.heads.pop()
-    }
-
-    if (this.heads.length !== 1) {
-      console.log('forks exists')
-      this._linearizeCache = null
-    } else if (this._linearizeCache !== null) {
-      this._linearizeCache.push(node.block)
-    }
-
-    return true
-  }
-}
-
-function snapshot (core) {
-  return {
-    length: core.core.tree.length,
-    treeHash: core.core.tree.hash().toString('hex')
-  }
-}
-
-function toNode (block, seq, writer) {
-  return {
-    writer,
-    seq,
-    block,
-    clock: null,
-    dependents: [],
-    dependencies: []
-  }
-}
-
-function toLink (node) {
-  return {
-    key: node.writer.core.key.toString('hex'),
-    length: node.seq + 1
+    return this.local.append(batch)
   }
 }
 
 function noop () {}
+
+function clearNode (node) {
+  node.length = 0
+  node.dependencies = null
+  node.dependents = null
+  node.clock = null
+  node.writer = null
+}
+
+function toKey (k) {
+  return b4a.isBuffer(k) ? k : b4a.from(k, 'hex')
+}
+
+function toLink (node) {
+  return {
+    key: b4a.toString(node.writer.core.key, 'hex'),
+    length: node.length
+  }
+}
+
+function popAndSwap (list, i) {
+  const pop = list.pop()
+  if (i >= list.length) return false
+  list[i] = pop
+  return true
+}
