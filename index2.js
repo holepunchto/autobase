@@ -164,157 +164,94 @@ class PendingNodes {
   }
 
   update () {
-    const node = this.shift()
-    if (node) {
-      console.log('TODO')
-      process.exit()
-    }
+    const indexed = []
 
-    let sharedClock = new Clock()
-    let sharedLength = 0
-    let diffedLength = 0
+    while (true) {
+      const node = this.shift()
 
-    addClock(sharedClock, this.clock)
-
-    const old = this.unindexed
-    const visited = new Set()
-    const pushed = []
-
-    console.log('\n\npre')
-    visit(this.heads)
-    console.log('post\n\n', sharedLength)
-
-    const popped = old.length - sharedLength
-
-    if (popped) {
-      old.splice(sharedLength, popped)
-    }
-
-    console.log('NU', pushed.length, sharedLength, this.heads.map(h => h.value))
-
-    for (const node of pushed) {
-      old.push(node)
-    }
-
-    return {
-      popped,
-      pushed: pushed.length,
-      unindexed: this.unindexed
-    }
-
-    process.exit()
-
-    function getExpectedLength (node, clock, sharedLength) {
-      for (const [writer, length] of node.clock) {
-        sharedLength += (length - clock.get(writer))
-      }
-
-      return sharedLength
-    }
-
-    function addClock (a, b) {
-      for (const [writer, length] of b) {
-        if (a.get(writer) < length) a.set(writer, length)
+      if (node) {
+        indexed.push(node)
+      } else {
+        break
       }
     }
 
-    function sortHeads (nodes) {
-      return nodes.sort((a, b) => a.writer.compare(b.writer))
-    }
-
-    function visit (heads) {
-      for (const best of sortHeads(heads)) {
-        if (visited.has(best)) continue
-        visited.add(best)
-
-        const expectedLength = getExpectedLength(best, sharedClock, sharedLength)
-
-        if (expectedLength > old.length || diffedLength >= expectedLength) {
-          pushed.push(best)
-          visit(best.heads)
-          return
-        }
-
-        if (old[expectedLength - 1] === best) {
-          // all the save <= expectedIndex
-          if (expectedLength > sharedLength) {
-            sharedLength = expectedLength
-            addClock(sharedClock, best.clock)
-          }
-        } else {
-          pushed.push(best)
-          if (diffedLength < expectedLength) diffedLength = expectedLength
-          visit(best.heads)
-        }
-      }
-    }
-
-    /*
-
-
-    console.log('linearlize')
-
-    let popped = 0
     let pushed = 0
+    let popped = 0
 
-    const indexed = this.indexed
+    const tails = this.tails.slice(0)
+    const clock = new Clock()
+    const list = []
 
-    this.indexed = []
+    for (const [writer, length] of this.clock) {
+      clock.set(writer, length)
+    }
 
-    const stack = [this.heads.slice()]
-    const pushing = []
-    let minClock =
+    while (tails.length) {
+      let best = null
 
-    while (stack.length) {
-      const heads = stack[stack.length - 1]
+      for (const t of tails) {
+        if (best === null || best.writer.compare(t.writer) > 0) {
+          best = t
+        }
+      }
 
-      if (!heads.length) {
-        stack.pop()
+      list.push(best)
+
+      popAndSwap(tails, tails.indexOf(best))
+      clock.set(best.writer, best.length)
+
+      for (const w of this.indexers) {
+        const length = clock.get(w)
+        const bottom = length < w.length ? w.getCached(length) : null
+
+        if (bottom === null) continue
+
+        let isTail = true
+
+        for (const t of tails) {
+          if (t === bottom || t.heads.indexOf(bottom) > -1) {
+            isTail = false
+            break
+          }
+        }
+
+        if (isTail) tails.push(bottom)
+      }
+    }
+
+    const dirtyList = indexed.length ? indexed.concat(list) : list
+    const min = Math.min(dirtyList.length, this.unindexed.length)
+
+    let same = true
+
+    for (let i = 0; i < min; i++) {
+      if (dirtyList[i] === this.unindexed[i]) {
         continue
       }
 
-      let best = null
-      for (const h of heads) {
-        if (best === null || h.writer.compare(best.writer) < 0) {
-          best = h
-        }
-      }
-
-      let l = 0
-      for (const [writer, length] of best.clock) {
-        l += length - this.clock.get(writer)
-      }
-
-      if (l > this.unindexed.length) {
-        pushing.push(best)
-        if (best.heads.length) stack.push(best.heads.slice())
-      } else {
-        const node = this.unindexed[l - 1]
-
-        if (node !== best) {
-          console.log('different', this.unindexed.length, l)
-          while (l <= this.unindexed.length) {
-            console.log('reordered!!!', node.value, best.value)
-            this.unindexed.pop()
-            popped++
-          }
-
-          pushing.push(best)
-          if (best.heads.length) stack.push(best.heads.slice())
-        }
-      }
-
-      popAndSwap(heads, heads.indexOf(best))
+      same = false
+      popped = this.unindexed.length - i
+      pushed = dirtyList.length - i
+      break
     }
 
-    console.log('pusing', pushing.length)
-
-    for (; pushed < pushing.length; pushed++) {
-      this.unindexed.push(pushing[pushing.length - pushed - 1])
+    if (same) {
+      pushed = dirtyList.length - this.unindexed.length
     }
 
-    return { pushed, popped, indexed, unindexed: this.unindexed }
-    */
+    this.unindexed = list
+
+// if (indexed.length) {
+//   console.log('indexed', indexed.map(v => v.value), list.map(v => v.value))
+// }
+
+    return {
+      popped,
+      pushed,
+      indexed,
+      unindexed: list
+    }
   }
 
   setIndexers (indexers) {
@@ -535,7 +472,10 @@ module.exports = class Autobase extends ReadyResource {
 
     const u = this.pending.update()
 
-    console.log({ ...u, unindexed: null, indexed: null })
+    if (this.debug) {
+      console.log('debug', { ...u, unindexed: u.unindexed.map(u => u.value), indexed: u.indexed.map(u => u.value) })
+
+    }
 
     if (this.localWriter.length > this.local.length) {
       await this._flushLocal()
