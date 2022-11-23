@@ -156,8 +156,7 @@ class PendingNodes {
     this.clock = new Clock()
     this.indexers = indexers
 
-    this.indexed = []
-    this.unindexed = []
+    this.tip = []
 
     this.pushed = 0
     this.popped = 0
@@ -221,32 +220,32 @@ class PendingNodes {
     }
 
     const dirtyList = indexed.length ? indexed.concat(list) : list
-    const min = Math.min(dirtyList.length, this.unindexed.length)
+    const min = Math.min(dirtyList.length, this.tip.length)
 
     let same = true
 
     for (let i = 0; i < min; i++) {
-      if (dirtyList[i] === this.unindexed[i]) {
+      if (dirtyList[i] === this.tip[i]) {
         continue
       }
 
       same = false
-      popped = this.unindexed.length - i
+      popped = this.tip.length - i
       pushed = dirtyList.length - i
       break
     }
 
     if (same) {
-      pushed = dirtyList.length - this.unindexed.length
+      pushed = dirtyList.length - this.tip.length
     }
 
-    this.unindexed = list
+    this.tip = list
 
     return {
       popped,
       pushed,
       indexed,
-      unindexed: list
+      tip: list
     }
   }
 
@@ -470,7 +469,7 @@ module.exports = class Autobase extends ReadyResource {
     const u = this.pending.update()
 
     if (this.debug) {
-      console.log('debug', { ...u, unindexed: u.unindexed.map(u => u.value), indexed: u.indexed.map(u => u.value) })
+      console.log('debug', { ...u, tip: u.tip.map(u => u.value), indexed: u.indexed.map(u => u.value) })
     }
 
     if (this.localWriter.length > this.local.length) {
