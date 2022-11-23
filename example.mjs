@@ -41,6 +41,7 @@ console.log('appending... b', b.local.key.toString('hex'))
 console.log('appending... c', c.local.key.toString('hex'))
 
 a.debug = true
+a.pending.debug = true
 
 
 await a.append({
