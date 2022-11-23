@@ -36,7 +36,12 @@ await c.ready()
 // console.log('a', a.local)
 // console.log('b', b.local)
 
-console.log('appending...', c.local.key.toString('hex'))
+console.log('appending... a', a.local.key.toString('hex'))
+console.log('appending... b', b.local.key.toString('hex'))
+console.log('appending... c', c.local.key.toString('hex'))
+
+a.debug = true
+
 
 await a.append({
   debug: 'a0'
@@ -58,12 +63,34 @@ await syncAll()
 
 console.log('------------------------\n\n\n')
 
-console.log('a', a.pending.unindexed.map(v => v.value))
-console.log('b', b.pending.unindexed.map(v => v.value))
+// console.log('a', a.pending.unindexed.map(v => v.value))
+// console.log('b', b.pending.unindexed.map(v => v.value))
 
-// await c.append({
-//   debug: 'c0'
-// })
+await c.append({
+  debug: 'c0'
+})
+
+await a.append({
+  debug: 'a2'
+})
+
+// console.log('c', c.pending.unindexed.map(v => v.value))
+
+await syncAll()
+
+await b.append({
+  debug: 'b2'
+})
+
+console.log('---------------')
+
+await a.append({
+  debug: 'b3'
+})
+
+// console.log('a', a.pending.unindexed.map(v => v.value))
+// console.log('b', b.pending.unindexed.map(v => v.value))
+// console.log('c', c.pending.unindexed.map(v => v.value))
 
 process.exit()
 
@@ -78,6 +105,8 @@ await a.append({
   debug: 'a1'
 })
 
+await syncAll()
+
 process.exit()
 
 // console.log(a.pending.indexers[1].getCached(0))
@@ -87,6 +116,8 @@ await syncAll()
 await b.append({
   debug: 'b1'
 })
+
+await syncAll()
 
 console.log('after append')
 
@@ -175,8 +206,8 @@ async function syncAll () {
   await sync(a, b)
 
   console.log('**** synced a and b ****')
-  // await sync(b, a)
-  // await sync(a, c)
+  await sync(a, c)
+  await sync(b, a)
   console.log('**** sync all done ****')
   console.log()
 }
