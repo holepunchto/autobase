@@ -1,4 +1,4 @@
-import Autobase from './index2.js'
+import Autobase from './index.js'
 import Corestore from 'corestore'
 import RAM from 'random-access-memory'
 import util from 'util'
