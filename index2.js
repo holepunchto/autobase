@@ -104,20 +104,21 @@ class Writer {
     return this.next
   }
 
-  _createNode (length, value, rawHeads, heads) {
+  _createNode (length, value, rawHeads, dependencies) {
     return {
       writer: this,
       length,
       rawHeads,
-      heads,
+      dependents: [],
+      dependencies,
       value,
       clock: new Clock()
     }
   }
 
   async ensureNode (node) {
-    while (node.heads.length < node.rawHeads.length) {
-      const rawHead = node.rawHeads[node.heads.length]
+    while (node.dependencies.length < node.rawHeads.length) {
+      const rawHead = node.rawHeads[node.dependencies.length]
 
       const headWriter = await this.base._getWriterByKey(rawHead.key)
       if (headWriter.length < rawHead.length) {
@@ -127,11 +128,12 @@ class Writer {
       const headNode = headWriter.getCached(rawHead.length - 1)
 
       if (headNode === null) { // already yielded
-        popAndSwap(node.rawHeads, node.heads.length)
+        popAndSwap(node.rawHeads, node.dependencies.length)
         continue
       }
 
-      node.heads.push(headNode)
+      node.dependencies.push(headNode)
+
       this._addClock(node.clock, headNode)
     }
 
@@ -179,12 +181,7 @@ class PendingNodes {
     let popped = 0
 
     const tails = this.tails.slice(0)
-    const clock = new Clock()
     const list = []
-
-    for (const [writer, length] of this.clock) {
-      clock.set(writer, length)
-    }
 
     while (tails.length) {
       let best = null
@@ -198,24 +195,18 @@ class PendingNodes {
       list.push(best)
 
       popAndSwap(tails, tails.indexOf(best))
-      clock.set(best.writer, best.length)
 
-      for (const w of this.indexers) {
-        const length = clock.get(w)
-        const bottom = length < w.length ? w.getCached(length) : null
-
-        if (bottom === null) continue
-
+      for (const node of best.dependents) {
         let isTail = true
 
         for (const t of tails) {
-          if (t.clock.get(bottom.writer) >= bottom.length) {
+          if (t.clock.get(node.writer) >= node.length) {
             isTail = false
             break
           }
         }
 
-        if (isTail) tails.push(bottom)
+        if (isTail) tails.push(node)
       }
     }
 
@@ -262,16 +253,29 @@ class PendingNodes {
       }
     }
 
-    if (this._isTail(node)) this.tails.push(node)
+    for (let i = 0; i < node.dependencies.length; i++) {
+      const dep = node.dependencies[i]
+
+      if (dep.length > 0) dep.dependents.push(node)
+      else if (popAndSwap(node.dependencies, i)) i--
+    }
+
+    if (node.dependencies.length === 0) this.tails.push(node)
     this.heads.push(node)
   }
 
   _isTail (node) {
-    for (let i = 0; i < node.heads.length; i++) {
-      if (node.heads[i].length) return false
+    for (let i = 0; i < node.dependencies.length; i++) {
+      if (node.dependencies[i].length) return false
     }
 
     return true
+  }
+
+  _votes (tails) {
+    for (const node of tails) {
+
+    }
   }
 
   shift () {
@@ -296,19 +300,20 @@ class PendingNodes {
 
   _shiftWriter (writer) {
     const node = writer.shift()
+    const dependents = node.dependents
 
     this.clock.set(writer, node.length)
 
-    popAndSwap(this.tails, this.tails.indexOf(node))
     clearNode(node)
+    popAndSwap(this.tails, this.tails.indexOf(node))
 
-    for (const w of this.indexers) {
-      const first = w.getCached(w.offset)
-      if (!first) continue
-      const i = first.heads.indexOf(node)
-      if (i === -1) continue
-      popAndSwap(first.heads, i)
-      if (this._isTail(first)) this.tails.push(first)
+    for (const next of dependents) {
+      for (let i = 0; i < next.dependencies.length; i++) {
+        const depDep = next.dependencies[i]
+        if (depDep.length === 0 && popAndSwap(next.dependencies, i)) i--
+      }
+
+      if (next.dependencies.length === 0) this.tails.push(next)
     }
 
     return node
@@ -432,6 +437,7 @@ module.exports = class Autobase extends ReadyResource {
     for (const w of this.pending.indexers) {
       if (b4a.toString(w.core.key, 'hex') === key) return w
     }
+
     throw new Error('Unknown writer')
   }
 
@@ -497,7 +503,8 @@ function noop () {}
 
 function clearNode (node) {
   node.length = 0
-  node.heads = null
+  node.dependencies = null
+  node.dependents = null
   node.clock = null
   node.writer = null
 }
