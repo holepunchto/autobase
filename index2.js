@@ -210,7 +210,7 @@ class PendingNodes {
         let isTail = true
 
         for (const t of tails) {
-          if (t === bottom || t.heads.indexOf(bottom) > -1) {
+          if (t.clock.get(bottom.writer) >= bottom.length) {
             isTail = false
             break
           }
@@ -242,10 +242,6 @@ class PendingNodes {
 
     this.unindexed = list
 
-// if (indexed.length) {
-//   console.log('indexed', indexed.map(v => v.value), list.map(v => v.value))
-// }
-
     return {
       popped,
       pushed,
@@ -275,6 +271,7 @@ class PendingNodes {
     for (let i = 0; i < node.heads.length; i++) {
       if (node.heads[i].length) return false
     }
+
     return true
   }
 
@@ -312,7 +309,7 @@ class PendingNodes {
       const i = first.heads.indexOf(node)
       if (i === -1) continue
       popAndSwap(first.heads, i)
-      this.tails.push(first)
+      if (this._isTail(first)) this.tails.push(first)
     }
 
     return node
@@ -474,7 +471,6 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this.debug) {
       console.log('debug', { ...u, unindexed: u.unindexed.map(u => u.value), indexed: u.indexed.map(u => u.value) })
-
     }
 
     if (this.localWriter.length > this.local.length) {
