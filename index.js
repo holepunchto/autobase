@@ -159,12 +159,13 @@ class PendingNodes {
     this.indexers = indexers
 
     this.tip = []
-
-    this.pushed = 0
-    this.popped = 0
+    this.updated = false
   }
 
   update () {
+    if (!this.updated) return null
+    this.updated = false
+
     const indexed = []
 
     while (true) {
@@ -241,6 +242,7 @@ class PendingNodes {
 
     if (node.dependencies.length === 0) this.tails.push(node)
     this.heads.push(node)
+    this.updated = true
   }
 
   _isTail (node) {
@@ -463,7 +465,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const u = this.pending.update()
 
-    if (this.debug) {
+    if (this.debug && u) {
       console.log('debug', { ...u, tip: u.tip.map(u => u.value), indexed: u.indexed.map(u => u.value) })
     }
 
