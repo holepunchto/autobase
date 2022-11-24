@@ -40,8 +40,8 @@ console.log('appending... a', a.local.key.toString('hex'))
 console.log('appending... b', b.local.key.toString('hex'))
 console.log('appending... c', c.local.key.toString('hex'))
 
-a.debug = true
-a.pending.debug = true
+// a.debug = true
+// a.pending.debug = true
 
 
 await a.append({
@@ -60,12 +60,17 @@ await b.append({
   debug: 'b1'
 })
 
+
 await syncAll()
 
 console.log('------------------------\n\n\n')
 
+
 // console.log('a', a.pending.unindexed.map(v => v.value))
 // console.log('b', b.pending.unindexed.map(v => v.value))
+
+// c.debug = true
+// c.pending.debug = true
 
 await c.append({
   debug: 'c0'
@@ -85,9 +90,19 @@ await b.append({
 
 console.log('---------------')
 
+a.debug = true
+a.pending.debug = true
+
 await a.append({
-  debug: 'b3'
+  debug: 'a3'
 })
+
+await syncAll()
+
+console.log(a.pending.tip.map(v => v.value))
+// console.log(a.pending._next(a.pending.tails))
+
+console.log('done')
 
 // console.log('a', a.pending.unindexed.map(v => v.value))
 // console.log('b', b.pending.unindexed.map(v => v.value))
