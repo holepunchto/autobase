@@ -184,14 +184,7 @@ class PendingNodes {
     const list = []
 
     while (tails.length) {
-      let best = null
-
-      for (const t of tails) {
-        if (best === null || best.writer.compare(t.writer) > 0) {
-          best = t
-        }
-      }
-
+      const best = this._next(tails).node
       list.push(best)
       removeTail(best, tails)
     }
