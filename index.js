@@ -1,6 +1,7 @@
 const b4a = require('b4a')
 const ReadyResource = require('ready-resource')
 const debounceify = require('debounceify')
+const { EventEmitter } = require('events')
 
 class Clock {
   constructor () {
@@ -74,14 +75,14 @@ class Writer {
     return node
   }
 
-  append (value, heads) {
-    const node = this._createNode(this.length + 1, value, [], heads)
+  append (value, dependencies, batch) {
+    const node = this._createNode(this.length + 1, value, [], batch, dependencies)
 
-    for (const head of heads) {
-      this._addClock(node.clock, head)
-      node.rawHeads.push({
-        key: b4a.toString(head.writer.core.key, 'hex'),
-        length: head.length
+    for (const dep of dependencies) {
+      this._addClock(node.clock, dep)
+      node.heads.push({
+        key: b4a.toString(dep.writer.core.key, 'hex'),
+        length: dep.length
       })
     }
 
@@ -97,28 +98,29 @@ class Writer {
 
     if (this.nextCache === null) {
       const block = await this.core.get(this.length)
-      this.nextCache = this._createNode(this.length + 1, block.value, block.heads, [])
+      this.nextCache = this._createNode(this.length + 1, block.value, block.heads, block.batch, [])
     }
 
     this.next = await this.ensureNode(this.nextCache)
     return this.next
   }
 
-  _createNode (length, value, rawHeads, dependencies) {
+  _createNode (length, value, heads, batch, dependencies) {
     return {
       writer: this,
       length,
-      rawHeads,
+      heads,
       dependents: [],
       dependencies,
       value,
+      batch,
       clock: new Clock()
     }
   }
 
   async ensureNode (node) {
-    while (node.dependencies.length < node.rawHeads.length) {
-      const rawHead = node.rawHeads[node.dependencies.length]
+    while (node.dependencies.length < node.heads.length) {
+      const rawHead = node.heads[node.dependencies.length]
 
       const headWriter = await this.base._getWriterByKey(rawHead.key)
       if (headWriter.length < rawHead.length) {
@@ -128,7 +130,7 @@ class Writer {
       const headNode = headWriter.getCached(rawHead.length - 1)
 
       if (headNode === null) { // already yielded
-        popAndSwap(node.rawHeads, node.dependencies.length)
+        popAndSwap(node.heads, node.dependencies.length)
         continue
       }
 
@@ -160,6 +162,7 @@ class PendingNodes {
 
     this.tip = []
     this.updated = false
+    this.ontruncate = noop
   }
 
   update () {
@@ -169,7 +172,7 @@ class PendingNodes {
     const indexed = []
 
     while (true) {
-      const node = this.shift()
+      const node = this._shift()
 
       if (node) {
         indexed.push(node)
@@ -194,15 +197,18 @@ class PendingNodes {
     const min = Math.min(dirtyList.length, this.tip.length)
 
     let same = true
+    let shared = 0
 
-    for (let i = 0; i < min; i++) {
-      if (dirtyList[i] === this.tip[i]) {
+    for (; shared < min; shared++) {
+      if (dirtyList[shared] === this.tip[shared]) {
         continue
       }
 
       same = false
-      popped = this.tip.length - i
-      pushed = dirtyList.length - i
+      popped = this.tip.length - shared
+      pushed = dirtyList.length - shared
+
+      if (popped > 0) this.ontruncate(shared, this.tip.length)
       break
     }
 
@@ -213,8 +219,10 @@ class PendingNodes {
     this.tip = list
 
     return {
+      shared,
       popped,
       pushed,
+      length: shared + pushed,
       indexed,
       tip: list
     }
@@ -330,7 +338,7 @@ class PendingNodes {
     }
   }
 
-  shift () {
+  _shift () {
     const result = this._next(this.tails)
     if (!result.indexed) return null
 
@@ -348,21 +356,33 @@ class PendingNodes {
 }
 
 class LinearizedCore {
-  constructor () {
+  constructor (core, indexed) {
+    this.core = core
+    this.indexed = 0
     this.nodes = []
   }
 
   get length () {
-    return this.nodes.length
+    return this.indexed + this.nodes.length
   }
 
-  get (seq) {
-    return this.nodes[seq]
+  async get (seq) {
+    if (seq > this.length || seq < 0) throw new Error('Out of bounds get')
+    return seq < this.indexed ? this.core.get(seq) : this.nodes[seq - this.indexed]
+  }
+
+  truncate (len) {
+    while (this.nodes.length > len) this.nodes.pop()
+  }
+
+  async append (buf) {
+    this.nodes.push(buf)
+    return { length: this.length }
   }
 }
 
 module.exports = class Autobase extends ReadyResource {
-  constructor (store, bootstraps) {
+  constructor (store, bootstraps, handlers) {
     super()
 
     this.sparse = false
@@ -374,9 +394,13 @@ module.exports = class Autobase extends ReadyResource {
     this.bootstraps = [].concat(bootstraps || []).map(toKey)
 
     this._appending = []
+    this._handlers = handlers || {}
     this._bump = debounceify(this._advance.bind(this))
 
-    this._update = null
+    this._hasApply = !!this._handlers.apply
+
+    this.viewCore = store.get({ name: 'view/0', valueEncoding: 'json' })
+    this.view = new LinearizedCore(this.viewCore)
 
     this.ready().catch(noop)
   }
@@ -419,7 +443,8 @@ module.exports = class Autobase extends ReadyResource {
   async append (value) {
     if (!this.opened) await this.ready()
 
-    this._appending.push(value)
+    if (Array.isArray(value)) this._appending.push(...value)
+    else this._appending.push(value)
 
     await this._bump()
   }
@@ -442,8 +467,10 @@ module.exports = class Autobase extends ReadyResource {
 
   async _advance () {
     if (this._appending.length) {
-      for (const value of this._appending) {
-        const node = this.localWriter.append(value, this.pending.heads.slice(0))
+      for (let i = 0; i < this._appending.length; i++) {
+        const value = this._appending[i]
+        const heads = this.pending.heads.slice(0)
+        const node = this.localWriter.append(value, heads, this._appending.length - i)
         this.pending.addHead(node)
       }
       this._appending = []
@@ -465,8 +492,8 @@ module.exports = class Autobase extends ReadyResource {
 
     const u = this.pending.update()
 
-    if (this.debug && u) {
-      console.log('debug', { ...u, tip: u.tip.map(u => u.value), indexed: u.indexed.map(u => u.value) })
+    if (u) {
+      await this._applyUpdate(u)
     }
 
     if (this.localWriter.length > this.local.length) {
@@ -474,19 +501,46 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  async _applyUpdate (u) {
+    if (u.popped) {
+      this.view.truncate(u.shared)
+    }
+
+    let batch = []
+    let missing = 1
+
+    for (let i = u.shared; i < u.length; i++) {
+      const indexed = i < u.indexed.length
+      const node = indexed ? u.indexed[i] : u.tip[i - u.indexed.length]
+
+      batch.push({
+        indexed,
+        from: node.writer.core,
+        value: node.value,
+        heads: node.heads
+      })
+
+      if (node.batch > 1) continue
+
+      if (this._hasApply === true) await this._handlers.apply(batch, this.view, this)
+      batch = []
+    }
+  }
+
   _flushLocal () {
-    const batch = new Array(this.localWriter.length - this.local.length)
+    const blocks = new Array(this.localWriter.length - this.local.length)
 
-    for (let i = 0; i < batch.length; i++) {
-      const { value, rawHeads } = this.localWriter.getCached(this.local.length + i)
+    for (let i = 0; i < blocks.length; i++) {
+      const { value, heads, batch } = this.localWriter.getCached(this.local.length + i)
 
-      batch[i] = {
+      blocks[i] = {
         value,
-        heads: rawHeads
+        heads,
+        batch
       }
     }
 
-    return this.local.append(batch)
+    return this.local.append(blocks)
   }
 }
 
