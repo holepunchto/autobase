@@ -278,10 +278,7 @@ class PendingNodes {
 
       const r = votesFor(head)
       const aggr = results[r.best]
-if (this.debug) {
-  console.log(writer.core.key.toString('hex'))
-  console.log('result', r)
-}
+
       aggr.votes++
       if (r.tally[r.best] >= majority) {
         aggr.majorityVotes++
@@ -301,16 +298,16 @@ if (this.debug) {
     function votesFor (node) {
       if (cache.has(node)) return cache.get(node)
 
-      const tally = new Array(tails.length)
-      for (let i = 0; i < tally.length; i++) tally[i] = 0
+      const result = { best: 0, tally: new Array(tails.length) }
+      for (let i = 0; i < result.tally.length; i++) result.tally[i] = 0
 
-      const result = { best: 0, tally }
       cache.set(node, result)
 
       const done = tails.indexOf(node)
       if (done > -1) {
-        tally[done] = 1
-        return { best: done, tally }
+        result.tally[done] = 1
+        result.best = done
+        return result
       }
 
       for (const [writer, length] of node.clock) {
@@ -318,16 +315,18 @@ if (this.debug) {
           ? writer.getCached(length - 2)
           : writer.getCached(length - 1)
 
-        if (dep === node || dep === null || !dep.length) continue
+        if (dep === null || !dep.length) continue
 
         const { best } = votesFor(dep)
-        tally[best]++
+        result.tally[best]++
       }
 
-      for (let i = 1; i < tally.length; i++) {
+      for (let i = 1; i < result.tally.length; i++) {
         const b = result.best
+        const vb = result.tally[b]
+        const vi = result.tally[i]
 
-        if (tally[i] > tally[b] || (tally[i] === tally[b] && tails[i].writer.compare(tails[b].writer) < 0)) {
+        if (vi > vb || (vi === vb && tails[i].writer.compare(tails[b].writer) < 0)) {
           result.best = i
         }
       }
@@ -339,17 +338,6 @@ if (this.debug) {
   shift () {
     const result = this._next(this.tails)
     if (!result.indexed) return null
-if (this.debug) {
-  console.log()
-  console.log('TIP', this.tip.map(v => v.value))
-  console.log('TAILS', this.tails.map(v => v.value))
-  console.log('NEXT!', result.node.value, this.tails.map(v => v.value), { ...result, node: null })
-  console.log()
-
-  if (result.majorityVotes === 3) {
-    process.exit()
-  }
-}
 
     const dependents = result.node.dependents
 
@@ -359,8 +347,6 @@ if (this.debug) {
     for (const dep of dependents) {
       if (this._isTail(dep)) this.tails.push(dep)
     }
-
-if (this.debug) console.log(this.tails.map(t => t.value), '<-- new tails')
 
     return result.node
   }
