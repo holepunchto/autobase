@@ -193,21 +193,7 @@ class PendingNodes {
       }
 
       list.push(best)
-
-      popAndSwap(tails, tails.indexOf(best))
-
-      for (const node of best.dependents) {
-        let isTail = true
-
-        for (const t of tails) {
-          if (t.clock.get(node.writer) >= node.length) {
-            isTail = false
-            break
-          }
-        }
-
-        if (isTail) tails.push(node)
-      }
+      removeTail(best, tails)
     }
 
     const dirtyList = indexed.length ? indexed.concat(list) : list
@@ -272,87 +258,111 @@ class PendingNodes {
     return true
   }
 
-  _votes (tails) {
-    for (const node of tails) {
+  _next (tails) {
+    const cache = new Map()
+    const results = new Array(tails.length)
+    const majority = Math.floor(this.indexers.length / 2) + 1
 
+    for (let i = 0; i < tails.length; i++) {
+      results[i] = {
+        votes: 0,
+        majorityVotes: 0,
+        indexed: false,
+        node: tails[i]
+      }
+    }
+
+    for (const writer of this.indexers) {
+      const head = writer.head()
+      if (!head) continue
+
+      const r = votesFor(head)
+      const aggr = results[r.best]
+if (this.debug) {
+  console.log(writer.core.key.toString('hex'))
+  console.log('result', r)
+}
+      aggr.votes++
+      if (r.tally[r.best] >= majority) {
+        aggr.majorityVotes++
+        if (aggr.majorityVotes >= majority) aggr.indexed = true
+      }
+    }
+
+    // TODO: silly, fix
+    return results.sort(cmp)[0]
+
+    function cmp (a, b) {
+      if (a.majorityVotes !== b.majorityVotes) return b.majorityVotes - a.majorityVotes
+      if (a.votes !== b.votes) return b.votes - a.votes
+      return a.node.writer.compare(b.node.writer)
+    }
+
+    function votesFor (node) {
+      if (cache.has(node)) return cache.get(node)
+
+      const tally = new Array(tails.length)
+      for (let i = 0; i < tally.length; i++) tally[i] = 0
+
+      const result = { best: 0, tally }
+      cache.set(node, result)
+
+      const done = tails.indexOf(node)
+      if (done > -1) {
+        tally[done] = 1
+        return { best: done, tally }
+      }
+
+      for (const [writer, length] of node.clock) {
+        const dep = node.writer === writer && node.length === length
+          ? writer.getCached(length - 2)
+          : writer.getCached(length - 1)
+
+        if (dep === node || dep === null || !dep.length) continue
+
+        const { best } = votesFor(dep)
+        tally[best]++
+      }
+
+      for (let i = 1; i < tally.length; i++) {
+        const b = result.best
+
+        if (tally[i] > tally[b] || (tally[i] === tally[b] && tails[i].writer.compare(tails[b].writer) < 0)) {
+          result.best = i
+        }
+      }
+
+      return result
     }
   }
 
   shift () {
-    const all = new Map()
-    const majority = Math.floor(this.indexers.length / 2) + 1
+    const result = this._next(this.tails)
+    if (!result.indexed) return null
+if (this.debug) {
+  console.log()
+  console.log('TIP', this.tip.map(v => v.value))
+  console.log('TAILS', this.tails.map(v => v.value))
+  console.log('NEXT!', result.node.value, this.tails.map(v => v.value), { ...result, node: null })
+  console.log()
 
-    for (const writer of this.indexers) {
-      const tally = this._votesFor(writer)
-
-      if (tally && tally.votes >= majority) {
-        const cnt = all.get(tally.writer) || 0
-        all.set(tally.writer, cnt + 1)
-      }
-    }
-
-    for (const [writer, total] of all) {
-      if (total >= majority) return this._shiftWriter(writer)
-    }
-
-    return null
+  if (result.majorityVotes === 3) {
+    process.exit()
   }
+}
 
-  _shiftWriter (writer) {
-    const node = writer.shift()
-    const dependents = node.dependents
+    const dependents = result.node.dependents
 
-    this.clock.set(writer, node.length)
+    popAndSwap(this.tails, this.tails.indexOf(result.node))
+    clearNode(result.node)
 
-    clearNode(node)
-    popAndSwap(this.tails, this.tails.indexOf(node))
-
-    for (const next of dependents) {
-      for (let i = 0; i < next.dependencies.length; i++) {
-        const depDep = next.dependencies[i]
-        if (depDep.length === 0 && popAndSwap(next.dependencies, i)) i--
-      }
-
-      if (next.dependencies.length === 0) this.tails.push(next)
+    for (const dep of dependents) {
+      if (this._isTail(dep)) this.tails.push(dep)
     }
 
-    return node
-  }
+if (this.debug) console.log(this.tails.map(t => t.value), '<-- new tails')
 
-  _votesFor (writer) {
-    const h = writer.head()
-    if (!h) return null
-
-    let best = null
-
-    for (const [cand] of h.clock) {
-      const first = cand.getCached(cand.offset)
-      if (!first || !this._isTail(first)) continue
-
-      const c = this._countVotes(writer, cand)
-
-      if (best === null || c > best.votes || (c === best.votes && best.writer.compare(cand) > 0)) {
-        best = { writer: cand, votes: c }
-      }
-    }
-
-    return best
-  }
-
-  _countVotes (writer, cand) {
-    let votes = 0
-
-    const h = writer.head()
-
-    if (!h) return 0
-
-    for (const [writer, length] of h.clock) {
-      const node = writer.getCached(length - 1)
-
-      if (node !== null && node.clock.has(cand)) votes++
-    }
-
-    return votes
+    return result.node
   }
 }
 
@@ -525,4 +535,25 @@ function popAndSwap (list, i) {
   if (i >= list.length) return false
   list[i] = pop
   return true
+}
+
+function removeTail (tail, tails) {
+  popAndSwap(tails, tails.indexOf(tail))
+
+  const tailsLen = tails.length
+
+  for (const dep of tail.dependents) {
+    let isTail = true
+
+    for (let i = 0; i < tailsLen; i++) {
+      const t = tails[i]
+
+      if (dep.clock.get(t.writer) >= t.length) {
+        isTail = false
+        break
+      }
+    }
+
+    if (isTail) tails.push(dep)
+  }
 }
