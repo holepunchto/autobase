@@ -5,14 +5,14 @@ import util from 'util'
 
 // util.inspect.defaultOptions.depth = 10
 
-async function apply (batch, base) {
-  // console.log('apply batch...', batch)
-  for (const { value } of batch) {
-    if (value.add) {
-      await base.addWriter(Buffer.from(value.add, 'hex'))
-    }
-  }
-}
+// async function apply (batch, base) {
+//   // console.log('apply batch...', batch)
+//   for (const { value } of batch) {
+//     if (value.add) {
+//       await base.addWriter(Buffer.from(value.add, 'hex'))
+//     }
+//   }
+// }
 
 const genesis = [
   'f0978c6d7a9ff36cdf600d85134550a4e1ebaef541203c2f119ed53b6f294990',
@@ -20,13 +20,28 @@ const genesis = [
   '10b2d42ea4e3933450d1fb204bd3f33debebffd81b4020631623cce8260d3c15'
 ]
 
-const a = new Autobase(new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill('a') }), genesis, { apply })
+async function apply (nodes, view) {
+  console.log('apply...', nodes.length)
+  for (const node of nodes) {
+    await view.append(node.value)
+  }
+}
+
+const a = new Autobase(makeStore('a'), genesis, { apply })
 
 await a.ready()
 
-const b = new Autobase(new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill('b') }), genesis, { apply })
+// a.pending.ontruncate = function (len, old) {
+//   console.log('a is truncating...', len, old)
+//   console.log(a.pending.tip.slice(0).map(v => v.value))
+//   console.log(a.pending.tip.slice(len).map(v => v.value))
+// }
 
-const c = new Autobase(new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill('c') }), genesis, { apply })
+a.debug = true
+a.pending.debug = true
+
+const b = new Autobase(makeStore('b'), genesis, {  })
+const c = new Autobase(makeStore('c'), genesis, {  })
 
 await b.ready()
 await c.ready()
@@ -60,17 +75,7 @@ await b.append({
   debug: 'b1'
 })
 
-
 await syncAll()
-
-console.log('------------------------\n\n\n')
-
-
-// console.log('a', a.pending.unindexed.map(v => v.value))
-// console.log('b', b.pending.unindexed.map(v => v.value))
-
-// c.debug = true
-// c.pending.debug = true
 
 await c.append({
   debug: 'c0'
@@ -80,8 +85,6 @@ await a.append({
   debug: 'a2'
 })
 
-// console.log('c', c.pending.unindexed.map(v => v.value))
-
 await syncAll()
 
 await b.append({
@@ -89,9 +92,6 @@ await b.append({
 })
 
 console.log('---------------')
-
-a.debug = true
-a.pending.debug = true
 
 await a.append({
   debug: 'a3'
@@ -102,11 +102,16 @@ await syncAll()
 console.log(a.pending.tip.map(v => v.value))
 // console.log(a.pending._next(a.pending.tails))
 
-console.log('done')
-
 // console.log('a', a.pending.unindexed.map(v => v.value))
 // console.log('b', b.pending.unindexed.map(v => v.value))
 // console.log('c', c.pending.unindexed.map(v => v.value))
+
+console.log('----- begin ----')
+console.log('view.length', a.view.length)
+for (let i = 0; i < a.view.length; i++) {
+  console.log(await a.view.get(i))
+}
+console.log('------ end -----')
 
 process.exit()
 
@@ -226,4 +231,8 @@ async function syncAll () {
   await sync(b, a)
   console.log('**** sync all done ****')
   console.log()
+}
+
+function makeStore (seed) {
+  return new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill(seed) })
 }
