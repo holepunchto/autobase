@@ -137,7 +137,7 @@ module.exports = class Autobase extends ReadyResource {
     await this.store.ready()
     await this.local.ready()
 
-    let writers = []
+    const writers = []
     for (const key of this.bootstraps) {
       if (b4a.equals(key, this.local.key)) {
         writers.push(this.localWriter)
@@ -235,7 +235,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     let batch = []
-    let missing = 1
 
     for (let i = u.shared; i < u.length; i++) {
       const indexed = i < u.indexed.length
@@ -276,13 +275,6 @@ function noop () {}
 
 function toKey (k) {
   return b4a.isBuffer(k) ? k : b4a.from(k, 'hex')
-}
-
-function toLink (node) {
-  return {
-    key: b4a.toString(node.writer.core.key, 'hex'),
-    length: node.length
-  }
 }
 
 function popAndSwap (list, i) {
