@@ -5,6 +5,8 @@ const debounceify = require('debounceify')
 const Linearizer = require('./lib/linearizer')
 const LinearizedCore = require('./lib/core')
 
+const inspect = Symbol.for('nodejs.util.inspect.custom')
+
 class Writer {
   constructor (base, core) {
     this.base = base
@@ -120,17 +122,29 @@ module.exports = class Autobase extends ReadyResource {
     this.local = store.get({ name: 'local', valueEncoding: 'json' })
     this.localWriter = new Writer(this, this.local)
     this.bootstraps = [].concat(bootstraps || []).map(toKey)
+    this.applying = false
 
     this._appending = []
+    this._updatedCores = []
+    this._updates = []
     this._handlers = handlers || {}
     this._bump = debounceify(this._advance.bind(this))
 
     this._hasApply = !!this._handlers.apply
 
     this.viewCore = store.get({ name: 'view/0', valueEncoding: 'json' })
-    this.view = new LinearizedCore(this.viewCore, 0)
+    this.view = new LinearizedCore(this, this.viewCore, 0)
 
     this.ready().catch(noop)
+  }
+
+  [inspect] (depth, opts) {
+    let indent = ''
+    if (typeof opts.indentationLvl === 'number') {
+      while (indent.length < opts.indentationLvl) indent += ' '
+    }
+
+    return indent + 'Autobase { ... }'
   }
 
   async _open () {
@@ -229,10 +243,36 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _applyUpdate (u) {
-    if (u.popped) {
-      this.view.truncate(u.shared)
+  // triggered from linearized core
+  _oncoreappend (core) {
+    if (this.applying === false) throw new Error('Append is only allowed in apply')
+
+    if (core.appending === 0) {
+      this._updatedCores.push(core)
     }
+
+    core.appending++
+  }
+
+  _undo (popped) {
+    const truncating = []
+
+    while (popped-- > 0) {
+      for (const { core, blocks } of this._updates.pop()) {
+        if (core.truncating === 0) truncating.push(core)
+        core.truncating += blocks
+      }
+    }
+
+    for (const core of truncating) {
+      const oldLength = core.length - core.truncating
+      core.truncating = 0
+      core.truncate(oldLength)
+    }
+  }
+
+  async _applyUpdate (u) {
+    if (u.popped) this._undo(u.popped)
 
     let batch = []
 
@@ -249,8 +289,35 @@ module.exports = class Autobase extends ReadyResource {
 
       if (node.batch > 1) continue
 
-      if (this._hasApply === true) await this._handlers.apply(batch, this.view, this)
+      if (this._hasApply === true) {
+        this.applying = true
+        await this._handlers.apply(batch, this.view, this)
+        this.applying = false
+      }
+
       batch = []
+
+      const update = []
+      this._updates.push(update)
+
+      // TODO: can we assume that the order is deterministic or do we need to sort them?
+      while (this._updatedCores.length > 0) {
+        const core = this._updatedCores.pop()
+
+        update.push({ core, blocks: core.appending })
+
+        core.appending = 0
+      }
+    }
+
+    if (u.indexed.length) {
+      await this._appendIndexes(u.indexed.length)
+    }
+  }
+
+  async _appendIndexes (indexed) {
+    if (this.debug) {
+      console.log(indexed, '<-- here')
     }
   }
 

@@ -21,8 +21,9 @@ const genesis = [
 ]
 
 async function apply (nodes, view) {
-  console.log('apply...', nodes.length)
   for (const node of nodes) {
+    // dbl!
+    await view.append(node.value)
     await view.append(node.value)
   }
 }
