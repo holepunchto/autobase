@@ -31,14 +31,14 @@ const a = new Autobase(makeStore('a'), genesis, { apply })
 
 await a.ready()
 
-// a.pending.ontruncate = function (len, old) {
+// a.linearizer.ontruncate = function (len, old) {
 //   console.log('a is truncating...', len, old)
-//   console.log(a.pending.tip.slice(0).map(v => v.value))
-//   console.log(a.pending.tip.slice(len).map(v => v.value))
+//   console.log(a.linearizer.tip.slice(0).map(v => v.value))
+//   console.log(a.linearizer.tip.slice(len).map(v => v.value))
 // }
 
 a.debug = true
-a.pending.debug = true
+a.linearizer.debug = true
 
 const b = new Autobase(makeStore('b'), genesis, {  })
 const c = new Autobase(makeStore('c'), genesis, {  })
@@ -56,7 +56,7 @@ console.log('appending... b', b.local.key.toString('hex'))
 console.log('appending... c', c.local.key.toString('hex'))
 
 // a.debug = true
-// a.pending.debug = true
+// a.linearizer.debug = true
 
 
 await a.append({
@@ -99,12 +99,12 @@ await a.append({
 
 await syncAll()
 
-console.log(a.pending.tip.map(v => v.value))
-// console.log(a.pending._next(a.pending.tails))
+console.log(a.linearizer.tip.map(v => v.value))
+// console.log(a.linearizer._next(a.linearizer.tails))
 
-// console.log('a', a.pending.unindexed.map(v => v.value))
-// console.log('b', b.pending.unindexed.map(v => v.value))
-// console.log('c', c.pending.unindexed.map(v => v.value))
+// console.log('a', a.linearizer.unindexed.map(v => v.value))
+// console.log('b', b.linearizer.unindexed.map(v => v.value))
+// console.log('c', c.linearizer.unindexed.map(v => v.value))
 
 console.log('----- begin ----')
 console.log('view.length', a.view.length)
@@ -115,13 +115,13 @@ console.log('------ end -----')
 
 process.exit()
 
-// console.log(b.pending.tails[0].writer.core)
+// console.log(b.linearizer.tails[0].writer.core)
 
 await syncAll()
 
 // console.log('preappend')
 
-// console.log(a.pending.heads.length)
+// console.log(a.linearizer.heads.length)
 await a.append({
   debug: 'a1'
 })
@@ -130,7 +130,7 @@ await syncAll()
 
 process.exit()
 
-// console.log(a.pending.indexers[1].getCached(0))
+// console.log(a.linearizer.indexers[1].getCached(0))
 
 await syncAll()
 

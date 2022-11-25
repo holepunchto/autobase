@@ -2,7 +2,6 @@ const b4a = require('b4a')
 const ReadyResource = require('ready-resource')
 const debounceify = require('debounceify')
 
-const Clock = require('./lib/clock')
 const Linearizer = require('./lib/linearizer')
 const LinearizedCore = require('./lib/core')
 
@@ -46,7 +45,7 @@ class Writer {
   }
 
   append (value, dependencies, batch) {
-    const node = this._createNode(this.length + 1, value, [], batch, dependencies)
+    const node = Linearizer.createNode(this, this.length + 1, value, [], batch, dependencies)
 
     for (const dep of dependencies) {
       this._addClock(node.clock, dep)
@@ -68,24 +67,11 @@ class Writer {
 
     if (this.nextCache === null) {
       const block = await this.core.get(this.length)
-      this.nextCache = this._createNode(this.length + 1, block.value, block.heads, block.batch, [])
+      this.nextCache = Linearizer.createNode(this, this.length + 1, block.value, block.heads, block.batch, [])
     }
 
     this.next = await this.ensureNode(this.nextCache)
     return this.next
-  }
-
-  _createNode (length, value, heads, batch, dependencies) {
-    return {
-      writer: this,
-      length,
-      heads,
-      dependents: [],
-      dependencies,
-      value,
-      batch,
-      clock: new Clock()
-    }
   }
 
   async ensureNode (node) {
@@ -130,7 +116,7 @@ module.exports = class Autobase extends ReadyResource {
     this.sparse = false
 
     this.store = store
-    this.linearizer = new PendingNodes([])
+    this.linearizer = new Linearizer([])
     this.local = store.get({ name: 'local', valueEncoding: 'json' })
     this.localWriter = new Writer(this, this.local)
     this.bootstraps = [].concat(bootstraps || []).map(toKey)
@@ -142,7 +128,7 @@ module.exports = class Autobase extends ReadyResource {
     this._hasApply = !!this._handlers.apply
 
     this.viewCore = store.get({ name: 'view/0', valueEncoding: 'json' })
-    this.view = new LinearizedCore(this.viewCore)
+    this.view = new LinearizedCore(this.viewCore, 0)
 
     this.ready().catch(noop)
   }
@@ -169,13 +155,13 @@ module.exports = class Autobase extends ReadyResource {
       writers.push(this.localWriter)
     }
 
-    this.pending.setIndexers(writers)
+    this.linearizer.setIndexers(writers)
   }
 
   async update () {
     if (!this.opened) await this.ready()
 
-    for (const w of this.pending.indexers) {
+    for (const w of this.linearizer.indexers) {
       await w.core.update()
     }
 
@@ -192,7 +178,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _getWriterByKey (key) {
-    for (const w of this.pending.indexers) {
+    for (const w of this.linearizer.indexers) {
       if (b4a.toString(w.core.key, 'hex') === key) return w
     }
 
@@ -201,7 +187,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _ensureAll () {
     const p = []
-    for (const w of this.pending.indexers) {
+    for (const w of this.linearizer.indexers) {
       if (w.next === null) p.push(w.ensureNext())
     }
     return Promise.all(p)
@@ -211,9 +197,9 @@ module.exports = class Autobase extends ReadyResource {
     if (this._appending.length) {
       for (let i = 0; i < this._appending.length; i++) {
         const value = this._appending[i]
-        const heads = this.pending.heads.slice(0)
+        const heads = this.linearizer.heads.slice(0)
         const node = this.localWriter.append(value, heads, this._appending.length - i)
-        this.pending.addHead(node)
+        this.linearizer.addHead(node)
       }
       this._appending = []
     }
@@ -224,15 +210,15 @@ module.exports = class Autobase extends ReadyResource {
       await this._ensureAll()
 
       active = false
-      for (const w of this.pending.indexers) {
+      for (const w of this.linearizer.indexers) {
         if (!w.next) continue
-        this.pending.addHead(w.advance())
+        this.linearizer.addHead(w.advance())
         active = true
         break
       }
     }
 
-    const u = this.pending.update()
+    const u = this.linearizer.update()
 
     if (u) {
       await this._applyUpdate(u)
@@ -288,14 +274,6 @@ module.exports = class Autobase extends ReadyResource {
 
 function noop () {}
 
-function clearNode (node) {
-  node.length = 0
-  node.dependencies = null
-  node.dependents = null
-  node.clock = null
-  node.writer = null
-}
-
 function toKey (k) {
   return b4a.isBuffer(k) ? k : b4a.from(k, 'hex')
 }
@@ -312,25 +290,4 @@ function popAndSwap (list, i) {
   if (i >= list.length) return false
   list[i] = pop
   return true
-}
-
-function removeTail (tail, tails) {
-  popAndSwap(tails, tails.indexOf(tail))
-
-  const tailsLen = tails.length
-
-  for (const dep of tail.dependents) {
-    let isTail = true
-
-    for (let i = 0; i < tailsLen; i++) {
-      const t = tails[i]
-
-      if (dep.clock.get(t.writer) >= t.length) {
-        isTail = false
-        break
-      }
-    }
-
-    if (isTail) tails.push(dep)
-  }
 }
