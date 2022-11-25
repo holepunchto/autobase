@@ -20,15 +20,23 @@ const genesis = [
   '10b2d42ea4e3933450d1fb204bd3f33debebffd81b4020631623cce8260d3c15'
 ]
 
+function open (store) {
+  return store.get('double')
+}
+
 async function apply (nodes, view) {
   for (const node of nodes) {
+    // console.log('applying', node)
     // dbl!
     await view.append(node.value)
     await view.append(node.value)
   }
 }
 
-const a = new Autobase(makeStore('a'), genesis, { apply })
+const a = new Autobase(makeStore('a'), genesis, {
+  open,
+  apply
+})
 
 await a.ready()
 
@@ -92,15 +100,21 @@ await b.append({
   debug: 'b2'
 })
 
+await syncAll()
+
 console.log('---------------')
 
 await a.append({
   debug: 'a3'
 })
 
+await a.append({
+  debug: 'a4'
+})
+
 await syncAll()
 
-console.log(a.linearizer.tip.map(v => v.value))
+// console.log(a.linearizer.tip)
 // console.log(a.linearizer._next(a.linearizer.tails))
 
 // console.log('a', a.linearizer.unindexed.map(v => v.value))

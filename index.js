@@ -1,6 +1,8 @@
 const b4a = require('b4a')
 const ReadyResource = require('ready-resource')
 const debounceify = require('debounceify')
+const Hyperbee = require('hyperbee')
+const SubEncoder = require('sub-encoder')
 
 const Linearizer = require('./lib/linearizer')
 const LinearizedCore = require('./lib/core')
@@ -111,6 +113,78 @@ class Writer {
   }
 }
 
+class SystemViewBatch {
+  constructor (sys) {
+    this.system = sys
+    this.batch = sys.db.batch()
+  }
+
+  updateIndex (index) {
+    const value = { treeHash: b4a.toString(index.treeHash, 'hex'), length: index.length }
+    return this.batch.put(index.name, value, { keyEncoding: this.system.subs.indexes })
+  }
+
+  flush () {
+    return this.batch.flush()
+  }
+}
+
+class SystemView {
+  constructor (core) {
+    const enc = new SubEncoder()
+
+    this.db = new Hyperbee(core, { valueEncoding: 'json' })
+    this.subs = {
+      writers: enc.sub('writers'),
+      indexes: enc.sub('indexes', { keyEncoding: 'utf-8' })
+    }
+
+    this.unindexedWriters = []
+  }
+
+  checkpoint () {
+    const tree = this.db.feed.core.tree
+
+    return {
+      treeHash: tree.hash(),
+      length: tree.length
+    }
+  }
+
+  async listIndexes () {
+    const all = []
+    for await (const data of this.db.createReadStream(this.subs.indexes.range())) {
+      all.push({ name: data.key, treeHash: b4a.from(data.value.treeHash, 'hex'), length: data.value.length })
+    }
+    return all
+  }
+
+  batch () {
+    return new SystemViewBatch(this)
+  }
+}
+
+
+class LinearizedStore {
+  constructor (base) {
+    this.base = base
+    this.opened = new Map()
+  }
+
+  get (opts) {
+    if (typeof opts === 'string') opts = { name: opts }
+
+    const name = opts.name
+    if (this.opened.has(name)) return this.opened.get(name)
+
+    const core = this.base.store.get({ name: 'view/' + name, valueEncoding: 'json' })
+    const l = new LinearizedCore(this.base, core, name, 0)
+
+    this.opened.set(name, l)
+    return l
+  }
+}
+
 module.exports = class Autobase extends ReadyResource {
   constructor (store, bootstraps, handlers) {
     super()
@@ -121,6 +195,7 @@ module.exports = class Autobase extends ReadyResource {
     this.linearizer = new Linearizer([])
     this.local = store.get({ name: 'local', valueEncoding: 'json' })
     this.localWriter = new Writer(this, this.local)
+    this.system = new SystemView(store.get({ name: 'system' }))
     this.bootstraps = [].concat(bootstraps || []).map(toKey)
     this.applying = false
 
@@ -130,10 +205,15 @@ module.exports = class Autobase extends ReadyResource {
     this._handlers = handlers || {}
     this._bump = debounceify(this._advance.bind(this))
 
-    this._hasApply = !!this._handlers.apply
+    this._checkpointer = 0
+    this._checkpoint = null
 
-    this.viewCore = store.get({ name: 'view/0', valueEncoding: 'json' })
-    this.view = new LinearizedCore(this, this.viewCore, 0)
+    this._hasApply = !!this._handlers.apply
+    this._hasOpen = !!this._handlers.open
+
+    this._viewStore = new LinearizedStore(this)
+
+    this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
 
     this.ready().catch(noop)
   }
@@ -258,9 +338,9 @@ module.exports = class Autobase extends ReadyResource {
     const truncating = []
 
     while (popped-- > 0) {
-      for (const { core, blocks } of this._updates.pop()) {
+      for (const { core, appending } of this._updates.pop()) {
         if (core.truncating === 0) truncating.push(core)
-        core.truncating += blocks
+        core.truncating += appending
       }
     }
 
@@ -300,25 +380,65 @@ module.exports = class Autobase extends ReadyResource {
       const update = []
       this._updates.push(update)
 
-      // TODO: can we assume that the order is deterministic or do we need to sort them?
+      // FIXME: sort me
       while (this._updatedCores.length > 0) {
         const core = this._updatedCores.pop()
 
-        update.push({ core, blocks: core.appending })
-
+        update.push({ core, appending: core.appending })
         core.appending = 0
       }
     }
 
-    if (u.indexed.length) {
-      await this._appendIndexes(u.indexed.length)
-    }
+    if (u.indexed.length === 0) return
+
+    const checkpoint = await this._appendIndexes(u.indexed.length)
+
+    if (checkpoint === null) return
+
+    this._checkpoint = checkpoint
+    this._checkpointer = 0
   }
 
   async _appendIndexes (indexed) {
-    if (this.debug) {
-      console.log(indexed, '<-- here')
+    const indexing = []
+
+    while (indexed-- > 0) {
+      for (const u of this._updates.shift()) {
+        if (u.core.indexing === 0) {
+          indexing.push(u.core)
+        }
+
+        u.core.indexing += u.appending
+      }
     }
+
+    if (!indexing.length) return null
+
+    for (const core of indexing) {
+      const blocks = core.tip.slice(0, core.indexing)
+
+      await core.core.append(blocks)
+
+      core.indexing = 0
+      core._onindexupdate(blocks.length)
+    }
+
+    const batch = this.system.batch()
+
+    for (const core of indexing) {
+      const tree = core.core.core.tree
+      const index = {
+        name: core.name,
+        treeHash: tree.hash(),
+        length: tree.length
+      }
+
+      await batch.updateIndex(index)
+    }
+
+    await batch.flush()
+
+    return this.system.checkpoint()
   }
 
   _flushLocal () {
@@ -330,7 +450,14 @@ module.exports = class Autobase extends ReadyResource {
       blocks[i] = {
         value,
         heads,
-        batch
+        batch,
+        checkpointer: this._checkpointer,
+        checkpoint: this._checkpointer === 0 ? toJSONCheckpoint(this._checkpoint) : null
+      }
+
+      if (this._checkpointer > 0 || this._checkpoint !== null) {
+        this._checkpointer++
+        this._checkpoint = null
       }
     }
 
@@ -349,4 +476,8 @@ function popAndSwap (list, i) {
   if (i >= list.length) return false
   list[i] = pop
   return true
+}
+
+function toJSONCheckpoint (c) {
+  return c && { treeHash: b4a.toString(c.treeHash, 'hex'), length: c.length }
 }
