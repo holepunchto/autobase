@@ -137,13 +137,13 @@ module.exports = class Autobase extends ReadyResource {
     super()
 
     this.sparse = false
-
+    this.bootstraps = [].concat(bootstraps || []).map(toKey)
     this.store = store
-    this.linearizer = new Linearizer([])
+
     this.local = store.get({ name: 'local', valueEncoding: 'json' })
     this.localWriter = new Writer(this, this.local)
+    this.linearizer = new Linearizer([])
     this.system = new SystemView(this, store.get({ name: 'system' }))
-    this.bootstraps = [].concat(bootstraps || []).map(toKey)
 
     this._appending = []
     this._applying = null
