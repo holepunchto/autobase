@@ -1,11 +1,10 @@
 const b4a = require('b4a')
 const ReadyResource = require('ready-resource')
 const debounceify = require('debounceify')
-const Hyperbee = require('hyperbee')
-const SubEncoder = require('sub-encoder')
 
 const Linearizer = require('./lib/linearizer')
 const LinearizedCore = require('./lib/core')
+const SystemView = require('./lib/system')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 
@@ -113,58 +112,6 @@ class Writer {
   }
 }
 
-class SystemViewBatch {
-  constructor (sys) {
-    this.system = sys
-    this.batch = sys.db.batch()
-  }
-
-  updateIndex (index) {
-    const value = { treeHash: b4a.toString(index.treeHash, 'hex'), length: index.length }
-    return this.batch.put(index.name, value, { keyEncoding: this.system.subs.indexes })
-  }
-
-  flush () {
-    return this.batch.flush()
-  }
-}
-
-class SystemView {
-  constructor (core) {
-    const enc = new SubEncoder()
-
-    this.db = new Hyperbee(core, { valueEncoding: 'json' })
-    this.subs = {
-      writers: enc.sub('writers'),
-      indexes: enc.sub('indexes', { keyEncoding: 'utf-8' })
-    }
-
-    this.unindexedWriters = []
-  }
-
-  checkpoint () {
-    const tree = this.db.feed.core.tree
-
-    return {
-      treeHash: tree.hash(),
-      length: tree.length
-    }
-  }
-
-  async listIndexes () {
-    const all = []
-    for await (const data of this.db.createReadStream(this.subs.indexes.range())) {
-      all.push({ name: data.key, treeHash: b4a.from(data.value.treeHash, 'hex'), length: data.value.length })
-    }
-    return all
-  }
-
-  batch () {
-    return new SystemViewBatch(this)
-  }
-}
-
-
 class LinearizedStore {
   constructor (base) {
     this.base = base
@@ -195,12 +142,11 @@ module.exports = class Autobase extends ReadyResource {
     this.linearizer = new Linearizer([])
     this.local = store.get({ name: 'local', valueEncoding: 'json' })
     this.localWriter = new Writer(this, this.local)
-    this.system = new SystemView(store.get({ name: 'system' }))
+    this.system = new SystemView(this, store.get({ name: 'system' }))
     this.bootstraps = [].concat(bootstraps || []).map(toKey)
-    this.applying = false
 
     this._appending = []
-    this._updatedCores = []
+    this._applying = null
     this._updates = []
     this._handlers = handlers || {}
     this._bump = debounceify(this._advance.bind(this))
@@ -260,6 +206,10 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     await this._bump()
+  }
+
+  ack () {
+    return this.append(null)
   }
 
   async append (value) {
@@ -324,30 +274,44 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // triggered from linearized core
-  _oncoreappend (core) {
-    if (this.applying === false) throw new Error('Append is only allowed in apply')
+  _onuserappend (core, blocks) {
+    if (this._applying === null) throw new Error('Append is only allowed in apply')
 
     if (core.appending === 0) {
-      this._updatedCores.push(core)
+      this._applying.user.push({ core, appending: 0 })
     }
 
-    core.appending++
+    core.appending += blocks
+  }
+
+  // triggered from system
+  _onsystemappend (system, blocks) {
+    if (this._applying === null) throw new Error('System changes are only allowed in apply')
+
+    this._applying.system += blocks
   }
 
   _undo (popped) {
     const truncating = []
+    let systemPop = 0
 
-    while (popped-- > 0) {
-      for (const { core, appending } of this._updates.pop()) {
+    while (popped > 0) {
+      const u = this._updates.pop()
+
+      popped -= u.batch
+      systemPop += u.system
+
+      for (const { core, appending } of u.user) {
         if (core.truncating === 0) truncating.push(core)
         core.truncating += appending
       }
     }
 
+    if (systemPop > 0) this.system._onundo(systemPop)
+
     for (const core of truncating) {
-      const oldLength = core.length - core.truncating
       core.truncating = 0
-      core.truncate(oldLength)
+      core._onundo(core.truncating)
     }
   }
 
@@ -369,29 +333,25 @@ module.exports = class Autobase extends ReadyResource {
 
       if (node.batch > 1) continue
 
-      if (this._hasApply === true) {
-        this.applying = true
-        await this._handlers.apply(batch, this.view, this)
-        this.applying = false
-      }
+      const update = { batch: batch.length, system: 0, user: [] }
+
+      this._updates.push(update)
+      this._applying = update
+      if (this._hasApply === true) await this._handlers.apply(batch, this.view, this)
+      this._applying = null
 
       batch = []
 
-      const update = []
-      this._updates.push(update)
-
-      // FIXME: sort me
-      while (this._updatedCores.length > 0) {
-        const core = this._updatedCores.pop()
-
-        update.push({ core, appending: core.appending })
-        core.appending = 0
+      for (let i = 0; i < update.user.length; i++) {
+        const u = update.user[i]
+        u.appending = u.core.appending
+        u.core.appending = 0
       }
     }
 
     if (u.indexed.length === 0) return
 
-    const checkpoint = await this._appendIndexes(u.indexed.length)
+    const checkpoint = await this._flushIndexes(u.indexed.length)
 
     if (checkpoint === null) return
 
@@ -399,44 +359,45 @@ module.exports = class Autobase extends ReadyResource {
     this._checkpointer = 0
   }
 
-  async _appendIndexes (indexed) {
-    const indexing = []
+  async _flushIndexes (indexed) {
+    const updatedCores = []
+    let updatedSystem = 0
 
-    while (indexed-- > 0) {
-      for (const u of this._updates.shift()) {
-        if (u.core.indexing === 0) {
-          indexing.push(u.core)
-        }
+    while (indexed > 0) {
+      const u = this._updates.shift()
+      const user = []
 
-        u.core.indexing += u.appending
+      indexed -= u.batch
+      updatedSystem += u.system
+
+      for (const { core, appending } of u.user) {
+        const start = core.indexing
+        const blocks = core.tip.slice(start, core.indexing += appending)
+        if (start === 0) updatedCores.push(core)
+
+        await core.core.append(blocks)
+
+        const tree = core.core.core.tree
+
+        user.push({
+          name: core.name,
+          treeHash: tree.hash(),
+          length: tree.length
+        })
       }
+
+      await this.system.flush(u.system, user)
     }
 
-    if (!indexing.length) return null
-
-    for (const core of indexing) {
-      const blocks = core.tip.slice(0, core.indexing)
-
-      await core.core.append(blocks)
-
+    for (const core of updatedCores) {
+      const indexing = core.indexing
       core.indexing = 0
-      core._onindexupdate(blocks.length)
+      core._onindex(indexing)
     }
 
-    const batch = this.system.batch()
-
-    for (const core of indexing) {
-      const tree = core.core.core.tree
-      const index = {
-        name: core.name,
-        treeHash: tree.hash(),
-        length: tree.length
-      }
-
-      await batch.updateIndex(index)
+    if (updatedSystem) {
+      this.system._onindex(updatedSystem)
     }
-
-    await batch.flush()
 
     return this.system.checkpoint()
   }
