@@ -128,6 +128,8 @@ for (let i = 0; i < a.view.length; i++) {
 }
 console.log('------ end -----')
 
+console.log('checkity checkpoint', await a.checkpoint())
+
 process.exit()
 
 // console.log(b.linearizer.tails[0].writer.core)
