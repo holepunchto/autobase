@@ -152,7 +152,7 @@ module.exports = class Autobase extends ReadyResource {
     super()
 
     this.sparse = false
-    this.bootstraps = [].concat(bootstraps || []).map(toKey)
+    this.bootstraps = [].concat(bootstraps || []).map(toKey).sort((a, b) => b4a.compare(a, b))
     this.store = store
 
     this.local = store.get({ name: 'local', valueEncoding: 'json' })
@@ -164,6 +164,7 @@ module.exports = class Autobase extends ReadyResource {
     this._applying = null
     this._updates = []
     this._handlers = handlers || {}
+    this._modified = false
     this._bump = debounceify(this._advance.bind(this))
 
     this._checkpointer = 0
@@ -208,6 +209,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (writers.length === 0) {
       writers.push(this.localWriter)
+      this.bootstraps.push(this.local.key)
     }
 
     this.linearizer.setIndexers(writers)
@@ -272,6 +274,13 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _advance () {
+    do {
+      this._modified = false
+      await this._advanceOnce()
+    } while (this._modified === true)
+  }
+
+  async _advanceOnce () {
     if (this._appending.length) {
       for (let i = 0; i < this._appending.length; i++) {
         const value = this._appending[i]
@@ -344,8 +353,9 @@ module.exports = class Autobase extends ReadyResource {
     if (systemPop > 0) this.system._onundo(systemPop)
 
     for (const core of truncating) {
+      const truncating = core.truncating
       core.truncating = 0
-      core._onundo(core.truncating)
+      core._onundo(truncating)
     }
   }
 
@@ -371,6 +381,7 @@ module.exports = class Autobase extends ReadyResource {
 
       this._updates.push(update)
       this._applying = update
+      if (this.system.bootstrapping) this._bootstrap()
       if (this._hasApply === true) await this._handlers.apply(batch, this.view, this)
       this._applying = null
 
@@ -391,6 +402,12 @@ module.exports = class Autobase extends ReadyResource {
 
     this._checkpoint = checkpoint
     this._checkpointer = 0
+  }
+
+  _bootstrap () {
+    for (const key of this.bootstraps) {
+      this.system.addWriter(key)
+    }
   }
 
   async _flushIndexes (indexed) {
@@ -431,9 +448,48 @@ module.exports = class Autobase extends ReadyResource {
 
     if (updatedSystem) {
       this.system._onindex(updatedSystem)
+      await this._updateIndexers()
     }
 
     return this.system.checkpoint()
+  }
+
+  async _updateIndexers () {
+    const indexers = await this.system.listIndexers()
+
+    const writers = []
+    let updated = false
+
+    for (const { key } of indexers) {
+      let existing = false
+
+      for (const w of this.linearizer.indexers) {
+        if (b4a.equals(w.core.key, key)) {
+          writers.push(w)
+          existing = true
+          break
+        }
+      }
+
+      if (existing) continue
+      updated = true
+
+      if (b4a.equals(this.localWriter.core.key, key)) {
+        writers.push(this.localWriter)
+        continue
+      }
+
+      const core = this.store.get({ key, valueEncoding: 'json', sparse: this.sparse })
+
+      await core.ready()
+      const w = new Writer(this, core)
+      writers.push(w)
+    }
+
+    if (!updated) return
+
+    this.linearizer.setIndexers(writers)
+    this._modified = true
   }
 
   _flushLocal () {
