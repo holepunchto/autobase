@@ -103,6 +103,21 @@ class Writer {
     return node
   }
 
+  async getCheckpoint () {
+    await this.core.update()
+
+    let length = this.core.length
+    if (length === 0) return null
+
+    let node = await this.core.get(length - 1)
+    if (node.checkpointer !== 0) {
+      length -= node.checkpointer
+      node = await this.core.get(length - 1)
+    }
+
+    return node.checkpoint
+  }
+
   _addClock (clock, node) {
     for (const [writer, length] of node.clock) {
       if (clock.get(writer) < length && this.base.linearizer.clock.get(writer) < length) {
@@ -219,6 +234,25 @@ module.exports = class Autobase extends ReadyResource {
     else this._appending.push(value)
 
     await this._bump()
+  }
+
+  async checkpoint () {
+    await this.ready()
+    const all = []
+
+    for (const w of this.linearizer.indexers) {
+      all.push(w.getCheckpoint())
+    }
+
+    const checkpoints = await Promise.all(all)
+    let best = null
+
+    for (const c of checkpoints) {
+      if (!c) continue
+      if (best === null || c.length > best.length) best = c
+    }
+
+    return best
   }
 
   _getWriterByKey (key) {
