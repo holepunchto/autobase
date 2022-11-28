@@ -2,6 +2,7 @@ import Autobase from './index.js'
 import Corestore from 'corestore'
 import RAM from 'random-access-memory'
 import util from 'util'
+import b4a from 'b4a'
 
 // util.inspect.defaultOptions.depth = 10
 
@@ -14,31 +15,43 @@ import util from 'util'
 //   }
 // }
 
-const genesis = [
-  'f0978c6d7a9ff36cdf600d85134550a4e1ebaef541203c2f119ed53b6f294990',
-  '34431d2aa1a0474a6c8e9e96b114b589ef74b94917fa52064c4aadad942bda1f',
-  '10b2d42ea4e3933450d1fb204bd3f33debebffd81b4020631623cce8260d3c15'
-]
+// const genesis = [
+//   'f0978c6d7a9ff36cdf600d85134550a4e1ebaef541203c2f119ed53b6f294990',
+//   '34431d2aa1a0474a6c8e9e96b114b589ef74b94917fa52064c4aadad942bda1f',
+//   '10b2d42ea4e3933450d1fb204bd3f33debebffd81b4020631623cce8260d3c15'
+// ]
 
 function open (store) {
   return store.get('double')
 }
 
-async function apply (nodes, view) {
+async function apply (nodes, view, base) {
+  if (!base.debug) {
+    console.log('apply for b')
+  }
+
   for (const node of nodes) {
-    // console.log('applying', node)
-    // dbl!
+    if (node.value.add) {
+      base.system.addWriter(b4a.from(node.value.add, 'hex'))
+    }
+
     await view.append(node.value)
     await view.append(node.value)
   }
 }
 
-const a = new Autobase(makeStore('a'), genesis, {
+const a = new Autobase(makeStore('a'), [], {
   open,
   apply
 })
 
+a.name = 'a'
+
 await a.ready()
+
+const genesis = [
+  a.local.key
+]
 
 // a.linearizer.ontruncate = function (len, old) {
 //   console.log('a is truncating...', len, old)
@@ -49,11 +62,54 @@ await a.ready()
 a.debug = true
 a.linearizer.debug = true
 
-const b = new Autobase(makeStore('b'), genesis, {  })
+const b = new Autobase(makeStore('b'), genesis, {
+  open,
+  apply
+})
+
+b.name = 'b'
+
 const c = new Autobase(makeStore('c'), genesis, {  })
+
+c.name = 'c'
 
 await b.ready()
 await c.ready()
+
+await a.append({
+  add: b4a.toString(b.local.key, 'hex'),
+  debug: 'a0'
+})
+
+await b.append({ debug: 'b0' })
+
+// process.exit()
+
+await syncAll()
+
+// process.exit()
+
+// console.log('----- begin ----')
+// console.log('a.view.length', a.view.length)
+// for (let i = 0; i < a.view.length; i++) {
+//   console.log(await a.view.get(i))
+// }
+// console.log('------ end -----')
+
+console.log()
+console.log()
+console.log()
+console.log()
+
+console.log('----- begin ----')
+console.log('b.view.length', b.view.length)
+for (let i = 0; i < b.view.length; i++) {
+  console.log(await b.view.get(i))
+}
+console.log('------ end -----')
+
+
+process.exit()
 
 // console.log(b.local.key.toString('hex'))
 
@@ -244,8 +300,8 @@ async function syncAll () {
   await sync(a, b)
 
   console.log('**** synced a and b ****')
-  await sync(a, c)
-  await sync(b, a)
+  // await sync(a, c)
+  // await sync(b, a)
   console.log('**** sync all done ****')
   console.log()
 }
