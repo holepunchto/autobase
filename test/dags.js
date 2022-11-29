@@ -1,48 +1,14 @@
 const test = require('brittle')
+const b4a = require('b4a')
 const Corestore = require('corestore')
 const RAM = require('random-access-memory')
 
 const Autobase = require('../index.js')
 
-const GENESIS = {
-  n: [
-    7, 4, 10, 15, 16, 2, 11,
-    12, 8, 18, 3, 9, 0, 13,
-    14, 6, 1, 5, 19, 17
-  ],
-  key: [
-    '16e94bbf48ec0c913884e3b742e033008adc0c1a91c679448c3873f2ec2791d4',
-    '19144faa7527c9ab6e743df9a384511d1dc7e52aa824fa1767968d1bc591bf75',
-    '1abdfb0d2bee9810e74671402267d5088ba29934d0386d6225c213788df92efc',
-    '36d977e235501a25786003642b53b26f2d3697f6bdb4e624f29a6d06910bd6c9',
-    '43cf68c3fe304ab7d22ce5122d9c26660a2b64042c332e47cbfa2514f0d661b6',
-    '515f8b21578f1b343d551e890cc63eea720d424ca3a01eb47fe39087be7a3b3e',
-    '5a7cec13a883277065e5bbfed79cd30b0c71a611fd004075cf3d0b1e81b81f05',
-    '5d9cfd1f469a568836d31137a07a6a6ef064003b6c2ae870836637f9a039f094',
-    '61b0de7ac026fda0bc416b609ee797b727491cd7c46290096d6f2565ac2e3673',
-    '6389e20c5b402b94025c7543240ad26fa34236cd3637cddd39f63cc7f8dfdd86',
-    '762179664d8741a9e744a107fe06251a88ce5325f8f4793b177a0087de643fb7',
-    '8d2472c40adef9c0f0aa5931d780cd6c01039c2f88228d19a83d81cad5b6cd84',
-    'b54d1cb0587a130b2197b8d1c28d7870c6fdb21a04724364fbd499ea9c281156',
-    'b5c395ce67cd8a32be1daa873e9d57aa756281050a059c134566bfed97baee30',
-    'bbe79d21c855c0689067ffa33f6d9043749b9378c00da663e8c4366c0f76a259',
-    'd3ce747379dc4be4d813261580351861d0f88212ae7a875bb71fe0152344fceb',
-    'd9c0b8bbd8c71aed943f0142f9afc346fe28da0501d39c994525beb063e99ab8',
-    'e0596504a57556495a51e388d9094370329d9487749ecedbc69ed42acd0402be',
-    'fba939d9e2c3ce975284b5a8c1263c37168ffd2dd72c9801ee97025ac2a726ed',
-    'fc109ecba89ffd8ec2b232235b95046ecc05988e3d1fd2485891750448c6bbd5'
-  ]
-}
+function tester (store, label, genesis, opts = {}) {
+  const base = new Autobase(store, genesis, { apply, open })
 
-function tester (seed, label, genesis, opts = {}) {
-  const store = makeStore(seed)
-  const base = new Autobase(store, genesis, { apply: opts.apply && apply, open: opts.open && open })
-
-  base.debug = !!opts.debug
-  base.name = label
-
-  base.linearizer.debug = !!opts.debug
-  base.linearizer.name = label
+  setDebug(!!opts.debug)
 
   let index = 0
   let last = 0
@@ -54,28 +20,34 @@ function tester (seed, label, genesis, opts = {}) {
           return syncTo
         case 'values':
           return values
-        case 'list':
-          return list
         case 'append':
           return append
         case 'tails':
           return tails
-        case 'values':
-          return values
+        case 'setDebug':
+          return setDebug
         default:
           return Reflect.get(...arguments)
       }
     }
   })
 
+  function setDebug (debug = true, lbl = label) {
+    base.debug = !!opts.debug
+    base.linearizer.debug = !!opts.debug
+
+    base.name = lbl
+    base.linearizer.name = lbl
+  }
+
   function open (store) {
     return store.get('double')
   }
 
   async function apply (nodes, view, base) {
-    if (!base.debug) {
-      console.log('apply for', label)
-    }
+    // if (!base.debug) {
+    //   console.log('apply for', label)
+    // }
 
     for (const node of nodes) {
       if (node.value.add) {
@@ -97,14 +69,6 @@ function tester (seed, label, genesis, opts = {}) {
     })
   }
 
-  async function list () {
-    console.log('**** list ' + label + ' ****')
-    for (let i = 0; i < base.length; i++) {
-      console.log(i, (await base.get(i)).value)
-    }
-    console.log('')
-  }
-
   function tails () {
     return base.linearizer.tails.map(t => t.value)
   }
@@ -123,17 +87,9 @@ c - b - a - c - b - a
 */
 
 test.solo('simple 3', async t => {
-  const seed = GENESIS.n.slice(0, 3)
-  const genesis = GENESIS.key.slice(0, 3)
+  const [a, b, c] = await getWriters(3)
 
-  let writer = 0
-  const a = tester(seed[writer++], 'a', genesis, { apply: true, open: true, debug: true })
-  const b = tester(seed[writer++], 'b', genesis)
-  const c = tester(seed[writer++], 'c', genesis)
-
-  await a.ready()
-  await b.ready()
-  await c.ready()
+  a.setDebug()
 
   const destroy = replicateMany(a, b, c)
 
@@ -187,12 +143,18 @@ test.solo('simple 3', async t => {
 
   // --- loop ---
 
-  console.log('----- begin ----')
-  console.log('view.length', a.view.length)
-  for await (const block of a.values()) console.log(block)
-  console.log('----- tails ----')
-  for (const tail of a.tails()) console.log(tail)
-  console.log('------ end -----')
+  t.alike(a.view.indexedLength, b.view.indexedLength)
+  t.alike(c.view.indexedLength, b.view.indexedLength)
+  t.alike(a.view.indexedLength, c.view.indexedLength)
+
+  const av = await collect(a.values())
+  const bv = await collect(b.values())
+  const cv = await collect(c.values())
+
+  t.alike(av, bv)
+  t.alike(av, cv)
+
+  t.is(a.linearizer.tails.length, 1)
 
   destroy()
   t.end()
@@ -215,18 +177,7 @@ c   a
 */
 
 test('non-convergence', async t => {
-  const seed = GENESIS.n.slice(0, 3)
-  const genesis = GENESIS.key.slice(0, 3)
-
-  let writer = 0
-  const a = tester(seed[writer++], 'a', genesis, { apply: true, open: true })
-  await a.ready()
-
-  const b = tester(seed[writer++], 'b', genesis)
-  const c = tester(seed[writer++], 'c', genesis)
-
-  await b.ready()
-  await c.ready()
+  const [a, b, c] = await getWriters(3)
 
   // --- loop ---
 
@@ -268,14 +219,18 @@ test('non-convergence', async t => {
 
   // --- loop ---
 
-  console.log(a.linearizer.tip.map(v => v.value))
+  t.alike(a.view.indexedLength, b.view.indexedLength)
+  t.alike(c.view.indexedLength, b.view.indexedLength)
+  t.alike(a.view.indexedLength, c.view.indexedLength)
 
-  console.log('----- begin ----')
-  console.log('view.length', a.view.length)
-  for await (const block of a.values()) console.log(block)
-  console.log('----- tails ----')
-  for (const tail of a.tails()) console.log(tail)
-  console.log('------ end -----')
+  const av = await collect(a.values())
+  const bv = await collect(b.values())
+  const cv = await collect(c.values())
+
+  t.alike(av, bv)
+  t.alike(av, cv)
+
+  t.is(a.linearizer.tails.length, 1)
 
   t.end()
 })
@@ -293,23 +248,7 @@ test('non-convergence', async t => {
 */
 
 test('inner majority', async t => {
-  const seed = GENESIS.n.slice(0, 3)
-  const genesis = GENESIS.key.slice(0, 3)
-
-  let writer = 0
-
-  const a = tester(seed[writer++], 'a', genesis, {})
-  await a.ready()
-
-  const b = tester(seed[writer++], 'b', genesis, { apply: true, open: true })
-  const c = tester(seed[writer++], 'c', genesis, {})
-  const d = tester(seed[writer++], 'd', genesis, {})
-  const e = tester(seed[writer++], 'e', genesis, {})
-
-  await b.ready()
-  await c.ready()
-  await d.ready()
-  await e.ready()
+  const [a, b, c, d, e] = await getWriters(5)
 
   // --- write ---
 
@@ -341,14 +280,10 @@ test('inner majority', async t => {
 
   await b.append()
 
-  console.log(b.linearizer.tip.map(v => v.value))
+  const bv = await collect(b.values())
 
-  console.log('----- begin ----')
-  console.log('view.length', b.view.length)
-  for await (const block of b.values()) console.log(block)
-  console.log('----- tails ----')
-  for (const tail of b.tails()) console.log(tail)
-  console.log('------ end -----')
+  t.is(bv.indexedLength, 3)
+  t.is(b.linearizer.tails.length, 1)
 
   t.end()
 })
@@ -360,22 +295,7 @@ test('inner majority', async t => {
 */
 
 test('majority alone - convergence', async t => {
-  const seed = GENESIS.n.slice(0, 3)
-  const genesis = GENESIS.key.slice(0, 3)
-
-  let writer = 0
-
-  const a = tester(seed[writer++], 'a', genesis, {})
-  const b = tester(seed[writer++], 'b', genesis, { apply: true, open: true })
-  const c = tester(seed[writer++], 'c', genesis, {})
-  const d = tester(seed[writer++], 'd', genesis, { apply: true, open: true })
-  const e = tester(seed[writer++], 'e', genesis, {})
-
-  await a.ready()
-  await b.ready()
-  await c.ready()
-  await d.ready()
-  await e.ready()
+  const [a, b, c, d, e] = await getWriters(5)
 
   // --- write ---
 
@@ -415,18 +335,18 @@ test('majority alone - convergence', async t => {
   await c.sync([b, d])
   await b.sync([d, c])
 
-  console.log(b.linearizer.tip.map(v => v.value))
+  const bv = await collect(b.values())
+  const cv = await collect(c.values())
+  const dv = await collect(d.values())
 
-  console.log('*** indexed ***')
-  for await (const val of d.values()) console.log(val)
-  console.log('***************\n')
+  t.alike(bv, cv)
+  t.alike(bv, dv)
 
-  console.log('----- begin ----')
-  console.log('view.length', d.view.length)
-  for await (const block of d.values()) console.log(block)
-  console.log('----- tails ----')
-  for (const tail of d.tails()) console.log(tail)
-  console.log('------ end -----')
+  t.is(b.indexedLength, 3)
+  t.is(c.indexedLength, 3)
+  t.is(d.indexedLength, 3)
+
+  t.is(b.linearizer.tails.length, 1)
 
   t.end()
 })
@@ -444,22 +364,7 @@ test('majority alone - convergence', async t => {
 */
 
 test('majority alone - non-convergence', async t => {
-  const seed = GENESIS.n.slice(0, 3)
-  const genesis = GENESIS.key.slice(0, 3)
-
-  let writer = 0
-
-  const a = tester(seed[writer++], 'a', genesis, {})
-  const b = tester(seed[writer++], 'b', genesis, { apply: true, open: true })
-  const c = tester(seed[writer++], 'c', genesis, {})
-  const d = tester(seed[writer++], 'd', genesis, {})
-  const e = tester(seed[writer++], 'e', genesis, {})
-
-  await a.ready()
-  await b.ready()
-  await c.ready()
-  await d.ready()
-  await e.ready()
+  const [a, b, c, d, e] = await getWriters(5)
 
   // --- write ---
 
@@ -489,29 +394,11 @@ test('majority alone - non-convergence', async t => {
 
   console.log(b.linearizer.tip.map(v => v.value))
 
-  console.log('----- begin ----')
-  console.log('view.length', b.view.length)
-  for await (const block of b.values()) console.log(block)
-  console.log('----- tails ----')
-  for (const tail of b.tails()) console.log(tail)
-  console.log('------ end -----')
-
   t.end()
 })
 
 test('example.mjs', async t => {
-  const seed = GENESIS.n.slice(0, 3)
-  const genesis = GENESIS.key.slice(0, 3)
-
-  let writer = 0
-  const a = tester(seed[writer++], 'a', genesis, { apply: true, open: true })
-  await a.ready()
-
-  const b = tester(seed[writer++], 'b', genesis, { apply: true, open: true })
-  const c = tester(seed[writer++], 'c', genesis, { apply: true, open: true })
-
-  await b.ready()
-  await c.ready()
+  const [a, b, c] = await getWriters(5)
 
   await a.append()
   await b.append()
@@ -601,6 +488,25 @@ function replicate (a, b) {
   }
 }
 
+async function getWriters (n) {
+  const stores = []
+  for (let i = 0; i < n; i++) {
+    const store = makeStore(i)
+    const local = store.get({ name: 'local', valueEncoding: 'json' })
+    stores.push({ store, local })
+  }
+
+  await Promise.all(stores.map(s => s.local.ready()))
+  stores.sort((a, b) => Buffer.compare(a.local.key, b.local.key))
+
+  const genesis = stores.map(s => b4a.toString(s.local.key, 'hex'))
+
+  const writers = stores.map((s, i) => tester(s.store, i, genesis))
+  await Promise.all(writers.map(w => w.ready()))
+
+  return writers
+}
+
 function replicateMany (...writers) {
   const destroy = []
 
@@ -627,4 +533,10 @@ function makeStore (seed) {
 
 function sleep () {
   return new Promise(resolve => setImmediate(resolve))
+}
+
+async function collect (ite) {
+  const res = []
+  for await (const v of ite) res.push(v)
+  return res
 }
