@@ -6,9 +6,9 @@ const Autobase = require('../index.js')
 
 const GENESIS = {
   n: [
-     7, 4, 10, 15, 16,  2, 11,
-    12, 8, 18,  3,  9,  0, 13,
-    14, 6,  1,  5, 19, 17
+    7, 4, 10, 15, 16, 2, 11,
+    12, 8, 18, 3, 9, 0, 13,
+    14, 6, 1, 5, 19, 17
   ],
   key: [
     '16e94bbf48ec0c913884e3b742e033008adc0c1a91c679448c3873f2ec2791d4',
@@ -121,6 +121,92 @@ function tester (seed, label, genesis, opts = {}) {
 
 /*
 
+c - b - a - c - b - a
+
+*/
+
+test.solo('simple 3', async t => {
+  const seed = GENESIS.n.slice(0, 3)
+  const genesis = GENESIS.key.slice(0, 3)
+
+  let writer = 0
+  const a = tester(seed[writer++], 'a', genesis, { apply: true, open: true })
+  const b = tester(seed[writer++], 'b', genesis)
+  const c = tester(seed[writer++], 'c', genesis)
+
+  await a.ready()
+  await b.ready()
+  await c.ready()
+
+  const destroy = replicateMany(a, b, c)
+
+  // --- loop ---
+
+  await c.append()
+  await sleep()
+
+  await a.update()
+  await b.update()
+  await c.update()
+
+  await b.append()
+  await sleep()
+
+  await a.update()
+  await b.update()
+  await c.update()
+
+  await a.append()
+
+  await sleep()
+
+  await a.update()
+  await b.update()
+  await c.update()
+
+  await c.append()
+
+  await sleep()
+
+  await a.update()
+  await b.update()
+  await c.update()
+
+  await b.append()
+
+  await sleep()
+
+  await a.update()
+  await b.update()
+  await c.update()
+
+  await a.append()
+
+  await sleep()
+
+  await a.update()
+  await b.update()
+  await c.update()
+
+  // --- loop ---
+
+  console.log(c.linearizer.tip.map(v => v.value))
+
+  await a.list()
+
+  console.log('----- begin ----')
+  console.log('view.length', a.view.length)
+  for await (const block of a.getView()) console.log(block)
+  console.log('----- tails ----')
+  for (const tail of a.tails()) console.log(tail)
+  console.log('------ end -----')
+
+  destroy()
+  t.end()
+})
+
+/*
+
 a   b
 | / |
 b   c
@@ -206,10 +292,10 @@ test('non-convergence', async t => {
 /*
 
     b   c   d
-  / | x | x | \  
+  / | x | x | \
  a  b   c   d  e
-  \ | x | x | /  
-    b   c   d 
+  \ | x | x | /
+    b   c   d
     | /
     b
 
@@ -354,14 +440,13 @@ test('majority alone - convergence', async t => {
   t.end()
 })
 
-
 /*
 
   b   c   d
-  | x | x |  
+  | x | x |
   b   c   d
-  | x | x |  
-  b   c   d 
+  | x | x |
+  b   c   d
   | /
   b
 
@@ -425,6 +510,75 @@ test('majority alone - non-convergence', async t => {
   t.end()
 })
 
+test('example.mjs', async t => {
+  const seed = GENESIS.n.slice(0, 3)
+  const genesis = GENESIS.key.slice(0, 3)
+
+  let writer = 0
+  const a = tester(seed[writer++], 'a', genesis, { apply: true, open: true })
+  await a.ready()
+
+  const b = tester(seed[writer++], 'b', genesis, { apply: true, open: true })
+  const c = tester(seed[writer++], 'c', genesis, { apply: true, open: true })
+
+  await b.ready()
+  await c.ready()
+
+  await a.append()
+  await b.append()
+
+  await syncAll()
+
+  await a.append()
+  await a.append()
+  await b.append()
+  await b.append()
+
+  await syncAll()
+
+  await c.append()
+  await a.append()
+
+  await syncAll()
+
+  await b.append()
+
+  await syncAll()
+
+  await a.append()
+  await a.append()
+
+  await syncAll()
+
+  console.log('checkity checkpoint', await a.checkpoint())
+
+  await syncAll()
+
+  await a.append()
+
+  await syncAll()
+
+  await b.append()
+
+  console.log(b._writersQuorum.size, b._writers.length)
+
+  console.log(await a.latestCheckpoint())
+  console.log(await b.latestCheckpoint())
+
+  await a.list()
+
+  async function syncAll () {
+    console.log('**** sync all ****')
+    await sync(a, b)
+
+    console.log('**** synced a and b ****')
+    // await sync(a, c)
+    // await sync(b, a)
+    console.log('**** sync all done ****')
+    console.log()
+  }
+})
+
 async function sync (a, b, oneway = false) {
   const s1 = a.store.replicate(true)
   const s2 = b.store.replicate(false)
@@ -441,6 +595,35 @@ async function sync (a, b, oneway = false) {
   s2.destroy()
 }
 
+function replicate (a, b) {
+  const s1 = a.store.replicate(true)
+  const s2 = b.store.replicate(false)
+
+  s1.on('error', () => {})
+  s2.on('error', () => {})
+
+  s1.pipe(s2).pipe(s1)
+
+  return function teardown () {
+    s1.destroy()
+    s2.destroy()
+  }
+}
+
+function replicateMany (...writers) {
+  const destroy = []
+
+  for (let i = 0; i < writers.length; i++) {
+    for (let j = i; i < writers.length; i++) {
+      destroy.push(replicate(writers[i], writers[j]))
+    }
+  }
+
+  return function teardown () {
+    destroy.forEach(d => d())
+  }
+}
+
 async function syncAll (...writers) {
   for (let i = 0; i < writers.length; i++) {
     await writers[i].sync(writers.filter(w => w !== writers[i]))
@@ -449,4 +632,8 @@ async function syncAll (...writers) {
 
 function makeStore (seed) {
   return new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill(seed) })
+}
+
+function sleep (n = 0.2) {
+  return new Promise(resolve => setTimeout(resolve, n * 1000))
 }
