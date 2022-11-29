@@ -130,7 +130,7 @@ class Writer {
   async _addClock (clock, node) {
     if (node.clock === null) return // gc'ed
     for (const [writer, length] of node.clock) {
-      if (clock.get(writer) < length && await this.base.system.isIndexed(writer.key, length)) {
+      if (clock.get(writer) < length && !(await this.base.system.isIndexed(writer.core.key, length))) {
         clock.set(writer, length)
       }
     }
@@ -295,7 +295,7 @@ module.exports = class Autobase extends ReadyResource {
       const local = b4a.equals(k, this.local.key)
 
       const core = local
-        ? this.local.session()
+        ? this.local.session({ valueEncoding: 'json' })
         : this.store.get({ key: k, sparse: this.sparse, valueEncoding: 'json' })
 
       await core.ready()
