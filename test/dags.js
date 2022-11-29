@@ -38,6 +38,12 @@ function tester (seed, label, genesis, opts = {}) {
   const store = makeStore(seed)
   const base = new Autobase(store, genesis, { apply: opts.apply && apply, open: opts.open && open })
 
+  base.debug = !!opts.debug
+  base.name = label
+
+  base.linearizer.debug = !!opts.debug
+  base.linearizer.name = label
+
   let index = 0
   let last = 0
 
@@ -76,7 +82,6 @@ function tester (seed, label, genesis, opts = {}) {
         base.system.addWriter(b4a.from(node.value.add, 'hex'))
       }
 
-      await view.append(node.value)
       await view.append(node.value)
     }
   }
@@ -130,7 +135,7 @@ test.solo('simple 3', async t => {
   const genesis = GENESIS.key.slice(0, 3)
 
   let writer = 0
-  const a = tester(seed[writer++], 'a', genesis, { apply: true, open: true })
+  const a = tester(seed[writer++], 'a', genesis, { apply: true, open: true, debug: true })
   const b = tester(seed[writer++], 'b', genesis)
   const c = tester(seed[writer++], 'c', genesis)
 
@@ -189,8 +194,6 @@ test.solo('simple 3', async t => {
   await c.update()
 
   // --- loop ---
-
-  console.log(c.linearizer.tip.map(v => v.value))
 
   await a.list()
 
@@ -634,6 +637,6 @@ function makeStore (seed) {
   return new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill(seed) })
 }
 
-function sleep (n = 0.2) {
-  return new Promise(resolve => setTimeout(resolve, n * 1000))
+function sleep () {
+  return new Promise(resolve => setImmediate(resolve))
 }
