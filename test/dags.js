@@ -52,16 +52,16 @@ function tester (seed, label, genesis, opts = {}) {
       switch (prop) {
         case 'sync':
           return syncTo
-        case 'results':
-          return results
+        case 'values':
+          return values
         case 'list':
           return list
         case 'append':
           return append
         case 'tails':
           return tails
-        case 'getView':
-          return getView
+        case 'values':
+          return values
         default:
           return Reflect.get(...arguments)
       }
@@ -97,14 +97,6 @@ function tester (seed, label, genesis, opts = {}) {
     })
   }
 
-  async function results () {
-    const result = []
-    while (last < base.length) {
-      result.push((await base.get(last++)).value)
-    }
-    return result
-  }
-
   async function list () {
     console.log('**** list ' + label + ' ****')
     for (let i = 0; i < base.length; i++) {
@@ -117,7 +109,7 @@ function tester (seed, label, genesis, opts = {}) {
     return base.linearizer.tails.map(t => t.value)
   }
 
-  async function * getView () {
+  async function * values () {
     for (let i = 0; i < base.view.length; i++) {
       yield await base.view.get(i)
     }
@@ -195,11 +187,9 @@ test.solo('simple 3', async t => {
 
   // --- loop ---
 
-  await a.list()
-
   console.log('----- begin ----')
   console.log('view.length', a.view.length)
-  for await (const block of a.getView()) console.log(block)
+  for await (const block of a.values()) console.log(block)
   console.log('----- tails ----')
   for (const tail of a.tails()) console.log(tail)
   console.log('------ end -----')
@@ -280,11 +270,9 @@ test('non-convergence', async t => {
 
   console.log(a.linearizer.tip.map(v => v.value))
 
-  await a.list()
-
   console.log('----- begin ----')
   console.log('view.length', a.view.length)
-  for await (const block of a.getView()) console.log(block)
+  for await (const block of a.values()) console.log(block)
   console.log('----- tails ----')
   for (const tail of a.tails()) console.log(tail)
   console.log('------ end -----')
@@ -355,11 +343,9 @@ test('inner majority', async t => {
 
   console.log(b.linearizer.tip.map(v => v.value))
 
-  await b.list()
-
   console.log('----- begin ----')
   console.log('view.length', b.view.length)
-  for await (const block of b.getView()) console.log(block)
+  for await (const block of b.values()) console.log(block)
   console.log('----- tails ----')
   for (const tail of b.tails()) console.log(tail)
   console.log('------ end -----')
@@ -431,11 +417,13 @@ test('majority alone - convergence', async t => {
 
   console.log(b.linearizer.tip.map(v => v.value))
 
-  await d.list()
+  console.log('*** indexed ***')
+  for await (const val of d.values()) console.log(val)
+  console.log('***************\n')
 
   console.log('----- begin ----')
   console.log('view.length', d.view.length)
-  for await (const block of d.getView()) console.log(block)
+  for await (const block of d.values()) console.log(block)
   console.log('----- tails ----')
   for (const tail of d.tails()) console.log(tail)
   console.log('------ end -----')
@@ -501,11 +489,9 @@ test('majority alone - non-convergence', async t => {
 
   console.log(b.linearizer.tip.map(v => v.value))
 
-  await b.list()
-
   console.log('----- begin ----')
   console.log('view.length', b.view.length)
-  for await (const block of b.getView()) console.log(block)
+  for await (const block of b.values()) console.log(block)
   console.log('----- tails ----')
   for (const tail of b.tails()) console.log(tail)
   console.log('------ end -----')
@@ -568,7 +554,9 @@ test('example.mjs', async t => {
   console.log(await a.latestCheckpoint())
   console.log(await b.latestCheckpoint())
 
-  await a.list()
+  console.log('*** indexed ***')
+  for await (const val of a.values()) console.log(val)
+  console.log('***************\n')
 
   async function syncAll () {
     console.log('**** sync all ****')
