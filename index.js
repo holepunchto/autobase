@@ -426,12 +426,11 @@ module.exports = class Autobase extends ReadyResource {
 
     for (let i = 0; i < Math.min(u.indexed.length, u.shared); i++) {
       const node = u.indexed[i]
+
+      node.writer.indexed++
       if (node.batch > 1) continue
 
       const update = this._updates[j++]
-
-      node.writer.indexed++
-
       if (update.system === 0) continue
 
       await this._flushAndCheckpoint(i + 1, node.indexed)
