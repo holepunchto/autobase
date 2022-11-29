@@ -418,6 +418,12 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  _bootstrap () {
+    for (const key of this.bootstraps) {
+      this.system.addWriter(key)
+    }
+  }
+
   async _applyUpdate (u) {
     if (u.popped) this._undo(u.popped)
 
@@ -490,12 +496,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this._checkpoint = checkpoint
     this._checkpointer = 0
-  }
-
-  _bootstrap () {
-    for (const key of this.bootstraps) {
-      this.system.addWriter(key)
-    }
   }
 
   async _flushIndexes (indexed, heads) {
