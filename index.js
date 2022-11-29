@@ -141,6 +141,7 @@ class LinearizedStore {
   constructor (base) {
     this.base = base
     this.opened = new Map()
+    this.waiting = []
   }
 
   get (opts) {
@@ -150,10 +151,18 @@ class LinearizedStore {
     if (this.opened.has(name)) return this.opened.get(name)
 
     const core = this.base.store.get({ name: 'view/' + name, valueEncoding: 'json' })
-    const l = new LinearizedCore(this.base, core, name, 0)
+    const l = new LinearizedCore(this.base, core, name)
 
+    this.waiting.push(l)
     this.opened.set(name, l)
     return l
+  }
+
+  async update () {
+    while (this.waiting.length) {
+      const core = this.waiting.pop()
+      await core.ready()
+    }
   }
 }
 
@@ -166,8 +175,9 @@ module.exports = class Autobase extends ReadyResource {
     this.store = store
 
     this.local = store.get({ name: 'local', valueEncoding: 'json' })
-    this.localWriter = new Writer(this, this.local, 0)
-    this.linearizer = new Linearizer([], [])
+    this.localWriter = null
+    this.linearizer = null
+
     this.system = new SystemView(this, store.get({ name: 'system' }))
 
     this._appending = []
@@ -199,30 +209,17 @@ module.exports = class Autobase extends ReadyResource {
     return indent + 'Autobase { ... }'
   }
 
+  get writable () {
+    return this.localWriter !== null
+  }
+
   async _open () {
     await this.store.ready()
     await this.local.ready()
+    await this.system.ready()
 
-    const writers = []
-    for (const key of this.bootstraps) {
-      if (b4a.equals(key, this.local.key)) {
-        writers.push(this.localWriter)
-        continue
-      }
-
-      const core = this.store.get({ key, valueEncoding: 'json', sparse: this.sparse })
-
-      await core.ready()
-
-      writers.push(new Writer(this, core, 0))
-    }
-
-    if (writers.length === 0) {
-      writers.push(this.localWriter)
-      this.bootstraps.push(this.local.key)
-    }
-
-    this.linearizer.setIndexers(writers)
+    await this._restart()
+    await this._bump()
   }
 
   async update () {
@@ -290,7 +287,15 @@ module.exports = class Autobase extends ReadyResource {
 
     const indexers = []
 
-    for (const { key, length } of this.system.digest.indexers) {
+    if (this.system.bootstrapping && this.bootstraps.length === 0) {
+      this.bootstraps.push(this.local.key)
+    }
+
+    const writers = this.system.bootstrapping
+      ? this.bootstraps.map(key => ({ key: b4a.toString(key, 'hex'), length: 0 }))
+      : this.system.digest.indexers
+
+    for (const { key, length } of writers) {
       const k = b4a.from(key, 'hex')
       const local = b4a.equals(k, this.local.key)
 
@@ -304,14 +309,6 @@ module.exports = class Autobase extends ReadyResource {
 
       if (local) this.localWriter = w
       indexers.push(w)
-    }
-
-    if (!this.localWriter) {
-      const core = this.local.session()
-
-      await core.ready()
-
-      this.localWriter = new Writer(this, core, 0)
     }
 
     const heads = []
@@ -355,7 +352,6 @@ module.exports = class Autobase extends ReadyResource {
         active = false
         for (const w of this.linearizer.indexers) {
           if (!w.next) continue
-
           this.linearizer.addHead(w.advance())
           active = true
           break
@@ -365,7 +361,7 @@ module.exports = class Autobase extends ReadyResource {
       const u = this.linearizer.update()
       const needsRestart = u ? await this._applyUpdate(u) : false
 
-      if (this.localWriter.length > this.local.length) {
+      if (this.localWriter !== null && this.localWriter.length > this.local.length) {
         await this._flushLocal()
       }
 
@@ -425,6 +421,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _applyUpdate (u) {
+    await this._viewStore.update()
+
     if (u.popped) this._undo(u.popped)
 
     let batch = []
