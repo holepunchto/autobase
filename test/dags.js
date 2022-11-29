@@ -34,62 +34,88 @@ const GENESIS = {
   ]
 }
 
-class Tester {
-  constructor (base, label) {
-    this.base = base
-    this.label = label
-    this.index = 0
-    this.last = 0
+function tester (seed, label, genesis, opts = {}) {
+  const store = makeStore(seed)
+  const base = new Autobase(store, genesis, { apply: opts.apply && apply, open: opts.open && open })
+
+  let index = 0
+  let last = 0
+
+  return new Proxy(base, {
+    get (target, prop) {
+      switch (prop) {
+        case 'sync':
+          return syncTo
+        case 'results':
+          return results
+        case 'list':
+          return list
+        case 'append':
+          return append
+        case 'tails':
+          return tails
+        case 'getView':
+          return getView
+        default:
+          return Reflect.get(...arguments)
+      }
+    }
+  })
+
+  function open (store) {
+    return store.get('double')
   }
 
-  ready () {
-    return this.base.ready()
+  async function apply (nodes, view, base) {
+    if (!base.debug) {
+      console.log('apply for', label)
+    }
+
+    for (const node of nodes) {
+      if (node.value.add) {
+        base.system.addWriter(b4a.from(node.value.add, 'hex'))
+      }
+
+      await view.append(node.value)
+      await view.append(node.value)
+    }
   }
 
-  sync (base, oneway) {
-    if (Array.isArray(base)) return Promise.all(base.map(b => this.sync(b, oneway)))
-    return sync(this.base, base.base, oneway)
+  function syncTo (remote, oneway) {
+    if (Array.isArray(remote)) return Promise.all(remote.map(b => syncTo(b, oneway)))
+    return sync(base, remote, oneway)
   }
 
-  append () {
-    return this.base.append({
-      debug: this.label + this.index++
+  function append () {
+    return base.append({
+      debug: label + index++
     })
   }
 
-  async results () {
+  async function results () {
     const result = []
-    while (this.last < this.base.length) {
-      result.push((await this.base.get(this.last++)).value)
+    while (last < base.length) {
+      result.push((await base.get(last++)).value)
     }
     return result
   }
 
-  async list () {
-    console.log('**** list ' + this.label + ' ****')
-    for (let i = 0; i < this.base.length; i++) {
-      console.log(i, (await this.base.get(i)).value)
+  async function list () {
+    console.log('**** list ' + label + ' ****')
+    for (let i = 0; i < base.length; i++) {
+      console.log(i, (await base.get(i)).value)
     }
     console.log('')
   }
-}
 
-function open (store) {
-  return store.get('double')
-}
-
-async function apply (nodes, view, base) {
-  if (!base.debug) {
-    console.log('apply for a')
+  function tails () {
+    return base.linearizer.tails.map(t => t.value)
   }
 
-  for (const node of nodes) {
-    if (node.value.add) {
-      base.system.addWriter(b4a.from(node.value.add, 'hex'))
+  async function * getView () {
+    for (let i = 0; i < base.view.length; i++) {
+      yield await base.view.get(i)
     }
-
-    await view.append(node.value)
-    await view.append(node.value)
   }
 }
 
@@ -113,11 +139,12 @@ test('non-convergence', async t => {
   const seed = GENESIS.n.slice(0, 3)
   const genesis = GENESIS.key.slice(0, 3)
 
-  const a = new Tester(new Autobase(makeStore(seed[0]), genesis, { apply, open }), 'a')
+  let writer = 0
+  const a = tester(seed[writer++], 'a', genesis, { apply: true, open: true })
   await a.ready()
 
-  const b = new Tester(new Autobase(makeStore(seed[1]), genesis, {}), 'b')
-  const c = new Tester(new Autobase(makeStore(seed[2]), genesis, {}), 'c')
+  const b = tester(seed[writer++], 'b', genesis)
+  const c = tester(seed[writer++], 'c', genesis)
 
   await b.ready()
   await c.ready()
@@ -162,15 +189,15 @@ test('non-convergence', async t => {
 
   // --- loop ---
 
-  console.log(a.base.linearizer.tip.map(v => v.value))
+  console.log(a.linearizer.tip.map(v => v.value))
 
   await a.list()
 
   console.log('----- begin ----')
-  console.log('view.length', a.base.view.length)
-  for (let i = 0; i < a.base.view.length; i++) {
-    console.log(await a.base.view.get(i))
-  }
+  console.log('view.length', a.view.length)
+  for await (const block of a.getView()) console.log(block)
+  console.log('----- tails ----')
+  for (const tail of a.tails()) console.log(tail)
   console.log('------ end -----')
 
   t.end()
@@ -194,13 +221,13 @@ test('inner majority', async t => {
 
   let writer = 0
 
-  const a = new Tester(new Autobase(makeStore(seed[writer++]), genesis, {}), 'a')
+  const a = tester(seed[writer++], 'a', genesis, {})
   await a.ready()
 
-  const b = new Tester(new Autobase(makeStore(seed[writer++]), genesis, { apply, open }), 'b')
-  const c = new Tester(new Autobase(makeStore(seed[writer++]), genesis, {}), 'c')
-  const d  = new Tester(new Autobase(makeStore(seed[writer++]), genesis, {}), 'b')
-  const e = new Tester(new Autobase(makeStore(seed[writer++]), genesis, {}), 'c')
+  const b = tester(seed[writer++], 'b', genesis, { apply: true, open: true })
+  const c = tester(seed[writer++], 'c', genesis, {})
+  const d = tester(seed[writer++], 'd', genesis, {})
+  const e = tester(seed[writer++], 'e', genesis, {})
 
   await b.ready()
   await c.ready()
@@ -237,15 +264,91 @@ test('inner majority', async t => {
 
   await b.append()
 
-  console.log(b.base.linearizer.tip.map(v => v.value))
+  console.log(b.linearizer.tip.map(v => v.value))
 
-  await a.list()
+  await b.list()
 
   console.log('----- begin ----')
-  console.log('view.length', b.base.view.length)
-  for (let i = 0; i < b.base.view.length; i++) {
-    console.log(await b.base.view.get(i))
-  }
+  console.log('view.length', b.view.length)
+  for await (const block of b.getView()) console.log(block)
+  console.log('----- tails ----')
+  for (const tail of b.tails()) console.log(tail)
+  console.log('------ end -----')
+
+  t.end()
+})
+
+/*
+
+  b - c - d - b - c - d
+
+*/
+
+test('majority alone - convergence', async t => {
+  const seed = GENESIS.n.slice(0, 3)
+  const genesis = GENESIS.key.slice(0, 3)
+
+  let writer = 0
+
+  const a = tester(seed[writer++], 'a', genesis, {})
+  const b = tester(seed[writer++], 'b', genesis, { apply: true, open: true })
+  const c = tester(seed[writer++], 'c', genesis, {})
+  const d = tester(seed[writer++], 'd', genesis, { apply: true, open: true })
+  const e = tester(seed[writer++], 'e', genesis, {})
+
+  await a.ready()
+  await b.ready()
+  await c.ready()
+  await d.ready()
+  await e.ready()
+
+  // --- write ---
+
+  await b.append()
+
+  await b.sync([c, d])
+  await c.sync([b, d])
+  await b.sync([d, c])
+
+  await c.append()
+
+  await b.sync([c, d])
+  await c.sync([b, d])
+  await b.sync([d, c])
+
+  await d.append()
+
+  await b.sync([c, d])
+  await c.sync([b, d])
+  await b.sync([d, c])
+
+  await b.append()
+
+  await b.sync([c, d])
+  await c.sync([b, d])
+  await b.sync([d, c])
+
+  await c.append()
+
+  await b.sync([c, d])
+  await c.sync([b, d])
+  await b.sync([d, c])
+
+  await d.append()
+
+  await b.sync([c, d])
+  await c.sync([b, d])
+  await b.sync([d, c])
+
+  console.log(b.linearizer.tip.map(v => v.value))
+
+  await d.list()
+
+  console.log('----- begin ----')
+  console.log('view.length', d.view.length)
+  for await (const block of d.getView()) console.log(block)
+  console.log('----- tails ----')
+  for (const tail of d.tails()) console.log(tail)
   console.log('------ end -----')
 
   t.end()
@@ -264,20 +367,19 @@ test('inner majority', async t => {
 
 */
 
-test('majority alone', async t => {
+test('majority alone - non-convergence', async t => {
   const seed = GENESIS.n.slice(0, 3)
   const genesis = GENESIS.key.slice(0, 3)
 
   let writer = 0
 
-  const a = new Tester(new Autobase(makeStore(seed[writer++]), genesis, {}), 'a')
+  const a = tester(seed[writer++], 'a', genesis, {})
+  const b = tester(seed[writer++], 'b', genesis, { apply: true, open: true })
+  const c = tester(seed[writer++], 'c', genesis, {})
+  const d = tester(seed[writer++], 'd', genesis, {})
+  const e = tester(seed[writer++], 'e', genesis, {})
+
   await a.ready()
-
-  const b = new Tester(new Autobase(makeStore(seed[writer++]), genesis, { apply, open }), 'b')
-  const c = new Tester(new Autobase(makeStore(seed[writer++]), genesis, {}), 'c')
-  const d  = new Tester(new Autobase(makeStore(seed[writer++]), genesis, {}), 'b')
-  const e = new Tester(new Autobase(makeStore(seed[writer++]), genesis, {}), 'c')
-
   await b.ready()
   await c.ready()
   await d.ready()
@@ -309,15 +411,15 @@ test('majority alone', async t => {
 
   await b.append()
 
-  console.log(b.base.linearizer.tip.map(v => v.value))
+  console.log(b.linearizer.tip.map(v => v.value))
 
-  await a.list()
+  await b.list()
 
   console.log('----- begin ----')
-  console.log('view.length', b.base.view.length)
-  for (let i = 0; i < b.base.view.length; i++) {
-    console.log(await b.base.view.get(i))
-  }
+  console.log('view.length', b.view.length)
+  for await (const block of b.getView()) console.log(block)
+  console.log('----- tails ----')
+  for (const tail of b.tails()) console.log(tail)
   console.log('------ end -----')
 
   t.end()
@@ -339,15 +441,10 @@ async function sync (a, b, oneway = false) {
   s2.destroy()
 }
 
-async function syncAll () {
-  console.log('**** sync all ****')
-  await sync(a, b)
-
-  console.log('**** synced a and b ****')
-  await sync(a, c)
-  await sync(b, a)
-  console.log('**** sync all done ****')
-  console.log()
+async function syncAll (...writers) {
+  for (let i = 0; i < writers.length; i++) {
+    await writers[i].sync(writers.filter(w => w !== writers[i]))
+  }
 }
 
 function makeStore (seed) {
