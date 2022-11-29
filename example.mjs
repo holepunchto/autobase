@@ -26,10 +26,6 @@ function open (store) {
 }
 
 async function apply (nodes, view, base) {
-  if (!base.debug) {
-    console.log('apply for b')
-  }
-
   for (const node of nodes) {
     if (node.value.add) {
       base.system.addWriter(b4a.from(node.value.add, 'hex'))
@@ -46,6 +42,7 @@ const a = new Autobase(makeStore('a'), [], {
 })
 
 a.name = 'a'
+a.linearizer.name = 'a'
 
 await a.ready()
 
@@ -67,9 +64,13 @@ const b = new Autobase(makeStore('b'), genesis, {
   apply
 })
 
-b.name = 'b'
+b.linearizer.name = b.name = 'b'
 
-const c = new Autobase(makeStore('c'), genesis, {  })
+
+const c = new Autobase(makeStore('c'), genesis, {
+  open,
+  apply
+})
 
 c.name = 'c'
 
@@ -81,20 +82,28 @@ await a.append({
   debug: 'a0'
 })
 
-await b.append({ debug: 'b0' })
+await a.append({
+  add: b4a.toString(c.local.key, 'hex'),
+  debug: 'a1'
+})
+
+
+console.log('----- begin ----')
+console.log('a.view.length', a.view.length)
+for (let i = 0; i < a.view.length; i++) {
+  console.log(await a.view.get(i))
+}
+console.log('------ end -----')
+
+// console.log(a.system)
 
 // process.exit()
 
 await syncAll()
 
-// process.exit()
+// await b.append({ debug: 'b0' })
 
-// console.log('----- begin ----')
-// console.log('a.view.length', a.view.length)
-// for (let i = 0; i < a.view.length; i++) {
-//   console.log(await a.view.get(i))
-// }
-// console.log('------ end -----')
+// process.exit()
 
 console.log()
 console.log()
@@ -104,10 +113,19 @@ console.log()
 console.log('----- begin ----')
 console.log('b.view.length', b.view.length)
 for (let i = 0; i < b.view.length; i++) {
-  console.log(await b.view.get(i))
+  console.log(i, await b.view.get(i))
 }
 console.log('------ end -----')
 
+// console.log('----- begin ----')
+// console.log('a.view.length', a.view.length)
+// for (let i = 0; i < a.view.length; i++) {
+//   console.log(i, await a.view.get(i))
+// }
+// console.log('------ end -----')
+
+// console.log(a.system.length)
+console.log(b.system.length)
 
 process.exit()
 
@@ -181,6 +199,13 @@ console.log('----- begin ----')
 console.log('view.length', a.view.length)
 for (let i = 0; i < a.view.length; i++) {
   console.log(await a.view.get(i))
+}
+console.log('------ end -----')
+
+console.log('----- begin ----')
+console.log('view.length', b.view.length)
+for (let i = 0; i < b.view.length; i++) {
+  console.log(await b.view.get(i))
 }
 console.log('------ end -----')
 
