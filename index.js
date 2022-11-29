@@ -536,48 +536,9 @@ module.exports = class Autobase extends ReadyResource {
 
     if (updatedSystem) {
       this.system._onindex(updatedSystem)
-      await this._updateIndexers()
     }
 
     return this.system.checkpoint()
-  }
-
-  async _updateIndexers () {
-    const indexers = await this.system.listIndexers()
-
-    const writers = []
-    let updated = false
-
-    for (const { key } of indexers) {
-      let existing = false
-
-      for (const w of this.linearizer.indexers) {
-        if (b4a.equals(w.core.key, key)) {
-          writers.push(w)
-          existing = true
-          break
-        }
-      }
-
-      if (existing) continue
-      updated = true
-
-      if (b4a.equals(this.localWriter.core.key, key)) {
-        writers.push(this.localWriter)
-        continue
-      }
-
-      const core = this.store.get({ key, valueEncoding: 'json', sparse: this.sparse })
-
-      await core.ready()
-      const w = new Writer(this, core, 0)
-      writers.push(w)
-    }
-
-    if (!updated) return
-
-    this.linearizer.setIndexers(writers)
-    this._modified = true
   }
 
   _flushLocal () {
