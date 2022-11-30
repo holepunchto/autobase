@@ -8,8 +8,6 @@ const Autobase = require('../index.js')
 function tester (store, label, genesis, opts = {}) {
   const base = new Autobase(store, genesis, { apply, open })
 
-  setDebug(!!opts.debug)
-
   let index = 0
   let last = 0
 
@@ -63,8 +61,9 @@ function tester (store, label, genesis, opts = {}) {
     return sync(base, remote, oneway)
   }
 
-  function append () {
+  function append (data) {
     return base.append({
+      ...data,
       debug: label + index++
     })
   }
@@ -351,6 +350,73 @@ test('majority alone - convergence', async t => {
   t.end()
 })
 
+test('add writer', async t => {
+  const a = await getWriter(0, [])
+
+  await a.append()
+
+  const b = await getWriter(1, [a.local.key])
+
+  const destroy = []
+  destroy.push(replicate(a, b))
+
+  await b.update()
+
+  t.is(a.view.indexedLength, 1)
+  t.is(b.view.indexedLength, 1)
+
+  t.alike(collect(a.values()), collect(b.values()))
+
+  await a.append({ add: b.local.key.toString('hex') })
+
+  await sleep()
+  await b.update()
+
+  await b.append()
+
+  await sleep()
+  await a.update()
+
+  t.is(a.view.indexedLength, 2)
+  t.is(b.view.indexedLength, 2)
+
+  t.alike(collect(a.values()), collect(b.values()))
+
+  const c = await getWriter(2, [a.local.key, b.local.key])
+
+  destroy.push(replicate(a, c))
+  destroy.push(replicate(b, c))
+
+  await b.update()
+
+  t.is(c.view.indexedLength, 2)
+
+  t.alike(collect(a.values()), collect(c.values()))
+
+  await a.append({ add: c.local.key.toString('hex') })
+
+  await sleep()
+  await c.update()
+
+  await c.append()
+
+  await sleep()
+  await a.update()
+
+  t.is(a.view.indexedLength, 2)
+  t.is(b.view.indexedLength, 2)
+  t.is(c.view.indexedLength, 3)
+
+  t.alike(collect(a.values()), collect(b.values()))
+  t.alike(collect(a.values()), collect(c.values()))
+
+  t.is(a.linearizer.tails.length, 1)
+  t.is(b.linearizer.tails.length, 1)
+  t.is(c.linearizer.tails.length, 1)
+
+  t.end()
+})
+
 /*
 
   b   c   d
@@ -486,6 +552,13 @@ function replicate (a, b) {
     s1.destroy()
     s2.destroy()
   }
+}
+
+async function getWriter (seed, genesis = []) {
+  const store = makeStore(seed)
+  const writer = tester(store, seed, genesis)
+  await writer.ready()
+  return writer
 }
 
 async function getWriters (n) {
