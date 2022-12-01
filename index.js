@@ -1,10 +1,12 @@
 const b4a = require('b4a')
 const ReadyResource = require('ready-resource')
 const debounceify = require('debounceify')
+const c = require('compact-encoding')
 
 const Linearizer = require('./lib/linearizer')
 const LinearizedCore = require('./lib/core')
 const SystemView = require('./lib/system')
+const messages = require('./lib/messages')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 
@@ -61,7 +63,7 @@ class Writer {
       }
 
       node.heads.push({
-        key: b4a.toString(dep.writer.core.key, 'hex'),
+        key: dep.writer.core.key,
         length: dep.length
       })
     }
@@ -78,7 +80,8 @@ class Writer {
 
     if (this.nextCache === null) {
       const block = await this.core.get(this.length)
-      this.nextCache = Linearizer.createNode(this, this.length + 1, block.value, block.heads, block.batch, [])
+      const value = c.decode(this.base.valueEncoding, block.value)
+      this.nextCache = Linearizer.createNode(this, this.length + 1, value, block.heads, block.batch, [])
     }
 
     this.next = await this.ensureNode(this.nextCache)
@@ -143,14 +146,16 @@ class LinearizedStore {
     this.waiting = []
   }
 
-  get (opts) {
+  get (opts, moreOpts) {
     if (typeof opts === 'string') opts = { name: opts }
+    if (moreOpts) opts = { ...opts, ...moreOpts }
 
     const name = opts.name
     if (this.opened.has(name)) return this.opened.get(name)
 
-    const core = this.base.store.get({ name: 'view/' + name, valueEncoding: 'json' })
-    const l = new LinearizedCore(this.base, core, name)
+    const valueEncoding = c.from(opts.valueEncoding || 'binary')
+    const core = this.base.store.get({ name: 'view/' + name })
+    const l = new LinearizedCore(this.base, core, name, valueEncoding)
 
     this.waiting.push(l)
     this.opened.set(name, l)
@@ -171,9 +176,10 @@ module.exports = class Autobase extends ReadyResource {
 
     this.sparse = false
     this.bootstraps = [].concat(bootstraps || []).map(toKey).sort((a, b) => b4a.compare(a, b))
+    this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
 
-    this.local = store.get({ name: 'local', valueEncoding: 'json' })
+    this.local = store.get({ name: 'local', valueEncoding: messages.OplogMessage })
     this.localWriter = null
     this.linearizer = null
 
@@ -280,7 +286,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _getWriterByKey (key) {
     for (const w of this.writers) {
-      if (b4a.toString(w.core.key, 'hex') === key) return w
+      if (b4a.equals(w.core.key, key)) return w
     }
 
     throw new Error('Unknown writer')
@@ -298,8 +304,8 @@ module.exports = class Autobase extends ReadyResource {
     const local = b4a.equals(key, this.local.key)
 
     const core = local
-      ? this.local.session({ valueEncoding: 'json' })
-      : this.store.get({ key, sparse: this.sparse, valueEncoding: 'json' })
+      ? this.local.session({ valueEncoding: messages.OplogMessage })
+      : this.store.get({ key, sparse: this.sparse, valueEncoding: messages.OplogMessage })
 
     // Small hack for now, should be fixed in hypercore (that key is set immediatly)
     core.key = key
@@ -322,18 +328,18 @@ module.exports = class Autobase extends ReadyResource {
     const indexers = []
 
     const writers = this.system.bootstrapping
-      ? this.bootstraps.map(key => ({ key: b4a.toString(key, 'hex'), length: 0, pending: false }))
+      ? this.bootstraps.map(key => ({ key, length: 0 }))
       : this.system.digest.writers
 
     for (const { key, length } of writers) {
-      indexers.push(this._makeWriter(b4a.from(key, 'hex'), length))
+      indexers.push(this._makeWriter(key, length))
     }
 
     const heads = []
 
     for (const head of this.system.digest.heads) {
       for (const w of indexers) {
-        if (b4a.toString(w.core.key, 'hex') === head.key) {
+        if (b4a.equals(w.core.key, head.key)) {
           heads.push(Linearizer.createNode(w, head.length, null, [], 1, []))
         }
       }
@@ -587,11 +593,11 @@ module.exports = class Autobase extends ReadyResource {
       const { value, heads, batch } = this.localWriter.getCached(this.local.length + i)
 
       blocks[i] = {
-        value,
+        value: c.encode(this.valueEncoding, value),
         heads,
         batch,
         checkpointer: this._checkpointer,
-        checkpoint: this._checkpointer === 0 ? toJSONCheckpoint(this._checkpoint) : null
+        checkpoint: this._checkpointer === 0 ? this._checkpoint : null
       }
 
       if (this._checkpointer > 0 || this._checkpoint !== null) {
@@ -615,8 +621,4 @@ function popAndSwap (list, i) {
   if (i >= list.length) return false
   list[i] = pop
   return true
-}
-
-function toJSONCheckpoint (c) {
-  return c && { treeHash: b4a.toString(c.treeHash, 'hex'), length: c.length }
 }
