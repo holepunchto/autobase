@@ -22,7 +22,7 @@ import b4a from 'b4a'
 // ]
 
 function open (store) {
-  return store.get('double')
+  return store.get('double', { valueEncoding: 'json' })
 }
 
 async function apply (nodes, view, base) {
@@ -36,6 +36,7 @@ async function apply (nodes, view, base) {
 }
 
 const a = new Autobase(makeStore('a'), [], {
+  valueEncoding: 'json',
   open,
   apply
 })
@@ -59,6 +60,7 @@ a.debug = true
 // a.linearizer.debug = true
 
 const b = new Autobase(makeStore('b'), genesis, {
+  valueEncoding: 'json',
   open,
   apply
 })
@@ -67,6 +69,7 @@ b.name = 'b'
 
 
 const c = new Autobase(makeStore('c'), genesis, {
+  valueEncoding: 'json',
   open,
   apply
 })
