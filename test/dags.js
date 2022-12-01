@@ -11,6 +11,8 @@ function tester (store, label, genesis, opts = {}) {
   let index = 0
   let last = 0
 
+  setDebug(!!opts.debug)
+
   return new Proxy(base, {
     get (target, prop) {
       switch (prop) {
@@ -32,9 +34,11 @@ function tester (store, label, genesis, opts = {}) {
 
   function setDebug (debug = true, lbl = label) {
     base.debug = !!opts.debug
-    base.linearizer.debug = !!opts.debug
-
     base.name = lbl
+
+    if (!base.linearizer) return
+
+    base.linearizer.debug = !!opts.debug
     base.linearizer.name = lbl
   }
 
@@ -85,7 +89,7 @@ c - b - a - c - b - a
 
 */
 
-test.solo('simple 3', async t => {
+test('simple 3', async t => {
   const [a, b, c] = await getWriters(3)
 
   a.setDebug()
@@ -387,24 +391,44 @@ test('add writer', async t => {
   destroy.push(replicate(a, c))
   destroy.push(replicate(b, c))
 
-  await b.update()
+  await sleep()
+  await c.update()
 
   t.is(c.view.indexedLength, 2)
 
   t.alike(collect(a.values()), collect(c.values()))
 
   await a.append({ add: c.local.key.toString('hex') })
-
   await sleep()
+  await b.append()
+  await sleep()
+  await a.append()
+
+  await a.update()
+  await b.update()
   await c.update()
 
-  await c.append()
-
   await sleep()
-  await a.update()
 
-  t.is(a.view.indexedLength, 2)
-  t.is(b.view.indexedLength, 2)
+  await c.append()
+  await sleep()
+  await b.append()
+  await sleep()
+  await a.append()
+  await sleep()
+  await c.append()
+  await sleep()
+  await b.append()
+  await sleep()
+  await a.append()
+  await sleep()
+
+  await a.update()
+  await b.update()
+  await c.update()
+
+  t.is(a.view.indexedLength, 3)
+  t.is(b.view.indexedLength, 3)
   t.is(c.view.indexedLength, 3)
 
   t.alike(collect(a.values()), collect(b.values()))
