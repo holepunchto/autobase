@@ -220,6 +220,10 @@ test('non-convergence', async t => {
   await a.append()
   await c.append()
 
+  await a.sync(c, false)
+  await c.sync(b, false)
+  await b.sync(a, false)
+
   // --- loop ---
 
   t.alike(a.view.indexedLength, b.view.indexedLength)
@@ -233,7 +237,7 @@ test('non-convergence', async t => {
   t.alike(av, bv)
   t.alike(av, cv)
 
-  t.is(a.linearizer.tails.length, 1)
+  t.is(a.linearizer.tails.length, 2)
 
   t.end()
 })
