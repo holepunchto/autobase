@@ -190,9 +190,9 @@ module.exports = class Autobase extends ReadyResource {
     this._appending = []
     this._applying = null
     this._needsReady = []
+    this._removedWriters = []
     this._updates = []
     this._handlers = handlers || {}
-    this._modified = false
     this._bump = debounceify(this._advance.bind(this))
 
     this._checkpointer = 0
@@ -232,10 +232,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._restart()
 
-    while (this._needsReady.length) {
-      await this._needsReady.pop().ready()
-    }
-
+    await this._cleanup()
     await this._bump()
   }
 
@@ -322,7 +319,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _restart () {
-    // TODO: close old...
+    for (const w of this.writers) this._removedWriters.push(w)
 
     this.localWriter = null
 
@@ -352,14 +349,10 @@ module.exports = class Autobase extends ReadyResource {
     // TODO: this is a bit silly (hitting it with the biggest of hammers)
     // but an easy fix for now so cores are "up to date"
     this._undo(this._updates.length)
-
-    this._modified = true
   }
 
   async _advance () {
-    do {
-      this._modified = false
-
+    while (true) {
       if (this._appending.length) {
         for (let i = 0; i < this._appending.length; i++) {
           const value = this._appending[i]
@@ -391,10 +384,27 @@ module.exports = class Autobase extends ReadyResource {
         await this._flushLocal()
       }
 
-      if (needsRestart) this._restart()
+      if (needsRestart === false) break
 
-      while (this._needsReady.length) await this._needsReady.pop().ready()
-    } while (this._modified === true)
+      this._restart()
+    }
+
+    await this._cleanup()
+  }
+
+  async _cleanup () {
+    while (this._needsReady.length > 0) {
+      await this._needsReady.pop().ready()
+    }
+
+    while (this._removedWriters.length > 0) {
+      const w = this._removedWriters.pop()
+      await w.core.close()
+
+      if (w === this.localWriter) {
+        this.localWriter = null
+      }
+    }
   }
 
   // triggered from linearized core
@@ -420,6 +430,16 @@ module.exports = class Autobase extends ReadyResource {
       if (b4a.equals(w.core.key, key)) return
     }
 
+    for (let i = 0; i < this._removedWriters.length; i++) {
+      const w = this._removedWriters[i]
+
+      if (b4a.equals(w.core.key, key)) {
+        popAndSwap(this._removedWriters, i)
+        this.writers.push(w)
+        return
+      }
+    }
+
     this.writers.push(this._makeWriter(key, 0))
   }
 
@@ -430,6 +450,7 @@ module.exports = class Autobase extends ReadyResource {
 
       if (b4a.equals(w.core.key, key)) {
         popAndSwap(this.writers, i)
+        this._removedWriters.push(w)
         return
       }
     }
