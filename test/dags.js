@@ -386,7 +386,7 @@ test('add writer', async t => {
 
   t.alike(collect(a.values()), collect(b.values()))
 
-  const c = await getWriter(2, [a.local.key, b.local.key])
+  const c = await getWriter(2, [a.local.key])
 
   destroy.push(replicate(a, c))
   destroy.push(replicate(b, c))
