@@ -6,7 +6,7 @@ const RAM = require('random-access-memory')
 const Autobase = require('../index.js')
 
 function tester (store, label, genesis, opts = {}) {
-  const base = new Autobase(store, genesis, { apply, open })
+  const base = new Autobase(store, genesis, { apply, open, valueEncoding: 'json' })
 
   let index = 0
   let last = 0
@@ -42,8 +42,8 @@ function tester (store, label, genesis, opts = {}) {
     base.linearizer.name = lbl
   }
 
-  function open (store) {
-    return store.get('double')
+  function open (store, base) {
+    return store.get('double', { valueEncoding: base.valueEncoding })
   }
 
   async function apply (nodes, view, base) {
