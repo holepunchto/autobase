@@ -598,7 +598,7 @@ async function getWriters (n) {
 
   const genesis = stores.map(s => b4a.toString(s.local.key, 'hex'))
 
-  const writers = stores.map((s, i) => tester(s.store, i, genesis))
+  const writers = stores.map((s, i) => tester(s.store, String.fromCharCode(97 + i), genesis))
   await Promise.all(writers.map(w => w.ready()))
 
   return writers
