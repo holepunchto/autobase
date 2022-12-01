@@ -151,15 +151,16 @@ class LinearizedStore {
     if (moreOpts) opts = { ...opts, ...moreOpts }
 
     const name = opts.name
-    if (this.opened.has(name)) return this.opened.get(name)
 
-    const valueEncoding = c.from(opts.valueEncoding || 'binary')
+    if (this.opened.has(name)) return this.opened.get(name).openSession(opts)
+
     const core = this.base.store.get({ name: 'view/' + name })
-    const l = new LinearizedCore(this.base, core, name, valueEncoding)
+    const l = new LinearizedCore(this.base, core, name)
 
     this.waiting.push(l)
     this.opened.set(name, l)
-    return l
+
+    return l.openSession(opts)
   }
 
   async update () {
