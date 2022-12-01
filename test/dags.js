@@ -547,6 +547,92 @@ test('example.mjs', async t => {
   }
 })
 
+/*
+
+    a0  e0
+    |   |
+    b0  d0
+    |   |
+    c0  |
+    |   |
+    a1  |
+    |   |
+    b1  |
+    | \ |
+    c1  b2
+    |   |
+    a2  d1
+    | / |
+    d2  e2
+    |   |
+    a3  b3
+
+[[a0, b0, c0, a1, ]]
+*/
+
+test('double fork', async t => {
+  const [a, b, c, d, e] = await getWriters(5)
+
+  await a.append()
+  await e.append()
+
+  await b.sync(a, true)
+  await d.sync(e, true)
+
+  await b.append()
+  await d.append()
+
+  await c.sync(b, true)
+  await c.append()
+
+  await a.sync(c, true)
+  await a.append()
+
+  await b.sync(a, true)
+  await b.append()
+
+  await c.sync(b, true)
+  await b.sync(d, true)
+
+  await b.append()
+  await c.append()
+
+  await a.sync(c, true)
+  await d.sync(b, true)
+
+  await a.append()
+  await d.append()
+
+  await e.sync(d, true)
+  await d.sync(a, true)
+
+  await d.append()
+  await e.append()
+
+  await b.sync(e, true)
+  await a.sync(d, true)
+
+  await b.append()
+  await a.append()
+
+  // --- done ---
+
+  t.alike(a.view.indexedLength, b.view.indexedLength)
+  t.alike(c.view.indexedLength, b.view.indexedLength)
+  t.alike(a.view.indexedLength, c.view.indexedLength)
+
+  const av = await collect(a.values())
+  const bv = await collect(b.values())
+  const cv = await collect(c.values())
+
+  t.alike(av, bv)
+  t.alike(av, cv)
+
+  t.is(a.linearizer.tails.length, 1)
+
+  t.end()
+})
+
 async function sync (a, b, oneway = false) {
   const s1 = a.store.replicate(true)
   const s2 = b.store.replicate(false)
