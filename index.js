@@ -15,8 +15,7 @@ class Writer {
     this.nodes = []
     this.length = length
     this.offset = length
-
-    this.indexed = 0
+    this.indexed = length
 
     this.next = null
     this.nextCache = null
@@ -178,10 +177,12 @@ module.exports = class Autobase extends ReadyResource {
     this.localWriter = null
     this.linearizer = null
 
+    this.writers = []
     this.system = new SystemView(this, store.get({ name: 'system' }))
 
     this._appending = []
     this._applying = null
+    this._needsReady = []
     this._updates = []
     this._handlers = handlers || {}
     this._modified = false
@@ -218,14 +219,21 @@ module.exports = class Autobase extends ReadyResource {
     await this.local.ready()
     await this.system.ready()
 
-    await this._restart()
+    if (this.system.bootstrapping && this.bootstraps.length === 0) {
+      this.bootstraps.push(this.local.key) // new autobase!
+    }
+
+    this._restart()
+
+    while (this._needsReady.length) await this._needsReady.pop().ready()
+
     await this._bump()
   }
 
   async update () {
     if (!this.opened) await this.ready()
 
-    for (const w of this.linearizer.indexers) {
+    for (const w of this.writers) {
       await w.core.update()
     }
 
@@ -239,6 +247,10 @@ module.exports = class Autobase extends ReadyResource {
   async append (value) {
     if (!this.opened) await this.ready()
 
+    if (this.localWriter === null) {
+      throw new Error('Not writable')
+    }
+
     if (Array.isArray(value)) this._appending.push(...value)
     else this._appending.push(value)
 
@@ -249,7 +261,7 @@ module.exports = class Autobase extends ReadyResource {
     await this.ready()
     const all = []
 
-    for (const w of this.linearizer.indexers) {
+    for (const w of this.writers) {
       all.push(w.getCheckpoint())
     }
 
@@ -265,7 +277,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _getWriterByKey (key) {
-    for (const w of this.linearizer.indexers) {
+    for (const w of this.writers) {
       if (b4a.toString(w.core.key, 'hex') === key) return w
     }
 
@@ -274,41 +286,45 @@ module.exports = class Autobase extends ReadyResource {
 
   _ensureAll () {
     const p = []
-    for (const w of this.linearizer.indexers) {
+    for (const w of this.writers) {
       if (w.next === null) p.push(w.ensureNext())
     }
     return Promise.all(p)
   }
 
-  async _restart () {
+  _makeWriter (key, length) {
+    const local = b4a.equals(key, this.local.key)
+
+    const core = local
+      ? this.local.session({ valueEncoding: 'json' })
+      : this.store.get({ key, sparse: this.sparse, valueEncoding: 'json' })
+
+    // Small hack for now, should be fixed in hypercore (that key is set immediatly)
+    core.key = key
+    this._needsReady.push(core)
+
+    const w = new Writer(this, core, length)
+
+    if (local) {
+      this.localWriter = w
+    }
+
+    return w
+  }
+
+  _restart () {
     // TODO: close old...
 
     this.localWriter = null
 
     const indexers = []
 
-    if (this.system.bootstrapping && this.bootstraps.length === 0) {
-      this.bootstraps.push(this.local.key)
-    }
-
     const writers = this.system.bootstrapping
-      ? this.bootstraps.map(key => ({ key: b4a.toString(key, 'hex'), length: 0 }))
-      : this.system.digest.indexers
+      ? this.bootstraps.map(key => ({ key: b4a.toString(key, 'hex'), length: 0, pending: false }))
+      : this.system.digest.writers
 
     for (const { key, length } of writers) {
-      const k = b4a.from(key, 'hex')
-      const local = b4a.equals(k, this.local.key)
-
-      const core = local
-        ? this.local.session({ valueEncoding: 'json' })
-        : this.store.get({ key: k, sparse: this.sparse, valueEncoding: 'json' })
-
-      await core.ready()
-
-      const w = new Writer(this, core, length)
-
-      if (local) this.localWriter = w
-      indexers.push(w)
+      indexers.push(this._makeWriter(b4a.from(key, 'hex'), length))
     }
 
     const heads = []
@@ -321,6 +337,7 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
+    this.writers = indexers.slice(0)
     this.linearizer = new Linearizer(indexers, heads)
 
     // TODO: this is a bit silly (hitting it with the biggest of hammers)
@@ -350,7 +367,7 @@ module.exports = class Autobase extends ReadyResource {
         await this._ensureAll()
 
         active = false
-        for (const w of this.linearizer.indexers) {
+        for (const w of this.writers) {
           if (!w.next) continue
           this.linearizer.addHead(w.advance())
           active = true
@@ -365,9 +382,9 @@ module.exports = class Autobase extends ReadyResource {
         await this._flushLocal()
       }
 
-      if (needsRestart) {
-        await this._restart()
-      }
+      if (needsRestart) this._restart()
+
+      while (this._needsReady.length) await this._needsReady.pop().ready()
     } while (this._modified === true)
   }
 
@@ -382,11 +399,31 @@ module.exports = class Autobase extends ReadyResource {
     core.appending += blocks
   }
 
-  // triggered from system
-  _onsystemappend (system, blocks) {
+  _onsystemappend (blocks) {
     if (this._applying === null) throw new Error('System changes are only allowed in apply')
 
-    this._applying.system += blocks
+    this._applying.system++
+  }
+
+  // triggered from system
+  _onaddwriter (key) {
+    for (const w of this.writers) {
+      if (b4a.equals(w.core.key, key)) return
+    }
+
+    this.writers.push(this._makeWriter(key, 0))
+  }
+
+  // triggered from system
+  _onremovewriter (key) {
+    for (let i = 0; i < this.writers.length; i++) {
+      const w = this.writers[i]
+
+      if (b4a.equals(w.core.key, key)) {
+        popAndSwap(this.writers, i)
+        return
+      }
+    }
   }
 
   _undo (popped) {
@@ -405,7 +442,9 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
-    if (systemPop > 0) this.system._onundo(systemPop)
+    if (systemPop > 0) {
+      this.system._onundo(systemPop)
+    }
 
     for (const core of truncating) {
       const truncating = core.truncating
@@ -523,7 +562,7 @@ module.exports = class Autobase extends ReadyResource {
         })
       }
 
-      await this.system.flush(u.system, user, this.linearizer.indexers, heads)
+      await this.system.flush(u.system, user, this.writers, heads)
     }
 
     for (const core of updatedCores) {
