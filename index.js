@@ -230,9 +230,7 @@ module.exports = class Autobase extends ReadyResource {
       this.bootstraps.push(this.local.key) // new autobase!
     }
 
-    this._restart()
-
-    await this._cleanup()
+    await this._restart()
     await this._bump()
   }
 
@@ -318,7 +316,7 @@ module.exports = class Autobase extends ReadyResource {
     return w
   }
 
-  _restart () {
+  async _restart () {
     for (const w of this.writers) this._removedWriters.push(w)
 
     this.localWriter = null
@@ -349,6 +347,8 @@ module.exports = class Autobase extends ReadyResource {
     // TODO: this is a bit silly (hitting it with the biggest of hammers)
     // but an easy fix for now so cores are "up to date"
     this._undo(this._updates.length)
+
+    await this._cleanup()
   }
 
   async _advance () {
@@ -385,8 +385,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       if (needsRestart === false) break
-
-      this._restart()
+      await this._restart()
     }
 
     await this._cleanup()
