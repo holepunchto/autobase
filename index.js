@@ -225,7 +225,9 @@ module.exports = class Autobase extends ReadyResource {
 
     this._restart()
 
-    while (this._needsReady.length) await this._needsReady.pop().ready()
+    while (this._needsReady.length) {
+      await this._needsReady.pop().ready()
+    }
 
     await this._bump()
   }
