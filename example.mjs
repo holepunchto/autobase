@@ -28,11 +28,9 @@ function open (store) {
 async function apply (nodes, view, base) {
   for (const node of nodes) {
     if (node.value.add) {
-      if (base.name === 'c') console.log('adding in apply')
       base.system.addWriter(b4a.from(node.value.add, 'hex'))
     }
 
-    await view.append(node.value)
     await view.append(node.value)
   }
 }
