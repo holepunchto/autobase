@@ -619,8 +619,9 @@ module.exports = class Autobase extends EventEmitter {
     }
   }
 
-  async _close () {
+  async _close () {    
     if (this.closed) return
+    await this._opening
     for (const input of this.inputs) {
       input.removeListener('append', this._onappend)
     }
