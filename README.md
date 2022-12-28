@@ -1,5 +1,7 @@
 # Autobase
 
+### [See the full API docs at docs.holepunch.to](https://docs.holepunch.to/building-blocks/autobase)
+
 Automatically rebase multiple causally-linked Hypercores into a single, linearized Hypercore.
 
 The output of an Autobase is "just a Hypercore", which means it can be used to transform higher-level data structures (like Hyperbee) into multiwriter data structures with minimal additional work.
