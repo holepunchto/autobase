@@ -27,7 +27,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/hypercore-protocol/autobase.git"
+    "url": "https://github.com/holepunchto/autobase.git"
   },
   "contributors": [
     {
@@ -43,7 +43,7 @@
   ],
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/hypercore-protocol/autobase/issues"
+    "url": "https://github.com/holepunchto/autobase/issues"
   },
-  "homepage": "https://github.com/hypercore-protocol/autobase"
+  "homepage": "https://github.com/holepunchto/autobase"
 }
