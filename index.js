@@ -520,6 +520,7 @@ module.exports = class Autobase extends ReadyResource {
       batch.push({
         indexed,
         from: node.writer.core,
+        length: node.length,
         value: node.value,
         heads: node.heads
       })
