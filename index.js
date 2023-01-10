@@ -93,7 +93,7 @@ class Writer {
       const rawHead = node.heads[node.dependencies.length]
 
       const headWriter = await this.base._getWriterByKey(rawHead.key)
-      if (headWriter.length < rawHead.length) {
+      if (headWriter === null || headWriter.length < rawHead.length) {
         return null
       }
 
@@ -285,7 +285,7 @@ module.exports = class Autobase extends ReadyResource {
       if (b4a.equals(w.core.key, key)) return w
     }
 
-    throw new Error('Unknown writer')
+    return null
   }
 
   _ensureAll () {
