@@ -155,8 +155,8 @@ class LinearizedStore {
 
     if (this.opened.has(name)) return this.opened.get(name).openSession(opts)
 
-    const core = this.base.store.get({ name: 'view/' + name, valueEncoding })
-    const l = new LinearizedCore(this.base, core, name)
+    const core = this.base.store.get({ name: 'view/' + name })
+    const l = new LinearizedCore(this.base, core, name, valueEncoding)
 
     this.waiting.push(l)
     this.opened.set(name, l)
