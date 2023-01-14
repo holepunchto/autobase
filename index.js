@@ -231,9 +231,8 @@ module.exports = class Autobase extends EventEmitter {
       header: { protocol: OUTPUT_PROTOCOL },
       view,
       apply,
-      unwrap
     })
-    const session = core.session()
+    const session = core.session({ unwrap })
     this._viewSessions.add(session)
     this.view = view ? view(session) : session
   }
