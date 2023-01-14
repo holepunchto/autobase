@@ -230,7 +230,7 @@ module.exports = class Autobase extends EventEmitter {
     const core = new LinearizedCore(this, {
       header: { protocol: OUTPUT_PROTOCOL },
       view,
-      apply,
+      apply
     })
     const session = core.session({ unwrap })
     this._viewSessions.add(session)
@@ -618,7 +618,7 @@ module.exports = class Autobase extends EventEmitter {
     }
   }
 
-  async _close () {    
+  async _close () {
     if (this.closed) return
     await this._opening
     for (const input of this.inputs) {
