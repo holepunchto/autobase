@@ -17,7 +17,7 @@ module.exports = class Autobee {
       unwrap: true,
       apply: applyAutobeeBatch,
       view: core => {
-        return new Hyperbee(core.unwrap(), {
+        return new Hyperbee(core, {
           ...opts,
           extension: false
         })

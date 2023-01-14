@@ -6,7 +6,7 @@ module.exports = class SimpleAutobee {
     this.autobase.start({
       unwrap: true,
       apply: applyAutobeeBatch,
-      view: core => new Hyperbee(core.unwrap(), {
+      view: core => new Hyperbee(core, {
         ...opts,
         extension: false
       })
