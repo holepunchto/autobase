@@ -230,7 +230,8 @@ module.exports = class Autobase extends EventEmitter {
     const core = new LinearizedCore(this, {
       header: { protocol: OUTPUT_PROTOCOL },
       view,
-      apply
+      apply,
+      unwrap
     })
     const session = core.session({ unwrap })
     this._viewSessions.add(session)
