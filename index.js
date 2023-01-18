@@ -82,7 +82,7 @@ module.exports = class Autobase extends EventEmitter {
     if (this._inputsByKey.has(id)) return
 
     const session = input.session({ sparse: this._sparse })
-    input.on('append', this._onappend)
+    session.on('append', this._onappend)
     this._inputsByKey.set(id, session)
 
     this._onInputsChanged()
