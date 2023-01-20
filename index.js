@@ -426,7 +426,7 @@ module.exports = class Autobase extends ReadyResource {
   _onsystemappend (blocks) {
     if (this._applying === null) throw new Error('System changes are only allowed in apply')
 
-    this._applying.system++
+    this._applying.system += blocks
   }
 
   // triggered from system
