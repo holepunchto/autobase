@@ -41,7 +41,7 @@ async function sync (...bases) {
     }
   }
 
-  await Promise.all(bases.map(b => b.update()))
+  await Promise.all(bases.map(b => b.update({ wait: true })))
 
   for (const stream of streams) {
     stream.destroy()
