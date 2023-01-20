@@ -2,6 +2,7 @@ const b4a = require('b4a')
 const ReadyResource = require('ready-resource')
 const debounceify = require('debounceify')
 const c = require('compact-encoding')
+const safetyCatch = require('safety-catch')
 
 const Linearizer = require('./lib/linearizer')
 const LinearizedCore = require('./lib/core')
@@ -194,7 +195,9 @@ module.exports = class Autobase extends ReadyResource {
     this._removedWriters = []
     this._updates = []
     this._handlers = handlers || {}
+
     this._bump = debounceify(this._advance.bind(this))
+    this._onremotewriterchange = () => this._bump().catch(safetyCatch)
 
     this._checkpointer = 0
     this._checkpoint = null
@@ -206,7 +209,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
 
-    this.ready().catch(noop)
+    this.ready().catch(safetyCatch)
   }
 
   [inspect] (depth, opts) {
@@ -235,11 +238,11 @@ module.exports = class Autobase extends ReadyResource {
     await this._bump()
   }
 
-  async update () {
+  async update (opts) {
     if (!this.opened) await this.ready()
 
     for (const w of this.writers) {
-      await w.core.update()
+      await w.core.update(opts)
     }
 
     await this._bump()
@@ -312,6 +315,8 @@ module.exports = class Autobase extends ReadyResource {
 
     if (local) {
       this.localWriter = w
+    } else {
+      core.on('append', this._onremotewriterchange)
     }
 
     return w
@@ -632,8 +637,6 @@ module.exports = class Autobase extends ReadyResource {
     return this.local.append(blocks)
   }
 }
-
-function noop () {}
 
 function toKey (k) {
   return b4a.isBuffer(k) ? k : b4a.from(k, 'hex')
