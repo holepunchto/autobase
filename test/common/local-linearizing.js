@@ -54,7 +54,7 @@ test('local linearizing - three independent forks', async t => {
   t.end()
 })
 
-test.only('local linearizing - three independent forks, two truncations', async t => {
+test('local linearizing - three independent forks, two truncations', async t => {
   t.plan(14)
 
   const output = new Hypercore(ram)
