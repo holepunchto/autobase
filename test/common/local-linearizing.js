@@ -55,6 +55,8 @@ test('local linearizing - three independent forks', async t => {
 })
 
 test.only('local linearizing - three independent forks, two truncations', async t => {
+  t.plan(14)
+
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
   const writerB = new Hypercore(ram)
@@ -65,6 +67,10 @@ test.only('local linearizing - three independent forks, two truncations', async 
     localOutput: output,
     autostart: true,
     eagerUpdate: false
+  })
+  const expectedTruncations = [5, 0]
+  base.view.on('truncate', length => {
+    t.same(length, expectedTruncations.pop())
   })
 
   // Create three independent forks
@@ -86,17 +92,17 @@ test.only('local linearizing - three independent forks, two truncations', async 
     t.same(output.length, 6)
   }
 
-  // Add 3 more records to A -- should switch fork ordering
-  for (let i = 1; i < 4; i++) {
+  // Add 4 more records to A -- should switch fork ordering
+  for (let i = 1; i < 5; i++) {
     await base.append(`a${i}`, await base.latest(writerA), writerA)
   }
 
   {
     const outputNodes = await linearizedValues(base.view)
-    t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']))
-    t.same(base.view.status.appended, 9)
+    t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a4', 'a3', 'a2', 'a1', 'a0']))
+    t.same(base.view.status.appended, 10)
     t.same(base.view.status.truncated, 6)
-    t.same(output.length, 9)
+    t.same(output.length, 10)
   }
 
   // Add 2 more records to B -- should switch fork ordering
@@ -106,7 +112,7 @@ test.only('local linearizing - three independent forks, two truncations', async 
 
   {
     const outputNodes = await linearizedValues(base.view)
-    t.same(outputNodes.map(v => v.value), bufferize(['c2', 'c1', 'c0', 'b3', 'b2', 'b1', 'b0', 'a3', 'a2', 'a1', 'a0']))
+    t.same(outputNodes.map(v => v.value), bufferize(['c2', 'c1', 'c0', 'b3', 'b2', 'b1', 'b0', 'a4', 'a3', 'a2', 'a1', 'a0']))
     t.same(base.view.status.appended, 7)
     t.same(base.view.status.truncated, 5)
     t.same(output.length, 12)
