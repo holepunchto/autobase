@@ -54,6 +54,67 @@ test('local linearizing - three independent forks', async t => {
   t.end()
 })
 
+test.only('local linearizing - three independent forks, two truncations', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+  const writerB = new Hypercore(ram)
+  const writerC = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA, writerB, writerC],
+    localOutput: output,
+    autostart: true,
+    eagerUpdate: false
+  })
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, [], writerA)
+  }
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`, [], writerB)
+  }
+  for (let i = 0; i < 3; i++) {
+    await base.append(`c${i}`, [], writerC)
+  }
+
+  {
+    const outputNodes = await linearizedValues(base.view)
+    t.same(outputNodes.map(v => v.value), bufferize(['a0', 'b1', 'b0', 'c2', 'c1', 'c0']))
+    t.same(base.view.status.appended, 6)
+    t.same(base.view.status.truncated, 0)
+    t.same(output.length, 6)
+  }
+
+  // Add 3 more records to A -- should switch fork ordering
+  for (let i = 1; i < 4; i++) {
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
+  }
+
+  {
+    const outputNodes = await linearizedValues(base.view)
+    t.same(outputNodes.map(v => v.value), bufferize(['b1', 'b0', 'c2', 'c1', 'c0', 'a3', 'a2', 'a1', 'a0']))
+    t.same(base.view.status.appended, 9)
+    t.same(base.view.status.truncated, 6)
+    t.same(output.length, 9)
+  }
+
+  // Add 2 more records to B -- should switch fork ordering
+  for (let i = 2; i < 4; i++) {
+    await base.append(`b${i}`, await base.latest(writerB), writerB)
+  }
+
+  {
+    const outputNodes = await linearizedValues(base.view)
+    t.same(outputNodes.map(v => v.value), bufferize(['c2', 'c1', 'c0', 'b3', 'b2', 'b1', 'b0', 'a3', 'a2', 'a1', 'a0']))
+    t.same(base.view.status.appended, 7)
+    t.same(base.view.status.truncated, 5)
+    t.same(output.length, 12)
+  }
+
+  t.end()
+})
+
 test('local linearizing - causal writes preserve clock', async t => {
   const output = new Hypercore(ram)
   const writerA = new Hypercore(ram)
