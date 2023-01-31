@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "standard && tape test/common/*.js && npm run test:non-sparse",
-    "test:non-sparse": "NON_SPARSE=1 tape test/common/*.js test/non-sparse/*.js"
+    "test:non-sparse": "tape test/common/*.js test/non-sparse/*.js --non-sparse"
   },
   "dependencies": {
     "b4a": "^1.3.1",

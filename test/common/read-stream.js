@@ -323,7 +323,7 @@ test('read stream - resume from empty checkpoint', async t => {
 })
 
 // Skipped in non-sparse mode because all input blocks will be downloaded eagerly.
-if (+process.env['NON_SPARSE'] !== 1) { // eslint-disable-line
+if (!process.argv.includes('--non-sparse')) {
   test('read stream - { wait: false } will not download remote blocks', async t => {
     const writerA = new Hypercore(ram)
     await writerA.ready()
