@@ -6,7 +6,8 @@ const Autobase = require('..')
 module.exports = {
   create,
   sync,
-  confirm
+  confirm,
+  compare
 }
 
 async function create (n, apply, open) {
@@ -57,4 +58,36 @@ async function confirm (...bases) {
   await sync(...bases)
   for (let i = 0; i < maj; i++) await writers[i].append(null)
   return sync(...bases)
+}
+
+async function compare (a, b, full = false) {
+  const alen = full ? a.view.length : a.view.indexedLength
+  const blen = full ? b.view.length : b.view.indexedLength
+
+  if (alen !== blen) throw new Error('Views are different lengths')
+
+  for (let i = 0; i < alen; i++) {
+    const left = await a.view.get(i)
+    const right = await b.view.get(i)
+
+    if (!equal(left, right)) throw new Error('Views differ at block' + i)
+  }
+}
+
+function equal (a, b) {
+  if (typeof a !== typeof b) return false
+  if (a === null) return b === null
+  if (typeof a === 'object') {
+    const entries = Object.entries(a)
+
+    if (entries.length !== Object.entries(b).length) return false
+
+    for (const [k, v] of entries) {
+      if (!equal(b[k], v)) return false
+    }
+
+    return true
+  }
+
+  return a === b
 }
