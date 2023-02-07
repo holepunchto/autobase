@@ -169,6 +169,22 @@ test('basic - rotating majority', async t => {
   }
 })
 
+test('basic - throws', async t => {
+  const bases = await create(2, apply, store => store.get('test'))
+
+  const [a, b] = bases
+
+  await a.append({ message: 'msg1' })
+  await a.append({ message: 'msg2' })
+  await a.append({ message: 'msg3' })
+
+  await confirm(a, b)
+
+  await t.exception(b.append({ message: 'not writable' }))
+  await t.exception(a.view.append({ message: 'append outside apply' }))
+  t.exception(() => a.system.addWriter(b.local.key))
+})
+
 async function apply (batch, view, base) {
   for (const { value } of batch) {
     if (value === null) continue
