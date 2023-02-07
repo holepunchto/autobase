@@ -9,8 +9,8 @@ module.exports = {
   confirm
 }
 
-async function create (n, apply) {
-  const opts = { apply, valueEncoding: 'json' }
+async function create (n, apply, open) {
+  const opts = { apply, open, valueEncoding: 'json' }
   const bases = [new Autobase(new Corestore(ram, { primaryKey: Buffer.alloc(32).fill(0) }), null, opts)]
   await bases[0].ready()
   if (n === 1) return bases
