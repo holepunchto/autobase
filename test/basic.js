@@ -7,7 +7,8 @@ const Autobase = require('..')
 const {
   create,
   sync,
-  confirm
+  confirm,
+  compare
 } = require('./helpers')
 
 test('basic - two writers', async t => {
@@ -55,15 +56,17 @@ test('basic - compare views', async t => {
 
   await confirm(...bases)
 
-  for (let i = 0; i < 6; i++) await bases[i % 2].append({ message: 'msg' + i })
+  for (let i = 0; i < 6; i++) await bases[i % 2].append('msg' + i)
 
   await confirm(...bases)
 
   t.is(a.system.digest.writers.length, b.system.digest.writers.length)
   t.is(a.view.indexedLength, b.view.indexedLength)
 
-  for (let i = 0; i < a.view.indexedLength; i++) {
-    t.alike(await a.view.get(i), await b.view.get(i))
+  try {
+    await compare(a, b)
+  } catch (e) {
+    t.fail(e.message)
   }
 })
 
@@ -85,7 +88,7 @@ test('basic - online majority', async t => {
 
   const indexed = a.view.indexedLength
 
-  for (let i = 0; i < 6; i++) await bases[i % 3].append({ message: 'msg' + i })
+  for (let i = 0; i < 6; i++) await bases[i % 3].append('msg' + i)
 
   await confirm(a, b)
 
@@ -93,16 +96,20 @@ test('basic - online majority', async t => {
   t.is(c.view.indexedLength, indexed)
   t.is(a.view.indexedLength, b.view.indexedLength)
 
-  for (let i = 0; i < a.view.indexedLength; i++) {
-    t.alike(await a.view.get(i), await b.view.get(i))
+  try {
+    await compare(a, b)
+  } catch (e) {
+    t.fail(e.message)
   }
 
   await sync(b, c)
 
   t.is(a.view.indexedLength, c.view.indexedLength)
 
-  for (let i = 0; i < a.view.indexedLength; i++) {
-    t.alike(await a.view.get(i), await c.view.get(i))
+  try {
+    await compare(a, c)
+  } catch (e) {
+    t.fail(e.message)
   }
 })
 
@@ -124,7 +131,7 @@ test('basic - rotating majority', async t => {
 
   let indexed = a.view.indexedLength
 
-  for (let i = 0; i < 6; i++) await bases[i % 3].append({ message: 'msg' + i })
+  for (let i = 0; i < 6; i++) await bases[i % 3].append('msg' + i)
 
   await confirm(a, b)
 
@@ -134,7 +141,7 @@ test('basic - rotating majority', async t => {
 
   indexed = a.view.indexedLength
 
-  for (let i = 0; i < 6; i++) await bases[i % 3].append({ message: 'msg' + i })
+  for (let i = 0; i < 6; i++) await bases[i % 3].append('msg' + i)
 
   await confirm(b, c)
 
@@ -144,7 +151,7 @@ test('basic - rotating majority', async t => {
 
   indexed = b.view.indexedLength
 
-  for (let i = 0; i < 6; i++) await bases[i % 3].append({ message: 'msg' + i })
+  for (let i = 0; i < 6; i++) await bases[i % 3].append('msg' + i)
 
   await confirm(a, c)
 
@@ -154,7 +161,7 @@ test('basic - rotating majority', async t => {
 
   indexed = a.view.indexedLength
 
-  for (let i = 0; i < 6; i++) await bases[i % 3].append({ message: 'msg' + i })
+  for (let i = 0; i < 6; i++) await bases[i % 3].append('msg' + i)
 
   await confirm(...bases)
 
@@ -162,10 +169,11 @@ test('basic - rotating majority', async t => {
   t.is(a.view.indexedLength, b.view.indexedLength)
   t.is(a.view.indexedLength, c.view.indexedLength)
 
-  for (let i = 0; i < a.view.indexedLength; i++) {
-    const block = await a.view.get(i)
-    t.alike(await b.view.get(i), block)
-    t.alike(await c.view.get(i), block)
+  try {
+    await compare(a, b)
+    await compare(a, c)
+  } catch (e) {
+    t.fail(e.message)
   }
 })
 
@@ -185,6 +193,59 @@ test('basic - throws', async t => {
   t.exception(() => a.system.addWriter(b.local.key))
 })
 
+test('basic - online minorities', async t => {
+  const bases = await create(5, apply, store => store.get('test'))
+
+  const [a, b, c, d, e] = bases
+
+  await a.append({ add: b.local.key.toString('hex') })
+  await a.append({ add: c.local.key.toString('hex') })
+  await a.append({ add: d.local.key.toString('hex') })
+  await a.append({ add: e.local.key.toString('hex') })
+
+  await confirm(...bases)
+
+  t.is(a.view.indexedLength, c.view.indexedLength)
+
+  for (let i = 0; i < 10; i++) await bases[i % 5].append('msg' + i)
+  for (let i = 0; i < 5; i++) await bases[i % 2].append('msg' + i)
+  for (let i = 0; i < 8; i++) await bases[i % 2 + 2].append('msg' + i)
+
+  await confirm(a, b)
+  await confirm(c, d)
+
+  t.is(a.view.indexedLength, b.view.indexedLength)
+  t.is(a.view.indexedLength, c.view.indexedLength)
+  t.is(a.view.indexedLength, d.view.indexedLength)
+  t.is(a.view.indexedLength, e.view.indexedLength)
+
+  t.not(a.view.length, a.view.indexedLength)
+  t.is(a.view.length, b.view.length)
+  t.not(c.view.length, a.view.length)
+  t.is(c.view.length, d.view.length)
+
+  try {
+    await compare(a, b, true)
+    await compare(c, d, true)
+  } catch (e) {
+    t.fail(e.message)
+  }
+
+  await confirm(...bases)
+
+  t.is(a.view.length, c.view.length)
+  t.is(a.view.indexedLength, c.view.indexedLength)
+
+  try {
+    await compare(a, b, true)
+    await compare(a, c, true)
+    await compare(a, d, true)
+    await compare(a, e, true)
+  } catch (e) {
+    t.fail(e.message)
+  }
+})
+
 async function apply (batch, view, base) {
   for (const { value } of batch) {
     if (value === null) continue
@@ -194,12 +255,4 @@ async function apply (batch, view, base) {
 
     if (view) await view.append(value)
   }
-}
-
-async function list (name, base) {
-  console.log('**** list ' + name + ' ****')
-  for (let i = 0; i < base.length; i++) {
-    console.log(i, (await base.get(i)).value)
-  }
-  console.log('')
 }
