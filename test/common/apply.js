@@ -222,3 +222,41 @@ test('applying - one-to-many apply with reordering, remote output out-of-date', 
     t.same(outputNodes.map(v => v.value), applyValues(['b1', 'b0', 'a2', 'a1', 'a0', 'c3', 'c2', 'c1', 'c0']))
   }
 })
+
+test('applying - cant be run twice simulatenously', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+
+  const applyValues = (values) => values.flatMap(v => [Buffer.from(v + '-0'), Buffer.from(v + '-1')])
+  const applyFunction = async (view, batch) => {
+    // Simulate slow / big apply run
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    const values = batch.map(n => n.value.toString())
+    const vals = applyValues(values)
+    for (let i = vals.length - 1; i >= 0; i--) {
+      await view.append(vals[i])
+    }
+  }
+
+  const base1 = new Autobase({
+    inputs: [writerA],
+    localInput: writerA,
+    localOutput: output,
+    apply: applyFunction,
+    eagerUpdate: true
+  })
+
+  await base1.append('foo')
+  await base1.view.ready()
+
+  await Promise.all([
+    base1.view.get(base1.view.length),
+    base1.append('bar')
+  ])
+
+  {
+    const outputNodes = await linearizedValues(base1.view)
+    t.same(outputNodes.map(v => v.value), applyValues(['bar', 'foo']))
+  }
+})
