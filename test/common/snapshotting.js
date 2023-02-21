@@ -195,6 +195,29 @@ test('snapshotting - concurrent snapshot updates will only migrate once', async 
   t.end()
 })
 
+test('snapshotting - creating session on snapshot copies options w/ overrides', async t => {
+  const output = new Hypercore(ram)
+  const writerA = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA],
+    localOutput: output,
+    autostart: true
+  })
+
+  const s1 = base.view.snapshot({ unwrap: true })
+  const session1 = s1.session()
+
+  t.deepEqual(session1.opts, s1.opts, 'options get copied')
+
+  const s2 = base.view.snapshot({ unwrap: true })
+  const session2 = s2.session({ pin: true })
+
+  t.deepEqual(session2.opts, { ...s2.opts, pin: true }, 'support overrides')
+
+  t.end()
+})
+
 test('snapshotting - snapshot session close', async t => {
   // TODO: implement
   t.end()
