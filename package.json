@@ -18,7 +18,7 @@
   "homepage": "https://github.com/holepunchto/autobase-next#readme",
   "dependencies": {
     "b4a": "^1.6.1",
-    "corestore": "^6.2.0",
+    "corestore": "^6.5.1",
     "debounceify": "^1.0.0",
     "hyperbee": "^2.2.0",
     "random-access-memory": "^6.0.0",
