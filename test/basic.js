@@ -246,6 +246,32 @@ test('basic - online minorities', async t => {
   }
 })
 
+test('basic - restarting sets bootstrap correctly', async t => {
+  const store = new Corestore(ram)
+
+  let bootstrapKey = null
+  let localKey = null
+
+  {
+    const ns = store.namespace('random-name')
+    const base = new Autobase(ns, null, {})
+    await base.ready()
+
+    bootstrapKey = base.bootstraps[0]
+    localKey = base.local.key
+  }
+
+  {
+    const ns = store.namespace(bootstrapKey)
+    const base = new Autobase(ns, [bootstrapKey], {})
+    await base.ready()
+
+    t.alike(base.bootstraps[0], bootstrapKey)
+    t.alike(base.local.key, base.bootstraps[0])
+    t.alike(base.local.key, localKey)
+  }
+})
+
 async function apply (batch, view, base) {
   for (const { value } of batch) {
     if (value === null) continue

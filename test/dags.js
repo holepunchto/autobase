@@ -531,7 +531,6 @@ test('example.mjs', async t => {
   await b.append()
 
   console.log(b._writersQuorum.size, b._writers.length)
-
   console.log(await a.latestCheckpoint())
   console.log(await b.latestCheckpoint())
 

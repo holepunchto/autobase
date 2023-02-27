@@ -181,13 +181,19 @@ module.exports = class Autobase extends ReadyResource {
     this.bootstraps = [].concat(bootstraps || []).map(toKey).sort((a, b) => b4a.compare(a, b))
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
+    this._primaryBootstrap = null
 
-    this.local = store.get({ name: 'local', valueEncoding: messages.OplogMessage })
+    if (this.bootstraps.length) {
+      this._primaryBootstrap = this.store.get(this.bootstraps[0])
+      this.store = this.store.namespace(this._primaryBootstrap)
+    }
+
+    this.local = this.store.get({ name: 'local', valueEncoding: messages.OplogMessage })
     this.localWriter = null
     this.linearizer = null
 
     this.writers = []
-    this.system = new SystemView(this, store.get({ name: 'system' }))
+    this.system = new SystemView(this, this.store.get({ name: 'system' }))
 
     this._appending = []
     this._applying = null
