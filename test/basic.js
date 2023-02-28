@@ -38,7 +38,7 @@ test('basic - two writers', async t => {
 })
 
 test('basic - view', async t => {
-  const [base] = await create(1, apply, store => store.get('test'))
+  const [base] = await create(1, apply, store => store.get('test', { valueEncoding: 'json' }))
 
   const block = { message: 'hello, world!' }
   await base.append(block)
@@ -49,7 +49,7 @@ test('basic - view', async t => {
 })
 
 test('basic - compare views', async t => {
-  const bases = await create(2, apply, store => store.get('test'))
+  const bases = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }))
 
   const [a, b] = bases
   await a.append({ add: b.local.key.toString('hex') })
@@ -71,7 +71,7 @@ test('basic - compare views', async t => {
 })
 
 test('basic - online majority', async t => {
-  const bases = await create(3, apply, store => store.get('test'))
+  const bases = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
 
   const [a, b, c] = bases
 
@@ -119,7 +119,7 @@ test('basic - online majority', async t => {
 })
 
 test('basic - rotating majority', async t => {
-  const bases = await create(3, apply, store => store.get('test'))
+  const bases = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
 
   const [a, b, c] = bases
 
@@ -203,7 +203,7 @@ test('basic - rotating majority', async t => {
 })
 
 test('basic - throws', async t => {
-  const bases = await create(2, apply, store => store.get('test'))
+  const bases = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }))
 
   const [a, b] = bases
 
@@ -219,7 +219,7 @@ test('basic - throws', async t => {
 })
 
 test('basic - online minorities', async t => {
-  const bases = await create(5, apply, store => store.get('test'))
+  const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }))
 
   const [a, b, c, d, e] = bases
 
