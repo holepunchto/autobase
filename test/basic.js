@@ -272,6 +272,35 @@ test('basic - restarting sets bootstrap correctly', async t => {
   }
 })
 
+test('basic - no inconsistent snapshot entries (throw on accessing truncated)', async t => {
+  const bases = await create(3, apply, store => store.get('test'))
+  const [base1, base2, base3] = bases
+
+  await base1.append({ add: base2.local.key.toString('hex') })
+  await base1.append({ add: base3.local.key.toString('hex') })
+
+  await confirm(...bases)
+
+  await base1.append('1-1')
+  await base1.append('1-2')
+  await base2.append('2-1')
+  await base2.append('2-2')
+
+  const orig1 = base1.view.snapshot()
+  const orig2 = base2.view.snapshot()
+
+  const origValue1 = await orig1.get(3)
+  const origValue2 = await orig2.get(3)
+
+  await confirm(...bases)
+
+  const newValue1 = await orig1.get(3)
+  const newValue2 = await orig2.get(3)
+
+  t.alike(origValue1, newValue1)
+  t.alike(origValue2, newValue2)
+})
+
 async function apply (batch, view, base) {
   for (const { value } of batch) {
     if (value === null) continue
