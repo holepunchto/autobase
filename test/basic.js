@@ -318,7 +318,7 @@ test('basic - restarting sets bootstrap correctly', async t => {
 })
 
 test('basic - no inconsistent snapshot entries (throw on accessing truncated)', async t => {
-  const bases = await create(3, apply, store => store.get('test'))
+  const bases = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
   const [base1, base2, base3] = bases
 
   await base1.append({ add: base2.local.key.toString('hex') })
