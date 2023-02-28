@@ -152,7 +152,7 @@ class LinearizedStore {
     if (moreOpts) opts = { ...opts, ...moreOpts }
 
     const name = opts.name
-    const valueEncoding = opts.valueEncoding || this.base.valueEncoding
+    const valueEncoding = opts.valueEncoding
 
     if (this.opened.has(name)) return this.opened.get(name).openSession(opts)
 
