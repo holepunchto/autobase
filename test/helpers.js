@@ -26,9 +26,13 @@ async function create (n, apply, open) {
 async function sync (...bases) {
   const streams = []
 
-  for (const a of bases) {
-    for (const b of bases) {
-      if (a === b) continue
+  const all = [...bases]
+  const missing = all.slice()
+
+  while (missing.length) {
+    const a = missing.pop()
+
+    for (const b of missing) {
       const s1 = a.store.replicate(true)
       const s2 = b.store.replicate(false)
 
@@ -42,22 +46,29 @@ async function sync (...bases) {
     }
   }
 
-  await Promise.all(bases.map(b => b.update({ wait: true })))
+  await Promise.all(all.map(b => b.update({ wait: true })))
+
+  const closes = []
 
   for (const stream of streams) {
     stream.destroy()
+    closes.push(new Promise(resolve => stream.on('close', resolve)))
   }
+
+  await Promise.all(closes)
 }
 
 async function confirm (...bases) {
-  const writers = bases.filter(b => !!b.localWriter)
+  const all = [...bases]
+
+  const writers = all.filter(b => !!b.localWriter)
   const maj = Math.floor(writers.length / 2) + 1
 
-  await sync(...bases)
+  await sync(...all)
   for (let i = 0; i < maj; i++) await writers[i].append(null)
-  await sync(...bases)
+  await sync(...all)
   for (let i = 0; i < maj; i++) await writers[i].append(null)
-  return sync(...bases)
+  return sync(...all)
 }
 
 async function compare (a, b, full = false) {

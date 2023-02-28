@@ -88,7 +88,12 @@ test('basic - online majority', async t => {
 
   const indexed = a.view.indexedLength
 
-  for (let i = 0; i < 6; i++) await bases[i % 3].append('msg' + i)
+  await a.append({ message: 'msg a' })
+  await b.append({ message: 'msg b' })
+  await c.append({ message: 'msg c' })
+  await a.append({ message: 'msg a' })
+  await b.append({ message: 'msg b' })
+  await c.append({ message: 'msg c' })
 
   await confirm(a, b)
 

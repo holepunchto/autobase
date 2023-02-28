@@ -249,6 +249,7 @@ module.exports = class Autobase extends ReadyResource {
 
     for (const w of this.writers) {
       await w.core.update(opts)
+      if (!this.sparse) await downloadAll(w.core)
     }
 
     await this._bump()
@@ -653,4 +654,11 @@ function popAndSwap (list, i) {
   if (i >= list.length) return false
   list[i] = pop
   return true
+}
+
+function downloadAll (core) {
+  const start = core.length
+  const end = core.core.tree.length
+
+  return core.download({ start, end, ifAvailable: true }).done()
 }
