@@ -6,6 +6,7 @@ const Autobase = require('..')
 module.exports = {
   create,
   sync,
+  addWriter,
   confirm,
   compare
 }
@@ -54,6 +55,10 @@ async function sync (bases) {
   }
 
   await Promise.all(closes)
+}
+
+async function addWriter (base, add) {
+  return base.append({ add: add.local.key.toString('hex') })
 }
 
 async function confirm (bases) {
