@@ -62,10 +62,11 @@ async function addWriter (base, add) {
 }
 
 async function confirm (bases) {
+  await sync(bases)
+
   const writers = bases.filter(b => !!b.localWriter)
   const maj = Math.floor(writers.length / 2) + 1
 
-  await sync(bases)
   for (let i = 0; i < maj; i++) await writers[i].append(null)
   await sync(bases)
   for (let i = 0; i < maj; i++) await writers[i].append(null)
