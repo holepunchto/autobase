@@ -7,6 +7,9 @@ on:
   pull_request:
     branches:
       - all
+  workflow_dispatch:
+
+
 env:
   BRITTLE_TIMEOUT: 60000
 jobs:
