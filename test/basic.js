@@ -8,6 +8,7 @@ const {
   create,
   sync,
   addWriter,
+  apply,
   confirm,
   compare
 } = require('./helpers')
@@ -334,6 +335,8 @@ test('basic - no inconsistent snapshot entries (throw on accessing truncated)', 
   await base2.append('2-1')
   await base2.append('2-2')
 
+  await sync(bases)
+
   const orig1 = base1.view.snapshot()
   const orig2 = base2.view.snapshot()
 
@@ -349,7 +352,6 @@ test('basic - no inconsistent snapshot entries (throw on accessing truncated)', 
   t.alike(origValue2, newValue2)
 })
 
-
 test('basic - check snapshot of snapshot after rebase', async t => {
   const bases = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
   const [base1, base2, base3] = bases
@@ -362,6 +364,8 @@ test('basic - check snapshot of snapshot after rebase', async t => {
   await base1.append('1-2')
   await base2.append('2-1')
   await base2.append('2-2')
+
+  await sync(bases)
 
   const orig1 = base1.view.snapshot()
   const orig2 = base2.view.snapshot()
@@ -386,43 +390,3 @@ test('basic - check snapshot of snapshot after rebase', async t => {
   t.alike(origValue1, resnapValue1)
   t.alike(origValue2, resnapValue2)
 })
-
-test('2 writer convergence', async t => {
-  const bases = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }))
-
-  const [a, b] = bases
-
-  let ai = 0
-  let bi = 0
-
-  await addWriter(a, b)
-  await sync(bases)
-
-  await a.append('a' + ai++)
-  await sync(bases)
-
-  await b.append('b' + bi++)
-  await sync(bases)
-
-  await a.append('a' + ai++)
-  await sync(bases)
-
-  // expect [add(b), a0]
-  t.alike(a.view.indexedLength, 2)
-  t.alike(b.view.indexedLength, 2)
-
-  t.alike(await a.view.get(0), await b.view.get(0))
-
-  t.is(a.linearizer.tails.length, 1)
-})
-
-async function apply (batch, view, base) {
-  for (const { value } of batch) {
-    if (value === null) continue
-    if (value.add) {
-      await base.system.addWriter(Buffer.from(value.add, 'hex'))
-    }
-
-    if (view) await view.append(value)
-  }
-}

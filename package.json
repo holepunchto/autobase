@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "brittle test/basic.js"
+    "test": "brittle test/*.js"
   },
   "repository": {
     "type": "git",
