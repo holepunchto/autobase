@@ -387,6 +387,35 @@ test('basic - check snapshot of snapshot after rebase', async t => {
   t.alike(origValue2, resnapValue2)
 })
 
+test('2 writer convergence', async t => {
+  const bases = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }))
+
+  const [a, b] = bases
+
+  let ai = 0
+  let bi = 0
+
+  await addWriter(a, b)
+  await sync(bases)
+
+  await a.append('a' + ai++)
+  await sync(bases)
+
+  await b.append('b' + bi++)
+  await sync(bases)
+
+  await a.append('a' + ai++)
+  await sync(bases)
+
+  // expect [add(b), a0]
+  t.alike(a.view.indexedLength, 2)
+  t.alike(b.view.indexedLength, 2)
+
+  t.alike(await a.view.get(0), await b.view.get(0))
+
+  t.is(a.linearizer.tails.length, 1)
+})
+
 async function apply (batch, view, base) {
   for (const { value } of batch) {
     if (value === null) continue
