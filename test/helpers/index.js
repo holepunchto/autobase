@@ -1,12 +1,13 @@
 const ram = require('random-access-memory')
 const Corestore = require('corestore')
 
-const Autobase = require('..')
+const Autobase = require('../..')
 
 module.exports = {
   create,
   sync,
   addWriter,
+  apply,
   confirm,
   compare
 }
@@ -103,4 +104,15 @@ function equal (a, b) {
   }
 
   return a === b
+}
+
+async function apply (batch, view, base) {
+  for (const { value } of batch) {
+    if (value === null) continue
+    if (value.add) {
+      return base.system.addWriter(Buffer.from(value.add, 'hex'))
+    }
+
+    if (view) await view.append(value)
+  }
 }
