@@ -8,6 +8,7 @@ const {
   create,
   sync,
   apply,
+  addWriter,
   confirm,
   compare
 } = require('./helpers')
@@ -318,4 +319,41 @@ test('basic - restarting sets bootstrap correctly', async t => {
     t.alike(base.local.key, base.bootstraps[0])
     t.alike(base.local.key, localKey)
   }
+})
+
+test('batch append', async t => {
+  const bases = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }))
+
+  const [a, b] = bases
+  a.on('error', (e) => console.error(e))
+  b.on('error', (e) => console.error(e))
+
+  await addWriter(a, b)
+
+  await confirm(bases)
+
+  await a.append(['a0', 'a1'])
+  await t.execution(confirm(bases))
+})
+
+test('undoing a batch', async t => {
+  const bases = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }))
+
+  const [a, b] = bases
+  a.on('error', (e) => console.error(e))
+  b.on('error', (e) => console.error(e))
+
+  await addWriter(a, b)
+
+  await confirm(bases)
+
+  await a.append('a0')
+  await confirm(bases)
+
+  await Promise.all([
+    a.append('a1'),
+    b.append(['b0', 'b1'])
+  ])
+
+  await t.execution(confirm(bases))
 })
