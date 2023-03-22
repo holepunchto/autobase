@@ -78,7 +78,7 @@ We use the term __vote__ to denote a reference from a writer to a node. Like thi
 
 In order to express a condition, we define the concept of __quorums__ over nodes:
 
-- A node achieves a __quorum__ once it has been referenced by a majority of writers, or eqivalently once it has a majority of votes. 
+- A node achieves a __quorum__ once it has been referenced by a majority of writers, or equivalently once it has a majority of votes. 
 
 We recursively define the degree of a quorum. A quroum increases in degree once the quorum has itself been referenced by a majority of writers (ie. a majority of writers are aware of a majority over a given node)
 
