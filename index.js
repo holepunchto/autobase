@@ -189,7 +189,7 @@ module.exports = class Autobase extends ReadyResource {
       this.store = this.store.namespace(this._primaryBootstrap)
     }
 
-    this.local = this.store.get({ name: 'local', valueEncoding: messages.OplogMessage })
+    this.local = Autobase.getLocalCore(this.store)
     this.localWriter = null
     this.linearizer = null
 
@@ -290,6 +290,10 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return best
+  }
+
+  static getLocalCore (store) {
+    return store.get({ name: 'local', valueEncoding: messages.OplogMessage })
   }
 
   _getWriterByKey (key) {
