@@ -132,6 +132,11 @@ test('remote linearizing - can locally extend an out-of-date remote output', asy
     eagerUpdate: false
   })
 
+  let readerBaseAppends = 0
+  let readerBaseTruncates = 0
+  readerBase.view.on('append', () => readerBaseAppends++)
+  readerBase.view.on('truncate', () => readerBaseTruncates++)
+
   for (let i = 0; i < 3; i++) {
     await writerBase.append(`a${i}`, [], writerA)
   }
@@ -144,6 +149,8 @@ test('remote linearizing - can locally extend an out-of-date remote output', asy
   t.same(readerBase.view.status.appended, 0)
   t.same(readerBase.view.status.truncated, 0)
   t.same(readerBase.view.length, 3)
+  t.same(readerBaseAppends, 1)
+  t.same(readerBaseTruncates, 0)
 
   for (let i = 0; i < 2; i++) {
     await writerBase.append(`b${i}`, [], writerB)
@@ -153,6 +160,8 @@ test('remote linearizing - can locally extend an out-of-date remote output', asy
   t.same(readerBase.view.status.appended, 2)
   t.same(readerBase.view.status.truncated, 0)
   t.same(readerBase.view.length, 5)
+  t.same(readerBaseAppends, 2)
+  t.same(readerBaseTruncates, 0)
 
   for (let i = 0; i < 1; i++) {
     await writerBase.append(`c${i}`, [], writerC)
@@ -162,6 +171,8 @@ test('remote linearizing - can locally extend an out-of-date remote output', asy
   t.same(readerBase.view.status.appended, 1)
   t.same(readerBase.view.status.truncated, 0)
   t.same(readerBase.view.length, 6)
+  t.same(readerBaseAppends, 3)
+  t.same(readerBaseTruncates, 0)
 
   // Extend C and lock the previous forks (will not reorg)
   for (let i = 1; i < 4; i++) {
@@ -172,6 +183,8 @@ test('remote linearizing - can locally extend an out-of-date remote output', asy
   t.same(readerBase.view.status.appended, 3)
   t.same(readerBase.view.status.truncated, 0)
   t.same(readerBase.view.length, 9)
+  t.same(readerBaseAppends, 4)
+  t.same(readerBaseTruncates, 0)
 
   // Create a new B fork at the back (full reorg)
   for (let i = 1; i < 11; i++) {
@@ -182,6 +195,8 @@ test('remote linearizing - can locally extend an out-of-date remote output', asy
   t.same(readerBase.view.status.appended, 19)
   t.same(readerBase.view.status.truncated, 9)
   t.same(readerBase.view.length, 19)
+  t.same(readerBaseAppends, 5)
+  t.same(readerBaseTruncates, 1)
 
   t.end()
 })
