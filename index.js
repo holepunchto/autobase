@@ -245,6 +245,10 @@ module.exports = class Autobase extends ReadyResource {
     await this._bump()
   }
 
+  async _close () {
+    await this.store.close()
+  }
+
   async update (opts) {
     if (!this.opened) await this.ready()
 
