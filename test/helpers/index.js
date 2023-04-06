@@ -9,8 +9,7 @@ module.exports = {
   addWriter,
   apply,
   confirm,
-  compare,
-  setupContinuousSync
+  compare
 }
 
 async function create (n, apply, open) {
@@ -57,39 +56,6 @@ async function sync (bases) {
   }
 
   await Promise.all(closes)
-}
-
-async function setupContinuousSync (t, bases) {
-  const streams = []
-  const missing = bases.slice()
-
-  while (missing.length) {
-    const a = missing.pop()
-
-    for (const b of missing) {
-      const s1 = a.store.replicate(true)
-      const s2 = b.store.replicate(false)
-
-      s1.on('error', () => {})
-      s2.on('error', () => {})
-
-      s1.pipe(s2).pipe(s1)
-
-      streams.push(s1)
-      streams.push(s2)
-    }
-  }
-
-  t.teardown(async () => {
-    const closes = []
-
-    for (const stream of streams) {
-      stream.destroy()
-      closes.push(new Promise(resolve => stream.on('close', resolve)))
-    }
-
-    await Promise.all(closes)
-  })
 }
 
 async function addWriter (base, add) {

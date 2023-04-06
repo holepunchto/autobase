@@ -197,6 +197,8 @@ module.exports = class Autobase extends ReadyResource {
     this.system = new SystemView(this, this.store.get({ name: 'system' }))
 
     this._appending = new FIFO()
+    this._appendingBatchLength = 0
+
     this._applying = null
     this._needsReady = []
     this._removedWriters = []
@@ -273,8 +275,10 @@ module.exports = class Autobase extends ReadyResource {
 
     if (Array.isArray(value)) {
       for (const v of value) this._appending.push(v)
+      this._appendingBatchLength += value.length
     } else {
       this._appending.push(value)
+      this._appendingBatchLength++
     }
 
     await this._bump()
@@ -380,11 +384,13 @@ module.exports = class Autobase extends ReadyResource {
     while (true) {
       // localWriter may have been unset by a restart
       if (this.localWriter) {
-        while (!this._appending.isEmpty()) {
+        let batch = this._appendingBatchLength
+        this._appendingBatchLength = 0
+
+        while (batch) {
           const value = this._appending.shift()
           const heads = this.linearizer.heads.slice(0)
-          const batch = this._appending.length - i
-          const node = this.localWriter.append(value, heads, batch)
+          const node = this.localWriter.append(value, heads, batch--)
           this.linearizer.addHead(node)
         }
       }

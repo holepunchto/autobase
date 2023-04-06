@@ -10,8 +10,7 @@ const {
   apply,
   addWriter,
   confirm,
-  compare,
-  setupContinuousSync
+  compare
 } = require('./helpers')
 
 test('basic - two writers', async t => {
