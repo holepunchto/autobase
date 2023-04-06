@@ -5,7 +5,7 @@ const {
   create,
   confirm,
   apply,
-  addWriter,
+  addWriter
 } = require('./helpers')
 
 const beeOpts = { extension: false, keyEncoding: 'binary', valueEncoding: 'binary' }

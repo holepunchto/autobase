@@ -178,7 +178,6 @@ module.exports = class Autobase extends ReadyResource {
     super()
 
     this.sparse = false
-    this.batched = false // disabled until linearizer is batch aware
     this.bootstraps = [].concat(bootstraps || []).map(toKey).sort((a, b) => b4a.compare(a, b))
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
@@ -379,7 +378,7 @@ module.exports = class Autobase extends ReadyResource {
         for (let i = 0; i < this._appending.length; i++) {
           const value = this._appending[i]
           const heads = this.linearizer.heads.slice(0)
-          const batch = this.batched ? this._appending.length - i : 1
+          const batch = this._appending.length - i
           const node = this.localWriter.append(value, heads, batch)
           this.linearizer.addHead(node)
         }
