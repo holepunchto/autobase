@@ -1,5 +1,6 @@
 const b4a = require('b4a')
 const ReadyResource = require('ready-resource')
+const FIFO = require('fast-fifo')
 const debounceify = require('debounceify')
 const c = require('compact-encoding')
 const safetyCatch = require('safety-catch')
@@ -195,7 +196,7 @@ module.exports = class Autobase extends ReadyResource {
     this.writers = []
     this.system = new SystemView(this, this.store.get({ name: 'system' }))
 
-    this._appending = []
+    this._appending = new FIFO()
     this._applying = null
     this._needsReady = []
     this._removedWriters = []
@@ -270,8 +271,11 @@ module.exports = class Autobase extends ReadyResource {
       throw new Error('Not writable')
     }
 
-    if (Array.isArray(value)) this._appending.push(...value)
-    else this._appending.push(value)
+    if (Array.isArray(value)) {
+      for (const v of value) this._appending.push(v)
+    } else {
+      this._appending.push(value)
+    }
 
     await this._bump()
   }
@@ -374,15 +378,15 @@ module.exports = class Autobase extends ReadyResource {
 
   async _advance () {
     while (true) {
-      if (this._appending.length) {
-        for (let i = 0; i < this._appending.length; i++) {
-          const value = this._appending[i]
+      // localWriter may have been unset by a restart
+      if (this.localWriter) {
+        while (!this._appending.isEmpty()) {
+          const value = this._appending.shift()
           const heads = this.linearizer.heads.slice(0)
           const batch = this._appending.length - i
           const node = this.localWriter.append(value, heads, batch)
           this.linearizer.addHead(node)
         }
-        this._appending = []
       }
 
       let active = true

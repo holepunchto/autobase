@@ -10,7 +10,8 @@ const {
   apply,
   addWriter,
   confirm,
-  compare
+  compare,
+  setupContinuousSync
 } = require('./helpers')
 
 test('basic - two writers', async t => {
@@ -356,6 +357,46 @@ test('undoing a batch', async t => {
   ])
 
   await t.execution(confirm(bases))
+})
+
+test('append during restart', async t => {
+  const bases = await create(4, apply, store => store.get('test', { valueEncoding: 'json' }))
+
+  const [a, b, c, d] = bases
+
+  await addWriter(a, b)
+  await addWriter(a, c)
+  await addWriter(a, d)
+  await sync(bases)
+
+  t.ok(!!a.localWriter)
+  t.ok(!!b.localWriter)
+  t.ok(!!c.localWriter)
+  t.ok(!!d.localWriter)
+
+  await addWriter(b, d)
+
+  const s1 = b.store.replicate(true)
+  const s2 = d.store.replicate(false)
+
+  s1.on('error', () => {})
+  s2.on('error', () => {})
+
+  s1.pipe(s2).pipe(s1)
+
+  for (const w of d.writers) {
+    if (w === d.localWriter) continue
+
+    await w.core.update({ wait: true })
+    const start = w.core.length
+    const end = w.core.core.tree.length
+
+    await w.core.download({ start, end, ifAvailable: true }).done()
+  }
+
+  await d.append('hello')
+
+  t.is(await d.view.get(d.view.length - 1), 'hello')
 })
 
 test('closing an autobase', async t => {
