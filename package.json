@@ -30,5 +30,11 @@
   },
   "devDependencies": {
     "brittle": "^3.1.1"
+  },
+  "standard": {
+    "ignore": [
+      "**/test/reference/**",
+      "example.mjs"
+    ]
   }
 }
