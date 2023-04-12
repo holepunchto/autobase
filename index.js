@@ -44,6 +44,16 @@ class Writer {
     return seq >= this.offset ? this.nodes[seq - this.offset] : null
   }
 
+  reset (length) {
+    this.length = length || 0
+
+    this.next = null
+    this.nextCache = null
+
+    // TODO: handle offset/shifts
+    this.nodes = this.nodes.slice(0, length)
+  }
+
   advance (node = this.next) {
     this.nodes.push(node)
     this.next = null
@@ -326,6 +336,21 @@ module.exports = class Autobase extends ReadyResource {
   _makeWriter (key, length) {
     const local = b4a.equals(key, this.local.key)
 
+    for (let i = 0; i < this._removedWriters.length; i++) {
+      const w = this._removedWriters[i]
+
+      if (b4a.equals(w.core.key, key)) {
+        w.reset(length)
+
+        popAndSwap(this._removedWriters, i)
+        if (local) this.localWriter = w
+
+        return w
+      }
+    }
+
+    if (!length) length = 0
+
     const core = local
       ? this.local.session({ valueEncoding: messages.OplogMessage })
       : this.store.get({ key, sparse: this.sparse, valueEncoding: messages.OplogMessage })
@@ -461,17 +486,7 @@ module.exports = class Autobase extends ReadyResource {
       if (b4a.equals(w.core.key, key)) return
     }
 
-    for (let i = 0; i < this._removedWriters.length; i++) {
-      const w = this._removedWriters[i]
-
-      if (b4a.equals(w.core.key, key)) {
-        popAndSwap(this._removedWriters, i)
-        this.writers.push(w)
-        return
-      }
-    }
-
-    this.writers.push(this._makeWriter(key, 0))
+    this.writers.push(this._makeWriter(key))
   }
 
   // triggered from system
