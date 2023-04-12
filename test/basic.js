@@ -1,6 +1,7 @@
 const test = require('brittle')
 const ram = require('random-access-memory')
 const Corestore = require('corestore')
+const b4a = require('b4a')
 
 const Autobase = require('..')
 
@@ -84,20 +85,20 @@ test('basic - online majority', async t => {
 
   await confirm(bases)
 
-  await a.append({ message: 'msg a' })
-  await b.append({ message: 'msg b' })
-  await c.append({ message: 'msg c' })
+  await a.append({ message: 'a0' })
+  await b.append({ message: 'b0' })
+  await c.append({ message: 'c0' })
 
   await confirm(bases)
 
   const indexed = a.view.indexedLength
 
-  await a.append({ message: 'msg a' })
-  await b.append({ message: 'msg b' })
-  await c.append({ message: 'msg c' })
-  await a.append({ message: 'msg a' })
-  await b.append({ message: 'msg b' })
-  await c.append({ message: 'msg c' })
+  await a.append({ message: 'a1' })
+  await b.append({ message: 'b1' })
+  await c.append({ message: 'c1' })
+  await a.append({ message: 'a2' })
+  await b.append({ message: 'b2' })
+  await c.append({ message: 'c2' })
 
   await confirm([a, b])
 
@@ -409,4 +410,59 @@ test('closing an autobase', async t => {
 
   t.not(base.store._closing, null)
   t.is(base.local.closed, true)
+})
+
+// test should throw for commit f41f5544dbe8743f6ad3b9886e7aa472344bc9c7 (with debug set to false)
+test.skip('consistent writers', async t => {
+  const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }))
+
+  const [a, b, c, d, e] = bases
+
+  await addWriter(a, b)
+  await sync(bases)
+
+  await addWriter(b, c)
+  await addWriter(b, d)
+
+  await sync(bases)
+
+  // trigger reorg
+  addWriter(a, e)
+
+  const s1 = a.store.replicate(true)
+  const s2 = d.store.replicate(false)
+
+  s1.on('error', () => {})
+  s2.on('error', () => {})
+
+  s1.pipe(s2).pipe(s1)
+
+  for (const w of d.writers) {
+    if (w === d.localWriter) continue
+
+    await w.core.update({ wait: true })
+    const start = w.core.length
+    const end = w.core.core.tree.length
+
+    await w.core.download({ start, end, ifAvailable: true }).done()
+  }
+
+  d.debug = true
+  d.update().then(() => { d.debug = false })
+
+  t.ok(await checkWriters(d))
+
+  async function checkWriters (b) {
+    while (b.debug) {
+      for (const w of b.writers) {
+        for (const rem of b._removedWriters) {
+          if (b4a.equals(w.core.key, rem.core.key)) return false
+        }
+      }
+
+      await new Promise(resolve => setImmediate(resolve))
+    }
+
+    return true
+  }
 })
