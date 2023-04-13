@@ -402,6 +402,23 @@ module.exports = class Autobase extends ReadyResource {
     this._undo(this._updates.length)
 
     await this._cleanup()
+    await this._addHeads()
+  }
+
+  async _addHeads () {
+    let active = true
+
+    while (active) {
+      await this._ensureAll()
+
+      active = false
+      for (const w of this.writers) {
+        if (!w.next) continue
+        this.linearizer.addHead(w.advance())
+        active = true
+        break
+      }
+    }
   }
 
   async _advance () {
@@ -419,19 +436,7 @@ module.exports = class Autobase extends ReadyResource {
         }
       }
 
-      let active = true
-
-      while (active) {
-        await this._ensureAll()
-
-        active = false
-        for (const w of this.writers) {
-          if (!w.next) continue
-          this.linearizer.addHead(w.advance())
-          active = true
-          break
-        }
-      }
+      await this._addHeads()
 
       const u = this.linearizer.update()
       const needsRestart = u ? await this._applyUpdate(u) : false
