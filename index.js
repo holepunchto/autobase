@@ -45,13 +45,14 @@ class Writer {
   }
 
   reset (length) {
-    this.length = length || 0
-
     this.next = null
     this.nextCache = null
 
-    // TODO: handle offset/shifts
-    this.nodes = this.nodes.slice(0, length)
+    // keep nodes for soft resets
+    if (length >= 0) {
+      this.length = length
+      this.nodes = this.nodes.slice(0, length)
+    }
   }
 
   advance (node = this.next) {
@@ -349,8 +350,6 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
-    if (!length) length = 0
-
     const core = local
       ? this.local.session({ valueEncoding: messages.OplogMessage })
       : this.store.get({ key, sparse: this.sparse, valueEncoding: messages.OplogMessage })
@@ -359,7 +358,7 @@ module.exports = class Autobase extends ReadyResource {
     core.key = key
     this._needsReady.push(core)
 
-    const w = new Writer(this, core, length)
+    const w = new Writer(this, core, Math.max(length, 0))
 
     if (local) {
       this.localWriter = w
@@ -486,7 +485,10 @@ module.exports = class Autobase extends ReadyResource {
       if (b4a.equals(w.core.key, key)) return
     }
 
-    this.writers.push(this._makeWriter(key))
+    this.writers.push(this._makeWriter(key, -1))
+
+    // fetch any nodes needed for dependents
+    this._bump()
   }
 
   // triggered from system
