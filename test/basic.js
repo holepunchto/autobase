@@ -53,6 +53,35 @@ test('basic - view', async t => {
   t.alike(await base.view.get(0), block)
 })
 
+test('basic - view with close', async t => {
+  const [base] = await create(1, apply, open, close)
+
+  const block = { message: 'hello, world!' }
+  await base.append(block)
+
+  t.is(base.system.digest.writers.length, 1)
+  t.is(base.view.core.indexedLength, 1)
+  t.alike(await base.view.core.get(0), block)
+
+  t.is(base.view.lastBlock, null)
+  await base.close()
+  t.is(base.view.lastBlock.message, 'hello, world!')
+
+  function open (store) {
+    const core = store.get('test', { valueEncoding: 'json' })
+    return {
+      core,
+      lastBlock: null,
+      append: v => core.append(v)
+    }
+  }
+
+  async function close (view) {
+    view.lastBlock = await view.core.get(view.core.length - 1)
+    await view.core.close()
+  }
+})
+
 test('basic - compare views', async t => {
   const bases = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }))
 

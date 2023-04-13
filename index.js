@@ -224,6 +224,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._hasApply = !!this._handlers.apply
     this._hasOpen = !!this._handlers.open
+    this._hasClose = !!this._handlers.close
 
     this._viewStore = new LinearizedStore(this)
 
@@ -259,6 +260,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _close () {
+    if (this._hasClose) await this._handlers.close(this.view)
     await this.store.close()
   }
 
