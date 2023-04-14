@@ -4,6 +4,7 @@ const FIFO = require('fast-fifo')
 const debounceify = require('debounceify')
 const c = require('compact-encoding')
 const safetyCatch = require('safety-catch')
+const crypto = require('hypercore-crypto')
 
 const Linearizer = require('./lib/linearizer')
 const LinearizedCore = require('./lib/core')
@@ -11,6 +12,8 @@ const SystemView = require('./lib/system')
 const messages = require('./lib/messages')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
+const REFERRER_USERDATA = 'referrer'
+const VIEW_NAME_USERDATA = 'autobase/view'
 
 class Writer {
   constructor (base, core, length) {
@@ -192,6 +195,7 @@ module.exports = class Autobase extends ReadyResource {
     this.sparse = false
     this.bootstraps = [].concat(bootstraps || []).map(toKey).sort((a, b) => b4a.compare(a, b))
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
+    this.discoveryKey = null
     this.store = store
     this._primaryBootstrap = null
 
@@ -254,6 +258,9 @@ module.exports = class Autobase extends ReadyResource {
     if (this.system.bootstrapping && this.bootstraps.length === 0) {
       this.bootstraps.push(this.local.key) // new autobase!
     }
+    this.discoveryKey = crypto.discoveryKey(this.bootstraps[0])
+
+    await this._ensureUserData(this.system.core)
 
     await this._restart()
     await this._bump()
@@ -262,6 +269,13 @@ module.exports = class Autobase extends ReadyResource {
   async _close () {
     if (this._hasClose) await this._handlers.close(this.view)
     await this.store.close()
+  }
+
+  async _ensureUserData (core, name) {
+    await core.setUserData(REFERRER_USERDATA, this.discoveryKey)
+    if (name) {
+      await core.setUserData(VIEW_NAME_USERDATA, b4a.from(name))
+    }
   }
 
   async update (opts) {
@@ -318,6 +332,14 @@ module.exports = class Autobase extends ReadyResource {
 
   static getLocalCore (store) {
     return store.get({ name: 'local', valueEncoding: messages.OplogMessage })
+  }
+
+  static async getUserData (core) {
+    const viewName = await core.getUserData(VIEW_NAME_USERDATA)
+    return {
+      referrer: await core.getUserData(REFERRER_USERDATA),
+      view: viewName ? b4a.toString(viewName) : null
+    }
   }
 
   _getWriterByKey (key) {
@@ -456,7 +478,9 @@ module.exports = class Autobase extends ReadyResource {
 
   async _cleanup () {
     while (this._needsReady.length > 0) {
-      await this._needsReady.pop().ready()
+      const core = this._needsReady.pop()
+      await core.ready()
+      await this._ensureUserData(core)
     }
 
     while (this._removedWriters.length > 0) {
