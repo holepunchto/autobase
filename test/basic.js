@@ -82,6 +82,33 @@ test('basic - view with close', async t => {
   }
 })
 
+test('basic - view/writer userdata is set', async t => {
+  const bases = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const [base1, base2] = bases
+
+  await base1.append({ add: base2.local.key.toString('hex') })
+
+  await confirm(bases)
+
+  await verifyUserData(base1)
+  await verifyUserData(base2)
+
+  async function verifyUserData (base) {
+    const viewData = await Autobase.getUserData(base.view.core.core)
+    const systemData = await Autobase.getUserData(base.system.core)
+
+    t.alike(systemData.referrer, base.discoveryKey)
+    t.alike(viewData.referrer, base.discoveryKey)
+    t.is(viewData.view, 'test')
+
+    t.is(base.writers.length, 2)
+    for (const writer of base.writers) {
+      const writerData = await Autobase.getUserData(writer.core)
+      t.alike(writerData.referrer, base.discoveryKey)
+    }
+  }
+})
+
 test('basic - compare views', async t => {
   const bases = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }))
 
