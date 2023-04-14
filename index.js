@@ -272,7 +272,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _ensureUserData (core, name) {
-    await core.setUserData(REFERRER_USERDATA, this.discoveryKey)
+    await core.setUserData(REFERRER_USERDATA, this.bootstraps[0])
     if (name) {
       await core.setUserData(VIEW_NAME_USERDATA, b4a.from(name))
     }

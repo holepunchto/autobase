@@ -97,14 +97,14 @@ test('basic - view/writer userdata is set', async t => {
     const viewData = await Autobase.getUserData(base.view.core.core)
     const systemData = await Autobase.getUserData(base.system.core)
 
-    t.alike(systemData.referrer, base.discoveryKey)
-    t.alike(viewData.referrer, base.discoveryKey)
+    t.alike(systemData.referrer, base.bootstraps[0])
+    t.alike(viewData.referrer, base.bootstraps[0])
     t.is(viewData.view, 'test')
 
     t.is(base.writers.length, 2)
     for (const writer of base.writers) {
       const writerData = await Autobase.getUserData(writer.core)
-      t.alike(writerData.referrer, base.discoveryKey)
+      t.alike(writerData.referrer, base.bootstraps[0])
     }
   }
 })
