@@ -4,7 +4,6 @@ const FIFO = require('fast-fifo')
 const debounceify = require('debounceify')
 const c = require('compact-encoding')
 const safetyCatch = require('safety-catch')
-const crypto = require('hypercore-crypto')
 
 const Linearizer = require('./lib/linearizer')
 const LinearizedCore = require('./lib/core')
@@ -195,7 +194,6 @@ module.exports = class Autobase extends ReadyResource {
     this.sparse = false
     this.bootstraps = [].concat(bootstraps || []).map(toKey).sort((a, b) => b4a.compare(a, b))
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
-    this.discoveryKey = null
     this.store = store
     this._primaryBootstrap = null
 
@@ -226,6 +224,8 @@ module.exports = class Autobase extends ReadyResource {
     this._checkpointer = 0
     this._checkpoint = null
 
+    this._openingCores = null
+
     this._hasApply = !!this._handlers.apply
     this._hasOpen = !!this._handlers.open
     this._hasClose = !!this._handlers.close
@@ -250,7 +250,15 @@ module.exports = class Autobase extends ReadyResource {
     return this.localWriter !== null
   }
 
-  async _open () {
+  get key () {
+    return this._primaryBootstrap === null ? this.local.key : this._primaryBootstrap.key
+  }
+
+  get discoveryKey () {
+    return this._primaryBootstrap === null ? this.local.discoveryKey : this._primaryBootstrap.discoveryKey
+  }
+
+  async _openCores () {
     await this.store.ready()
     await this.local.ready()
     await this.system.ready()
@@ -258,10 +266,12 @@ module.exports = class Autobase extends ReadyResource {
     if (this.system.bootstrapping && this.bootstraps.length === 0) {
       this.bootstraps.push(this.local.key) // new autobase!
     }
-    this.discoveryKey = crypto.discoveryKey(this.bootstraps[0])
 
     await this._ensureUserData(this.system.core)
+  }
 
+  async _open () {
+    await (this._openingCores = this._openCores())
     await this._restart()
     await this._bump()
   }
@@ -272,7 +282,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _ensureUserData (core, name) {
-    await core.setUserData(REFERRER_USERDATA, this.bootstraps[0])
+    await core.setUserData(REFERRER_USERDATA, this.key)
     if (name) {
       await core.setUserData(VIEW_NAME_USERDATA, b4a.from(name))
     }
