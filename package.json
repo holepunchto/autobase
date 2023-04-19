@@ -22,7 +22,7 @@
     "b4a": "^1.6.1",
     "corestore": "^6.5.1",
     "debounceify": "^1.0.0",
-    "fast-fifo": "^1.1.0",
+    "fast-fifo": "^1.2.0",
     "hyperbee": "^2.4.2",
     "random-access-memory": "^6.0.0",
     "ready-resource": "^1.0.0",
