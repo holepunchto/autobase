@@ -247,6 +247,45 @@ test('dynamically adding/removing inputs', async t => {
   t.end()
 })
 
+test('dynamically adding/removing local input', async t => {
+  const writerA = new Hypercore(ram)
+
+  const base = new Autobase({
+    inputs: [writerA]
+  })
+
+  // Create three independent forks
+  for (let i = 0; i < 1; i++) {
+    await base.append(`a${i}`, await base.latest(writerA), writerA)
+  }
+  {
+    const output = await causalValues(base)
+    t.same(output.map(v => v.value), bufferize(['a0']))
+  }
+
+  const writerB = new Hypercore(ram)
+  await base.addInput(writerB, { local: true })
+  t.same(base.localInput, writerB)
+
+  for (let i = 0; i < 2; i++) {
+    await base.append(`b${i}`)
+  }
+  {
+    const output = await causalValues(base)
+    t.same(output.map(v => v.value), bufferize(['b1', 'b0', 'a0']))
+  }
+
+  await base.removeInput(writerB, { local: true })
+  t.same(base.localInput, null)
+
+  {
+    const output = await causalValues(base)
+    t.same(output.map(v => v.value), bufferize(['a0']))
+  }
+
+  t.end()
+})
+
 test('dynamically adding inputs does not alter existing causal streams', async t => {
   const writerA = new Hypercore(ram)
 

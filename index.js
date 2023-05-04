@@ -68,6 +68,10 @@ module.exports = class Autobase extends EventEmitter {
     for (const output of this._outputs) {
       this._addOutput(output)
     }
+    if (this.localInput) {
+      await this.localInput.ready()
+      this._addInput(this.localInput, { local: true })
+    }
     if (this.localOutput) {
       await this.localOutput.ready()
       this._addOutput(this.localOutput, { local: true })
@@ -77,13 +81,15 @@ module.exports = class Autobase extends EventEmitter {
   }
 
   // Called by MemberBatch
-  _addInput (input) {
+  _addInput (input, opts) {
     const id = b.toString(input.key, 'hex')
     if (this._inputsByKey.has(id)) return
 
     const session = input.session({ sparse: this._sparse })
     session.on('append', this._onappend)
     this._inputsByKey.set(id, session)
+
+    if (opts && opts.local) this.localInput = input
 
     this._onInputsChanged()
   }
@@ -107,6 +113,8 @@ module.exports = class Autobase extends EventEmitter {
     input = this._inputsByKey.get(id)
     input.removeListener('append', this._onappend)
     this._inputsByKey.delete(id)
+
+    if (opts && opts.local) this.localInput = null
 
     this._onInputsChanged()
   }
