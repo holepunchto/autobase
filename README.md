@@ -89,7 +89,7 @@ async function apply (nodes, view, base) {
 
 ### Autobase
 
-### `const base = new Autobase(store, bootstrap, opts)`
+#### `const base = new Autobase(store, bootstrap, opts)`
 
 Instantiate an Autobase.
 
@@ -106,31 +106,31 @@ If loading an existing Autobase then set `bootstrap` to `base.key`, otherwise pa
 }
 ```
 
-### `base.key`
+#### `base.key`
 
 The primary key of the autobase.
 
-### `base.discoveryKey`
+#### `base.discoveryKey`
 
 The discovery key associated with the autobase.
 
-### `await base.append(value)`
+#### `await base.append(value)`
 
 Append a new entry to the autobase.
 
-### `await base.update()`
+#### `await base.update()`
 
 Fetch all available data and update the linearizer.
 
-### `const checkpoint = await base.checkpoint()`
+#### `const checkpoint = await base.checkpoint()`
 
 Fetch a static checkpoint of the autobase state.
 
-### `const core = Autobase.getLocalCore(store)`
+#### `const core = Autobase.getLocalCore(store)`
 
 Generate a local core to be used for an Autobase.
 
-### `const userData = Autobase.getUserData(core)`
+#### `const userData = Autobase.getUserData(core)`
 
 Get user data associated with the autobase core.
 
