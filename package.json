@@ -1,6 +1,6 @@
 {
-  "name": "autobase-next",
-  "version": "0.0.2",
+  "name": "@holepunchto/autobase",
+  "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
