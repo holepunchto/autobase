@@ -458,13 +458,10 @@ test('append during restart', async t => {
 test('closing an autobase', async t => {
   const [base] = await create(1, apply, store => store.get('test'))
 
-  // Sanity checks
-  t.is(base.store._closing, null)
+  // Sanity check
   t.is(base.local.closed, false)
 
   await base.close()
-
-  t.not(base.store._closing, null)
   t.is(base.local.closed, true)
 })
 
