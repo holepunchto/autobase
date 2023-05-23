@@ -8,6 +8,10 @@
     "fuzz:generated": "brittle test/reference/fuzz/generated/*.js",
     "fuzz": "node test/reference/fuzz/fuzz.js"
   },
+  "files": [
+    "index.js",
+    "lib/**"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/holepunchto/autobase-next.git"
