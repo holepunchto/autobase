@@ -274,4 +274,4 @@ __Note__: This operation can only be performed inside the `apply` function.
 
 ## License
 
-MIT
+Apache-2.0
