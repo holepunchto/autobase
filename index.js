@@ -46,17 +46,6 @@ class Writer {
     return seq >= this.offset ? this.nodes[seq - this.offset] : null
   }
 
-  reset (length) {
-    this.next = null
-    this.nextCache = null
-
-    // keep nodes for soft resets
-    if (length >= 0) {
-      this.length = length
-      this.nodes = this.nodes.slice(0, length)
-    }
-  }
-
   advance (node = this.next) {
     this.nodes.push(node)
     this.next = null
@@ -69,7 +58,7 @@ class Writer {
     const node = Linearizer.createNode(this, this.length + 1, value, [], batch, dependencies)
 
     for (const dep of dependencies) {
-      if (dep.clock !== null) {
+      if (!dep.yielded) {
         for (const [writer, length] of dep.clock) {
           if (node.clock.get(writer) < length) {
             node.clock.set(writer, length)
@@ -104,8 +93,8 @@ class Writer {
   }
 
   async ensureNode (node) {
-    while (node.dependencies.length < node.heads.length) {
-      const rawHead = node.heads[node.dependencies.length]
+    while (node.dependencies.size < node.heads.length) {
+      const rawHead = node.heads[node.dependencies.size]
 
       const headWriter = await this.base._getWriterByKey(rawHead.key)
       if (headWriter === null || headWriter.length < rawHead.length) {
@@ -115,11 +104,11 @@ class Writer {
       const headNode = headWriter.getCached(rawHead.length - 1)
 
       if (headNode === null) { // already yielded
-        popAndSwap(node.heads, node.dependencies.length)
+        popAndSwap(node.heads, node.dependencies.size)
         continue
       }
 
-      node.dependencies.push(headNode)
+      node.dependencies.add(headNode)
 
       await this._addClock(node.clock, headNode)
     }
@@ -145,7 +134,7 @@ class Writer {
   }
 
   async _addClock (clock, node) {
-    if (node.clock === null) return // gc'ed
+    if (node.yielded) return // gc'ed
     for (const [writer, length] of node.clock) {
       if (clock.get(writer) < length && !(await this.base.system.isIndexed(writer.core.key, length))) {
         clock.set(writer, length)
@@ -212,8 +201,8 @@ module.exports = class Autobase extends ReadyResource {
     this._appending = new FIFO()
 
     this._applying = null
+
     this._needsReady = []
-    this._removedWriters = []
     this._updates = []
     this._handlers = handlers || {}
 
@@ -271,7 +260,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async _open () {
     await (this._openingCores = this._openCores())
-    await this._restart()
+    this._reindex()
     await this._bump()
   }
 
@@ -284,6 +273,14 @@ module.exports = class Autobase extends ReadyResource {
     await core.setUserData(REFERRER_USERDATA, this.key)
     if (name) {
       await core.setUserData(VIEW_NAME_USERDATA, b4a.from(name))
+    }
+  }
+
+  async _ensureAllCores () {
+    while (this._needsReady.length > 0) {
+      const core = this._needsReady.pop()
+      await core.ready()
+      await this._ensureUserData(core)
     }
   }
 
@@ -354,7 +351,10 @@ module.exports = class Autobase extends ReadyResource {
       if (b4a.equals(w.core.key, key)) return w
     }
 
-    return null
+    const w = this._makeWriter(key, -1)
+    this.writers.push(w)
+
+    return w
   }
 
   _ensureAll () {
@@ -368,19 +368,6 @@ module.exports = class Autobase extends ReadyResource {
   _makeWriter (key, length) {
     const local = b4a.equals(key, this.local.key)
 
-    for (let i = 0; i < this._removedWriters.length; i++) {
-      const w = this._removedWriters[i]
-
-      if (b4a.equals(w.core.key, key)) {
-        w.reset(length)
-
-        popAndSwap(this._removedWriters, i)
-        if (local) this.localWriter = w
-
-        return w
-      }
-    }
-
     const core = local
       ? this.local.session({ valueEncoding: messages.OplogMessage })
       : this.store.get({ key, sparse: this.sparse, valueEncoding: messages.OplogMessage })
@@ -389,7 +376,7 @@ module.exports = class Autobase extends ReadyResource {
     core.key = key
     this._needsReady.push(core)
 
-    const w = new Writer(this, core, Math.max(length, 0))
+    const w = new Writer(this, core, Math.max(length, core.length))
 
     if (local) {
       this.localWriter = w
@@ -400,19 +387,20 @@ module.exports = class Autobase extends ReadyResource {
     return w
   }
 
-  async _restart () {
-    for (const w of this.writers) this._removedWriters.push(w)
-
-    this.localWriter = null
-
+  _reindex (change) {
     const indexers = []
 
-    const writers = this.system.bootstrapping
-      ? this.bootstraps.map(key => ({ key, length: 0 }))
-      : this.system.digest.writers
+    if (this.system.bootstrapping) {
+      for (const key of this.bootstraps) {
+        indexers.push(this._makeWriter(key, 0))
+      }
 
-    for (const { key, length } of writers) {
-      indexers.push(this._makeWriter(key, length))
+      this.writers = indexers.slice()
+    } else {
+      for (const { key } of this.system.digest.writers) {
+        const w = this._getWriterByKey(key)
+        indexers.push(w)
+      }
     }
 
     const heads = []
@@ -425,15 +413,41 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
-    this.writers = indexers.slice(0)
     this.linearizer = new Linearizer(indexers, heads)
 
-    // TODO: this is a bit silly (hitting it with the biggest of hammers)
-    // but an easy fix for now so cores are "up to date"
-    this._undo(this._updates.length)
+    if (change) this._reloadUpdate(change, heads)
+  }
 
-    await this._cleanup()
-    await this._addHeads()
+  _reloadUpdate (change, heads) {
+    const { count, nodes } = change
+
+    this._undo(count)
+
+    for (const node of nodes) {
+      node.yielded = false
+
+      for (let i = 0; i < node.heads.length; i++) {
+        const link = node.heads[i]
+
+        const writer = this._getWriterByKey(link.key)
+        if (node.clock.get(writer) < link.length) {
+          node.clock.set(writer, link.length)
+        }
+
+        for (const head of heads) {
+          if (compareHead(link, head)) {
+            node.dependencies.add(head)
+            break
+          }
+        }
+      }
+
+      heads.push(node)
+    }
+
+    for (const node of nodes) {
+      this.linearizer.addHead(node)
+    }
   }
 
   async _addHeads () {
@@ -454,48 +468,29 @@ module.exports = class Autobase extends ReadyResource {
 
   async _advance () {
     while (true) {
-      // localWriter may have been unset by a restart
-      if (this.localWriter) {
-        while (!this._appending.isEmpty()) {
-          const batch = this._appending.length
-          const value = this._appending.shift()
-          const heads = this.linearizer.heads.slice(0)
-          const node = this.localWriter.append(value, heads, batch)
-          this.linearizer.addHead(node)
-        }
+      while (!this._appending.isEmpty()) {
+        const batch = this._appending.length
+        const value = this._appending.shift()
+        const heads = this.linearizer.heads.slice(0)
+        const node = this.localWriter.append(value, heads, batch)
+        this.linearizer.addHead(node)
       }
 
       await this._addHeads()
 
       const u = this.linearizer.update()
-      const needsRestart = u ? await this._applyUpdate(u) : false
+      const changed = u ? await this._applyUpdate(u) : null
 
       if (this.localWriter !== null && this.localWriter.length > this.local.length) {
         await this._flushLocal()
       }
 
-      if (needsRestart === false) break
-      await this._restart()
+      if (!changed) break
+
+      this._reindex(changed)
     }
 
-    await this._cleanup()
-  }
-
-  async _cleanup () {
-    while (this._needsReady.length > 0) {
-      const core = this._needsReady.pop()
-      await core.ready()
-      await this._ensureUserData(core)
-    }
-
-    while (this._removedWriters.length > 0) {
-      const w = this._removedWriters.pop()
-      await w.core.close()
-
-      if (w === this.localWriter) {
-        this.localWriter = null
-      }
-    }
+    return this._ensureAllCores()
   }
 
   // triggered from linearized core
@@ -525,19 +520,6 @@ module.exports = class Autobase extends ReadyResource {
 
     // fetch any nodes needed for dependents
     this._bump()
-  }
-
-  // triggered from system
-  _onremovewriter (key) {
-    for (let i = 0; i < this.writers.length; i++) {
-      const w = this.writers[i]
-
-      if (b4a.equals(w.core.key, key)) {
-        popAndSwap(this.writers, i)
-        this._removedWriters.push(w)
-        return
-      }
-    }
   }
 
   _undo (popped) {
@@ -581,25 +563,31 @@ module.exports = class Autobase extends ReadyResource {
     let batch = []
     let j = 0
 
-    for (let i = 0; i < Math.min(u.indexed.length, u.shared); i++) {
-      const node = u.indexed[i]
+    let i = 0
+    while (i < Math.min(u.indexed.length, u.shared)) {
+      const node = u.indexed[i++]
 
       node.writer.indexed++
+      node.clear()
+
       if (node.batch > 1) continue
 
       const update = this._updates[j++]
       if (update.system === 0) continue
 
-      await this._flushAndCheckpoint(i + 1, node.indexed)
-      return true
+      await this._flushAndCheckpoint(i, node.indexed)
+
+      const nodes = u.indexed.slice(i).concat(u.tip)
+      return { count: u.shared - i, nodes }
     }
 
-    for (let i = u.shared; i < u.length; i++) {
+    for (i = u.shared; i < u.length; i++) {
       const indexed = i < u.indexed.length
       const node = indexed ? u.indexed[i] : u.tip[i - u.indexed.length]
 
       if (indexed) {
         node.writer.indexed++
+        node.clear()
       }
 
       batch.push({
@@ -622,15 +610,17 @@ module.exports = class Autobase extends ReadyResource {
 
       batch = []
 
-      for (let i = 0; i < update.user.length; i++) {
-        const u = update.user[i]
+      for (let k = 0; k < update.user.length; k++) {
+        const u = update.user[k]
         u.appending = u.core.appending
         u.core.appending = 0
       }
 
       if (update.system > 0 && indexed) {
         await this._flushAndCheckpoint(i + 1, node.indexed)
-        return true
+
+        const nodes = u.indexed.slice(i + 1).concat(u.tip)
+        return { count: 0, nodes }
       }
     }
 
@@ -638,7 +628,7 @@ module.exports = class Autobase extends ReadyResource {
       await this._flushAndCheckpoint(u.indexed.length, u.indexed[u.indexed.length - 1].indexed)
     }
 
-    return false
+    return null
   }
 
   async _flushAndCheckpoint (indexed, heads) {
@@ -733,4 +723,8 @@ function downloadAll (core) {
   const end = core.core.tree.length
 
   return core.download({ start, end, ifAvailable: true }).done()
+}
+
+function compareHead (head, node) {
+  return head.length === node.length && b4a.equals(head.key, node.writer.core.key)
 }
