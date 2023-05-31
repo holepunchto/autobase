@@ -465,6 +465,92 @@ test('closing an autobase', async t => {
   t.is(base.local.closed, true)
 })
 
+test('flush after restart', async t => {
+  const bases = await create(9, apply, store => store.get('test', { valueEncoding: 'json' }))
+
+  const root = bases[0]
+  const adds = []
+  let msg = 0
+
+  adds.push(addWriter(root, bases[1]))
+  adds.push(addWriter(root, bases[2]))
+  adds.push(addWriter(root, bases[3]))
+  adds.push(addWriter(root, bases[4]))
+  adds.push(addWriter(root, bases[5]))
+  adds.push(addWriter(root, bases[6]))
+  adds.push(addWriter(root, bases[7]))
+  adds.push(addWriter(root, bases[8]))
+
+  await Promise.all(adds)
+  await sync(bases)
+
+  await t.execution(bases[0].append('msg' + msg++))
+  await t.execution(bases[1].append('msg' + msg++))
+  await t.execution(bases[2].append('msg' + msg++))
+  await t.execution(bases[3].append('msg' + msg++))
+  await t.execution(bases[4].append('msg' + msg++))
+  await t.execution(bases[5].append('msg' + msg++))
+  await t.execution(bases[6].append('msg' + msg++))
+  await t.execution(bases[7].append('msg' + msg++))
+  await t.execution(bases[8].append('msg' + msg++))
+})
+
+test('seuential restarts', async t => {
+  const bases = await create(9, apply, store => store.get('test', { valueEncoding: 'json' }))
+
+  const root = bases[0]
+  const adds = []
+  let msg = 0
+
+  adds.push(addWriter(root, bases[1]))
+  adds.push(addWriter(root, bases[2]))
+
+  await Promise.all(adds)
+  await sync(bases)
+
+  for (let i = 2; i < bases.length + 3; i++) {
+    const appends = []
+
+    if (i < bases.length) await addWriter(bases[i - 1], bases[i])
+
+    if (i > 0) appends.push(bases[0].append('msg' + msg++))
+    if (i > 1) appends.push(bases[1].append('msg' + msg++))
+    if (i > 2) appends.push(bases[2].append('msg' + msg++))
+    if (i > 3) appends.push(bases[3].append('msg' + msg++))
+    if (i > 4) appends.push(bases[4].append('msg' + msg++))
+    if (i > 5) appends.push(bases[5].append('msg' + msg++))
+    if (i > 6) appends.push(bases[6].append('msg' + msg++))
+    if (i > 7) appends.push(bases[7].append('msg' + msg++))
+    if (i > 8) appends.push(bases[8].append('msg' + msg++))
+
+    await Promise.all(appends)
+    await sync(bases.slice(1))
+
+    if (i % 2 === 1) {
+      await sync(bases)
+      if (i < bases.length) {
+        t.is(
+          bases[0].linearizer.indexers.length,
+          bases[i - 1].linearizer.indexers.length
+        )
+      }
+    }
+  }
+
+  await sync(bases)
+
+  t.is(bases[0].system.digest.heads.length, bases.length)
+  t.is(bases[0].system.digest.writers.length, bases.length)
+
+  t.not(bases[0].view.indexedLength, 0)
+  t.not(bases[0].view.indexedLength, bases[0].view.length)
+
+  for (let i = 1; i < bases.length; i++) {
+    t.is(bases[0].view.indexedLength, bases[i].view.indexedLength)
+    t.is(bases[0].view.length, bases[i].view.length)
+  }
+})
+
 // test should throw for commit f41f5544dbe8743f6ad3b9886e7aa472344bc9c7 (with debug set to false)
 test.skip('consistent writers', async t => {
   const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }))
@@ -518,4 +604,45 @@ test.skip('consistent writers', async t => {
 
     return true
   }
+})
+
+test('basic - pass exisiting store', async t => {
+  const [base1] = await create(1, apply)
+
+  const store = new Corestore(ram.reusable(), {
+    primaryKey: Buffer.alloc(32).fill(1)
+  })
+
+  const ns2 = store.namespace('1')
+  const base2 = new Autobase(ns2, [base1.local.key], { apply, valueEncoding: 'json' })
+  await base2.ready()
+
+  await base1.append({
+    add: base2.local.key.toString('hex'),
+    debug: 'this is adding b'
+  })
+
+  await base1.append({
+    value: 'base1'
+  })
+
+  await confirm([base1, base2])
+
+  await base2.append({
+    value: 'base2'
+  })
+
+  await confirm([base1, base2])
+
+  t.is(base2.system.digest.writers.length, 2)
+
+  await base2.close()
+
+  const ns3 = store.namespace('1')
+  const base3 = new Autobase(ns3, [base1.local.key], { apply, valueEncoding: 'json' })
+  await base3.ready()
+
+  await base3.update({ wait: false })
+
+  t.is(base3.system.digest.writers.length, 2)
 })
