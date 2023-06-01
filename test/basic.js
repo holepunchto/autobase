@@ -161,7 +161,6 @@ test('basic - online majority', async t => {
   t.not(a.view.indexedLength, indexed)
   t.is(c.view.indexedLength, indexed)
   t.is(a.view.indexedLength, b.view.indexedLength)
-
   try {
     await compare(a, b)
   } catch (e) {
@@ -645,4 +644,28 @@ test('basic - pass exisiting store', async t => {
   await base3.update({ wait: false })
 
   t.is(base3.system.digest.writers.length, 2)
+})
+
+test.skip('two writers write many messages, third writer joins', async t => {
+  // TODO: test this passes with next linearliser version
+  const [base1, base2, base3] = await create(3, apply)
+
+  await base1.append({
+    add: base2.local.key.toString('hex'),
+    debug: 'this is adding writer 2'
+  })
+
+  for (let i = 0; i < 10000; i++) {
+    base1.append({ value: `Message${i}` })
+  }
+
+  await confirm([base1, base2])
+
+  await base1.append({
+    add: base3.local.key.toString('hex'),
+    debug: 'this is adding writer 3'
+  })
+
+  await confirm([base1, base2, base3])
+  t.pass('Confirming did not throw RangeError: Maximum call stack size exceeded')
 })
