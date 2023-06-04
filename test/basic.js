@@ -364,6 +364,8 @@ test('basic - restarting sets bootstrap correctly', async t => {
 
     bootstrapKey = base.bootstraps[0]
     localKey = base.local.key
+
+    await base.close()
   }
 
   {
