@@ -159,7 +159,7 @@ class LinearizedStore {
 
     if (this.opened.has(name)) return this.opened.get(name).openSession(opts)
 
-    const core = this.base.store.get({ name: 'view/' + name })
+    const core = this.base.store.get({ name: 'view/' + name, exclusive: true })
     const l = new LinearizedCore(this.base, core, name, valueEncoding)
 
     this.waiting.push(l)
@@ -185,9 +185,11 @@ module.exports = class Autobase extends ReadyResource {
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
     this._primaryBootstrap = null
+    this._mainStore = null
 
     if (this.bootstraps.length) {
-      this._primaryBootstrap = this.store.get(this.bootstraps[0])
+      this._primaryBootstrap = this.store.get({ key: this.bootstraps[0] })
+      this._mainStore = this.store
       this.store = this.store.namespace(this._primaryBootstrap)
     }
 
@@ -196,7 +198,7 @@ module.exports = class Autobase extends ReadyResource {
     this.linearizer = null
 
     this.writers = []
-    this.system = new SystemView(this, this.store.get({ name: 'system' }))
+    this.system = new SystemView(this, this.store.get({ name: 'system', exclusive: true }))
 
     this._appending = new FIFO()
 
@@ -266,7 +268,9 @@ module.exports = class Autobase extends ReadyResource {
 
   async _close () {
     if (this._hasClose) await this._handlers.close(this.view)
+    if (this._primaryBootstrap) await this._primaryBootstrap.close()
     await this.store.close()
+    if (this._mainStore) await this._mainStore.close()
   }
 
   async _ensureUserData (core, name) {
@@ -335,7 +339,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   static getLocalCore (store) {
-    return store.get({ name: 'local', valueEncoding: messages.OplogMessage })
+    return store.get({ name: 'local', exclusive: true, valueEncoding: messages.OplogMessage })
   }
 
   static async getUserData (core) {
