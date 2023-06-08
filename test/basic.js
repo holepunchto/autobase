@@ -671,3 +671,23 @@ test.skip('two writers write many messages, third writer joins', async t => {
   await confirm([base1, base2, base3])
   t.pass('Confirming did not throw RangeError: Maximum call stack size exceeded')
 })
+
+test('basic - gc indexed nodes', async t => {
+  const [base] = await create(1, apply, store => store.get('test', { valueEncoding: 'json' }))
+
+  await base.append({ message: '0' })
+  await base.append({ message: '1' })
+  await base.append({ message: '2' })
+  await base.append({ message: '3' })
+  await base.append({ message: '4' })
+
+  t.is(base.system.digest.writers.length, 1)
+  t.is(base.view.indexedLength, 5)
+  t.is(base.localWriter.nodes.size, 0)
+
+  t.alike(await base.view.get(0), { message: '0' })
+  t.alike(await base.view.get(1), { message: '1' })
+  t.alike(await base.view.get(2), { message: '2' })
+  t.alike(await base.view.get(3), { message: '3' })
+  t.alike(await base.view.get(4), { message: '4' })
+})

@@ -9,6 +9,7 @@ const Linearizer = require('./lib/linearizer')
 const LinearizedCore = require('./lib/core')
 const SystemView = require('./lib/system')
 const messages = require('./lib/messages')
+const NodeBuffer = require('./lib/node-buffer')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 const REFERRER_USERDATA = 'referrer'
@@ -18,13 +19,15 @@ class Writer {
   constructor (base, core, length) {
     this.base = base
     this.core = core
-    this.nodes = []
-    this.length = length
-    this.offset = length
+    this.nodes = new NodeBuffer(length)
     this.indexed = length
 
     this.next = null
     this.nextCache = null
+  }
+
+  get length () {
+    return this.nodes.length
   }
 
   compare (writer) {
@@ -32,25 +35,21 @@ class Writer {
   }
 
   head () {
-    const len = this.length - this.offset
-    return len === 0 ? null : this.nodes[len - 1]
+    return this.nodes.get(this.nodes.length - 1)
   }
 
   shift () {
-    if (this.offset === this.length) return null
-    this.offset++
     return this.nodes.shift()
   }
 
   getCached (seq) {
-    return seq >= this.offset ? this.nodes[seq - this.offset] : null
+    return this.nodes.get(seq)
   }
 
   advance (node = this.next) {
     this.nodes.push(node)
     this.next = null
     this.nextCache = null
-    this.length++
     return node
   }
 
@@ -572,7 +571,7 @@ module.exports = class Autobase extends ReadyResource {
       const node = u.indexed[i++]
 
       node.writer.indexed++
-      node.clear()
+      node.writer.shift().clear()
 
       if (node.batch > 1) continue
 
@@ -591,7 +590,11 @@ module.exports = class Autobase extends ReadyResource {
 
       if (indexed) {
         node.writer.indexed++
-        node.clear()
+
+        // local flushed in _flushLocal
+        if (node.writer !== this.localWriter) {
+          node.writer.shift().clear()
+        }
       }
 
       batch.push({
@@ -691,7 +694,9 @@ module.exports = class Autobase extends ReadyResource {
     const blocks = new Array(this.localWriter.length - this.local.length)
 
     for (let i = 0; i < blocks.length; i++) {
-      const { value, heads, batch } = this.localWriter.getCached(this.local.length + i)
+      const { value, heads, batch, yielded } = this.localWriter.getCached(this.local.length + i)
+
+      if (yielded) this.localWriter.shift().clear()
 
       blocks[i] = {
         value: c.encode(this.valueEncoding, value),
