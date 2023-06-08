@@ -118,9 +118,11 @@ The discovery key associated with the autobase.
 
 Append a new entry to the autobase.
 
-#### `await base.update()`
+#### `await base.update({ wait: false })`
 
 Fetch all available data and update the linearizer.
+
+Setting `wait` option will wait for latest writer blocks to be fetched.
 
 #### `const checkpoint = await base.checkpoint()`
 
