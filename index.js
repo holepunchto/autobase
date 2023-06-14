@@ -58,11 +58,7 @@ class Writer {
 
     for (const dep of dependencies) {
       if (!dep.yielded) {
-        for (const [writer, length] of dep.clock) {
-          if (node.clock.get(writer) < length) {
-            node.clock.set(writer, length)
-          }
-        }
+        node.clock.add(dep.clock)
       }
 
       node.heads.push({
@@ -411,7 +407,9 @@ module.exports = class Autobase extends ReadyResource {
     for (const head of this.system.digest.heads) {
       for (const w of indexers) {
         if (b4a.equals(w.core.key, head.key)) {
-          heads.push(Linearizer.createNode(w, head.length, null, [], 1, []))
+          const headNode = Linearizer.createNode(w, head.length, null, [], 1, [])
+          headNode.yielded = true
+          heads.push(headNode)
         }
       }
     }
@@ -428,6 +426,7 @@ module.exports = class Autobase extends ReadyResource {
 
     for (const node of nodes) {
       node.yielded = false
+      node.dependents.clear()
 
       for (let i = 0; i < node.heads.length; i++) {
         const link = node.heads[i]
@@ -474,7 +473,7 @@ module.exports = class Autobase extends ReadyResource {
       while (!this._appending.isEmpty()) {
         const batch = this._appending.length
         const value = this._appending.shift()
-        const heads = this.linearizer.heads.slice(0)
+        const heads = new Set(this.linearizer.heads)
         const node = this.localWriter.append(value, heads, batch)
         this.linearizer.addHead(node)
       }
