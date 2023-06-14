@@ -278,6 +278,34 @@ test('basic - throws', async t => {
   t.exception(() => a.system.addWriter(b.local.key))
 })
 
+test('basic - add 5 writers', async t => {
+  const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }))
+
+  const [a, b, c, d, e] = bases
+
+  await a.append({ add: b.local.key.toString('hex') })
+  await a.append({ add: c.local.key.toString('hex') })
+  await a.append({ add: d.local.key.toString('hex') })
+  await a.append({ add: e.local.key.toString('hex') })
+
+  await confirm(bases)
+
+  t.is(a.writers.length, 5)
+  t.is(a.system.digest.writers.length, 5)
+
+  t.is(a.writers.length, b.writers.length)
+  t.is(a.system.digest.writers.length, b.system.digest.writers.length)
+
+  t.is(a.writers.length, c.writers.length)
+  t.is(a.system.digest.writers.length, c.system.digest.writers.length)
+
+  t.is(a.writers.length, d.writers.length)
+  t.is(a.system.digest.writers.length, d.system.digest.writers.length)
+
+  t.is(a.writers.length, e.writers.length)
+  t.is(a.system.digest.writers.length, e.system.digest.writers.length)
+})
+
 test('basic - online minorities', async t => {
   const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }))
 
@@ -496,7 +524,65 @@ test('flush after restart', async t => {
   await t.execution(bases[8].append('msg' + msg++))
 })
 
-test('seuential restarts', async t => {
+test('restart', async t => {
+  const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }))
+
+  const [a, b, c, d, e] = bases
+
+  let msg = 0
+
+  await Promise.all([
+    addWriter(a, b),
+    addWriter(a, c)
+  ])
+
+  await confirm([a, b])
+
+  // a sends message
+  await a.append('a:' + msg++)
+
+  // b and c add writer
+  await addWriter(b, bases[3])
+  await confirm([b, c], 3)
+
+  t.is(b.system.digest.writers.length, 4)
+
+  // trigger restart for a
+  await sync([a, b, c, d])
+
+  await a.append('a:' + msg++)
+  await b.append('b:' + msg++)
+  await c.append('c:' + msg++)
+  await d.append('d:' + msg++)
+
+  await sync([a, b, c, d])
+
+  // d sends message
+  await d.append('d:' + msg++)
+
+  // a, b and c add writer
+  await addWriter(a, e)
+  await confirm([a, b, c], 4)
+
+  t.is(b.system.digest.writers.length, 5)
+
+  // trigger restart for a
+  await sync([a, b, c, d, e])
+
+  t.is(a.system.digest.heads.length, 1)
+  t.is(a.system.digest.writers.length, bases.length)
+
+  t.not(a.view.indexedLength, a.view.length)
+
+  for (let i = 1; i < bases.length; i++) {
+    const [l, r] = [bases[0], bases[i]]
+
+    t.is(l.view.indexedLength, r.view.indexedLength)
+    t.is(l.view.length, r.view.length)
+  }
+})
+
+test('sequential restarts', async t => {
   const bases = await create(9, apply, store => store.get('test', { valueEncoding: 'json' }))
 
   const root = bases[0]
@@ -507,28 +593,37 @@ test('seuential restarts', async t => {
   adds.push(addWriter(root, bases[2]))
 
   await Promise.all(adds)
-  await sync(bases)
+  await confirm(bases.slice(0, 3))
 
-  for (let i = 2; i < bases.length + 3; i++) {
+  for (let i = 2; i < bases.length + 5; i++) {
     const appends = []
 
-    if (i < bases.length) await addWriter(bases[i - 1], bases[i])
+    const syncers = bases.slice(0, i + 1)
+    const [isolated] = syncers.splice(i - 1, 1)
 
-    if (i > 0) appends.push(bases[0].append('msg' + msg++))
-    if (i > 1) appends.push(bases[1].append('msg' + msg++))
-    if (i > 2) appends.push(bases[2].append('msg' + msg++))
-    if (i > 3) appends.push(bases[3].append('msg' + msg++))
-    if (i > 4) appends.push(bases[4].append('msg' + msg++))
-    if (i > 5) appends.push(bases[5].append('msg' + msg++))
-    if (i > 6) appends.push(bases[6].append('msg' + msg++))
-    if (i > 7) appends.push(bases[7].append('msg' + msg++))
-    if (i > 8) appends.push(bases[8].append('msg' + msg++))
+    // confirm over this node
+    // include all dag except previous addWriter
+    await sync(syncers)
+    bases[0].append(null)
+    await sync(syncers)
+
+    // everyone writes a message
+    for (let j = 0; j < Math.min(i, bases.length); j++) {
+      appends.push(bases[j].append('msg' + msg++))
+    }
 
     await Promise.all(appends)
-    await sync(bases.slice(1))
+    await sync(syncers)
+
+    // unsynced writer adds a node
+    if (i < bases.length) {
+      const newguy = bases[i]
+      await addWriter(isolated, newguy)
+
+      await sync([isolated, newguy])
+    }
 
     if (i % 2 === 1) {
-      await sync(bases)
       if (i < bases.length) {
         t.is(
           bases[0].linearizer.indexers.length,
@@ -538,13 +633,13 @@ test('seuential restarts', async t => {
     }
   }
 
-  await sync(bases)
-
   t.is(bases[0].system.digest.heads.length, bases.length)
   t.is(bases[0].system.digest.writers.length, bases.length)
 
   t.not(bases[0].view.indexedLength, 0)
   t.not(bases[0].view.indexedLength, bases[0].view.length)
+
+  await sync(bases)
 
   for (let i = 1; i < bases.length; i++) {
     t.is(bases[0].view.indexedLength, bases[i].view.indexedLength)

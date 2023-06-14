@@ -111,8 +111,6 @@ class Linearizer {
     this.heads.add(node)
     this.indexerHeads.set(node.writer, node)
 
-    while (this._shiftPending()) {}
-
     return node
   }
 
@@ -204,18 +202,6 @@ class Linearizer {
     if (this.debug) console.log(this.debug + ':', ...m)
   }
 
-  shift () {
-    const node = this.pending.shift() || null
-    if (!node) return null
-
-    for (const d of node.dependents) {
-      const i = d.deps.indexOf(node)
-      d.deps.splice(i, 1)
-    }
-
-    return node
-  }
-
   _yield (node) {
     if (node.dependencies.length === 0) return this._remove(node)
     if (node.dependencies.length === 1) return this._yield(node.dependencies[0])
@@ -236,13 +222,12 @@ class Linearizer {
     return this._yield(best)
   }
 
-  _shiftPending () {
+  shift () {
     for (const tail of this.tails) {
       this._debug('tail', tail.writer.key, tail.seq, this._isConfirmed(tail))
 
       if (this._isConfirmed(tail)) {
-        this.pending.push(this._yield(tail))
-        return true
+        return this._yield(tail)
       }
     }
 
@@ -250,13 +235,11 @@ class Linearizer {
       this._debug('merge', merge.writer.key, merge.seq, this._isConfirmed(merge))
 
       if (this._isConfirmed(merge)) {
-        const node = this._yield(merge)
-        this.pending.push(node)
-        return true
+        return this._yield(merge)
       }
     }
 
-    return false
+    return null
   }
 
   _remove (node) {
@@ -271,6 +254,9 @@ class Linearizer {
       const i = d.dependencies.indexOf(node)
       d.dependencies.splice(i, 1)
       if (d.dependencies.length === 0) this.tails.add(d)
+
+      const j = d.deps.indexOf(node)
+      d.deps.splice(j, 1)
     }
 
     return node

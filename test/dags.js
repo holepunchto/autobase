@@ -43,7 +43,7 @@ test('simple 2', async t => {
     t.fail(e.message)
   }
 
-  t.is(a.linearizer.tails.length, 1)
+  t.is(a.linearizer.tails.size, 1)
 })
 
 /*
@@ -95,7 +95,7 @@ test('simple 3', async t => {
     t.fail(e.message)
   }
 
-  t.is(a.linearizer.tails.length, 1)
+  t.is(a.linearizer.tails.size, 1)
 })
 
 /*
@@ -177,7 +177,7 @@ test.skip('convergence', async t => {
   t.alike(c.view.indexedLength, b.view.indexedLength)
   t.alike(a.view.indexedLength, c.view.indexedLength)
 
-  t.is(a.linearizer.tails.length, 1)
+  t.is(a.linearizer.tails.size, 1)
 
   try {
     await compare(a, b)
@@ -253,7 +253,7 @@ test.skip('inner majority', async t => {
   await b.append('b' + bi++)
 
   t.is(b.view.indexedLength, 3)
-  t.is(b.linearizer.tails.length, 1)
+  t.is(b.linearizer.tails.size, 1)
 })
 
 /*
@@ -309,7 +309,7 @@ test('majority alone - convergence', async t => {
   t.is(c.view.indexedLength, 2)
   t.is(d.view.indexedLength, 2)
 
-  t.is(b.linearizer.tails.length, 1)
+  t.is(b.linearizer.tails.size, 1)
 })
 
 test('add writer', async t => {
@@ -366,8 +366,8 @@ test('add writer', async t => {
   await t.execution(compare(a, b))
   await t.execution(compare(a, c))
 
-  t.is(a.linearizer.tails.length, b.linearizer.tails.length)
-  t.is(b.linearizer.tails.length, c.linearizer.tails.length)
+  t.is(a.linearizer.tails.size, b.linearizer.tails.size)
+  t.is(b.linearizer.tails.size, c.linearizer.tails.size)
 })
 
 /*
@@ -434,8 +434,8 @@ test('majority alone - non-convergence', async t => {
 
   await sync(bases)
 
-  t.is(a.linearizer.tails.length, b.linearizer.tails.length)
-  t.is(b.linearizer.tails.length, c.linearizer.tails.length)
+  t.is(a.linearizer.tails.size, b.linearizer.tails.size)
+  t.is(b.linearizer.tails.size, c.linearizer.tails.size)
 })
 
 /*

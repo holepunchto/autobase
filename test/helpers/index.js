@@ -46,7 +46,9 @@ async function sync (bases) {
     }
   }
 
-  await Promise.all(bases.map(b => b.update({ wait: true })))
+  for (let i = 0; i < bases.length; i++) {
+    await bases[i].update({ wait: true })
+  }
 
   const closes = []
 
@@ -62,16 +64,22 @@ async function addWriter (base, add) {
   return base.append({ add: add.local.key.toString('hex') })
 }
 
-async function confirm (bases) {
+async function confirm (bases, length) {
+  await sync(bases)
+  await bases[0].append(null)
   await sync(bases)
 
-  const writers = bases.filter(b => !!b.localWriter)
-  const maj = Math.floor(writers.length / 2) + 1
+  for (let i = 0; i < 2; i++) {
+    const writers = bases.filter(b => !!b.localWriter)
+    const maj = Math.floor((length || writers.length) / 2) + 1
 
-  for (let i = 0; i < maj; i++) await writers[i].append(null)
+    for (let j = 0; j < maj; j++) {
+      await writers[j].append(null)
+      await sync(bases)
+    }
+  }
+
   await sync(bases)
-  for (let i = 0; i < maj; i++) await writers[i].append(null)
-  return sync(bases)
 }
 
 async function compare (a, b, full = false) {
