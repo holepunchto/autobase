@@ -380,7 +380,7 @@ test('basic - online minorities', async t => {
 })
 
 test('basic - restarting sets bootstrap correctly', async t => {
-  const store = new Corestore(ram)
+  const store = new Corestore(ram.reusable())
 
   let bootstrapKey = null
   let localKey = null
