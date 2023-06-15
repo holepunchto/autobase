@@ -172,18 +172,18 @@ class LinearizedStore {
 }
 
 module.exports = class Autobase extends ReadyResource {
-  constructor (store, bootstraps, handlers) {
+  constructor (store, bootstrap, handlers) {
     super()
 
     this.sparse = false
-    this.bootstraps = [].concat(bootstraps || []).map(toKey).sort((a, b) => b4a.compare(a, b))
+    this.bootstrap = bootstrap ? toKey(bootstrap) : null
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
     this._primaryBootstrap = null
     this._mainStore = null
 
-    if (this.bootstraps.length) {
-      this._primaryBootstrap = this.store.get({ key: this.bootstraps[0] })
+    if (this.bootstrap) {
+      this._primaryBootstrap = this.store.get({ key: this.bootstrap })
       this._mainStore = this.store
       this.store = this.store.namespace(this._primaryBootstrap)
     }
@@ -248,8 +248,8 @@ module.exports = class Autobase extends ReadyResource {
     await this.local.ready()
     await this.system.ready()
 
-    if (this.system.bootstrapping && this.bootstraps.length === 0) {
-      this.bootstraps.push(this.local.key) // new autobase!
+    if (this.system.bootstrapping && !this.bootstrap) {
+      this.bootstrap = this.local.key // new autobase!
     }
 
     await this._ensureUserData(this.system.core)
@@ -390,10 +390,7 @@ module.exports = class Autobase extends ReadyResource {
     const indexers = []
 
     if (this.system.bootstrapping) {
-      for (const key of this.bootstraps) {
-        indexers.push(this._makeWriter(key, 0))
-      }
-
+      indexers.push(this._makeWriter(this.bootstrap, 0))
       this.writers = indexers.slice()
     } else {
       for (const { key } of this.system.digest.writers) {
@@ -552,9 +549,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _bootstrap () {
-    for (const key of this.bootstraps) {
-      this.system.addWriter(key)
-    }
+    this.system.addWriter(this.bootstrap)
   }
 
   async _applyUpdate (u) {

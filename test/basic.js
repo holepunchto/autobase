@@ -97,14 +97,14 @@ test('basic - view/writer userdata is set', async t => {
     const viewData = await Autobase.getUserData(base.view.core.core)
     const systemData = await Autobase.getUserData(base.system.core)
 
-    t.alike(systemData.referrer, base.bootstraps[0])
-    t.alike(viewData.referrer, base.bootstraps[0])
+    t.alike(systemData.referrer, base.bootstrap)
+    t.alike(viewData.referrer, base.bootstrap)
     t.is(viewData.view, 'test')
 
     t.is(base.writers.length, 2)
     for (const writer of base.writers) {
       const writerData = await Autobase.getUserData(writer.core)
-      t.alike(writerData.referrer, base.bootstraps[0])
+      t.alike(writerData.referrer, base.bootstrap)
     }
   }
 })
@@ -390,7 +390,7 @@ test('basic - restarting sets bootstrap correctly', async t => {
     const base = new Autobase(ns, null, {})
     await base.ready()
 
-    bootstrapKey = base.bootstraps[0]
+    bootstrapKey = base.bootstrap
     localKey = base.local.key
 
     await base.close()
@@ -398,11 +398,11 @@ test('basic - restarting sets bootstrap correctly', async t => {
 
   {
     const ns = store.namespace(bootstrapKey)
-    const base = new Autobase(ns, [bootstrapKey], {})
+    const base = new Autobase(ns, bootstrapKey, {})
     await base.ready()
 
-    t.alike(base.bootstraps[0], bootstrapKey)
-    t.alike(base.local.key, base.bootstraps[0])
+    t.alike(base.bootstrap, bootstrapKey)
+    t.alike(base.local.key, base.bootstrap)
     t.alike(base.local.key, localKey)
   }
 })
@@ -710,7 +710,7 @@ test('basic - pass exisiting store', async t => {
   })
 
   const ns2 = store.namespace('1')
-  const base2 = new Autobase(ns2, [base1.local.key], { apply, valueEncoding: 'json' })
+  const base2 = new Autobase(ns2, base1.local.key, { apply, valueEncoding: 'json' })
   await base2.ready()
 
   await base1.append({
@@ -735,7 +735,7 @@ test('basic - pass exisiting store', async t => {
   await base2.close()
 
   const ns3 = store.namespace('1')
-  const base3 = new Autobase(ns3, [base1.local.key], { apply, valueEncoding: 'json' })
+  const base3 = new Autobase(ns3, base1.local.key, { apply, valueEncoding: 'json' })
   await base3.ready()
 
   await base3.update({ wait: false })
