@@ -92,7 +92,7 @@ async function compare (a, b, full = false) {
     const left = await a.view.get(i)
     const right = await b.view.get(i)
 
-    if (!equal(left, right)) throw new Error('Views differ at block' + i)
+    if (!equal(left, right)) throw new Error('Views differ at block ' + i)
   }
 }
 

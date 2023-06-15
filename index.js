@@ -4,9 +4,10 @@ const FIFO = require('fast-fifo')
 const debounceify = require('debounceify')
 const c = require('compact-encoding')
 const safetyCatch = require('safety-catch')
+const assert = require('nanoassert')
 
 const Linearizer = require('./lib/linearizer')
-const LinearizedCore = require('./lib/core')
+const Autocore = require('./lib/core')
 const SystemView = require('./lib/system')
 const messages = require('./lib/messages')
 const NodeBuffer = require('./lib/node-buffer')
@@ -150,17 +151,17 @@ class LinearizedStore {
     if (moreOpts) opts = { ...opts, ...moreOpts }
 
     const name = opts.name
-    const valueEncoding = opts.valueEncoding
+    const valueEncoding = opts.valueEncoding || null
 
-    if (this.opened.has(name)) return this.opened.get(name).openSession(opts)
+    if (this.opened.has(name)) return this.opened.get(name).createSession(valueEncoding)
 
     const core = this.base.store.get({ name: 'view/' + name, exclusive: true })
-    const l = new LinearizedCore(this.base, core, name, valueEncoding)
+    const ac = new Autocore(this.base, core, name)
 
-    this.waiting.push(l)
-    this.opened.set(name, l)
+    this.waiting.push(ac)
+    this.opened.set(name, ac)
 
-    return l.openSession(opts)
+    return ac.createSession(valueEncoding)
   }
 
   async update () {
@@ -216,10 +217,11 @@ module.exports = class Autobase extends ReadyResource {
     this._hasClose = !!this._handlers.close
 
     this._viewStore = new LinearizedStore(this)
-
-    this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
+    this.view = null
 
     this.ready().catch(safetyCatch)
+
+    this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
   }
 
   [inspect] (depth, opts) {
@@ -252,7 +254,7 @@ module.exports = class Autobase extends ReadyResource {
       this.bootstrap = this.local.key // new autobase!
     }
 
-    await this._ensureUserData(this.system.core)
+    await this._ensureUserData(this.system.core, null)
   }
 
   async _open () {
@@ -279,7 +281,7 @@ module.exports = class Autobase extends ReadyResource {
     while (this._needsReady.length > 0) {
       const core = this._needsReady.pop()
       await core.ready()
-      await this._ensureUserData(core)
+      await this._ensureUserData(core, null)
     }
   }
 
@@ -494,7 +496,7 @@ module.exports = class Autobase extends ReadyResource {
 
   // triggered from linearized core
   _onuserappend (core, blocks) {
-    if (this._applying === null) throw new Error('Append is only allowed in apply')
+    assert(this._applying !== null, 'Append is only allowed in apply')
 
     if (core.appending === 0) {
       this._applying.user.push({ core, appending: 0 })
@@ -504,7 +506,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _onsystemappend (blocks) {
-    if (this._applying === null) throw new Error('System changes are only allowed in apply')
+    assert(this._applying !== null, 'System changes are only allowed in apply')
 
     this._applying.system += blocks
   }
@@ -654,7 +656,7 @@ module.exports = class Autobase extends ReadyResource {
 
       for (const { core, appending } of u.user) {
         const start = core.indexing
-        const blocks = core.tip.slice(start, core.indexing += appending)
+        const blocks = core.indexBatch(start, core.indexing += appending)
         if (start === 0) updatedCores.push(core)
 
         await core.core.append(blocks)

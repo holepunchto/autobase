@@ -94,7 +94,7 @@ test('basic - view/writer userdata is set', async t => {
   await verifyUserData(base2)
 
   async function verifyUserData (base) {
-    const viewData = await Autobase.getUserData(base.view.core.core)
+    const viewData = await Autobase.getUserData(base.view)
     const systemData = await Autobase.getUserData(base.system.core)
 
     t.alike(systemData.referrer, base.bootstrap)
