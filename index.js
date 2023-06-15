@@ -174,6 +174,7 @@ class LinearizedStore {
 
 module.exports = class Autobase extends ReadyResource {
   constructor (store, bootstrap, handlers) {
+    if (Array.isArray(bootstrap)) bootstrap = bootstrap[0] // TODO: just a quick compat, lets remove soon
     super()
 
     this.sparse = false
