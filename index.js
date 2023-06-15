@@ -234,6 +234,11 @@ module.exports = class Autobase extends ReadyResource {
     return indent + 'Autobase { ... }'
   }
 
+  // TODO: compat, will be removed
+  get bootstraps () {
+    return [this.bootstrap]
+  }
+
   get writable () {
     return this.localWriter !== null
   }
