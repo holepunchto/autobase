@@ -786,3 +786,29 @@ test('basic - gc indexed nodes', async t => {
   t.alike(await base.view.get(3), { message: '3' })
   t.alike(await base.view.get(4), { message: '4' })
 })
+
+test('basic - isAutobase', async t => {
+  const [base1, base2, base3] = await create(3, apply)
+
+  await base1.append({
+    add: base2.local.key.toString('hex'),
+    debug: 'this is adding b'
+  })
+
+  await confirm([base1, base2, base3])
+
+  await base2.append({
+    add: base3.local.key.toString('hex'),
+    debug: 'this is adding c'
+  })
+
+  await confirm([base1, base2, base3])
+
+  t.is(await Autobase.isAutobase(base1.local), true)
+  t.is(await Autobase.isAutobase(base2.local), true)
+  await t.exception(Autobase.isAutobase(base3.local, { wait: false }))
+
+  await base3.append('hello')
+
+  t.is(await Autobase.isAutobase(base3.local), true)
+})

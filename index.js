@@ -79,9 +79,9 @@ class Writer {
     if (this.next !== null || !(await this.core.has(this.length))) return this.next
 
     if (this.nextCache === null) {
-      const block = await this.core.get(this.length)
-      const value = c.decode(this.base.valueEncoding, block.value)
-      this.nextCache = Linearizer.createNode(this, this.length + 1, value, block.heads, block.batch, [])
+      const { node } = await this.core.get(this.length)
+      const value = c.decode(this.base.valueEncoding, node.value)
+      this.nextCache = Linearizer.createNode(this, this.length + 1, value, node.heads, node.batch, [])
     }
 
     this.next = await this.ensureNode(this.nextCache)
@@ -208,6 +208,7 @@ module.exports = class Autobase extends ReadyResource {
     this._bump = debounceify(this._advance.bind(this))
     this._onremotewriterchange = () => this._bump().catch(safetyCatch)
 
+    this.version = 0 // todo: set version
     this._checkpointer = 0
     this._checkpoint = null
 
@@ -350,6 +351,19 @@ module.exports = class Autobase extends ReadyResource {
     return {
       referrer: await core.getUserData(REFERRER_USERDATA),
       view: viewName ? b4a.toString(viewName) : null
+    }
+  }
+
+  static async isAutobase (core, opts = {}) {
+    const block = await core.get(0, opts)
+    if (!block) throw new Error('Core is empty.')
+    if (!b4a.isBuffer(block)) return isAutobaseMessage(block)
+
+    try {
+      const m = c.decode(messages.OplogMessage, block)
+      return isAutobaseMessage(m)
+    } catch (e) {
+      return false
     }
   }
 
@@ -701,11 +715,15 @@ module.exports = class Autobase extends ReadyResource {
       if (yielded) this.localWriter.shift().clear()
 
       blocks[i] = {
-        value: c.encode(this.valueEncoding, value),
-        heads,
-        batch,
+        version: this.version,
         checkpointer: this._checkpointer,
-        checkpoint: this._checkpointer === 0 ? this._checkpoint : null
+        checkpoint: this._checkpointer === 0 ? this._checkpoint : null,
+        node: {
+          heads,
+          abi: 0,
+          batch,
+          value: c.encode(this.valueEncoding, value)
+        }
       }
 
       if (this._checkpointer > 0 || this._checkpoint !== null) {
@@ -738,4 +756,9 @@ function downloadAll (core) {
 
 function compareHead (head, node) {
   return head.length === node.length && b4a.equals(head.key, node.writer.core.key)
+}
+
+function isAutobaseMessage (msg) {
+  if (msg.checkpointer) return !msg.checkpoint
+  return msg.checkpoint && msg.checkpoint.length > 0
 }
