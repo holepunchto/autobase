@@ -46,9 +46,7 @@ async function sync (bases) {
     }
   }
 
-  for (let i = 0; i < bases.length; i++) {
-    await bases[i].update({ wait: true })
-  }
+  await Promise.all(bases.map(b => b.update({ wait: true })))
 
   const closes = []
 

@@ -200,6 +200,7 @@ module.exports = class Autobase extends ReadyResource {
     this._appending = new FIFO()
 
     this._applying = null
+    this._pendingWriters = false
 
     this._needsReady = []
     this._updates = []
@@ -474,6 +475,15 @@ module.exports = class Autobase extends ReadyResource {
   async _addHeads () {
     let active = true
 
+    if (this._pendingWriters) {
+      this._pendingWriters = false
+
+      for (const w of this.writers) {
+        await w.core.update({ wait: true })
+        if (!this.sparse) await downloadAll(w.core)
+      }
+    }
+
     while (active) {
       await this._ensureAll()
 
@@ -538,6 +548,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     this.writers.push(this._makeWriter(key, -1))
+    this._pendingWriters = true
 
     // fetch any nodes needed for dependents
     this._bump()
