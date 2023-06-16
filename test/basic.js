@@ -604,7 +604,7 @@ test('sequential restarts', async t => {
     // confirm over this node
     // include all dag except previous addWriter
     await sync(syncers)
-    bases[0].append(null)
+    await bases[0].append(null)
     await sync(syncers)
 
     // everyone writes a message
