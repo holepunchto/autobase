@@ -743,7 +743,7 @@ test('basic - pass exisiting store', async t => {
   t.is(base3.system.digest.writers.length, 2)
 })
 
-test.skip('two writers write many messages, third writer joins', async t => {
+test('two writers write many messages, third writer joins', async t => {
   // TODO: test this passes with next linearliser version
   const [base1, base2, base3] = await create(3, apply)
 
@@ -764,7 +764,7 @@ test.skip('two writers write many messages, third writer joins', async t => {
   })
 
   await confirm([base1, base2, base3])
-  t.pass('Confirming did not throw RangeError: Maximum call stack size exceeded')
+  t.pass('Confirming did not throw')
 })
 
 test('basic - gc indexed nodes', async t => {
