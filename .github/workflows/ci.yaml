@@ -18,8 +18,7 @@ jobs:
     strategy:
       matrix:
         node-version: [lts/*]
-        # windows and particularly macos CI are very expensive on github, so skipping
-        os: [ubuntu-latest] #, macos-latest, windows-latest]
+        os: [[self-hosted, non-ui, Linux], [self-hosted, non-ui, macOS]]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v2
