@@ -480,7 +480,13 @@ module.exports = class Autobase extends ReadyResource {
       active = false
       for (const w of this.writers) {
         if (!w.next) continue
-        this.linearizer.addHead(w.advance())
+
+        while (w.next) {
+          const node = w.advance()
+          this.linearizer.addHead(node)
+          if (node.batch === 1) break
+        }
+
         active = true
         break
       }
