@@ -444,7 +444,7 @@ test('undoing a batch', async t => {
   await t.execution(confirm(bases))
 })
 
-test('append during restart', async t => {
+test('append during reindex', async t => {
   const bases = await create(4, apply, store => store.get('test', { valueEncoding: 'json' }))
 
   const [a, b, c, d] = bases
@@ -494,7 +494,7 @@ test('closing an autobase', async t => {
   t.is(base.local.closed, true)
 })
 
-test('flush after restart', async t => {
+test('flush after reindex', async t => {
   const bases = await create(9, apply, store => store.get('test', { valueEncoding: 'json' }))
 
   const root = bases[0]
@@ -524,7 +524,7 @@ test('flush after restart', async t => {
   await t.execution(bases[8].append('msg' + msg++))
 })
 
-test('restart', async t => {
+test('reindex', async t => {
   const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }))
 
   const [a, b, c, d, e] = bases
@@ -547,7 +547,7 @@ test('restart', async t => {
 
   t.is(b.system.digest.writers.length, 4)
 
-  // trigger restart for a
+  // trigger reindex for a
   await sync([a, b, c, d])
 
   await a.append('a:' + msg++)
@@ -566,7 +566,7 @@ test('restart', async t => {
 
   t.is(b.system.digest.writers.length, 5)
 
-  // trigger restart for a
+  // trigger reindex for a
   await sync([a, b, c, d, e])
 
   t.is(a.system.digest.heads.length, 1)
@@ -738,7 +738,11 @@ test('basic - pass exisiting store', async t => {
   const base3 = new Autobase(ns3, base1.local.key, { apply, valueEncoding: 'json' })
   await base3.ready()
 
-  await base3.update({ wait: false })
+  t.is(base3.system.digest.writers.length, 2)
+
+  await base3.append('final')
+
+  await t.execution(sync([base3, base2]))
 
   t.is(base3.system.digest.writers.length, 2)
 })
