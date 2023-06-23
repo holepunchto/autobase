@@ -261,6 +261,11 @@ module.exports = class Autobase extends ReadyResource {
       this.bootstrap = this.local.key // new autobase!
     }
 
+    if (this.local.length > 0) {
+      const head = await this.local.get(this.local.length - 1)
+      this._checkpointer = head.checkpoint ? 1 : head.checkpointer + 1
+    }
+
     await this._ensureUserData(this.system.core, null)
   }
 
@@ -714,6 +719,10 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _flushLocal () {
+    if (this.system.length > 0 && this._checkpoint === null && this._checkpointer === 0) {
+      this._checkpoint = this.system.checkpoint()
+    }
+
     const blocks = new Array(this.localWriter.length - this.local.length)
 
     for (let i = 0; i < blocks.length; i++) {
