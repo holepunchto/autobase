@@ -372,7 +372,7 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  _getWriterByKey (key, len = -1) {
+  _getWriterByKey (key, len = 0) {
     for (const w of this.writers) {
       if (b4a.equals(w.core.key, key)) return w
     }
@@ -402,7 +402,7 @@ module.exports = class Autobase extends ReadyResource {
     core.key = key
     this._needsReady.push(core)
 
-    const w = new Writer(this, core, Math.max(0, length))
+    const w = new Writer(this, core, length)
 
     if (local) {
       this.localWriter = w
@@ -552,7 +552,7 @@ module.exports = class Autobase extends ReadyResource {
       if (b4a.equals(w.core.key, key)) return
     }
 
-    this.writers.push(this._makeWriter(key, -1))
+    this.writers.push(this._makeWriter(key, 0))
     this._pendingWriters = true
 
     // fetch any nodes needed for dependents
