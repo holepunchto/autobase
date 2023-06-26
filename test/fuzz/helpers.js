@@ -153,7 +153,7 @@ function rollBack (n, steps, batch = 3, result = []) {
   }
 
   const nodes = new Map()
-  const graph = new Linearizer(Object.values(writers), [])
+  const graph = new Linearizer(Object.values(writers), [], [])
 
   let pos = 0
 
