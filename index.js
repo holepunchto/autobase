@@ -372,12 +372,12 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  _getWriterByKey (key) {
+  _getWriterByKey (key, len = -1) {
     for (const w of this.writers) {
       if (b4a.equals(w.core.key, key)) return w
     }
 
-    const w = this._makeWriter(key, -1)
+    const w = this._makeWriter(key, len)
     this.writers.push(w)
 
     return w
@@ -402,7 +402,7 @@ module.exports = class Autobase extends ReadyResource {
     core.key = key
     this._needsReady.push(core)
 
-    const w = new Writer(this, core, Math.max(length, core.length))
+    const w = new Writer(this, core, Math.max(0, length))
 
     if (local) {
       this.localWriter = w
@@ -420,9 +420,8 @@ module.exports = class Autobase extends ReadyResource {
       indexers.push(this._makeWriter(this.bootstrap, 0))
       this.writers = indexers.slice()
     } else {
-      for (const { key } of this.system.digest.writers) {
-        const w = this._getWriterByKey(key)
-        indexers.push(w)
+      for (const { key, length } of this.system.digest.writers) {
+        indexers.push(this._getWriterByKey(key, length))
       }
     }
 
