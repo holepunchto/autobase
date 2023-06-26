@@ -438,7 +438,12 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
-    this.linearizer = new Linearizer(indexers, heads)
+    const clock = this.system.digest.writers.map(w => {
+      const writer = this._getWriterByKey(w.key)
+      return { writer, length: w.length }
+    })
+
+    this.linearizer = new Linearizer(indexers, heads, clock)
 
     if (change) this._reloadUpdate(change, heads)
   }

@@ -633,7 +633,10 @@ test('sequential restarts', async t => {
     }
   }
 
-  t.is(bases[0].system.digest.heads.length, bases.length)
+  // only bases[0] node should be head
+  t.is(bases[0].system.digest.heads.length, 1)
+  t.alike(bases[0].system.digest.heads[0].key, bases[0].local.key)
+
   t.is(bases[0].system.digest.writers.length, bases.length)
 
   t.not(bases[0].view.indexedLength, 0)
