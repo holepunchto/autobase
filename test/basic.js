@@ -11,6 +11,7 @@ const {
   apply,
   addWriter,
   confirm,
+  replicate,
   compare
 } = require('./helpers')
 
@@ -818,4 +819,119 @@ test('basic - isAutobase', async t => {
   await base3.append('hello')
 
   t.is(await Autobase.isAutobase(base3.local), true)
+})
+
+test('basic - autoack', async t => {
+  t.plan(4)
+
+  const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 10 })
+
+  const str1 = a.store.replicate(true)
+  const str2 = b.store.replicate(false)
+
+  str1.pipe(str2).pipe(str1)
+
+  t.teardown(() => {
+    a.close()
+    b.close()
+  })
+
+  await addWriter(a, b)
+
+  await b.update({ wait: true })
+  await b.append('b0')
+
+  t.is(a.view.indexedLength, 0)
+  t.is(b.view.indexedLength, 0)
+
+  setTimeout(() => {
+    t.is(a.view.indexedLength, 1)
+    t.is(b.view.indexedLength, 1)
+  }, 100)
+})
+
+test('basic - autoack 5 writers', async t => {
+  t.plan(12)
+
+  const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 10 })
+  const [a, b, c, d, e] = bases
+
+  replicate(bases)
+
+  t.teardown(() => {
+    bases.forEach(b => b.close())
+  })
+
+  await addWriter(a, b)
+  await addWriter(a, c)
+  await addWriter(a, d)
+  await addWriter(a, e)
+
+  await bases.map(n => n.update({ wait: true }))
+
+  // e is not writable until flush
+  await t.exception(() => e.append('e0'))
+
+  await b.append('b0')
+
+  t.is(a.view.indexedLength, 0)
+  t.is(b.view.indexedLength, 0)
+  t.is(c.view.indexedLength, 0)
+  t.is(d.view.indexedLength, 0)
+  t.is(e.view.indexedLength, 0)
+
+  setTimeout(async () => {
+    await t.execution(() => e.append('e0'))
+
+    t.is(a.view.indexedLength, 1)
+    t.is(b.view.indexedLength, 1)
+    t.is(c.view.indexedLength, 1)
+    t.is(d.view.indexedLength, 1)
+    t.is(e.view.indexedLength, 1)
+  }, 100)
+})
+
+test('basic - autoack concurrent', async t => {
+  t.plan(10)
+
+  const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 100 })
+  const [a, b, c, d, e] = bases
+
+  replicate(bases)
+
+  t.teardown(() => {
+    bases.forEach(b => b.close())
+  })
+
+  await addWriter(a, b)
+  await addWriter(a, c)
+  await addWriter(a, d)
+  await addWriter(a, e)
+
+  await bases.map(n => n.update({ wait: true }))
+
+  await b.append(null)
+
+  await Promise.all(bases.map(n => message(n, 10)))
+
+  async function message (w, n) {
+    for (let i = 0; i < n; i++) {
+      await w.append(w.local.key.toString('hex').slice(0, 2) + n)
+    }
+  }
+
+  setTimeout(async () => {
+    t.is(a.view.indexedLength, 50)
+    t.is(b.view.indexedLength, 50)
+    t.is(c.view.indexedLength, 50)
+    t.is(d.view.indexedLength, 50)
+    t.is(e.view.indexedLength, 50)
+
+    // max acks for any writer is bounded
+    t.ok(a.local.length < 21)
+    t.ok(b.local.length < 17)
+    t.ok(c.local.length < 17)
+    t.ok(d.local.length < 17)
+    t.ok(e.local.length < 17)
+  }, 800)
 })
