@@ -518,8 +518,9 @@ module.exports = class Autobase extends ReadyResource {
 
   async _addHeads () {
     let active = true
+    let added = 0
 
-    while (active) {
+    while (active && added < 50) { // 50 here is just to reduce the bulk batches
       await this._ensureAll()
 
       active = false
@@ -529,7 +530,10 @@ module.exports = class Autobase extends ReadyResource {
         while (w.next) {
           const node = w.advance()
           this.linearizer.addHead(node)
-          if (node.batch === 1) break
+          if (node.batch === 1) {
+            added++
+            break
+          }
         }
 
         active = true
