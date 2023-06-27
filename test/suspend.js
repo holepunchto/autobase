@@ -1,0 +1,469 @@
+const test = require('brittle')
+const ram = require('random-access-memory')
+const tmpDir = require('test-tmp')
+const Corestore = require('corestore')
+
+const Autobase = require('..')
+
+const {
+  create,
+  sync,
+  apply,
+  addWriter,
+  confirm
+} = require('./helpers')
+
+test('suspend - pass exisiting store', async t => {
+  const [base1] = await create(1, apply)
+
+  const store = new Corestore(ram.reusable(), {
+    primaryKey: Buffer.alloc(32).fill(1)
+  })
+
+  const session1 = store.session()
+  const base2 = new Autobase(session1, base1.local.key, { apply, valueEncoding: 'json' })
+  await base2.ready()
+
+  await base1.append({
+    add: base2.local.key.toString('hex'),
+    debug: 'this is adding b'
+  })
+
+  await base1.append({
+    value: 'base1'
+  })
+
+  await confirm([base1, base2])
+
+  await base2.append({
+    value: 'base2'
+  })
+
+  await confirm([base1, base2])
+
+  t.is(base2.system.digest.writers.length, 2)
+
+  await base2.close()
+
+  const session2 = store.session()
+  const base3 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json' })
+  await base3.ready()
+
+  t.is(base3.system.digest.writers.length, 2)
+
+  await base3.append('final')
+
+  await t.execution(sync([base3, base2]))
+})
+
+test('suspend - pass exisiting fs store', async t => {
+  const [base1] = await create(1, apply)
+
+  const store = new Corestore(await tmpDir(t), {
+    primaryKey: Buffer.alloc(32).fill(1)
+  })
+
+  const session1 = store.session()
+  const base2 = new Autobase(session1, base1.local.key, { apply, valueEncoding: 'json' })
+  await base2.ready()
+
+  await base1.append({
+    add: base2.local.key.toString('hex'),
+    debug: 'this is adding b'
+  })
+
+  await base1.append({
+    value: 'base1'
+  })
+
+  await confirm([base1, base2])
+
+  await base2.append({
+    value: 'base2'
+  })
+
+  await confirm([base1, base2])
+
+  t.is(base2.system.digest.writers.length, 2)
+
+  await base2.close()
+
+  const session2 = store.session()
+  const base3 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json' })
+  await base3.ready()
+
+  t.is(base3.system.digest.writers.length, 2)
+
+  await base3.append('final')
+
+  await t.execution(sync([base3, base2]))
+})
+
+test('suspend - 2 exisiting fs stores', async t => {
+  const store = new Corestore(await tmpDir(t), {
+    primaryKey: Buffer.alloc(32).fill(0)
+  })
+
+  const base1 = new Autobase(store, null, { apply, valueEncoding: 'json' })
+  await base1.ready()
+
+  const store2 = new Corestore(await tmpDir(t), {
+    primaryKey: Buffer.alloc(32).fill(1)
+  })
+
+  const session1 = store2.session()
+  const base2 = new Autobase(session1, base1.local.key, { apply, valueEncoding: 'json' })
+  await base2.ready()
+
+  await base1.append({
+    add: base2.local.key.toString('hex'),
+    debug: 'this is adding b'
+  })
+
+  await base1.append({
+    value: 'base1'
+  })
+
+  await confirm([base1, base2])
+
+  await base2.append({
+    value: 'base2'
+  })
+
+  await confirm([base1, base2])
+
+  t.is(base2.system.digest.writers.length, 2)
+
+  await base2.close()
+
+  const session2 = store2.session()
+  const base3 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json' })
+  await base3.ready()
+
+  t.is(base3.system.digest.writers.length, 2)
+
+  await base3.append('final')
+
+  await t.execution(sync([base3, base2]))
+
+  await base1.close()
+  await base2.close()
+  await base3.close()
+})
+
+test('suspend - reopen after index', async t => {
+  const [a] = await create(1, apply, open)
+
+  const store = new Corestore(await tmpDir(t), {
+    primaryKey: Buffer.alloc(32).fill(1)
+  })
+
+  const session1 = store.session()
+  const b = new Autobase(session1, a.local.key, {
+    apply,
+    valueEncoding: 'json',
+    open: store => store.get('view', {
+      valueEncoding: 'json'
+    })
+  })
+
+  await b.ready()
+
+  await addWriter(a, b)
+
+  await sync([a, b])
+
+  await a.append('a0')
+
+  await confirm([a, b])
+
+  await b.append('b0')
+  await a.append('a1')
+
+  t.is(b.system.digest.writers.length, 2)
+
+  const order = []
+  for (let i = 0; i < b.view.length; i++) {
+    order.push(await b.view.get(i))
+  }
+
+  await b.close()
+
+  const session2 = store.session()
+  const c = new Autobase(session2, a.local.key, {
+    apply,
+    valueEncoding: 'json',
+    open: store => store.get('view', {
+      valueEncoding: 'json'
+    })
+  })
+
+  await c.ready()
+  await c.update({ wait: false })
+
+  t.is(c.view.length, order.length)
+
+  for (let i = 0; i < c.view.length; i++) {
+    t.alike(await c.view.get(i), order[i])
+  }
+
+  t.is(c.system.digest.writers.length, 2)
+
+  await c.append('final')
+
+  await t.execution(sync([a, c]))
+
+  t.is(b.view.indexedLength, 1)
+  t.is(c.view.indexedLength, 1)
+  t.is(c.view.length, b.view.length + 2)
+
+  await a.close()
+  await b.close()
+  await c.close()
+})
+
+test('suspend - reopen with sync in middle', async t => {
+  const [a] = await create(1, apply, open)
+
+  const store = new Corestore(await tmpDir(t), {
+    primaryKey: Buffer.alloc(32).fill(1)
+  })
+
+  const session1 = store.session()
+  const b = new Autobase(session1, a.local.key, {
+    apply,
+    valueEncoding: 'json',
+    open
+  })
+
+  await b.ready()
+
+  await addWriter(a, b)
+
+  await sync([a, b])
+
+  await a.append('a0')
+
+  await confirm([a, b])
+
+  await b.append('b0')
+  await a.append('a1')
+
+  t.is(b.system.digest.writers.length, 2)
+  t.is(b.view.length, 2)
+
+  await b.close()
+
+  const s1 = a.store.replicate(true)
+  const s2 = store.replicate(false)
+
+  s1.pipe(s2).pipe(s1)
+
+  await a.update({ wait: true })
+
+  for (const [key, core] of store.cores) {
+    const end = a.store.cores.get(key).core.tree.length
+    const range = core.download({ start: 0, end })
+    await range.done()
+  }
+
+  s1.destroy()
+  s2.destroy()
+
+  await Promise.all([
+    new Promise(resolve => s1.on('close', resolve)),
+    new Promise(resolve => s2.on('close', resolve))
+  ])
+
+  const session2 = store.session()
+  await session2.ready()
+
+  const c = new Autobase(session2, a.local.key, {
+    apply,
+    valueEncoding: 'json',
+    open
+  })
+
+  await c.ready()
+  await c.update({ wait: false })
+
+  t.is(c.system.digest.writers.length, 2)
+  t.is(c.view.length, b.view.length + 1)
+
+  await c.append('final')
+
+  await t.execution(sync([c, b]))
+
+  t.is(b.view.indexedLength, 1)
+  t.is(c.view.indexedLength, 1)
+  t.is(c.view.length, b.view.length + 2)
+
+  await a.close()
+  await b.close()
+  await c.close()
+})
+
+test('suspend - reopen with indexing in middle', async t => {
+  const [a, b] = await create(2, apply, open)
+
+  const store = new Corestore(await tmpDir(t), {
+    primaryKey: Buffer.alloc(32).fill(2)
+  })
+
+  const session1 = store.session()
+  const c = new Autobase(session1, a.local.key, {
+    apply,
+    valueEncoding: 'json',
+    open
+  })
+
+  await c.ready()
+
+  await addWriter(a, b)
+  await addWriter(a, c)
+
+  await confirm([a, b, c])
+
+  t.is(c.system.digest.writers.length, 3)
+  t.is(c.view.length, 0)
+
+  await c.append('c0')
+
+  await c.close()
+
+  // majority continues
+
+  await a.append('a0')
+  await sync([a, b])
+  await b.append('b0')
+  await sync([a, b])
+  await a.append('a1')
+
+  await confirm([a, b])
+
+  const session2 = store.session()
+  await session2.ready()
+
+  const c2 = new Autobase(session2, a.local.key, {
+    apply,
+    valueEncoding: 'json',
+    open
+  })
+
+  await c2.ready()
+  await c2.update({ wait: false })
+
+  t.is(c2.system.digest.writers.length, 3)
+  t.is(c2.view.length, 1)
+  t.is(c2.view.indexedLength, 0)
+
+  t.alike(await c2.view.get(0), await c.view.get(0))
+
+  await c2.append('final')
+
+  await t.execution(sync([c2, b]))
+
+  t.is(b.view.indexedLength, 3)
+  t.is(c2.view.indexedLength, 3)
+  t.is(c2.view.length, 5)
+
+  await a.close()
+  await b.close()
+  await c2.close()
+})
+
+test('suspend - reopen with indexing + sync in middle', async t => {
+  const [a, b] = await create(2, apply, open)
+
+  const store = new Corestore(await tmpDir(t), {
+    primaryKey: Buffer.alloc(32).fill(2)
+  })
+
+  const session1 = store.session()
+  const c = new Autobase(session1, a.local.key, {
+    apply,
+    valueEncoding: 'json',
+    open
+  })
+
+  await c.ready()
+
+  await addWriter(a, b)
+  await addWriter(a, c)
+
+  await confirm([a, b, c])
+
+  t.is(c.system.digest.writers.length, 3)
+  t.is(c.view.length, 0)
+
+  await c.append('c0')
+
+  await c.close()
+
+  // majority continues
+
+  await a.append('a0')
+  await sync([a, b])
+  await b.append('b0')
+  await sync([a, b])
+  await a.append('a1')
+
+  await confirm([a, b])
+
+  const s1 = a.store.replicate(true)
+  const s2 = store.replicate(false)
+
+  s1.pipe(s2).pipe(s1)
+
+  await a.update({ wait: true })
+
+  for (const [key, core] of store.cores) {
+    const end = a.store.cores.get(key).core.tree.length
+    const range = core.download({ start: 0, end })
+    await range.done()
+  }
+
+  s1.destroy()
+  s2.destroy()
+
+  await Promise.all([
+    new Promise(resolve => s1.on('close', resolve)),
+    new Promise(resolve => s2.on('close', resolve))
+  ])
+
+  const session2 = store.session()
+  await session2.ready()
+
+  const c2 = new Autobase(session2, a.local.key, {
+    apply,
+    valueEncoding: 'json',
+    open
+  })
+
+  await c2.ready()
+  await c2.update({ wait: false })
+
+  t.is(c2.system.digest.writers.length, 3)
+  t.is(c2.view.length, 4)
+  t.is(c2.view.indexedLength, 3)
+
+  for (let i = 0; i < b.view.length; i++) {
+    t.alike(await c2.view.get(i), await b.view.get(i))
+  }
+
+  await c2.append('final')
+
+  await t.execution(sync([c2, b]))
+
+  t.is(b.view.indexedLength, 3)
+  t.is(c2.view.indexedLength, 3)
+  t.is(c2.view.length, 5)
+
+  await a.close()
+  await b.close()
+  await c2.close()
+})
+
+function open (store) {
+  return store.get('view', { valueEncoding: 'json' })
+}
