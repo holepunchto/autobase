@@ -9,23 +9,24 @@ module.exports = {
   addWriter,
   apply,
   confirm,
+  replicate,
   compare
 }
 
-async function create (n, apply, open, close) {
-  const opts = { apply, open, close, valueEncoding: 'json' }
-  const bases = [new Autobase(new Corestore(ram, { primaryKey: Buffer.alloc(32).fill(0) }), null, opts)]
+async function create (n, apply, open, close, opts = {}) {
+  const moreOpts = { ...opts, apply, open, close, valueEncoding: 'json' }
+  const bases = [new Autobase(new Corestore(ram, { primaryKey: Buffer.alloc(32).fill(0) }), null, moreOpts)]
   await bases[0].ready()
   if (n === 1) return bases
   for (let i = 1; i < n; i++) {
-    const base = new Autobase(new Corestore(ram, { primaryKey: Buffer.alloc(32).fill(i) }), bases[0].local.key, opts)
+    const base = new Autobase(new Corestore(ram, { primaryKey: Buffer.alloc(32).fill(i) }), bases[0].local.key, moreOpts)
     await base.ready()
     bases.push(base)
   }
   return bases
 }
 
-async function sync (bases) {
+function replicate (bases) {
   const streams = []
   const missing = bases.slice()
 
@@ -46,16 +47,21 @@ async function sync (bases) {
     }
   }
 
+  return close
+
+  function close () {
+    return Promise.all(streams.map(s => {
+      s.destroy()
+      return new Promise(resolve => s.on('close', resolve))
+    }))
+  }
+}
+
+async function sync (bases) {
+  const close = replicate(bases)
   await Promise.all(bases.map(b => b.update({ wait: true })))
 
-  const closes = []
-
-  for (const stream of streams) {
-    stream.destroy()
-    closes.push(new Promise(resolve => stream.on('close', resolve)))
-  }
-
-  await Promise.all(closes)
+  return close()
 }
 
 async function addWriter (base, add) {

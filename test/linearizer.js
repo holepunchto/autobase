@@ -416,6 +416,75 @@ test('linearizer - reordering after restart', async t => {
   t.is(await b.view.get(2), 'b0')
 })
 
+test('linearizer - shouldAck', async t => {
+  const bases = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
+
+  const [a, b, c] = bases
+
+  await addWriter(a, b)
+  await sync(bases)
+
+  await addWriter(a, c)
+  await sync(bases)
+
+  t.absent(a.linearizer.shouldAck(a.localWriter))
+  t.absent(b.linearizer.shouldAck(getWriter(b, a.localWriter)))
+  t.absent(c.linearizer.shouldAck(getWriter(c, a.localWriter)))
+
+  t.ok(a.linearizer.shouldAck(getWriter(a, b.localWriter)))
+  t.ok(b.linearizer.shouldAck(b.localWriter))
+  t.ok(c.linearizer.shouldAck(getWriter(c, b.localWriter)))
+
+  t.ok(a.linearizer.shouldAck(getWriter(a, c.localWriter)))
+  t.ok(b.linearizer.shouldAck(getWriter(b, c.localWriter)))
+  t.ok(c.linearizer.shouldAck(c.localWriter))
+
+  function getWriter (base, writer) {
+    for (const w of base.writers) {
+      if (b4a.compare(w.core.key, writer.core.key)) continue
+      return w
+    }
+
+    return null
+  }
+})
+
+test('linearizer - no loop', async t => {
+  const bases = await create(4, apply, store => store.get('test', { valueEncoding: 'json' }))
+
+  const [a, b, c, d] = bases
+
+  let ai = 0
+  let bi = 0
+
+  await addWriter(a, b)
+  await addWriter(a, c)
+  await addWriter(a, d)
+  await sync(bases)
+
+  let i = 0
+  while (++i < 20) {
+    await sync(bases)
+
+    if (a.linearizer.shouldAck(a.localWriter)) {
+      await a.append('a' + ai++)
+      continue
+    }
+
+    if (b.linearizer.shouldAck(b.localWriter)) {
+      await b.append('b' + bi++)
+      continue
+    }
+
+    break
+  }
+
+  t.is(a.view.indexedLength, 0)
+  t.is(b.view.indexedLength, 0)
+
+  t.not(i, 20)
+})
+
 async function syncTo (a, b) {
   const s1 = a.store.replicate(true)
   const s2 = b.store.replicate(false)

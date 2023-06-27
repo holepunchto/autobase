@@ -102,9 +102,12 @@ If loading an existing Autobase then set `bootstrap` to `base.key`, otherwise pa
   open: store => { ... }, // create the view
   apply: (nodes, view, base) => { ... }, // handle nodes
   close: view => { ... }, // close the view
-  valueEncoding // encoding
+  valueEncoding, // encoding
+  ackInterval: 1000 // enable auto acking with the interval
 }
 ```
+
+An `ackInterval` may be set to enable automatic acknowledgements. When enabled, in cases where it would help the linearizer converge the base shall eagerly append `null` values to the oplog.
 
 #### `base.key`
 

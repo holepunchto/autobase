@@ -11,6 +11,7 @@ const Autocore = require('./lib/core')
 const SystemView = require('./lib/system')
 const messages = require('./lib/messages')
 const NodeBuffer = require('./lib/node-buffer')
+const Timer = require('./lib/timer')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 const REFERRER_USERDATA = 'referrer'
@@ -206,7 +207,7 @@ module.exports = class Autobase extends ReadyResource {
     this._handlers = handlers || {}
 
     this._bump = debounceify(this._advance.bind(this))
-    this._onremotewriterchange = () => this._bump().catch(safetyCatch)
+    this._onremotewriterchangeBound = this._onremotewriterchange.bind(this)
 
     this.version = 0 // todo: set version
     this._checkpointer = 0
@@ -220,6 +221,9 @@ module.exports = class Autobase extends ReadyResource {
 
     this._viewStore = new LinearizedStore(this)
     this.view = null
+
+    this._ackInterval = handlers.ackInterval || 0
+    this._ackTimer = null
 
     this.ready().catch(safetyCatch)
 
@@ -272,6 +276,7 @@ module.exports = class Autobase extends ReadyResource {
   async _open () {
     await (this._openingCores = this._openCores())
     this._reindex()
+    if (this.localWriter && this._ackInterval) this._startAckTimer()
     await this._bump()
   }
 
@@ -279,6 +284,7 @@ module.exports = class Autobase extends ReadyResource {
     if (this._hasClose) await this._handlers.close(this.view)
     if (this._primaryBootstrap) await this._primaryBootstrap.close()
     await this.store.close()
+    if (this._ackTimer) this._ackTimer.stop()
     if (this._mainStore) await this._mainStore.close()
   }
 
@@ -297,6 +303,18 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  _startAckTimer () {
+    if (this._ackTimer) return
+    this._ackTimer = new Timer(this.ack.bind(this), this._ackInterval)
+    this._ackTimer.bump()
+  }
+
+  _bumpAckTimer () {
+    if (!this._ackTimer) return
+    this._ackTimer.bump()
+    this._ackTimer.unref()
+  }
+
   async update (opts) {
     if (!this.opened) await this.ready()
 
@@ -308,8 +326,25 @@ module.exports = class Autobase extends ReadyResource {
     await this._bump()
   }
 
-  ack () {
-    return this.append(null)
+  // runs in bg, not allowed to throw
+  async _onremotewriterchange () {
+    try {
+      await this._bump()
+      this._bumpAckTimer()
+    } catch (e) {
+      safetyCatch(e)
+    }
+  }
+
+  async ack () {
+    if (!this.localWriter) return
+
+    await this._bump()
+
+    if (this.linearizer.shouldAck(this.localWriter)) {
+      if (this._appending.length) return this._bump()
+      return this.append(null)
+    }
   }
 
   async append (value) {
@@ -406,8 +441,9 @@ module.exports = class Autobase extends ReadyResource {
 
     if (local) {
       this.localWriter = w
+      if (this._ackInterval) this._startAckTimer()
     } else {
-      core.on('append', this._onremotewriterchange)
+      core.on('append', this._onremotewriterchangeBound)
     }
 
     return w
