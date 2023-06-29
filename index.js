@@ -635,7 +635,9 @@ module.exports = class Autobase extends ReadyResource {
 
     if (u.popped) this._undo(u.popped)
 
-    let batch = []
+    let batch = 0
+    let applyBatch = []
+
     let j = 0
 
     let i = 0
@@ -669,25 +671,30 @@ module.exports = class Autobase extends ReadyResource {
         }
       }
 
-      batch.push({
-        indexed,
-        from: node.writer.core,
-        length: node.length,
-        value: node.value,
-        heads: node.heads
-      })
+      batch++
+
+      if (node.value !== null) {
+        applyBatch.push({
+          indexed,
+          from: node.writer.core,
+          length: node.length,
+          value: node.value,
+          heads: node.heads
+        })
+      }
 
       if (node.batch > 1) continue
 
-      const update = { batch: batch.length, system: 0, user: [] }
+      const update = { batch, system: 0, user: [] }
 
       this._updates.push(update)
       this._applying = update
       if (this.system.bootstrapping) this._bootstrap()
-      if (this._hasApply === true) await this._handlers.apply(batch, this.view, this)
+      if (applyBatch.length && this._hasApply === true) await this._handlers.apply(applyBatch, this.view, this)
       this._applying = null
 
       batch = []
+      applyBatch = []
 
       for (let k = 0; k < update.user.length; k++) {
         const u = update.user[k]
