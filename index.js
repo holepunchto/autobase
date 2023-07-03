@@ -81,7 +81,7 @@ class Writer {
 
     if (this.nextCache === null) {
       const { node } = await this.core.get(this.length)
-      const value = c.decode(this.base.valueEncoding, node.value)
+      const value = node.value == null ? null : c.decode(this.base.valueEncoding, node.value)
       this.nextCache = Linearizer.createNode(this, this.length + 1, value, node.heads, node.batch, [])
     }
 
@@ -789,7 +789,7 @@ module.exports = class Autobase extends ReadyResource {
           heads,
           abi: 0,
           batch,
-          value: c.encode(this.valueEncoding, value)
+          value: value === null ? null : c.encode(this.valueEncoding, value)
         }
       }
 
