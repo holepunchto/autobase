@@ -335,12 +335,8 @@ module.exports = class Autobase extends ReadyResource {
 
   // runs in bg, not allowed to throw
   async _onremotewriterchange () {
-    try {
-      await this._bump()
-      this._bumpAckTimer()
-    } catch (e) {
-      this.emit('error', e)
-    }
+    await this._bump()
+    this._bumpAckTimer()
   }
 
   async ack () {
@@ -409,7 +405,7 @@ module.exports = class Autobase extends ReadyResource {
     try {
       const m = c.decode(messages.OplogMessage, block)
       return isAutobaseMessage(m)
-    } catch (e) {
+    } catch {
       return false
     }
   }
@@ -697,7 +693,17 @@ module.exports = class Autobase extends ReadyResource {
       this._updates.push(update)
       this._applying = update
       if (this.system.bootstrapping) this._bootstrap()
-      if (applyBatch.length && this._hasApply === true) await this._handlers.apply(applyBatch, this.view, this)
+
+      if (applyBatch.length && this._hasApply === true) {
+        try {
+          await this._handlers.apply(applyBatch, this.view, this)
+        } catch (err) {
+          // todo: recover/shutdown?
+          this.emit('error', err)
+          return null
+        }
+      }
+
       this._applying = null
 
       batch = []
