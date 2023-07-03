@@ -65,7 +65,7 @@ test('timer - bump max timeout', t => {
 test('timer - reset', t => {
   t.plan(1)
 
-  const timer = new Timer(fail, 100, { limit: 200 })
+  const timer = new Timer(fail, 100, { unref: false, limit: 200 })
 
   timer.bump()
   timer.reset(pass)

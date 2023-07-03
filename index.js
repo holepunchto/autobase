@@ -306,13 +306,12 @@ module.exports = class Autobase extends ReadyResource {
   _startAckTimer () {
     if (this._ackTimer) return
     this._ackTimer = new Timer(this.ack.bind(this), this._ackInterval)
-    this._ackTimer.bump()
+    this._bumpAckTimer()
   }
 
   _bumpAckTimer () {
     if (!this._ackTimer) return
     this._ackTimer.bump()
-    this._ackTimer.unref()
   }
 
   async update (opts) {
