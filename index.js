@@ -25,7 +25,7 @@ class Writer {
     this.indexed = length
 
     this.next = null
-    this.nextCache = null
+    this.nextCache = []
   }
 
   get length () {
@@ -51,7 +51,6 @@ class Writer {
   advance (node = this.next) {
     this.nodes.push(node)
     this.next = null
-    this.nextCache = null
     return node
   }
 
@@ -77,19 +76,28 @@ class Writer {
 
   async ensureNext () {
     if (this.length >= this.core.length || this.core.length === 0) return null
-    if (this.next !== null || !(await this.core.has(this.length))) return this.next
+    if (this.next !== null) return this.next
 
-    if (this.nextCache === null) {
-      const { node } = await this.core.get(this.length)
+    const cache = this.nextCache
+
+    if (!cache.length && !(await this.core.has(this.length + cache.length))) return null
+
+    while (!cache.length || cache[cache.length - 1].batch !== 1) {
+      const { node } = await this.core.get(this.length + cache.length)
       const value = node.value == null ? null : c.decode(this.base.valueEncoding, node.value)
-      this.nextCache = Linearizer.createNode(this, this.length + 1, value, node.heads, node.batch, [])
+      cache.push(Linearizer.createNode(this, this.length + cache.length + 1, value, node.heads, node.batch, []))
     }
 
-    this.next = await this.ensureNode(this.nextCache)
+    this.next = await this.ensureNode(cache)
     return this.next
   }
 
-  async ensureNode (node) {
+  async ensureNode (batch) {
+    const last = batch[batch.length - 1]
+    if (last.batch !== 1) return null
+
+    const node = batch.shift()
+
     while (node.dependencies.size < node.heads.length) {
       const rawHead = node.heads[node.dependencies.size]
 
@@ -331,7 +339,7 @@ module.exports = class Autobase extends ReadyResource {
       await this._bump()
       this._bumpAckTimer()
     } catch (e) {
-      safetyCatch(e)
+      this.emit('error', e)
     }
   }
 

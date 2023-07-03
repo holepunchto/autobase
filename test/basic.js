@@ -935,3 +935,46 @@ test('basic - autoack concurrent', async t => {
     t.ok(e.local.length < 17)
   }, 800)
 })
+
+test('basic - catch apply throws', async t => {
+  t.plan(1)
+
+  const [a] = await create(1, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const b = new Autobase(new Corestore(ram, { primaryKey: Buffer.alloc(32).fill(1) }), a.local.key, {
+    apply: applyThrow,
+    valueEncoding: 'json'
+  })
+
+  b.on('error', err => {
+    t.pass(!!err)
+  })
+
+  await b.ready()
+
+  const timeout = setTimeout(() => t.fail(), 1000)
+
+  t.teardown(() => {
+    clearTimeout(timeout)
+    a.close()
+    b.close()
+  })
+
+  replicate([a, b])
+
+  await addWriter(a, b)
+  await b.update({ wait: true })
+
+  await a.append('trigger')
+
+  function applyThrow (batch, view, base) {
+    for (const node of batch) {
+      if (node.value.add) {
+        base.system.addWriter(b4a.from(node.value.add, 'hex'))
+      }
+
+      if (node.value === 'trigger') {
+        throw new Error('Syntehtic.')
+      }
+    }
+  }
+})
