@@ -753,7 +753,7 @@ test('basic - pass exisiting store', async t => {
 
 test('two writers write many messages, third writer joins', async t => {
   // TODO: test this passes with next linearliser version
-  const [base1, base2, base3] = await create(3, apply)
+  const [base1, base2, base3] = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
 
   await base1.append({
     add: base2.local.key.toString('hex'),
@@ -773,6 +773,9 @@ test('two writers write many messages, third writer joins', async t => {
 
   await confirm([base1, base2, base3])
   t.pass('Confirming did not throw')
+
+  await t.execution(compare(base1, base2))
+  await t.execution(compare(base1, base3))
 })
 
 test('basic - gc indexed nodes', async t => {
@@ -934,6 +937,70 @@ test('basic - autoack concurrent', async t => {
     t.ok(d.local.length < 17)
     t.ok(e.local.length < 17)
   }, 800)
+})
+
+test('basic - autoack threshold', async t => {
+  t.plan(4)
+
+  const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackThreshold: 1 })
+
+  const str1 = a.store.replicate(true)
+  const str2 = b.store.replicate(false)
+
+  str1.pipe(str2).pipe(str1)
+
+  t.teardown(() => {
+    a.close()
+    b.close()
+  })
+
+  await addWriter(a, b)
+
+  await b.update({ wait: true })
+  await b.append('b0')
+  await b.append('b1')
+  await b.append('b2')
+  await b.append('b3')
+
+  t.is(a.view.indexedLength, 0)
+  t.is(b.view.indexedLength, 0)
+
+  setImmediate(() => {
+    t.is(a.view.indexedLength, 4)
+    t.is(b.view.indexedLength, 4)
+  })
+})
+
+test('basic - autoack threshold with interval', async t => {
+  t.plan(4)
+
+  const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 100000, ackThreshold: 1 })
+
+  const str1 = a.store.replicate(true)
+  const str2 = b.store.replicate(false)
+
+  str1.pipe(str2).pipe(str1)
+
+  t.teardown(() => {
+    a.close()
+    b.close()
+  })
+
+  await addWriter(a, b)
+
+  await b.update({ wait: true })
+  await b.append('b0')
+  await b.append('b1')
+  await b.append('b2')
+  await b.append('b3')
+
+  t.is(a.view.indexedLength, 0)
+  t.is(b.view.indexedLength, 0)
+
+  setImmediate(() => {
+    t.is(a.view.indexedLength, 4)
+    t.is(b.view.indexedLength, 4)
+  })
 })
 
 test('basic - catch apply throws', async t => {

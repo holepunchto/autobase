@@ -17,6 +17,10 @@ const inspect = Symbol.for('nodejs.util.inspect.custom')
 const REFERRER_USERDATA = 'referrer'
 const VIEW_NAME_USERDATA = 'autobase/view'
 
+// default is not to ack
+const DEFAULT_ACK_INTERVAL = 0
+const DEFAULT_ACK_THRESHOLD = 0
+
 class Writer {
   constructor (base, core, length) {
     this.base = base
@@ -230,8 +234,10 @@ module.exports = class Autobase extends ReadyResource {
     this._viewStore = new LinearizedStore(this)
     this.view = null
 
-    this._ackInterval = handlers.ackInterval || 0
+    this._ackInterval = handlers.ackInterval || DEFAULT_ACK_INTERVAL
+    this._ackThreshold = handlers.ackThreshold || DEFAULT_ACK_THRESHOLD
     this._ackTimer = null
+    this._acking = false
 
     this.ready().catch(safetyCatch)
 
@@ -322,6 +328,14 @@ module.exports = class Autobase extends ReadyResource {
     this._ackTimer.bump()
   }
 
+  _triggerAck () {
+    if (this._ackTimer) {
+      return this._ackTimer.trigger()
+    } else {
+      return this.ack()
+    }
+  }
+
   async update (opts) {
     if (!this.opened) await this.ready()
 
@@ -340,14 +354,17 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async ack () {
-    if (!this.localWriter) return
+    if (!this.localWriter || this._acking) return
+
+    this._acking = true
 
     await this._bump()
 
     if (this.linearizer.shouldAck(this.localWriter)) {
-      if (this._appending.length) return this._bump()
-      return this.append(null)
+      await this.append(null)
     }
+
+    this._acking = false
   }
 
   async append (value) {
@@ -550,6 +567,10 @@ module.exports = class Autobase extends ReadyResource {
       while (!this._appending.isEmpty()) {
         const batch = this._appending.length
         const value = this._appending.shift()
+
+        // filter out pointless acks
+        if (value === null && !this._appending.isEmpty()) continue
+
         const heads = new Set(this.linearizer.heads)
         const node = this.localWriter.append(value, heads, batch)
         this.linearizer.addHead(node)
@@ -567,6 +588,14 @@ module.exports = class Autobase extends ReadyResource {
       if (!changed) break
 
       this._reindex(changed)
+    }
+
+    // skip threshold check while acking
+    if (this.localWriter && this._ackThreshold && !this._acking) {
+      const n = this._ackThreshold * this.linearizer.indexers.length
+
+      // await here would cause deadlock, fine to run in bg
+      if (this.linearizer.size >= (1 + Math.random()) * n) this._triggerAck()
     }
 
     return this._ensureAllCores()

@@ -109,3 +109,21 @@ test('timer - await execution', t => {
     })
   }
 })
+
+test('timer - trigger', t => {
+  t.plan(1)
+
+  const fail = setTimeout(() => t.fail(), 1000)
+  const timer = new Timer(pass, 2000)
+
+  timer.trigger()
+
+  t.teardown(() => {
+    timer.stop()
+  })
+
+  function pass () {
+    clearTimeout(fail)
+    return t.pass()
+  }
+})
