@@ -854,7 +854,7 @@ test('basic - autoack', async t => {
 })
 
 test('basic - autoack 5 writers', async t => {
-  t.plan(12)
+  t.plan(22)
 
   const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 10 })
   const [a, b, c, d, e] = bases
@@ -883,15 +883,51 @@ test('basic - autoack 5 writers', async t => {
   t.is(d.view.indexedLength, 0)
   t.is(e.view.indexedLength, 0)
 
-  setTimeout(async () => {
-    await t.execution(() => e.append('e0'))
+  await t.execution(new Promise((resolve, reject) => {
+    setTimeout(() => {
+      e.append('e0').then(resolve, reject)
+    }, 1000)
+  }))
 
-    t.is(a.view.indexedLength, 1)
-    t.is(b.view.indexedLength, 1)
-    t.is(c.view.indexedLength, 1)
-    t.is(d.view.indexedLength, 1)
-    t.is(e.view.indexedLength, 1)
-  }, 100)
+  await new Promise(resolve => setTimeout(resolve, 1000))
+
+  let alen = a.local.length
+  let blen = b.local.length
+  let clen = c.local.length
+  let dlen = d.local.length
+  let elen = e.local.length
+
+  await new Promise(resolve => setTimeout(resolve, 300))
+
+  // check that acks stop
+  t.is(a.local.length, alen)
+  t.is(b.local.length, blen)
+  t.is(c.local.length, clen)
+  t.is(d.local.length, dlen)
+  t.is(e.local.length, elen)
+
+  alen = a.local.length
+  blen = b.local.length
+  clen = c.local.length
+  dlen = d.local.length
+  elen = e.local.length
+
+  await new Promise(resolve => setTimeout(resolve, 300))
+
+  // check that acks stop
+  t.is(a.local.length, alen)
+  t.is(b.local.length, blen)
+  t.is(c.local.length, clen)
+  t.is(d.local.length, dlen)
+  t.is(e.local.length, elen)
+
+  await Promise.all([a, b, c, d, e].map(b => b.update()))
+
+  t.is(a.view.indexedLength, 2)
+  t.is(b.view.indexedLength, 2)
+  t.is(c.view.indexedLength, 2)
+  t.is(d.view.indexedLength, 2)
+  t.is(e.view.indexedLength, 2)
 })
 
 test('basic - autoack concurrent', async t => {
@@ -936,7 +972,7 @@ test('basic - autoack concurrent', async t => {
     t.ok(c.local.length < 17)
     t.ok(d.local.length < 17)
     t.ok(e.local.length < 17)
-  }, 800)
+  }, 1600)
 })
 
 test('basic - autoack threshold', async t => {
@@ -957,9 +993,9 @@ test('basic - autoack threshold', async t => {
   await addWriter(a, b)
 
   await b.update({ wait: true })
-  await b.append('b0')
-  await b.append('b1')
-  await b.append('b2')
+  b.append('b0')
+  b.append('b1')
+  b.append('b2')
   await b.append('b3')
 
   t.is(a.view.indexedLength, 0)
@@ -989,9 +1025,9 @@ test('basic - autoack threshold with interval', async t => {
   await addWriter(a, b)
 
   await b.update({ wait: true })
-  await b.append('b0')
-  await b.append('b1')
-  await b.append('b2')
+  b.append('b0')
+  b.append('b1')
+  b.append('b2')
   await b.append('b3')
 
   t.is(a.view.indexedLength, 0)
