@@ -1081,3 +1081,194 @@ test('basic - catch apply throws', async t => {
     }
   }
 })
+
+test('basic - non-indexed writer', async t => {
+  const [a, b] = await create(2, applyWriter, store => store.get('test', { valueEncoding: 'json' }))
+
+  await a.append({ add: b.local.key.toString('hex'), indexer: false })
+
+  await sync([a, b])
+
+  await b.append('b0')
+  await b.append('b1')
+
+  await sync([a, b])
+
+  t.is(a.view.indexedLength, 0)
+  t.is(b.view.indexedLength, 0)
+
+  t.is(a.view.length, 2)
+  t.is(b.view.length, 2)
+
+  await a.append('a0')
+
+  await sync([a, b])
+
+  t.is(a.view.indexedLength, 3)
+  t.is(b.view.indexedLength, 3)
+
+  t.is(a.view.length, 3)
+  t.is(b.view.length, 3)
+
+  const a0 = await a.view.get(0)
+  const b0 = await b.view.get(0)
+
+  const a1 = await a.view.get(1)
+  const b1 = await b.view.get(1)
+
+  const a2 = await a.view.get(2)
+  const b2 = await b.view.get(2)
+
+  t.is(a0, 'b0')
+  t.is(b0, 'b0')
+
+  t.is(a1, 'b1')
+  t.is(b1, 'b1')
+
+  t.is(a2, 'a0')
+  t.is(b2, 'a0')
+
+  t.ok(await Autobase.isAutobase(a.local))
+  t.ok(await Autobase.isAutobase(b.local))
+
+  for await (const block of a.local.createReadStream()) {
+    t.ok(block.checkpointer || block.checkpoint !== null)
+  }
+
+  for await (const block of b.local.createReadStream()) {
+    t.ok(block.checkpointer === 0 && block.checkpoint === null)
+  }
+
+  async function applyWriter (batch, view, base) {
+    for (const node of batch) {
+      if (node.value.add) {
+        base.system.addWriter(b4a.from(node.value.add, 'hex'), !!node.value.indexer)
+        continue
+      }
+
+      if (view) await view.append(node.value)
+    }
+  }
+})
+
+test('basic - non-indexed writers 3-of-5', async t => {
+  const [a, b, c, d, e] = await create(5, applyWriter, store => store.get('test', { valueEncoding: 'json' }))
+
+  await a.append({ add: b.local.key.toString('hex'), indexer: true })
+  await a.append({ add: c.local.key.toString('hex'), indexer: true })
+  await a.append({ add: d.local.key.toString('hex'), indexer: false })
+  await a.append({ add: e.local.key.toString('hex'), indexer: false })
+
+  await sync([a, b, c, d, e])
+
+  t.is(a.linearizer.indexers.length, 2)
+  t.is(b.linearizer.indexers.length, 2)
+  t.is(c.linearizer.indexers.length, 2)
+  t.is(d.linearizer.indexers.length, 2)
+  t.is(e.linearizer.indexers.length, 2)
+
+  t.ok(c.writable)
+  t.ok(d.writable)
+  t.ok(e.writable)
+
+  await b.append(null)
+  await sync([a, b, c, d, e])
+
+  // b cannot unilaterally confirm
+  t.is(a.linearizer.indexers.length, 2)
+  t.is(b.linearizer.indexers.length, 2)
+  t.is(c.linearizer.indexers.length, 2)
+
+  await a.append(null)
+  await sync([a, b, c, d, e])
+
+  // c is indexer now
+  t.is(c.linearizer.indexers.length, 3)
+
+  await e.append('e0')
+  await sync([d, e])
+
+  await d.append('d0')
+  await sync([a, d])
+
+  await a.append('a0') // later will only index to here
+  await sync([a, e])
+
+  await e.append('e1')
+  await sync([d, e])
+
+  await e.append('d1')
+  await sync([a, d, e])
+
+  // e and d do not count
+  t.is(a.view.indexedLength, 0)
+  t.is(d.view.indexedLength, 0)
+  t.is(e.view.indexedLength, 0)
+
+  // confirm with only b and c
+  await sync([a, b, c])
+  await b.append('b0')
+
+  await sync([b, c])
+  await c.append('c0')
+
+  // should only index up to a0
+  t.is(c.view.indexedLength, 3)
+
+  await sync([a, b, c, d, e])
+
+  t.is(a.view.indexedLength, 3)
+  t.is(b.view.indexedLength, 3)
+  t.is(d.view.indexedLength, 3)
+  t.is(e.view.indexedLength, 3)
+
+  const a0 = await a.view.get(0)
+  const a1 = await a.view.get(1)
+  const a2 = await a.view.get(2)
+
+  t.is(a0, 'e0')
+  t.is(a1, 'd0')
+  t.is(a2, 'a0')
+
+  await t.execution(compare(a, b))
+  await t.execution(compare(a, c))
+  await t.execution(compare(a, d))
+  await t.execution(compare(a, e))
+
+  t.ok(await Autobase.isAutobase(a.local))
+  t.ok(await Autobase.isAutobase(b.local))
+  t.ok(await Autobase.isAutobase(c.local))
+  t.ok(await Autobase.isAutobase(d.local))
+  t.ok(await Autobase.isAutobase(e.local))
+
+  for await (const block of a.local.createReadStream()) {
+    t.ok(block.checkpointer || block.checkpoint !== null)
+  }
+
+  for await (const block of b.local.createReadStream()) {
+    t.ok(block.checkpointer || block.checkpoint !== null)
+  }
+
+  for await (const block of c.local.createReadStream()) {
+    t.ok(block.checkpointer || block.checkpoint !== null)
+  }
+
+  for await (const block of d.local.createReadStream()) {
+    t.ok(block.checkpointer === 0 && block.checkpoint === null)
+  }
+
+  for await (const block of e.local.createReadStream()) {
+    t.ok(block.checkpointer === 0 && block.checkpoint === null)
+  }
+
+  async function applyWriter (batch, view, base) {
+    for (const node of batch) {
+      if (node.value.add) {
+        base.system.addWriter(b4a.from(node.value.add, 'hex'), !!node.value.indexer)
+        continue
+      }
+
+      if (view) await view.append(node.value)
+    }
+  }
+})

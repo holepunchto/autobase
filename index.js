@@ -21,6 +21,8 @@ const VIEW_NAME_USERDATA = 'autobase/view'
 const DEFAULT_ACK_INTERVAL = 0
 const DEFAULT_ACK_THRESHOLD = 0
 
+const { FLAG_OPLOG_CHECKPOINT } = messages
+
 class Writer {
   constructor (base, core, length) {
     this.base = base
@@ -224,6 +226,7 @@ module.exports = class Autobase extends ReadyResource {
     this.version = 0 // todo: set version
     this._checkpointer = 0
     this._checkpoint = null
+    this._needsCheckpoint = false
 
     this._openingCores = null
 
@@ -462,6 +465,7 @@ module.exports = class Autobase extends ReadyResource {
     if (local) {
       this.localWriter = w
       if (this._ackInterval) this._startAckTimer()
+      if (this.system.bootstrapping) this._needsCheckpoint = true
     } else {
       core.on('append', this._onremotewriterchangeBound)
     }
@@ -476,8 +480,9 @@ module.exports = class Autobase extends ReadyResource {
       indexers.push(this._makeWriter(this.bootstrap, 0))
       this.writers = indexers.slice()
     } else {
-      for (const { key, length } of this.system.digest.writers) {
-        indexers.push(this._getWriterByKey(key, length))
+      for (const { key, length, indexer } of this.system.digest.writers) {
+        const writer = this._getWriterByKey(key, length)
+        if (indexer) indexers.push(writer)
       }
     }
 
@@ -619,13 +624,17 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // triggered from system
-  _onaddwriter (key) {
+  _onaddwriter (key, indexer) {
     for (const w of this.writers) {
       if (b4a.equals(w.core.key, key)) return
     }
 
-    this.writers.push(this._makeWriter(key, 0))
-    this._pendingWriters = true
+    const writer = this._makeWriter(key, 0)
+    this.writers.push(writer)
+
+    if (indexer && writer === this.localWriter) {
+      this._needsCheckpoint = true
+    }
 
     // fetch any nodes needed for dependents
     this._bump()
@@ -659,7 +668,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _bootstrap () {
-    this.system.addWriter(this.bootstrap)
+    this.system.addWriter(this.bootstrap, true)
   }
 
   async _applyUpdate (u) {
@@ -762,7 +771,7 @@ module.exports = class Autobase extends ReadyResource {
   async _flushAndCheckpoint (indexed, heads) {
     const checkpoint = await this._flushIndexes(indexed, heads)
 
-    if (checkpoint === null) return
+    if (!this._needsCheckpoint || checkpoint === null) return
 
     this._checkpoint = checkpoint
     this._checkpointer = 0
@@ -812,7 +821,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _flushLocal () {
-    if (this.system.length > 0 && this._checkpoint === null && this._checkpointer === 0) {
+    if (this._needsCheckpoint && this.system.length > 0 && this._checkpoint === null && this._checkpointer === 0) {
       this._checkpoint = this.system.checkpoint()
     }
 
@@ -823,7 +832,11 @@ module.exports = class Autobase extends ReadyResource {
 
       if (yielded) this.localWriter.shift().clear()
 
+      let flags = 0
+      if (this._needsCheckpoint) flags |= FLAG_OPLOG_CHECKPOINT
+
       blocks[i] = {
+        flags,
         version: this.version,
         checkpointer: this._checkpointer,
         checkpoint: this._checkpointer === 0 ? this._checkpoint : null,
@@ -835,7 +848,7 @@ module.exports = class Autobase extends ReadyResource {
         }
       }
 
-      if (this._checkpointer > 0 || this._checkpoint !== null) {
+      if (this._needsCheckpoint && (this._checkpointer > 0 || this._checkpoint !== null)) {
         this._checkpointer++
         this._checkpoint = null
       }
@@ -869,5 +882,10 @@ function compareHead (head, node) {
 
 function isAutobaseMessage (msg) {
   if (msg.checkpointer) return !msg.checkpoint
-  return msg.checkpoint && msg.checkpoint.length > 0
+  const indexer = msg.flags & FLAG_OPLOG_CHECKPOINT
+  if (indexer) {
+    return msg.checkpoint && msg.checkpoint.length > 0
+  } else {
+    return !msg.checkpoint
+  }
 }

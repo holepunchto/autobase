@@ -435,9 +435,10 @@ test('linearizer - shouldAck', async t => {
   t.ok(b.linearizer.shouldAck(b.localWriter))
   t.ok(c.linearizer.shouldAck(getWriter(c, b.localWriter)))
 
-  t.ok(a.linearizer.shouldAck(getWriter(a, c.localWriter)))
-  t.ok(b.linearizer.shouldAck(getWriter(b, c.localWriter)))
-  t.ok(c.linearizer.shouldAck(c.localWriter))
+  // c is not a writer yet
+  t.absent(a.linearizer.shouldAck(getWriter(a, c.localWriter)))
+  t.absent(b.linearizer.shouldAck(getWriter(b, c.localWriter)))
+  t.absent(c.linearizer.shouldAck(c.localWriter))
 
   function getWriter (base, writer) {
     for (const w of base.writers) {
