@@ -545,6 +545,227 @@ test('suspend - non-indexed writer', async t => {
   }
 })
 
+test('suspend - open new index after reopen', async t => {
+  const [a] = await create(1, applyMultiple, openMultiple)
+
+  const store = new Corestore(await tmpDir(t), {
+    primaryKey: Buffer.alloc(32).fill(1)
+  })
+
+  const session1 = store.session()
+  const b = new Autobase(session1, a.local.key, {
+    valueEncoding: 'json',
+    apply: applyMultiple,
+    open: openMultiple
+  })
+
+  await b.ready()
+
+  await addWriter(a, b)
+
+  await sync([a, b])
+
+  await a.append({ index: 1, data: 'a0' })
+
+  await confirm([a, b])
+
+  await b.append({ index: 2, data: 'b0' })
+  await a.append({ index: 1, data: 'a1' })
+
+  t.is(b.system.digest.writers.length, 2)
+
+  const order = []
+  for (let i = 0; i < b.view.first.length; i++) {
+    order.push(await b.view.first.get(i))
+  }
+
+  for (let i = 0; i < b.view.second.length; i++) {
+    order.push(await b.view.second.get(i))
+  }
+
+  await b.close()
+
+  const session2 = store.session()
+  const c = new Autobase(session2, a.local.key, {
+    valueEncoding: 'json',
+    apply: applyMultiple,
+    open: openMultiple
+  })
+
+  await c.ready()
+  await c.update({ wait: false })
+
+  t.is(c.view.first.length + c.view.second.length, order.length)
+
+  for (let i = 0; i < c.view.first.length; i++) {
+    t.alike(await c.view.first.get(i), order[i])
+  }
+
+  for (let i = 0; i < c.view.second.length; i++) {
+    t.alike(await c.view.second.get(i), order[i + c.view.first.length])
+  }
+
+  t.is(c.system.digest.writers.length, 2)
+
+  await c.append({ view: 1, data: 'final' })
+
+  await t.execution(sync([a, c]))
+
+  t.is(b.view.first.indexedLength, 1)
+  t.is(c.view.first.indexedLength, 1)
+  t.is(c.view.first.length, b.view.first.length + 1)
+
+  await t.execution(confirm([a, c]))
+
+  const an = await a.local.get(a.local.length - 1)
+  const cn = await c.local.get(c.local.length - 1)
+
+  t.is(an.checkpoint.length, 3)
+  t.is(cn.checkpoint.length, 3)
+
+  const acp1 = await a.localWriter.getCheckpoint(1)
+  const acp2 = await a.localWriter.getCheckpoint(2)
+
+  const ccp1 = await c.localWriter.getCheckpoint(1)
+  const ccp2 = await c.localWriter.getCheckpoint(2)
+
+  t.alike(acp1.treeHash, ccp1.treeHash)
+  t.alike(acp1.length, ccp1.length)
+
+  t.alike(acp2.treeHash, ccp2.treeHash)
+  t.alike(acp2.length, ccp2.length)
+
+  t.alike(acp1, a.view.first._source._checkpoint())
+  t.alike(acp2, a.view.second._source._checkpoint())
+
+  await a.close()
+  await b.close()
+  await c.close()
+})
+
+test('suspend - reopen multiple indexes', async t => {
+  const [a] = await create(1, applyMultiple, openMultiple)
+
+  const store = new Corestore(await tmpDir(t), {
+    primaryKey: Buffer.alloc(32).fill(1)
+  })
+
+  const session1 = store.session()
+  const b = new Autobase(session1, a.local.key, {
+    valueEncoding: 'json',
+    apply: applyMultiple,
+    open: openMultiple
+  })
+
+  await b.ready()
+
+  await addWriter(a, b)
+
+  await sync([a, b])
+
+  await a.append({ index: 1, data: 'a0' })
+  await a.append({ index: 2, data: 'a1' })
+
+  await confirm([a, b])
+
+  await b.append({ index: 2, data: 'b0' })
+  await b.append({ index: 1, data: 'b1' })
+  // await b.append({ index: 1, data: 'b2' })
+  await a.append({ index: 1, data: 'a2' })
+
+  t.is(b.system.digest.writers.length, 2)
+
+  const order = []
+  for (let i = 0; i < b.view.first.length; i++) {
+    order.push(await b.view.first.get(i))
+  }
+
+  for (let i = 0; i < b.view.second.length; i++) {
+    order.push(await b.view.second.get(i))
+  }
+
+  await b.close()
+
+  const session2 = store.session()
+  const c = new Autobase(session2, a.local.key, {
+    valueEncoding: 'json',
+    apply: applyMultiple,
+    open: openMultiple
+  })
+
+  await c.ready()
+  await c.update({ wait: false })
+
+  t.is(c.view.first.length + c.view.second.length, order.length)
+
+  for (let i = 0; i < c.view.first.length; i++) {
+    t.alike(await c.view.first.get(i), order[i])
+  }
+
+  for (let i = 0; i < c.view.second.length; i++) {
+    t.alike(await c.view.second.get(i), order[i + c.view.first.length])
+  }
+
+  t.is(c.system.digest.writers.length, 2)
+
+  await c.append({ view: 1, data: 'final' })
+
+  await t.execution(sync([a, c]))
+
+  t.is(b.view.first.indexedLength, 1)
+  t.is(c.view.first.indexedLength, 1)
+  t.is(c.view.first.length, b.view.first.length + 1)
+
+  await t.execution(confirm([a, c]))
+
+  const an = await a.local.get(a.local.length - 1)
+  const cn = await c.local.get(c.local.length - 1)
+
+  t.is(an.checkpoint.length, 3)
+  t.is(cn.checkpoint.length, 3)
+
+  const acp1 = await a.localWriter.getCheckpoint(1)
+  const acp2 = await a.localWriter.getCheckpoint(2)
+
+  const ccp1 = await c.localWriter.getCheckpoint(1)
+  const ccp2 = await c.localWriter.getCheckpoint(2)
+
+  t.alike(acp1.treeHash, ccp1.treeHash)
+  t.alike(acp1.length, ccp1.length)
+
+  t.alike(acp2.treeHash, ccp2.treeHash)
+  t.alike(acp2.length, ccp2.length)
+
+  t.alike(acp1, a.view.first._source._checkpoint())
+  t.alike(acp2, a.view.second._source._checkpoint())
+
+  await a.close()
+  await b.close()
+  await c.close()
+})
+
 function open (store) {
   return store.get('view', { valueEncoding: 'json' })
+}
+
+function openMultiple (store) {
+  return {
+    first: store.get('first', { valueEncoding: 'json' }),
+    second: store.get('second', { valueEncoding: 'json' })
+  }
+}
+
+async function applyMultiple (batch, view, base) {
+  for (const { value } of batch) {
+    if (value.add) {
+      base.system.addWriter(Buffer.from(value.add, 'hex'))
+      continue
+    }
+
+    if (value.index === 1) {
+      await view.first.append(value.data)
+    } else if (value.index === 2) {
+      await view.second.append(value.data)
+    }
+  }
 }

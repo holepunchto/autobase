@@ -21,7 +21,7 @@ const VIEW_NAME_USERDATA = 'autobase/view'
 const DEFAULT_ACK_INTERVAL = 0
 const DEFAULT_ACK_THRESHOLD = 0
 
-const { FLAG_OPLOG_CHECKPOINT } = messages
+const { FLAG_OPLOG_IS_CHECKPOINTER } = messages
 
 class Writer {
   constructor (base, core, length) {
@@ -129,19 +129,24 @@ class Writer {
     return node
   }
 
-  async getCheckpoint () {
+  async getCheckpoint (index) {
     await this.core.update()
 
     let length = this.core.length
     if (length === 0) return null
 
     let node = await this.core.get(length - 1)
-    if (node.checkpointer !== 0) {
-      length -= node.checkpointer
+
+    let target = node.checkpoint[index]
+    if (!target) return null
+
+    if (!target.checkpoint) {
+      length -= target.checkpointer
       node = await this.core.get(length - 1)
+      target = node.checkpoint[index]
     }
 
-    return node.checkpoint
+    return target.checkpoint
   }
 
   async _addClock (clock, node) {
@@ -224,8 +229,6 @@ module.exports = class Autobase extends ReadyResource {
     this._onremotewriterchangeBound = this._onremotewriterchange.bind(this)
 
     this.version = 0 // todo: set version
-    this._checkpointer = 0
-    this._checkpoint = null
     this._needsCheckpoint = false
 
     this._openingCores = null
@@ -284,7 +287,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this.local.length > 0) {
       const head = await this.local.get(this.local.length - 1)
-      this._checkpointer = head.checkpoint ? 1 : head.checkpointer + 1
+      this.checkpointer = head.checkpoint ? 1 : head.checkpointer + 1
     }
 
     await this._ensureUserData(this.system.core, null)
@@ -482,7 +485,9 @@ module.exports = class Autobase extends ReadyResource {
     } else {
       for (const { key, length, indexer } of this.system.digest.writers) {
         const writer = this._getWriterByKey(key, length)
-        if (indexer) indexers.push(writer)
+        if (!indexer) continue
+        indexers.push(writer)
+        if (writer === this.localWriter) this._needsCheckpoint = true
       }
     }
 
@@ -693,7 +698,7 @@ module.exports = class Autobase extends ReadyResource {
       const update = this._updates[j++]
       if (update.system === 0) continue
 
-      await this._flushAndCheckpoint(i, node.indexed)
+      await this._flushIndexes(i, node.indexed)
 
       const nodes = u.indexed.slice(i).concat(u.tip)
       return { count: u.shared - i, nodes }
@@ -754,7 +759,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       if (update.system > 0 && indexed) {
-        await this._flushAndCheckpoint(i + 1, node.indexed)
+        await this._flushIndexes(i + 1, node.indexed)
 
         const nodes = u.indexed.slice(i + 1).concat(u.tip)
         return { count: 0, nodes }
@@ -762,19 +767,10 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     if (u.indexed.length) {
-      await this._flushAndCheckpoint(u.indexed.length, u.indexed[u.indexed.length - 1].indexed)
+      await this._flushIndexes(u.indexed.length, u.indexed[u.indexed.length - 1].indexed)
     }
 
     return null
-  }
-
-  async _flushAndCheckpoint (indexed, heads) {
-    const checkpoint = await this._flushIndexes(indexed, heads)
-
-    if (!this._needsCheckpoint || checkpoint === null) return
-
-    this._checkpoint = checkpoint
-    this._checkpointer = 0
   }
 
   async _flushIndexes (indexed, heads) {
@@ -783,7 +779,6 @@ module.exports = class Autobase extends ReadyResource {
 
     while (indexed > 0) {
       const u = this._updates.shift()
-      const user = []
 
       indexed -= u.batch
       updatedSystem += u.system
@@ -794,17 +789,9 @@ module.exports = class Autobase extends ReadyResource {
         if (start === 0) updatedCores.push(core)
 
         await core.core.append(blocks)
-
-        const tree = core.core.core.tree
-
-        user.push({
-          name: core.name,
-          treeHash: tree.hash(),
-          length: tree.length
-        })
       }
 
-      await this.system.flush(u.system, user, this.writers, heads)
+      await this.system.flush(u.system, updatedCores, this.writers, heads)
     }
 
     for (const core of updatedCores) {
@@ -816,13 +803,23 @@ module.exports = class Autobase extends ReadyResource {
     if (updatedSystem) {
       this.system._onindex(updatedSystem)
     }
-
-    return this.system.checkpoint()
   }
 
-  _flushLocal () {
-    if (this._needsCheckpoint && this.system.length > 0 && this._checkpoint === null && this._checkpointer === 0) {
-      this._checkpoint = this.system.checkpoint()
+  async _flushLocal () {
+    const checkpoint = []
+
+    if (this._needsCheckpoint) {
+      checkpoint.push(this.system.checkpoint())
+
+      for (const [, core] of this._viewStore.opened) {
+        if (!core.indexedLength) continue
+
+        const index = await this.system.getIndex(core.name)
+        if (index < 0) continue
+
+        core.index = index
+        checkpoint.push(core.checkpoint())
+      }
     }
 
     const blocks = new Array(this.localWriter.length - this.local.length)
@@ -833,13 +830,12 @@ module.exports = class Autobase extends ReadyResource {
       if (yielded) this.localWriter.shift().clear()
 
       let flags = 0
-      if (this._needsCheckpoint) flags |= FLAG_OPLOG_CHECKPOINT
+      if (this._needsCheckpoint) flags |= FLAG_OPLOG_IS_CHECKPOINTER
 
       blocks[i] = {
         flags,
         version: this.version,
-        checkpointer: this._checkpointer,
-        checkpoint: this._checkpointer === 0 ? this._checkpoint : null,
+        checkpoint: checkpoint.sort(cmpCheckpoint),
         node: {
           heads,
           abi: 0,
@@ -848,13 +844,35 @@ module.exports = class Autobase extends ReadyResource {
         }
       }
 
-      if (this._needsCheckpoint && (this._checkpointer > 0 || this._checkpoint !== null)) {
-        this._checkpointer++
-        this._checkpoint = null
+      if (this._needsCheckpoint) {
+        this.system.checkpointer++
+
+        for (const [, core] of this._viewStore.opened) {
+          core.checkpointer++
+        }
       }
     }
 
     return this.local.append(blocks)
+  }
+
+  async loadIndex (name) {
+    const idx = await this.system.getIndex(name)
+    if (idx < 0) return 0
+
+    if (this.local.length === 0) return 0
+
+    // only indexers have checkpoints
+    let indexer = this.localWriter
+    if (!this._needsCheckpoint) {
+      const indexerHeads = await this.system.digest.indexerHeads
+      if (!indexerHeads.length) return 0 // no data
+
+      indexer = this._getWriterByKey(indexerHeads[0].key)
+    }
+
+    const checkpoint = await indexer.getCheckpoint(idx)
+    return checkpoint.length
   }
 }
 
@@ -881,11 +899,10 @@ function compareHead (head, node) {
 }
 
 function isAutobaseMessage (msg) {
-  if (msg.checkpointer) return !msg.checkpoint
-  const indexer = msg.flags & FLAG_OPLOG_CHECKPOINT
-  if (indexer) {
-    return msg.checkpoint && msg.checkpoint.length > 0
-  } else {
-    return !msg.checkpoint
-  }
+  const indexer = msg.flags & FLAG_OPLOG_IS_CHECKPOINTER
+  return indexer ? msg.checkpoint.length > 0 : msg.checkpoint.length === 0
+}
+
+function cmpCheckpoint (a, b) {
+  return a.index - b.index
 }
