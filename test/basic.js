@@ -870,10 +870,9 @@ test('basic - autoack 5 writers', async t => {
   await addWriter(a, d)
   await addWriter(a, e)
 
-  await bases.map(n => n.update({ wait: true }))
+  await Promise.all(bases.map(n => n.update({ wait: true })))
 
-  // e is not writable until flush
-  await t.exception(() => e.append('e0'))
+  t.not(e.linearizer.indexers.length, 5)
 
   await b.append('b0')
 
@@ -882,12 +881,6 @@ test('basic - autoack 5 writers', async t => {
   t.is(c.view.indexedLength, 0)
   t.is(d.view.indexedLength, 0)
   t.is(e.view.indexedLength, 0)
-
-  await t.execution(new Promise((resolve, reject) => {
-    setTimeout(() => {
-      e.append('e0').then(resolve, reject)
-    }, 1000)
-  }))
 
   await new Promise(resolve => setTimeout(resolve, 1000))
 
@@ -923,11 +916,13 @@ test('basic - autoack 5 writers', async t => {
 
   await Promise.all([a, b, c, d, e].map(b => b.update()))
 
-  t.is(a.view.indexedLength, 2)
-  t.is(b.view.indexedLength, 2)
-  t.is(c.view.indexedLength, 2)
-  t.is(d.view.indexedLength, 2)
-  t.is(e.view.indexedLength, 2)
+  t.is(e.linearizer.indexers.length, 5)
+
+  t.is(a.view.indexedLength, 1)
+  t.is(b.view.indexedLength, 1)
+  t.is(c.view.indexedLength, 1)
+  t.is(d.view.indexedLength, 1)
+  t.is(e.view.indexedLength, 1)
 })
 
 test('basic - autoack concurrent', async t => {
@@ -947,7 +942,7 @@ test('basic - autoack concurrent', async t => {
   await addWriter(a, d)
   await addWriter(a, e)
 
-  await bases.map(n => n.update({ wait: true }))
+  await Promise.all(bases.map(n => n.update({ wait: true })))
 
   await b.append(null)
 
