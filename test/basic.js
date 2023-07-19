@@ -1127,11 +1127,11 @@ test('basic - non-indexed writer', async t => {
   t.ok(await Autobase.isAutobase(b.local))
 
   for await (const block of a.local.createReadStream()) {
-    t.ok(block.checkpointer || block.checkpoint !== null)
+    t.ok(block.checkpoint.length !== 0)
   }
 
   for await (const block of b.local.createReadStream()) {
-    t.ok(block.checkpointer === 0 && block.checkpoint === null)
+    t.ok(block.checkpoint.length === 0)
   }
 
   async function applyWriter (batch, view, base) {
@@ -1237,23 +1237,23 @@ test('basic - non-indexed writers 3-of-5', async t => {
   t.ok(await Autobase.isAutobase(e.local))
 
   for await (const block of a.local.createReadStream()) {
-    t.ok(block.checkpointer || block.checkpoint !== null)
+    t.ok(block.checkpoint.length !== 0)
   }
 
   for await (const block of b.local.createReadStream()) {
-    t.ok(block.checkpointer || block.checkpoint !== null)
+    t.ok(block.checkpoint.length !== 0)
   }
 
   for await (const block of c.local.createReadStream()) {
-    t.ok(block.checkpointer || block.checkpoint !== null)
+    t.ok(block.checkpoint.length !== 0)
   }
 
   for await (const block of d.local.createReadStream()) {
-    t.ok(block.checkpointer === 0 && block.checkpoint === null)
+    t.ok(block.checkpoint.length === 0)
   }
 
   for await (const block of e.local.createReadStream()) {
-    t.ok(block.checkpointer === 0 && block.checkpoint === null)
+    t.ok(block.checkpoint.length === 0)
   }
 
   async function applyWriter (batch, view, base) {
