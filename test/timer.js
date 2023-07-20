@@ -62,20 +62,51 @@ test('timer - bump max timeout', t => {
   }
 })
 
-test('timer - reset', t => {
-  t.plan(1)
+test('timer - extend', t => {
+  t.plan(2)
 
-  const timer = new Timer(fail, 100, { unref: false, limit: 200 })
+  const timer = new Timer(handler, 100)
 
   timer.bump()
-  timer.reset(pass)
+  timer.extend()
 
-  function fail () {
+  t.is(timer._interval, 200)
+
+  const pass = setTimeout(() => {
+    t.pass()
+    timer.stop()
+  }, 200)
+
+  function handler () {
+    clearTimeout(pass)
+
     t.fail()
     timer.stop()
   }
+})
 
-  function pass () {
+test('timer - reset', t => {
+  t.plan(2)
+
+  const timer = new Timer(handler, 50)
+
+  timer.bump()
+  timer.extend()
+  timer.extend()
+  timer.extend()
+
+  t.is(timer._interval, 400)
+
+  timer.reset()
+
+  const fail = setTimeout(() => {
+    t.fail()
+    timer.stop()
+  }, 200)
+
+  function handler () {
+    clearTimeout(fail)
+
     t.pass()
     timer.stop()
   }
@@ -107,23 +138,5 @@ test('timer - await execution', t => {
       t.pass()
       running = false
     })
-  }
-})
-
-test('timer - trigger', t => {
-  t.plan(1)
-
-  const fail = setTimeout(() => t.fail(), 1000)
-  const timer = new Timer(pass, 2000)
-
-  timer.trigger()
-
-  t.teardown(() => {
-    timer.stop()
-  })
-
-  function pass () {
-    clearTimeout(fail)
-    return t.pass()
   }
 })

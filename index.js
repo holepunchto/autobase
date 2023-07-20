@@ -243,6 +243,7 @@ module.exports = class Autobase extends ReadyResource {
     this._ackInterval = handlers.ackInterval || DEFAULT_ACK_INTERVAL
     this._ackThreshold = handlers.ackThreshold || DEFAULT_ACK_THRESHOLD
     this._ackTimer = null
+    this._ackSize = 0
     this._acking = false
 
     this.ready().catch(safetyCatch)
@@ -360,11 +361,22 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async ack () {
-    if (!this.localWriter || this._acking) return
+    if (!this._needsCheckpoint || this._acking) return
 
     this._acking = true
 
-    await this._bump()
+    await this.update({ wait: true })
+
+    if (this._ackTimer) {
+      const ackSize = this.linearizer.size
+      if (this._ackSize && this._ackSize < ackSize) {
+        this._ackTimer.extend()
+      } else {
+        this._ackTimer.reset()
+      }
+
+      this._ackSize = ackSize
+    }
 
     if (this.linearizer.shouldAck(this.localWriter)) {
       await this.append(null)
@@ -601,7 +613,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     // skip threshold check while acking
-    if (this.localWriter && this._ackThreshold && !this._acking) {
+    if (this._ackThreshold && !this._acking) {
       const n = this._ackThreshold * this.linearizer.indexers.length
 
       // await here would cause deadlock, fine to run in bg
