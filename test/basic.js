@@ -276,7 +276,7 @@ test('basic - throws', async t => {
 
   await t.exception(b.append({ message: 'not writable' }))
   await t.exception(a.view.append({ message: 'append outside apply' }))
-  t.exception(() => a.system.addWriter(b.local.key))
+  await t.exception(() => a.system.addWriter(b.local.key))
 })
 
 test('basic - add 5 writers', async t => {
@@ -713,8 +713,8 @@ test('basic - pass exisiting store', async t => {
     primaryKey: Buffer.alloc(32).fill(1)
   })
 
-  const ns2 = store.namespace('1')
-  const base2 = new Autobase(ns2, base1.local.key, { apply, valueEncoding: 'json' })
+  const session2 = store.session()
+  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json' })
   await base2.ready()
 
   await base1.append({
@@ -738,15 +738,15 @@ test('basic - pass exisiting store', async t => {
 
   await base2.close()
 
-  const ns3 = store.namespace('1')
-  const base3 = new Autobase(ns3, base1.local.key, { apply, valueEncoding: 'json' })
+  const session3 = store.session()
+  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json' })
   await base3.ready()
 
   t.is(base3.system.digest.writers.length, 2)
 
   await base3.append('final')
 
-  await t.execution(sync([base3, base2]))
+  await t.execution(sync([base3, base1]))
 
   t.is(base3.system.digest.writers.length, 2)
 })
@@ -1064,10 +1064,10 @@ test('basic - catch apply throws', async t => {
 
   await a.append('trigger')
 
-  function applyThrow (batch, view, base) {
+  async function applyThrow (batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
-        base.system.addWriter(b4a.from(node.value.add, 'hex'))
+        await base.system.addWriter(b4a.from(node.value.add, 'hex'))
       }
 
       if (node.value === 'trigger') {

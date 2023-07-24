@@ -21,8 +21,8 @@ test('suspend - pass exisiting store', async t => {
     primaryKey: Buffer.alloc(32).fill(1)
   })
 
-  const session1 = store.session()
-  const base2 = new Autobase(session1, base1.local.key, { apply, valueEncoding: 'json' })
+  const session2 = store.session()
+  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json' })
   await base2.ready()
 
   await base1.append({
@@ -46,15 +46,15 @@ test('suspend - pass exisiting store', async t => {
 
   await base2.close()
 
-  const session2 = store.session()
-  const base3 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json' })
+  const session3 = store.session()
+  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json' })
   await base3.ready()
 
   t.is(base3.system.digest.writers.length, 2)
 
   await base3.append('final')
 
-  await t.execution(sync([base3, base2]))
+  await t.execution(sync([base3, base1]))
 })
 
 test('suspend - pass exisiting fs store', async t => {
@@ -64,8 +64,8 @@ test('suspend - pass exisiting fs store', async t => {
     primaryKey: Buffer.alloc(32).fill(1)
   })
 
-  const session1 = store.session()
-  const base2 = new Autobase(session1, base1.local.key, { apply, valueEncoding: 'json' })
+  const session2 = store.session()
+  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json' })
   await base2.ready()
 
   await base1.append({
@@ -89,15 +89,15 @@ test('suspend - pass exisiting fs store', async t => {
 
   await base2.close()
 
-  const session2 = store.session()
-  const base3 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json' })
+  const session3 = store.session()
+  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json' })
   await base3.ready()
 
   t.is(base3.system.digest.writers.length, 2)
 
   await base3.append('final')
 
-  await t.execution(sync([base3, base2]))
+  await t.execution(sync([base3, base1]))
 })
 
 test('suspend - 2 exisiting fs stores', async t => {
@@ -112,8 +112,8 @@ test('suspend - 2 exisiting fs stores', async t => {
     primaryKey: Buffer.alloc(32).fill(1)
   })
 
-  const session1 = store2.session()
-  const base2 = new Autobase(session1, base1.local.key, { apply, valueEncoding: 'json' })
+  const session2 = store2.session()
+  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json' })
   await base2.ready()
 
   await base1.append({
@@ -137,15 +137,15 @@ test('suspend - 2 exisiting fs stores', async t => {
 
   await base2.close()
 
-  const session2 = store2.session()
-  const base3 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json' })
+  const session3 = store2.session()
+  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json' })
   await base3.ready()
 
   t.is(base3.system.digest.writers.length, 2)
 
   await base3.append('final')
 
-  await t.execution(sync([base3, base2]))
+  await t.execution(sync([base3, base1]))
 
   await base1.close()
   await base2.close()

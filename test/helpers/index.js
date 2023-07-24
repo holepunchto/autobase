@@ -70,8 +70,6 @@ async function addWriter (base, add) {
 
 async function confirm (bases, length) {
   await sync(bases)
-  await bases[0].append(null)
-  await sync(bases)
 
   for (let i = 0; i < 2; i++) {
     const writers = bases.filter(b => !!b.localWriter)
@@ -121,7 +119,7 @@ function equal (a, b) {
 async function apply (batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
-      base.system.addWriter(Buffer.from(value.add, 'hex'))
+      await base.system.addWriter(Buffer.from(value.add, 'hex'))
       continue
     }
 
