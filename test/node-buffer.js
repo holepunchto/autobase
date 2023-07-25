@@ -89,7 +89,7 @@ test('node buffer - many entries', t => {
   }
 
   t.is(nodes.length, 0x1000001)
-  t.is(nodes.buffer.length, 2)
+  t.is(nodes.buffer.length, 1)
 })
 
 test('node buffer - grow only if necessary', t => {
@@ -109,23 +109,26 @@ test('node buffer - grow only if necessary', t => {
   nodes.push(3)
   nodes.push(4)
   nodes.push(5)
+  nodes.push(6)
+
+  t.is(nodes.buffer, b1)
+
+  nodes.push(7)
 
   const b2 = nodes.buffer
 
-  nodes.push(6)
-
   t.not(nodes.buffer, b1)
   t.is(nodes.buffer, b2)
-  t.is(nodes.buffer.length, 4)
+  t.is(nodes.buffer.length, 8)
 
   t.is(nodes.get(1), null)
-  t.is(nodes.get(7), null)
+  t.is(nodes.get(8), null)
 
   t.is(nodes.get(3), 3)
   t.is(nodes.get(4), 4)
   t.is(nodes.get(5), 5)
 
-  t.is(nodes.length, 7)
+  t.is(nodes.length, 8)
 })
 
 test('node buffer - push shift push', t => {
@@ -180,5 +183,5 @@ test('node buffer - shrink', t => {
   t.is(nodes.shift(), null)
 
   t.is(nodes.push('4'), 4)
-  t.is(nodes.buffer.length, 2)
+  t.is(nodes.buffer.length, 1)
 })
