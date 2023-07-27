@@ -175,7 +175,7 @@ class LinearizedStore {
 
     if (this.opened.has(name)) return this.opened.get(name).createSession(valueEncoding)
 
-    const core = this.base.store.get({ name: 'view/' + name, exclusive: true })
+    const core = this.base.store.get({ name: 'view/' + name, cache: opts.cache, exclusive: true })
     const ac = new Autocore(this.base, core, name)
 
     this.waiting.push(ac)
