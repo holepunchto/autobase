@@ -536,7 +536,7 @@ test('suspend - non-indexed writer', async t => {
   async function applyWriter (batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
-        base.system.addWriter(b4a.from(node.value.add, 'hex'), !!node.value.indexer)
+        base.addWriter(b4a.from(node.value.add, 'hex'), !!node.value.indexer)
         continue
       }
 
@@ -758,7 +758,7 @@ function openMultiple (store) {
 async function applyMultiple (batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
-      base.system.addWriter(Buffer.from(value.add, 'hex'))
+      base.addWriter(Buffer.from(value.add, 'hex'))
       continue
     }
 

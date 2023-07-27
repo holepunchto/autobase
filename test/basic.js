@@ -276,7 +276,7 @@ test('basic - throws', async t => {
 
   await t.exception(b.append({ message: 'not writable' }))
   await t.exception(a.view.append({ message: 'append outside apply' }))
-  await t.exception(() => a.system.addWriter(b.local.key))
+  await t.exception(() => a.addWriter(b.local.key))
 })
 
 test('basic - add 5 writers', async t => {
@@ -1137,7 +1137,7 @@ test('basic - non-indexed writer', async t => {
   async function applyWriter (batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
-        base.system.addWriter(b4a.from(node.value.add, 'hex'), !!node.value.indexer)
+        base.addWriter(b4a.from(node.value.add, 'hex'), !!node.value.indexer)
         continue
       }
 
@@ -1259,7 +1259,7 @@ test('basic - non-indexed writers 3-of-5', async t => {
   async function applyWriter (batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
-        base.system.addWriter(b4a.from(node.value.add, 'hex'), !!node.value.indexer)
+        base.addWriter(b4a.from(node.value.add, 'hex'), !!node.value.indexer)
         continue
       }
 
