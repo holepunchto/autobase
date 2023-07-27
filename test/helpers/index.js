@@ -119,7 +119,7 @@ function equal (a, b) {
 async function apply (batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
-      await base.system.addWriter(Buffer.from(value.add, 'hex'))
+      base.addWriter(Buffer.from(value.add, 'hex'))
       continue
     }
 
