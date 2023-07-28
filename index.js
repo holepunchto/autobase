@@ -119,6 +119,8 @@ module.exports = class Autobase extends ReadyResource {
     // view opens after system is loaded
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
 
+    this._restarts = 0
+
     this.ready().catch(safetyCatch)
   }
 
@@ -408,7 +410,16 @@ module.exports = class Autobase extends ReadyResource {
       heads.push(headNode)
     }
 
-    this.linearizer = new Linearizer(indexers, heads, clock)
+    const removed = this.system.digest.writers.map(w => {
+      const writer = this._getWriterByKey(w.key)
+      return { writer, length: w.length }
+    })
+
+    this.linearizer = new Linearizer(indexers, {
+      heads,
+      removed,
+      cacheIndex: this._restarts++
+    })
 
     if (change) this._reloadUpdate(change, heads)
   }
