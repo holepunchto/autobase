@@ -17,7 +17,7 @@ const inspect = Symbol.for('nodejs.util.inspect.custom')
 const REFERRER_USERDATA = 'referrer'
 const VIEW_NAME_USERDATA = 'autobase/view'
 
-// default is not to ack
+// default is to automatically ack
 const DEFAULT_ACK_INTERVAL = 10 * 1000
 const DEFAULT_ACK_THRESHOLD = 4
 
