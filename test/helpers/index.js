@@ -14,7 +14,7 @@ module.exports = {
 }
 
 async function create (n, apply, open, close, opts = {}) {
-  const moreOpts = { ...opts, apply, open, close, valueEncoding: 'json' }
+  const moreOpts = { apply, open, close, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, ...opts }
   const bases = [new Autobase(new Corestore(ram, { primaryKey: Buffer.alloc(32).fill(0) }), null, moreOpts)]
   await bases[0].ready()
   if (n === 1) return bases

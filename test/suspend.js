@@ -22,7 +22,7 @@ test('suspend - pass exisiting store', async t => {
   })
 
   const session2 = store.session()
-  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json' })
+  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
   await base2.ready()
 
   await base1.append({
@@ -47,7 +47,7 @@ test('suspend - pass exisiting store', async t => {
   await base2.close()
 
   const session3 = store.session()
-  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json' })
+  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
   await base3.ready()
 
   t.is(base3.system.digest.writers.length, 2)
@@ -65,7 +65,7 @@ test('suspend - pass exisiting fs store', async t => {
   })
 
   const session2 = store.session()
-  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json' })
+  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
   await base2.ready()
 
   await base1.append({
@@ -90,7 +90,7 @@ test('suspend - pass exisiting fs store', async t => {
   await base2.close()
 
   const session3 = store.session()
-  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json' })
+  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
   await base3.ready()
 
   t.is(base3.system.digest.writers.length, 2)
@@ -105,7 +105,7 @@ test('suspend - 2 exisiting fs stores', async t => {
     primaryKey: Buffer.alloc(32).fill(0)
   })
 
-  const base1 = new Autobase(store, null, { apply, valueEncoding: 'json' })
+  const base1 = new Autobase(store, null, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
   await base1.ready()
 
   const store2 = new Corestore(await tmpDir(t), {
@@ -113,7 +113,7 @@ test('suspend - 2 exisiting fs stores', async t => {
   })
 
   const session2 = store2.session()
-  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json' })
+  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
   await base2.ready()
 
   await base1.append({
@@ -138,7 +138,7 @@ test('suspend - 2 exisiting fs stores', async t => {
   await base2.close()
 
   const session3 = store2.session()
-  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json' })
+  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
   await base3.ready()
 
   t.is(base3.system.digest.writers.length, 2)
@@ -165,7 +165,9 @@ test('suspend - reopen after index', async t => {
     valueEncoding: 'json',
     open: store => store.get('view', {
       valueEncoding: 'json'
-    })
+    }),
+    ackInterval: 0,
+    ackThreshold: 0
   })
 
   await b.ready()
@@ -196,7 +198,9 @@ test('suspend - reopen after index', async t => {
     valueEncoding: 'json',
     open: store => store.get('view', {
       valueEncoding: 'json'
-    })
+    }),
+    ackInterval: 0,
+    ackThreshold: 0
   })
 
   await c.ready()
@@ -234,7 +238,9 @@ test('suspend - reopen with sync in middle', async t => {
   const b = new Autobase(session1, a.local.key, {
     apply,
     valueEncoding: 'json',
-    open
+    open,
+    ackInterval: 0,
+    ackThreshold: 0
   })
 
   await b.ready()
@@ -282,7 +288,9 @@ test('suspend - reopen with sync in middle', async t => {
   const c = new Autobase(session2, a.local.key, {
     apply,
     valueEncoding: 'json',
-    open
+    open,
+    ackInterval: 0,
+    ackThreshold: 0
   })
 
   await c.ready()
@@ -315,7 +323,9 @@ test('suspend - reopen with indexing in middle', async t => {
   const c = new Autobase(session1, a.local.key, {
     apply,
     valueEncoding: 'json',
-    open
+    open,
+    ackInterval: 0,
+    ackThreshold: 0
   })
 
   await c.ready()
@@ -348,7 +358,9 @@ test('suspend - reopen with indexing in middle', async t => {
   const c2 = new Autobase(session2, a.local.key, {
     apply,
     valueEncoding: 'json',
-    open
+    open,
+    ackInterval: 0,
+    ackThreshold: 0
   })
 
   await c2.ready()
@@ -384,7 +396,9 @@ test('suspend - reopen with indexing + sync in middle', async t => {
   const c = new Autobase(session1, a.local.key, {
     apply,
     valueEncoding: 'json',
-    open
+    open,
+    ackInterval: 0,
+    ackThreshold: 0
   })
 
   await c.ready()
@@ -438,7 +452,9 @@ test('suspend - reopen with indexing + sync in middle', async t => {
   const c2 = new Autobase(session2, a.local.key, {
     apply,
     valueEncoding: 'json',
-    open
+    open,
+    ackInterval: 0,
+    ackThreshold: 0
   })
 
   await c2.ready()
@@ -476,7 +492,9 @@ test('suspend - non-indexed writer', async t => {
   const b = new Autobase(session1, a.local.key, {
     apply: applyWriter,
     valueEncoding: 'json',
-    open
+    open,
+    ackInterval: 0,
+    ackThreshold: 0
   })
 
   await b.ready()
@@ -519,7 +537,9 @@ test('suspend - non-indexed writer', async t => {
   const c = new Autobase(session2, a.local.key, {
     applyWriter,
     valueEncoding: 'json',
-    open
+    open,
+    ackInterval: 0,
+    ackThreshold: 0
   })
 
   c.debug = true
@@ -556,7 +576,9 @@ test('suspend - open new index after reopen', async t => {
   const b = new Autobase(session1, a.local.key, {
     valueEncoding: 'json',
     apply: applyMultiple,
-    open: openMultiple
+    open: openMultiple,
+    ackInterval: 0,
+    ackThreshold: 0
   })
 
   await b.ready()
@@ -589,7 +611,9 @@ test('suspend - open new index after reopen', async t => {
   const c = new Autobase(session2, a.local.key, {
     valueEncoding: 'json',
     apply: applyMultiple,
-    open: openMultiple
+    open: openMultiple,
+    ackInterval: 0,
+    ackThreshold: 0
   })
 
   await c.ready()
@@ -654,7 +678,9 @@ test('suspend - reopen multiple indexes', async t => {
   const b = new Autobase(session1, a.local.key, {
     valueEncoding: 'json',
     apply: applyMultiple,
-    open: openMultiple
+    open: openMultiple,
+    ackInterval: 0,
+    ackThreshold: 0
   })
 
   await b.ready()
@@ -690,7 +716,9 @@ test('suspend - reopen multiple indexes', async t => {
   const c = new Autobase(session2, a.local.key, {
     valueEncoding: 'json',
     apply: applyMultiple,
-    open: openMultiple
+    open: openMultiple,
+    ackInterval: 0,
+    ackThreshold: 0
   })
 
   await c.ready()
