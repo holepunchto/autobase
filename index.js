@@ -10,8 +10,8 @@ const Linearizer = require('./lib/linearizer')
 const Autocore = require('./lib/core')
 const SystemView = require('./lib/system')
 const messages = require('./lib/messages')
-const NodeBuffer = require('./lib/node-buffer')
 const Timer = require('./lib/timer')
+const Writer = require('./lib/writer')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 const REFERRER_USERDATA = 'referrer'
@@ -22,142 +22,6 @@ const DEFAULT_ACK_INTERVAL = 0
 const DEFAULT_ACK_THRESHOLD = 0
 
 const { FLAG_OPLOG_IS_CHECKPOINTER } = messages
-
-class Writer {
-  constructor (base, core, length) {
-    this.base = base
-    this.core = core
-    this.nodes = new NodeBuffer(length)
-    this.indexed = length
-
-    this.next = null
-    this.nextCache = []
-  }
-
-  get length () {
-    return this.nodes.length
-  }
-
-  compare (writer) {
-    return b4a.compare(this.core.key, writer.core.key)
-  }
-
-  head () {
-    return this.nodes.get(this.nodes.length - 1)
-  }
-
-  shift () {
-    return this.nodes.shift()
-  }
-
-  getCached (seq) {
-    return this.nodes.get(seq)
-  }
-
-  advance (node = this.next) {
-    this.nodes.push(node)
-    this.next = null
-    return node
-  }
-
-  append (value, dependencies, batch) {
-    const node = Linearizer.createNode(this, this.length + 1, value, [], batch, dependencies)
-
-    for (const dep of dependencies) {
-      if (!dep.yielded) {
-        node.clock.add(dep.clock)
-      }
-
-      node.heads.push({
-        key: dep.writer.core.key,
-        length: dep.length
-      })
-    }
-
-    node.clock.set(node.writer.core.key, node.length)
-
-    this.advance(node)
-    return node
-  }
-
-  async ensureNext () {
-    if (this.length >= this.core.length || this.core.length === 0) return null
-    if (this.next !== null) return this.next
-
-    const cache = this.nextCache
-
-    if (!cache.length && !(await this.core.has(this.length + cache.length))) return null
-
-    while (!cache.length || cache[cache.length - 1].batch !== 1) {
-      const { node } = await this.core.get(this.length + cache.length)
-      const value = node.value == null ? null : c.decode(this.base.valueEncoding, node.value)
-      cache.push(Linearizer.createNode(this, this.length + cache.length + 1, value, node.heads, node.batch, []))
-    }
-
-    this.next = await this.ensureNode(cache)
-    return this.next
-  }
-
-  async ensureNode (batch) {
-    const last = batch[batch.length - 1]
-    if (last.batch !== 1) return null
-
-    const node = batch.shift()
-
-    while (node.dependencies.size < node.heads.length) {
-      const rawHead = node.heads[node.dependencies.size]
-
-      const headWriter = await this.base._getWriterByKey(rawHead.key)
-      if (headWriter === null || headWriter.length < rawHead.length) {
-        return null
-      }
-
-      const headNode = headWriter.getCached(rawHead.length - 1)
-
-      if (headNode === null) { // already yielded
-        popAndSwap(node.heads, node.dependencies.size)
-        continue
-      }
-
-      node.dependencies.add(headNode)
-
-      await this._addClock(node.clock, headNode)
-    }
-
-    node.clock.set(node.writer.core.key, node.length)
-
-    return node
-  }
-
-  async getCheckpoint (index) {
-    await this.core.update()
-
-    let length = this.core.length
-    if (length === 0) return null
-
-    let node = await this.core.get(length - 1)
-
-    let target = node.checkpoint[index]
-    if (!target) return null
-
-    if (!target.checkpoint) {
-      length -= target.checkpointer
-      node = await this.core.get(length - 1)
-      target = node.checkpoint[index]
-    }
-
-    return target.checkpoint
-  }
-
-  async _addClock (clock, node) {
-    if (node.yielded) return // gc'ed
-    for (const [key, length] of node.clock) {
-      if (clock.get(key) < length && !(await this.base.system.isIndexed(key, length))) {
-        clock.set(key, length)
-      }
-    }
-  }
-}
 
 class LinearizedStore {
   constructor (base) {
@@ -473,11 +337,9 @@ module.exports = class Autobase extends ReadyResource {
     return w
   }
 
-  _ensureAll () {
+  _updateAll () {
     const p = []
-    for (const w of this.writers) {
-      if (w.next === null) p.push(w.ensureNext())
-    }
+    for (const w of this.writers) p.push(w.update())
     return Promise.all(p)
   }
 
@@ -580,28 +442,28 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _addHeads () {
-    let active = true
     let added = 0
 
-    while (active && added < 50) { // 50 here is just to reduce the bulk batches
-      await this._ensureAll()
+    while (added < 50) { // 50 here is just to reduce the bulk batches
+      await this._updateAll()
 
-      active = false
+      let advanced = 0
+
       for (const w of this.writers) {
-        if (!w.next) continue
+        let node = w.advance()
+        if (node === null) continue
 
-        while (w.next) {
-          const node = w.advance()
+        advanced += node.batch
+
+        while (true) {
           this.linearizer.addHead(node)
-          if (node.batch === 1) {
-            added++
-            break
-          }
+          if (node.batch === 1) break
+          node = w.advance()
         }
-
-        active = true
-        break
       }
+
+      if (advanced === 0) break
+      added += advanced
     }
   }
 
@@ -838,7 +700,7 @@ module.exports = class Autobase extends ReadyResource {
     const blocks = new Array(this.localWriter.length - this.local.length)
 
     for (let i = 0; i < blocks.length; i++) {
-      const { value, heads, batch, yielded } = this.localWriter.getCached(this.local.length + i)
+      const { value, heads, batch, yielded } = this.localWriter.get(this.local.length + i)
 
       if (yielded) this.localWriter.shift().clear()
 
@@ -889,13 +751,6 @@ module.exports = class Autobase extends ReadyResource {
 
 function toKey (k) {
   return b4a.isBuffer(k) ? k : b4a.from(k, 'hex')
-}
-
-function popAndSwap (list, i) {
-  const pop = list.pop()
-  if (i >= list.length) return false
-  list[i] = pop
-  return true
 }
 
 function downloadAll (core) {
