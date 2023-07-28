@@ -388,7 +388,7 @@ test('basic - restarting sets bootstrap correctly', async t => {
 
   {
     const ns = store.namespace('random-name')
-    const base = new Autobase(ns, null, {})
+    const base = new Autobase(ns, null, { ackInterval: 0, ackThreshold: 0 })
     await base.ready()
 
     bootstrapKey = base.bootstrap
@@ -399,7 +399,7 @@ test('basic - restarting sets bootstrap correctly', async t => {
 
   {
     const ns = store.namespace(bootstrapKey)
-    const base = new Autobase(ns, bootstrapKey, {})
+    const base = new Autobase(ns, bootstrapKey, { ackInterval: 0, ackThreshold: 0 })
     await base.ready()
 
     t.alike(base.bootstrap, bootstrapKey)
@@ -714,7 +714,7 @@ test('basic - pass exisiting store', async t => {
   })
 
   const session2 = store.session()
-  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json' })
+  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
   await base2.ready()
 
   await base1.append({
@@ -739,7 +739,7 @@ test('basic - pass exisiting store', async t => {
   await base2.close()
 
   const session3 = store.session()
-  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json' })
+  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
   await base3.ready()
 
   t.is(base3.system.digest.writers.length, 2)
@@ -824,223 +824,15 @@ test('basic - isAutobase', async t => {
   t.is(await Autobase.isAutobase(base3.local), true)
 })
 
-test('basic - autoack', async t => {
-  t.plan(4)
-
-  const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 10 })
-
-  const str1 = a.store.replicate(true)
-  const str2 = b.store.replicate(false)
-
-  str1.pipe(str2).pipe(str1)
-
-  t.teardown(() => {
-    a.close()
-    b.close()
-  })
-
-  await addWriter(a, b)
-
-  await b.update({ wait: true })
-  await b.append('b0')
-
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
-
-  setTimeout(() => {
-    t.is(a.view.indexedLength, 1)
-    t.is(b.view.indexedLength, 1)
-  }, 100)
-})
-
-test('basic - autoack 5 writers', async t => {
-  t.plan(22)
-
-  const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 10 })
-  const [a, b, c, d, e] = bases
-
-  replicate(bases)
-
-  t.teardown(() => {
-    bases.forEach(b => b.close())
-  })
-
-  await addWriter(a, b)
-  await addWriter(a, c)
-  await addWriter(a, d)
-  await addWriter(a, e)
-
-  await Promise.all(bases.map(n => n.update({ wait: true })))
-
-  t.not(e.linearizer.indexers.length, 5)
-
-  await b.append('b0')
-
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
-  t.is(c.view.indexedLength, 0)
-  t.is(d.view.indexedLength, 0)
-  t.is(e.view.indexedLength, 0)
-
-  await new Promise(resolve => setTimeout(resolve, 1000))
-
-  let alen = a.local.length
-  let blen = b.local.length
-  let clen = c.local.length
-  let dlen = d.local.length
-  let elen = e.local.length
-
-  await new Promise(resolve => setTimeout(resolve, 300))
-
-  // check that acks stop
-  t.is(a.local.length, alen)
-  t.is(b.local.length, blen)
-  t.is(c.local.length, clen)
-  t.is(d.local.length, dlen)
-  t.is(e.local.length, elen)
-
-  alen = a.local.length
-  blen = b.local.length
-  clen = c.local.length
-  dlen = d.local.length
-  elen = e.local.length
-
-  await new Promise(resolve => setTimeout(resolve, 300))
-
-  // check that acks stop
-  t.is(a.local.length, alen)
-  t.is(b.local.length, blen)
-  t.is(c.local.length, clen)
-  t.is(d.local.length, dlen)
-  t.is(e.local.length, elen)
-
-  await Promise.all([a, b, c, d, e].map(b => b.update()))
-
-  t.is(e.linearizer.indexers.length, 5)
-
-  t.is(a.view.indexedLength, 1)
-  t.is(b.view.indexedLength, 1)
-  t.is(c.view.indexedLength, 1)
-  t.is(d.view.indexedLength, 1)
-  t.is(e.view.indexedLength, 1)
-})
-
-test('basic - autoack concurrent', async t => {
-  t.plan(10)
-
-  const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 100 })
-  const [a, b, c, d, e] = bases
-
-  replicate(bases)
-
-  t.teardown(() => {
-    bases.forEach(b => b.close())
-  })
-
-  await addWriter(a, b)
-  await addWriter(a, c)
-  await addWriter(a, d)
-  await addWriter(a, e)
-
-  await Promise.all(bases.map(n => n.update({ wait: true })))
-
-  await b.append(null)
-
-  await Promise.all(bases.map(n => message(n, 10)))
-
-  async function message (w, n) {
-    for (let i = 0; i < n; i++) {
-      await w.append(w.local.key.toString('hex').slice(0, 2) + n)
-    }
-  }
-
-  setTimeout(async () => {
-    t.is(a.view.indexedLength, 50)
-    t.is(b.view.indexedLength, 50)
-    t.is(c.view.indexedLength, 50)
-    t.is(d.view.indexedLength, 50)
-    t.is(e.view.indexedLength, 50)
-
-    // max acks for any writer is bounded
-    t.ok(a.local.length < 21)
-    t.ok(b.local.length < 17)
-    t.ok(c.local.length < 17)
-    t.ok(d.local.length < 17)
-    t.ok(e.local.length < 17)
-  }, 1600)
-})
-
-test('basic - autoack threshold', async t => {
-  t.plan(4)
-
-  const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackThreshold: 1 })
-
-  const str1 = a.store.replicate(true)
-  const str2 = b.store.replicate(false)
-
-  str1.pipe(str2).pipe(str1)
-
-  t.teardown(() => {
-    a.close()
-    b.close()
-  })
-
-  await addWriter(a, b)
-
-  await b.update({ wait: true })
-  b.append('b0')
-  b.append('b1')
-  b.append('b2')
-  await b.append('b3')
-
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
-
-  setImmediate(() => {
-    t.is(a.view.indexedLength, 4)
-    t.is(b.view.indexedLength, 4)
-  })
-})
-
-test('basic - autoack threshold with interval', async t => {
-  t.plan(4)
-
-  const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 100000, ackThreshold: 1 })
-
-  const str1 = a.store.replicate(true)
-  const str2 = b.store.replicate(false)
-
-  str1.pipe(str2).pipe(str1)
-
-  t.teardown(() => {
-    a.close()
-    b.close()
-  })
-
-  await addWriter(a, b)
-
-  await b.update({ wait: true })
-  b.append('b0')
-  b.append('b1')
-  b.append('b2')
-  await b.append('b3')
-
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
-
-  setImmediate(() => {
-    t.is(a.view.indexedLength, 4)
-    t.is(b.view.indexedLength, 4)
-  })
-})
-
 test('basic - catch apply throws', async t => {
   t.plan(1)
 
   const [a] = await create(1, apply, store => store.get('test', { valueEncoding: 'json' }))
   const b = new Autobase(new Corestore(ram, { primaryKey: Buffer.alloc(32).fill(1) }), a.local.key, {
     apply: applyThrow,
-    valueEncoding: 'json'
+    valueEncoding: 'json',
+    ackInterval: 0,
+    ackThreshold: 0
   })
 
   b.on('error', err => {

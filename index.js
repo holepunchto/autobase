@@ -18,8 +18,8 @@ const REFERRER_USERDATA = 'referrer'
 const VIEW_NAME_USERDATA = 'autobase/view'
 
 // default is not to ack
-const DEFAULT_ACK_INTERVAL = 0
-const DEFAULT_ACK_THRESHOLD = 0
+const DEFAULT_ACK_INTERVAL = 10 * 1000
+const DEFAULT_ACK_THRESHOLD = 4
 
 const { FLAG_OPLOG_IS_CHECKPOINTER } = messages
 
@@ -105,8 +105,13 @@ module.exports = class Autobase extends ReadyResource {
     // preloader will be replaced
     this.system = new SystemView(this.store.get({ name: 'view/system', exclusive: true, cache: true }))
 
-    this._ackInterval = handlers.ackInterval || DEFAULT_ACK_INTERVAL
-    this._ackThreshold = handlers.ackThreshold || DEFAULT_ACK_THRESHOLD
+    const {
+      ackInterval = DEFAULT_ACK_INTERVAL,
+      ackThreshold = DEFAULT_ACK_THRESHOLD
+    } = handlers
+
+    this._ackInterval = ackInterval
+    this._ackThreshold = ackThreshold
     this._ackTimer = null
     this._ackSize = 0
     this._acking = false
