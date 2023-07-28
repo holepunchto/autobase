@@ -248,7 +248,7 @@ module.exports = class Autobase extends ReadyResource {
     this._acking = false
 
     // view opens after system is loaded
-    this.view = null
+    this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
 
     this.ready().catch(safetyCatch)
   }
@@ -291,30 +291,31 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _openCores () {
+    if (!this._openingCores) this._openingCores = this._openCoresPromise()
+    return this._openingCores
+  }
+
+  async _openCoresPromise () {
     await this.store.ready()
     await this.local.ready()
     await this.system.ready()
-  }
-
-  async _open () {
-    await (this._openingCores = this._openCores())
 
     if (this.system.bootstrapping && !this.bootstrap) {
       this.bootstrap = this.local.key // new autobase!
     }
+  }
+
+  async _open () {
+    await this._openCores()
 
     // reindex to load writers
     this._reindex()
 
     // see if we can load from indexer checkpoint
     await this._openSystem()
-
     await this._ensureUserData(this.system.core, null)
 
-    if (this._hasOpen) this.view = this._handlers.open(this._viewStore, this)
-
     if (this.localWriter && this._ackInterval) this._startAckTimer()
-    return this.update()
   }
 
   async _close () {
@@ -360,7 +361,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async update (opts) {
-    if (!this.opened && !this._openingCores) await this.ready()
+    await this.ready()
 
     for (const w of this.writers) {
       await w.core.update(opts)
@@ -655,7 +656,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // triggered from system
-  addWriter (key, indexer = true) {
+  addWriter (key, { indexer = true } = {}) {
     assert(this._applying !== null, 'System changes are only allowed in apply')
 
     this.system.addWriter(key, indexer)
