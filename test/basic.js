@@ -1137,7 +1137,7 @@ test('basic - non-indexed writer', async t => {
   async function applyWriter (batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
-        base.addWriter(b4a.from(node.value.add, 'hex'), !!node.value.indexer)
+        base.addWriter(b4a.from(node.value.add, 'hex'), { indexer: !!node.value.indexer })
         continue
       }
 
@@ -1259,7 +1259,7 @@ test('basic - non-indexed writers 3-of-5', async t => {
   async function applyWriter (batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
-        base.addWriter(b4a.from(node.value.add, 'hex'), !!node.value.indexer)
+        base.addWriter(b4a.from(node.value.add, 'hex'), { indexer: !!node.value.indexer })
         continue
       }
 
