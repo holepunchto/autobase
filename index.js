@@ -59,6 +59,12 @@ class LinearizedStore {
 module.exports = class Autobase extends ReadyResource {
   constructor (store, bootstrap, handlers) {
     if (Array.isArray(bootstrap)) bootstrap = bootstrap[0] // TODO: just a quick compat, lets remove soon
+
+    if (bootstrap && typeof bootstrap !== 'string' && !b4a.isBuffer(bootstrap)) {
+      handlers = bootstrap
+      bootstrap = null
+    }
+
     super()
 
     this.sparse = false
@@ -493,6 +499,7 @@ module.exports = class Autobase extends ReadyResource {
         if (value === null && !this._appending.isEmpty()) continue
 
         const heads = new Set(this.linearizer.heads)
+
         const node = this.localWriter.append(value, heads, batch)
         this.linearizer.addHead(node)
       }
