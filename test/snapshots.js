@@ -5,7 +5,8 @@ const {
   create,
   confirm,
   apply,
-  addWriter
+  addWriter,
+  sync
 } = require('./helpers')
 
 const beeOpts = { extension: false, keyEncoding: 'binary', valueEncoding: 'binary' }
@@ -157,6 +158,40 @@ test('no inconsistent entries when using snapshot core in bee (bee snapshot)', a
   t.alike(keys2PreMerge, keys2PostMerge)
 
   t.is(hasTruncated, true) // Sanity check
+})
+
+test('check cloning detached snapshot', async t => {
+  const bases = await create(4, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const [base1, base2, base3, base4] = bases
+
+  await addWriter(base1, base2)
+  await addWriter(base1, base3)
+  await confirm(bases)
+
+  await base2.append('1-1')
+  await base2.append('1-2')
+  await base2.append('1-3')
+  await base2.append('1-4')
+  await base2.append('1-5')
+  await base2.append('1-6')
+
+  const orig = base2.view.snapshot()
+
+  await base1.append('2-1')
+  await base1.append('2-2')
+
+  await confirm([base1, base3])
+  await sync([base1, base4])
+  await sync([base2, base4])
+
+  const resnap = orig.snapshot()
+
+  await base1.append('2-3')
+  await resnap.close()
+  await confirm([base1, base3])
+
+  // todo: this test throws uncaught error
+  await t.execution(confirm(bases))
 })
 
 async function applyForBee (t, batch, view, base) {
