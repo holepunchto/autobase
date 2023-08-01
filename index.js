@@ -57,7 +57,7 @@ class LinearizedStore {
 }
 
 module.exports = class Autobase extends ReadyResource {
-  constructor (store, bootstrap, handlers) {
+  constructor (store, bootstrap, handlers = {}) {
     if (Array.isArray(bootstrap)) bootstrap = bootstrap[0] // TODO: just a quick compat, lets remove soon
 
     if (bootstrap && typeof bootstrap !== 'string' && !b4a.isBuffer(bootstrap)) {
@@ -255,7 +255,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async ack () {
-    if (!this.localWriter.isIndexer || this._acking) return
+    if (this.localWriter === null || !this.localWriter.isIndexer || this._acking) return
 
     this._acking = true
 
@@ -760,7 +760,7 @@ module.exports = class Autobase extends ReadyResource {
 
     // only indexers have checkpoints
     let indexer = this.localWriter
-    if (!this.localWriter.isIndexer) {
+    if (this.localWriter === null || !this.localWriter.isIndexer) {
       const indexerHeads = this.system.digest.heads
       if (!indexerHeads.length) return 0 // no data
 
