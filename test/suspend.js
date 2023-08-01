@@ -772,6 +772,27 @@ test('suspend - reopen multiple indexes', async t => {
   await c.close()
 })
 
+test('restart non writer', async t => {
+  const storeA = new Corestore(ram.reusable())
+  const storeB = new Corestore(ram.reusable())
+
+  const base = new Autobase(storeA, { apply, valueEncoding: 'json' })
+  await base.append({ hello: 'world' })
+
+  const other = new Autobase(storeB.session(), base.key, { apply, valueEncoding: 'json' })
+
+  await other.ready()
+
+  await sync([base, other])
+
+  await other.close()
+  await base.close()
+
+  const other2 = new Autobase(storeB.session(), base.key, { apply, valueEncoding: 'json' })
+  await t.execution(other2.ready(), 'should be able to start')
+  await other2.close()
+})
+
 function open (store) {
   return store.get('view', { valueEncoding: 'json' })
 }
