@@ -75,7 +75,7 @@ test('timer - extend', t => {
   const pass = setTimeout(() => {
     t.pass()
     timer.stop()
-  }, 200)
+  }, 150)
 
   function handler () {
     clearTimeout(pass)
