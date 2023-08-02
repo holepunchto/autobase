@@ -765,16 +765,20 @@ module.exports = class Autobase extends ReadyResource {
     if (idx < 0) return 0
 
     // only indexers have checkpoints
-    let indexer = this.localWriter
-    if (this.localWriter === null || !this.localWriter.isIndexer) {
-      const indexerHeads = this.system.digest.heads
-      if (!indexerHeads.length) return 0 // no data
-
-      indexer = this._getWriterByKey(indexerHeads[0].key)
+    if (this.localWriter && this.localWriter.isIndexer) {
+      const checkpoint = await this.localWriter.getCheckpoint(idx)
+      if (checkpoint) return checkpoint.length
     }
 
-    const checkpoint = await indexer.getCheckpoint(idx)
-    return checkpoint ? checkpoint.length : 0
+    // todo: checkpoints should be reactive so no need for lookup
+    for (const head of this.system.digest.heads) {
+      const indexer = this._getWriterByKey(head.key)
+      const checkpoint = await indexer.getCheckpoint(idx, head.length)
+
+      if (checkpoint) return checkpoint.length
+    }
+
+    return 0
   }
 }
 
