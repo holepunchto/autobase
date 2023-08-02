@@ -494,7 +494,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _advance () {
-    while (true) {
+    while (!this.closing) {
       while (!this._appending.isEmpty()) {
         const batch = this._appending.length
         const value = this._appending.shift()
@@ -513,6 +513,8 @@ module.exports = class Autobase extends ReadyResource {
       const u = this.linearizer.update()
       const changed = u ? await this._applyUpdate(u) : null
 
+      if (this.closing) break
+
       if (this.localWriter !== null && this.localWriter.length > this.local.length) {
         await this._flushLocal()
       }
@@ -523,7 +525,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     // skip threshold check while acking
-    if (this._ackThreshold && !this._acking) {
+    if (!this.closing && this._ackThreshold && !this._acking) {
       const n = this._ackThreshold * this.linearizer.indexers.length
 
       // await here would cause deadlock, fine to run in bg
@@ -647,7 +649,7 @@ module.exports = class Autobase extends ReadyResource {
         try {
           await this._handlers.apply(applyBatch, this.view, this)
         } catch (err) {
-          // todo: recover/shutdown?
+          this.close()
           this.emit('error', err)
           return null
         }
