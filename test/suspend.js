@@ -793,6 +793,91 @@ test('restart non writer', async t => {
   await other2.close()
 })
 
+test('suspend - non-indexed writer catches up', async t => {
+  const [a] = await create(1, applyWriter, open)
+
+  const store = new Corestore(await tmpDir(t), {
+    primaryKey: b4a.alloc(32).fill(1)
+  })
+
+  const session1 = store.session()
+  const b = new Autobase(session1, a.local.key, {
+    apply: applyWriter,
+    valueEncoding: 'json',
+    open,
+    ackInterval: 0,
+    ackThreshold: 0
+  })
+
+  await b.ready()
+  await b.view.ready()
+
+  await a.append({ add: b.local.key.toString('hex'), indexer: false })
+
+  await sync([a, b])
+
+  await b.append('b0')
+  await b.append('b1')
+
+  await sync([a, b])
+
+  await a.append('a0')
+
+  await confirm([a, b])
+
+  const s1 = a.store.replicate(true)
+  const s2 = store.replicate(false)
+
+  s1.pipe(s2).pipe(s1)
+
+  await a.update({ wait: true })
+  await b.update({ wait: true })
+
+  for (let i = 0; i < 999; i++) a.append('a')
+  await a.append('final')
+
+  s1.destroy()
+  s2.destroy()
+
+  await Promise.all([
+    new Promise(resolve => s1.on('close', resolve)),
+    new Promise(resolve => s2.on('close', resolve))
+  ])
+
+  await b.close()
+
+  const session2 = store.session()
+  await session2.ready()
+
+  const c = new Autobase(session2, a.local.key, {
+    applyWriter,
+    valueEncoding: 'json',
+    open,
+    ackInterval: 0,
+    ackThreshold: 0
+  })
+
+  await c.ready()
+
+  t.pass() // will fail on core open
+
+  await c.update({ wait: false })
+
+  await a.close()
+  await c.close()
+
+  async function applyWriter (batch, view, base) {
+    for (const node of batch) {
+      if (node.value.add) {
+        base.addWriter(b4a.from(node.value.add, 'hex'), { indexer: !!node.value.indexer })
+        continue
+      }
+
+      if (view) await view.append(node.value)
+    }
+  }
+})
+
 function open (store) {
   return store.get('view', { valueEncoding: 'json' })
 }
