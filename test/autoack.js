@@ -7,7 +7,7 @@ const {
   replicate
 } = require('./helpers')
 
-test('basic - autoack', async t => {
+test('autoack - simple', async t => {
   t.plan(4)
 
   const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 10, ackThreshold: 0 })
@@ -36,7 +36,7 @@ test('basic - autoack', async t => {
   }, 100)
 })
 
-test('basic - autoack 5 writers', async t => {
+test('autoack - 5 writers', async t => {
   t.plan(22)
 
   const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 10, ackThreshold: 0 })
@@ -108,7 +108,7 @@ test('basic - autoack 5 writers', async t => {
   t.is(e.view.indexedLength, 1)
 })
 
-test('basic - autoack concurrent', async t => {
+test('autoack - concurrent', async t => {
   t.plan(10)
 
   const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 100, ackThreshold: 0 })
@@ -153,7 +153,7 @@ test('basic - autoack concurrent', async t => {
   }, 1600)
 })
 
-test('basic - autoack threshold', async t => {
+test('autoack - threshold', async t => {
   t.plan(4)
 
   const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 0, ackThreshold: 1 })
@@ -185,10 +185,11 @@ test('basic - autoack threshold', async t => {
   })
 })
 
-test('basic - autoack threshold with interval', async t => {
-  t.plan(4)
+test('autoack - threshold with interval', async t => {
+  t.plan(5)
 
-  const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 100000, ackThreshold: 1 })
+  const ackInterval = 10000
+  const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval, ackThreshold: 1 })
 
   const str1 = a.store.replicate(true)
   const str2 = b.store.replicate(false)
@@ -212,6 +213,7 @@ test('basic - autoack threshold with interval', async t => {
   t.is(b.view.indexedLength, 0)
 
   setImmediate(() => {
+    t.is(a._ackTimer._interval, ackInterval)
     t.is(a.view.indexedLength, 4)
     t.is(b.view.indexedLength, 4)
   })
