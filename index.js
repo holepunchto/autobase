@@ -220,7 +220,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _startAckTimer () {
     if (this._ackTimer) return
-    this._ackTimer = new Timer(this.ack.bind(this), this._ackInterval)
+    this._ackTimer = new Timer(this._ack.bind(this), this._ackInterval)
     this._bumpAckTimer()
   }
 
@@ -233,7 +233,7 @@ module.exports = class Autobase extends ReadyResource {
     if (this._ackTimer) {
       return this._ackTimer.trigger()
     } else {
-      return this.ack()
+      return this._ack(true)
     }
   }
 
@@ -254,16 +254,20 @@ module.exports = class Autobase extends ReadyResource {
     this._bumpAckTimer()
   }
 
-  async ack () {
+  ack () {
+    return this._ack(false)
+  }
+
+  async _ack (triggered) {
     if (this.localWriter === null || !this.localWriter.isIndexer || this._acking) return
 
     this._acking = true
 
     await this.update({ wait: true })
 
-    if (this._ackTimer) {
+    if (this._ackTimer && !triggered) {
       const ackSize = this.linearizer.size
-      if (this._ackSize && this._ackSize < ackSize) {
+      if (this._ackSize < ackSize) {
         this._ackTimer.extend()
       } else {
         this._ackTimer.reset()
