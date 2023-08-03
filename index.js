@@ -376,6 +376,7 @@ module.exports = class Autobase extends ReadyResource {
     if (local) {
       this.localWriter = w
       if (this._ackInterval) this._startAckTimer()
+      this.emit('writable')
     } else {
       core.on('append', this._onremotewriterchangeBound)
     }

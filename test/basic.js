@@ -43,6 +43,22 @@ test('basic - two writers', async t => {
   // t.alike(await base1.system.checkpoint(), await base3.system.checkpoint())
 })
 
+test('basic - writable event fires', async t => {
+  t.plan(1)
+  const [base1, base2] = await create(2, apply)
+
+  base2.on('writable', () => {
+    t.ok(base2.writable, 'Writable event fired when autobase writable')
+  })
+
+  await base1.append({
+    add: base2.local.key.toString('hex'),
+    debug: 'this is adding b'
+  })
+
+  await confirm([base1, base2])
+})
+
 test('basic - view', async t => {
   const [base] = await create(1, apply, store => store.get('test', { valueEncoding: 'json' }))
 
