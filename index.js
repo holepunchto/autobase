@@ -239,12 +239,6 @@ module.exports = class Autobase extends ReadyResource {
 
   async update (opts) {
     await this.ready()
-
-    for (const w of this.writers) {
-      await w.core.update(opts)
-      if (!this.sparse) await downloadAll(w.core)
-    }
-
     await this._bump()
   }
 
@@ -379,6 +373,7 @@ module.exports = class Autobase extends ReadyResource {
       this.emit('writable')
     } else {
       core.on('append', this._onremotewriterchangeBound)
+      core.on('download', this._onremotewriterchangeBound)
     }
 
     return w
@@ -785,12 +780,6 @@ module.exports = class Autobase extends ReadyResource {
 
 function toKey (k) {
   return b4a.isBuffer(k) ? k : b4a.from(k, 'hex')
-}
-
-function downloadAll (core) {
-  const start = core.contiguousLength
-  const end = core.length
-  return core.download({ start, end }).done()
 }
 
 function compareHead (head, node) {

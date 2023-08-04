@@ -87,7 +87,7 @@ async function sync (...b) {
 
   if (bases.length === 1) {
     await eventFlush()
-    await bases[0].update({ wait: true })
+    await downloadAllWriters(bases[0])
     return
   }
 
@@ -95,7 +95,7 @@ async function sync (...b) {
 
   while (!synced(bases)) {
     await eventFlush()
-    await Promise.all(bases.map(b => b.update({ wait: true })))
+    await Promise.all(bases.map(downloadAllWriters))
   }
 
   return close()
@@ -121,6 +121,9 @@ function synced (...b) {
         return false
       }
       if (w.core.length !== other.core.length) {
+        return false
+      }
+      if (w.core.contiguousLength !== other.core.contiguousLength) {
         return false
       }
     }
@@ -190,4 +193,20 @@ async function apply (batch, view, base) {
 
     if (view) await view.append(value)
   }
+}
+
+async function downloadAllWriters (base) {
+  await base.ready()
+  for (const w of base.writers) {
+    await eventFlush()
+    await w.core.update({ wait: true })
+    await downloadAll(w.core)
+  }
+  await base.update()
+}
+
+function downloadAll (core) {
+  const start = core.contiguousLength
+  const end = core.length
+  return core.download({ start, end }).done()
 }
