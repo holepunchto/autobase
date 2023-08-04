@@ -365,7 +365,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const core = local
       ? this.local.session({ valueEncoding: messages.OplogMessage })
-      : this.store.get({ key, sparse: this.sparse, valueEncoding: messages.OplogMessage })
+      : this.store.get({ key, valueEncoding: messages.OplogMessage })
 
     // Small hack for now, should be fixed in hypercore (that key is set immediatly)
     core.key = key
@@ -788,10 +788,9 @@ function toKey (k) {
 }
 
 function downloadAll (core) {
-  const start = core.length
-  const end = core.core.tree.length
-
-  return core.download({ start, end, ifAvailable: true }).done()
+  const start = core.contiguousLength
+  const end = core.length
+  return core.download({ start, end }).done()
 }
 
 function compareHead (head, node) {
