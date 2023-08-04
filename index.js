@@ -67,7 +67,6 @@ module.exports = class Autobase extends ReadyResource {
 
     super()
 
-    this.sparse = false
     this.bootstrap = bootstrap ? toKey(bootstrap) : null
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
