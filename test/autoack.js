@@ -5,7 +5,8 @@ const {
   apply,
   addWriter,
   replicate,
-  sync
+  sync,
+  eventFlush
 } = require('./helpers')
 
 test('autoack - simple', async t => {
@@ -154,7 +155,7 @@ test('autoack - concurrent', async t => {
 })
 
 test('autoack - threshold', async t => {
-  t.plan(4)
+  t.plan(2)
 
   const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 0, ackThreshold: 1 })
 
@@ -178,17 +179,14 @@ test('autoack - threshold', async t => {
 
   await sync(a)
 
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
+  await eventFlush()
 
-  setImmediate(() => {
-    t.is(a.view.indexedLength, 4)
-    t.is(b.view.indexedLength, 4)
-  })
+  t.is(a.view.indexedLength, 4)
+  t.is(b.view.indexedLength, 4)
 })
 
 test('autoack - threshold with interval', async t => {
-  t.plan(5)
+  t.plan(3)
 
   const ackInterval = 10000
   const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval, ackThreshold: 1 })
@@ -212,12 +210,9 @@ test('autoack - threshold with interval', async t => {
   await b.append('b3')
   await sync(a)
 
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
+  await eventFlush()
 
-  setImmediate(() => {
-    t.is(a._ackTimer._interval, ackInterval)
-    t.is(a.view.indexedLength, 4)
-    t.is(b.view.indexedLength, 4)
-  })
+  t.is(a._ackTimer._interval, ackInterval)
+  t.is(a.view.indexedLength, 4)
+  t.is(b.view.indexedLength, 4)
 })
