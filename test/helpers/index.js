@@ -1,11 +1,14 @@
 const ram = require('random-access-memory')
 const Corestore = require('corestore')
+const b4a = require('b4a')
 
 const Autobase = require('../..')
 
 module.exports = {
   create,
+  eventFlush,
   sync,
+  synced,
   addWriter,
   apply,
   confirm,
@@ -26,7 +29,8 @@ async function create (n, apply, open, close, opts = {}) {
   return bases
 }
 
-function replicate (bases) {
+function replicate (...b) {
+  const [bases] = parse(b)
   const streams = []
   const missing = bases.slice()
 
@@ -57,23 +61,84 @@ function replicate (bases) {
   }
 }
 
-async function sync (bases) {
+function eventFlush () {
+  return new Promise(resolve => setImmediate(resolve))
+}
+
+function isAutobase (x) {
+  return x.constructor.name === 'Autobase'
+}
+
+function isOptions (x) {
+  return !!x && x.constructor.name === 'Object'
+}
+
+function parse (b) {
+  if (b.length === 1 && Array.isArray(b[0])) return [b[0], {}]
+
+  const bases = b.flat().filter(isAutobase)
+  const options = b.length > 0 && isOptions(b[b.length - 1]) ? b.pop() : {}
+
+  return [bases, options]
+}
+
+async function sync (...b) {
+  const [bases] = parse(b)
+
+  if (bases.length === 1) {
+    await eventFlush()
+    await bases[0].update({ wait: true })
+    return
+  }
+
   const close = replicate(bases)
-  await Promise.all(bases.map(b => b.update({ wait: true })))
+
+  while (!synced(bases)) {
+    await eventFlush()
+    await Promise.all(bases.map(b => b.update({ wait: true })))
+  }
 
   return close()
+}
+
+function synced (...b) {
+  const [bases] = parse(b)
+  const first = bases[0]
+
+  for (let i = 1; i < bases.length; i++) {
+    if (first.writers.length !== bases[i].writers.length) {
+      return false
+    }
+    for (const w of bases[i].writers) {
+      let other = null
+      for (const o of first.writers) {
+        if (b4a.equals(o.core.key, w.core.key)) {
+          other = o
+          break
+        }
+      }
+      if (other === null) {
+        return false
+      }
+      if (w.core.length !== other.core.length) {
+        return false
+      }
+    }
+  }
+  return true
 }
 
 async function addWriter (base, add) {
   return base.append({ add: add.local.key.toString('hex') })
 }
 
-async function confirm (bases, length) {
+async function confirm (...b) {
+  const [bases, options] = parse(b)
   await sync(bases)
 
   for (let i = 0; i < 2; i++) {
     const writers = bases.filter(b => !!b.localWriter)
-    const maj = Math.floor((length || writers.length) / 2) + 1
+    const maj = options.majority || (Math.floor(writers.length / 2) + 1)
 
     for (let j = 0; j < maj; j++) {
       await writers[j].append(null)

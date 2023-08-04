@@ -4,7 +4,8 @@ const {
   create,
   apply,
   addWriter,
-  replicate
+  replicate,
+  sync
 } = require('./helpers')
 
 test('autoack - simple', async t => {
@@ -23,8 +24,7 @@ test('autoack - simple', async t => {
   })
 
   await addWriter(a, b)
-
-  await b.update({ wait: true })
+  await sync(b)
   await b.append('b0')
 
   t.is(a.view.indexedLength, 0)
@@ -53,7 +53,7 @@ test('autoack - 5 writers', async t => {
   await addWriter(a, d)
   await addWriter(a, e)
 
-  await Promise.all(bases.map(n => n.update({ wait: true })))
+  await Promise.all(bases.map(sync))
 
   t.not(e.linearizer.indexers.length, 5)
 
@@ -125,7 +125,7 @@ test('autoack - concurrent', async t => {
   await addWriter(a, d)
   await addWriter(a, e)
 
-  await Promise.all(bases.map(n => n.update({ wait: true })))
+  await Promise.all(bases.map(sync))
 
   await b.append(null)
 
@@ -170,11 +170,13 @@ test('autoack - threshold', async t => {
 
   await addWriter(a, b)
 
-  await b.update({ wait: true })
+  await sync(b)
   b.append('b0')
   b.append('b1')
   b.append('b2')
   await b.append('b3')
+
+  await sync(a)
 
   t.is(a.view.indexedLength, 0)
   t.is(b.view.indexedLength, 0)
@@ -203,11 +205,12 @@ test('autoack - threshold with interval', async t => {
 
   await addWriter(a, b)
 
-  await b.update({ wait: true })
+  await sync(b)
   b.append('b0')
   b.append('b1')
   b.append('b2')
   await b.append('b3')
+  await sync(a)
 
   t.is(a.view.indexedLength, 0)
   t.is(b.view.indexedLength, 0)

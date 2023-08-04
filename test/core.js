@@ -66,13 +66,13 @@ test('core - seek multi writer', async t => {
   await addWriter(a, b)
 
   await a.append('hello')
-  await sync([a, b])
+  await sync(a, b)
 
   await b.append('and')
-  await sync([a, b])
+  await sync(a, b)
 
   await a.append('goodbye')
-  await sync([a, b])
+  await sync(a, b)
 
   t.is(a.view.length, 3)
   t.is(a.view.byteLength, 15)

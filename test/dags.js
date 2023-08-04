@@ -167,9 +167,9 @@ test.skip('convergence', async t => {
   await a.append('a' + ai++)
   await c.append('c' + ci++)
 
-  await sync([c, a])
-  await sync([b, c])
-  await sync([a, b])
+  await sync(c, a)
+  await sync(b, c)
+  await sync(a, b)
 
   // --- loop ---
 
@@ -281,22 +281,22 @@ test('majority alone - convergence', async t => {
   // --- write ---
 
   await b.append('b' + bi++)
-  await sync([b, c, d])
+  await sync(b, c, d)
 
   await c.append('c' + ci++)
-  await sync([b, c, d])
+  await sync(b, c, d)
 
   await d.append('d' + di++)
-  await sync([b, c, d])
+  await sync(b, c, d)
 
   await b.append('b' + bi++)
-  await sync([b, c, d])
+  await sync(b, c, d)
 
   await c.append('c' + ci++)
-  await sync([b, c, d])
+  await sync(b, c, d)
 
   await d.append('d' + di++)
-  await sync([b, c, d])
+  await sync(b, c, d)
 
   try {
     await compare(b, c)
@@ -321,9 +321,7 @@ test('add writer', async t => {
 
   await a.append('a' + ai++)
 
-  await sync([a, b])
-
-  await b.update()
+  await sync(a, b)
 
   t.is(a.view.indexedLength, 1)
   t.is(b.view.indexedLength, 1)
@@ -331,14 +329,14 @@ test('add writer', async t => {
   await t.execution(compare(a, b))
 
   await addWriter(a, b)
-  await sync([a, b])
+  await sync(a, b)
 
   t.is(a.view.indexedLength, 1)
   t.is(b.view.indexedLength, 1)
 
   await t.execution(compare(a, b))
 
-  await sync([a, b, c])
+  await sync(a, b, c)
 
   t.is(c.view.indexedLength, 1)
 
@@ -349,7 +347,7 @@ test('add writer', async t => {
   await b.append('b' + bi++)
   await a.append('a' + ai++)
 
-  await sync([a, b, c])
+  await sync(a, b, c)
 
   await c.append('c' + ci++)
   await b.append('b' + bi++)
@@ -358,7 +356,7 @@ test('add writer', async t => {
   await b.append('b' + bi++)
   await a.append('a' + ai++)
 
-  await sync([a, b, c])
+  await sync(a, b, c)
 
   t.is(a.view.indexedLength, b.view.indexedLength)
   t.is(b.view.indexedLength, c.view.indexedLength)
@@ -545,7 +543,7 @@ async function syncTo (a, b) {
 
   s1.pipe(s2).pipe(s1)
 
-  await a.update({ wait: true })
+  await sync(a)
 
   s1.destroy()
   s2.destroy()

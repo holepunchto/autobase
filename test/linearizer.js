@@ -495,7 +495,7 @@ async function syncTo (a, b) {
 
   s1.pipe(s2).pipe(s1)
 
-  await a.update({ wait: true })
+  await sync(a)
 
   s1.destroy()
   s2.destroy()
