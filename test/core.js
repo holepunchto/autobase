@@ -126,3 +126,14 @@ test('core - userData', async t => {
   t.alike(await base.view.getUserData('first'), Buffer.from('change'))
   t.alike(await session.getUserData('first'), Buffer.from('change'))
 })
+
+test('core - properties', async t => {
+  const [base] = await create(1, apply, store => store.get('test'))
+
+  await base.append('hello, world!')
+
+  t.ok(base.view._source.core.id)
+  t.is(base.view.id, base.view._source.core.id)
+  t.is(base.view.key, base.view._source.core.key)
+  t.is(base.view.discoveryKey, base.view._source.core.discoveryKey)
+})
