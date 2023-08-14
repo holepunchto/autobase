@@ -718,7 +718,7 @@ module.exports = class Autobase extends ReadyResource {
         const start = core.indexing
         core.indexing += appending
         if (start === 0) {
-          if (core.name === 'system') sys = this._updatedCores.length // system ALWAYS goes last
+          if (core._isSystem()) sys = this._updatedCores.length // system ALWAYS goes last
           this._updatedCores.push(core)
         }
       }
