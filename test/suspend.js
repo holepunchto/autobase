@@ -42,7 +42,7 @@ test('suspend - pass exisiting store', async t => {
 
   await confirm(base1, base2)
 
-  t.is(base2.system.digest.writers.length, 2)
+  t.is(base2.writers.length, 2)
 
   await base2.close()
 
@@ -50,7 +50,7 @@ test('suspend - pass exisiting store', async t => {
   const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
   await base3.ready()
 
-  t.is(base3.system.digest.writers.length, 2)
+  t.is(base3.writers.length, 2)
 
   await base3.append('final')
 
@@ -85,7 +85,7 @@ test('suspend - pass exisiting fs store', async t => {
 
   await confirm(base1, base2)
 
-  t.is(base2.system.digest.writers.length, 2)
+  t.is(base2.writers.length, 2)
 
   await base2.close()
 
@@ -93,7 +93,7 @@ test('suspend - pass exisiting fs store', async t => {
   const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
   await base3.ready()
 
-  t.is(base3.system.digest.writers.length, 2)
+  t.is(base3.writers.length, 2)
 
   await base3.append('final')
 
@@ -133,7 +133,7 @@ test('suspend - 2 exisiting fs stores', async t => {
 
   await confirm(base1, base2)
 
-  t.is(base2.system.digest.writers.length, 2)
+  t.is(base2.writers.length, 2)
 
   await base2.close()
 
@@ -141,7 +141,7 @@ test('suspend - 2 exisiting fs stores', async t => {
   const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
   await base3.ready()
 
-  t.is(base3.system.digest.writers.length, 2)
+  t.is(base3.writers.length, 2)
 
   await base3.append('final')
 
@@ -183,7 +183,7 @@ test('suspend - reopen after index', async t => {
   await b.append('b0')
   await a.append('a1')
 
-  t.is(b.system.digest.writers.length, 2)
+  t.is(b.writers.length, 2)
 
   const order = []
   for (let i = 0; i < b.view.length; i++) {
@@ -212,7 +212,7 @@ test('suspend - reopen after index', async t => {
     t.alike(await c.view.get(i), order[i])
   }
 
-  t.is(c.system.digest.writers.length, 2)
+  t.is(c.writers.length, 2)
 
   await c.append('final')
 
@@ -256,7 +256,7 @@ test('suspend - reopen with sync in middle', async t => {
   await b.append('b0')
   await a.append('a1')
 
-  t.is(b.system.digest.writers.length, 2)
+  t.is(b.writers.length, 2)
   t.is(b.view.length, 2)
 
   await b.close()
@@ -296,7 +296,7 @@ test('suspend - reopen with sync in middle', async t => {
   await c.ready()
   await sync(c)
 
-  t.is(c.system.digest.writers.length, 2)
+  t.is(c.writers.length, 2)
   t.is(c.view.length, b.view.length + 1)
 
   await c.append('final')
@@ -335,7 +335,7 @@ test('suspend - reopen with indexing in middle', async t => {
 
   await confirm(a, b, c)
 
-  t.is(c.system.digest.writers.length, 3)
+  t.is(c.writers.length, 3)
   t.is(c.view.length, 0)
 
   await c.append('c0')
@@ -366,7 +366,7 @@ test('suspend - reopen with indexing in middle', async t => {
   await c2.ready()
   await sync(c2)
 
-  t.is(c2.system.digest.writers.length, 3)
+  t.is(c2.writers.length, 3)
   t.is(c2.view.length, 1)
   t.is(c2.view.indexedLength, 0)
 
@@ -408,7 +408,7 @@ test('suspend - reopen with indexing + sync in middle', async t => {
 
   await confirm(a, b, c)
 
-  t.is(c.system.digest.writers.length, 3)
+  t.is(c.writers.length, 3)
   t.is(c.view.length, 0)
 
   await c.append('c0')
@@ -460,7 +460,7 @@ test('suspend - reopen with indexing + sync in middle', async t => {
   await c2.ready()
   await sync(c2)
 
-  t.is(c2.system.digest.writers.length, 3)
+  t.is(c2.writers.length, 3)
   t.is(c2.view.length, 4)
   t.is(c2.view.indexedLength, 3)
 
@@ -556,7 +556,7 @@ test('suspend - non-indexed writer', async t => {
   async function applyWriter (batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
-        base.addWriter(b4a.from(node.value.add, 'hex'), { indexer: !!node.value.indexer })
+        await base.addWriter(b4a.from(node.value.add, 'hex'), { isIndexer: !!node.value.indexer })
         continue
       }
 
@@ -594,7 +594,7 @@ test('suspend - open new index after reopen', async t => {
   await b.append({ index: 2, data: 'b0' })
   await a.append({ index: 1, data: 'a1' })
 
-  t.is(b.system.digest.writers.length, 2)
+  t.is(b.writers.length, 2)
 
   const order = []
   for (let i = 0; i < b.view.first.length; i++) {
@@ -629,7 +629,7 @@ test('suspend - open new index after reopen', async t => {
     t.alike(await c.view.second.get(i), order[i + c.view.first.length])
   }
 
-  t.is(c.system.digest.writers.length, 2)
+  t.is(c.writers.length, 2)
 
   await c.append({ view: 1, data: 'final' })
 
@@ -699,7 +699,7 @@ test('suspend - reopen multiple indexes', async t => {
   // await b.append({ index: 1, data: 'b2' })
   await a.append({ index: 1, data: 'a2' })
 
-  t.is(b.system.digest.writers.length, 2)
+  t.is(b.writers.length, 2)
 
   const order = []
   for (let i = 0; i < b.view.first.length; i++) {
@@ -734,7 +734,7 @@ test('suspend - reopen multiple indexes', async t => {
     t.alike(await c.view.second.get(i), order[i + c.view.first.length])
   }
 
-  t.is(c.system.digest.writers.length, 2)
+  t.is(c.writers.length, 2)
 
   await c.append({ view: 1, data: 'final' })
 
@@ -869,7 +869,7 @@ test('suspend - non-indexed writer catches up', async t => {
   async function applyWriter (batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
-        base.addWriter(b4a.from(node.value.add, 'hex'), { indexer: !!node.value.indexer })
+        await base.addWriter(b4a.from(node.value.add, 'hex'), { isIndexer: !!node.value.indexer })
         continue
       }
 
@@ -892,7 +892,7 @@ function openMultiple (store) {
 async function applyMultiple (batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
-      base.addWriter(Buffer.from(value.add, 'hex'))
+      await base.addWriter(Buffer.from(value.add, 'hex'))
       continue
     }
 

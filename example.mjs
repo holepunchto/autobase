@@ -9,8 +9,7 @@ function open (store) {
 async function apply (nodes, view, base) {
   for (const node of nodes) {
     if (node.value.add) {
-      console.log('add', base.addWriter.toString())
-      base.addWriter(Buffer.from(node.value.add, 'hex'))
+      await base.addWriter(Buffer.from(node.value.add, 'hex'))
     }
 
     await view.append(node.value)

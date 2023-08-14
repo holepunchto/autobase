@@ -105,10 +105,9 @@ module.exports = class Autobase extends ReadyResource {
     this._hasClose = !!this._handlers.close
 
     this._viewStore = new LinearizedStore(this)
-    this.view = null
 
-    // preloader will be replaced
-    this.system = new SystemView(this.store.get({ name: 'view/system', exclusive: true, cache: true }))
+    this.view = null
+    this.system = null
 
     const {
       ackInterval = DEFAULT_ACK_INTERVAL,
@@ -121,10 +120,11 @@ module.exports = class Autobase extends ReadyResource {
     this._ackSize = 0
     this._acking = false
 
-    // view opens after system is loaded
-    this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
-
     this._restarts = 0
+
+    // view opens after system is loaded
+    this.system = new SystemView(this._viewStore.get({ name: 'system', exclusive: true, cache: true }))
+    this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
 
     this.ready().catch(safetyCatch)
   }
@@ -156,13 +156,6 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _openSystem () {
-    await this.system.core.close()
-
-    const autocore = this._viewStore.get({ name: 'system', exclusive: true, cache: true })
-    await autocore.ready()
-
-    this.system = new SystemView(autocore)
-
     await this.system.ready()
   }
 
@@ -174,9 +167,13 @@ module.exports = class Autobase extends ReadyResource {
   async _openCoresPromise () {
     await this.store.ready()
     await this.local.ready()
-    await this.system.ready()
 
-    if (this.system.bootstrapping && !this.bootstrap) {
+    const sysCore = this.system.core._backingCore()
+    await sysCore.ready()
+
+    const bootstrapping = sysCore.length < 2 // record 0 is just metadata...
+
+    if (bootstrapping && !this.bootstrap) {
       this.bootstrap = this.local.key // new autobase!
     }
   }
@@ -184,11 +181,12 @@ module.exports = class Autobase extends ReadyResource {
   async _open () {
     await this._openCores()
 
-    // reindex to load writers
-    this._reindex()
-
     // see if we can load from indexer checkpoint
-    await this._openSystem()
+    await this.system.ready()
+
+    // reindex to load writers
+    await this._reindex(null)
+
     await this._ensureUserData(this.system.core, null)
 
     if (this.localWriter && this._ackInterval) this._startAckTimer()
@@ -387,42 +385,42 @@ module.exports = class Autobase extends ReadyResource {
     this.linearizer = new Linearizer([bootstrap], [], [])
   }
 
-  _reindex (change) {
+  async _reindex (change) {
     if (this.system.bootstrapping) {
       this._startIndex()
       return
+    }
+
+    if (change) {
+      this._undo(change.count)
+      await this.system.update()
     }
 
     const indexers = []
     const heads = []
     const clock = []
 
-    for (const { key, length, indexer } of this.system.digest.writers) {
-      const writer = this._getWriterByKey(key, length)
+    for await (const { key, value } of this.system.list()) {
+      const writer = this._getWriterByKey(key, value.length)
 
-      clock.push({ writer, length })
+      clock.push({ writer, length: value.length })
 
-      if (!indexer) continue
+      if (!value.isIndexer) continue
 
       indexers.push(writer)
       writer.isIndexer = true
     }
 
-    for (const head of this.system.digest.heads) {
+    for (const head of this.system.heads) {
       const writer = this._getWriterByKey(head.key)
       const headNode = Linearizer.createNode(writer, head.length, null, [], 1, [])
       headNode.yielded = true
       heads.push(headNode)
     }
 
-    const removed = this.system.digest.writers.map(w => {
-      const writer = this._getWriterByKey(w.key)
-      return { writer, length: w.length }
-    })
-
     this.linearizer = new Linearizer(indexers, {
       heads,
-      removed,
+      removed: clock,
       cacheIndex: this._restarts++
     })
 
@@ -430,11 +428,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _reloadUpdate (change, heads) {
-    const { count, nodes } = change
-
-    this._undo(count)
-
-    for (const node of nodes) {
+    for (const node of change.nodes) {
       node.yielded = false
       node.dependents.clear()
 
@@ -457,7 +451,7 @@ module.exports = class Autobase extends ReadyResource {
       heads.push(node)
     }
 
-    for (const node of nodes) {
+    for (const node of change.nodes) {
       this.linearizer.addHead(node)
     }
   }
@@ -516,7 +510,7 @@ module.exports = class Autobase extends ReadyResource {
 
       if (!changed) break
 
-      this._reindex(changed)
+      await this._reindex(changed)
     }
 
     // skip threshold check while acking
@@ -531,28 +525,28 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // triggered from linearized core
-  _onuserappend (core, blocks) {
+  _onviewappend (core, blocks) {
     assert(this._applying !== null, 'Append is only allowed in apply')
 
     if (core.appending === 0) {
-      this._applying.user.push({ core, appending: 0 })
+      this._applying.views.push({ core, appending: 0 })
     }
 
     core.appending += blocks
   }
 
-  // triggered from system
-  addWriter (key, { indexer = true } = {}) {
+  // triggered from apply
+  async addWriter (key, { indexer = true, isIndexer = indexer } = {}) { // just compat for old version
     assert(this._applying !== null, 'System changes are only allowed in apply')
 
-    this.system.addWriter(key, indexer)
+    await this.system.add(key, { isIndexer })
 
     for (const w of this.writers) {
       if (b4a.equals(w.core.key, key)) return
     }
 
     const writer = this._makeWriter(key, 0)
-    if (indexer) writer.isIndexer = true
+    if (isIndexer) writer.isIndexer = true
 
     this.writers.push(writer)
 
@@ -568,7 +562,7 @@ module.exports = class Autobase extends ReadyResource {
 
       popped -= u.batch
 
-      for (const { core, appending } of u.user) {
+      for (const { core, appending } of u.views) {
         if (core.truncating === 0) truncating.push(core)
         core.truncating += appending
       }
@@ -582,13 +576,16 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _bootstrap () {
-    this.system.addWriter(this.bootstrap, true)
+    return this.system.add(this.bootstrap, { isIndexer: true })
   }
 
   async _applyUpdate (u) {
     await this._viewStore.update()
 
     if (u.popped) this._undo(u.popped)
+
+    // make sure the latest changes is reflected on the system...
+    await this.system.update()
 
     let batch = 0
     let applyBatch = []
@@ -605,7 +602,7 @@ module.exports = class Autobase extends ReadyResource {
       if (node.batch > 1) continue
 
       const update = this._updates[j++]
-      if (!update.system) continue
+      if (!update.indexers) continue
 
       await this._flushIndexes(i)
 
@@ -620,6 +617,7 @@ module.exports = class Autobase extends ReadyResource {
       if (indexed) node.writer.indexed++
 
       batch++
+      this.system.addHead(node)
 
       if (node.value !== null) {
         applyBatch.push({
@@ -633,12 +631,12 @@ module.exports = class Autobase extends ReadyResource {
 
       if (node.batch > 1) continue
 
-      const update = { batch, system: 0, user: [] }
+      const update = { batch, indexers: false, views: [] }
 
       this._updates.push(update)
       this._applying = update
 
-      if (this.system.bootstrapping) this._bootstrap()
+      if (this.system.bootstrapping) await this._bootstrap()
 
       if (applyBatch.length && this._hasApply === true) {
         try {
@@ -650,7 +648,7 @@ module.exports = class Autobase extends ReadyResource {
         }
       }
 
-      update.system = await this.system.flush(update, node, this.writers)
+      update.indexers = await this.system.flush(update)
 
       // local flushed in _flushLocal
       if (indexed && node.writer !== this.localWriter) {
@@ -663,13 +661,13 @@ module.exports = class Autobase extends ReadyResource {
       batch = []
       applyBatch = []
 
-      for (let k = 0; k < update.user.length; k++) {
-        const u = update.user[k]
+      for (let k = 0; k < update.views.length; k++) {
+        const u = update.views[k]
         u.appending = u.core.appending
         u.core.appending = 0
       }
 
-      if (update.system && indexed) {
+      if (update.indexers && indexed) {
         await this._flushIndexes(i + 1)
 
         const nodes = u.indexed.slice(i + 1).concat(u.tip)
@@ -692,7 +690,7 @@ module.exports = class Autobase extends ReadyResource {
 
       indexed -= u.batch
 
-      for (const { core, appending } of u.user) {
+      for (const { core, appending } of u.views) {
         const start = core.indexing
         const blocks = core.indexBatch(start, core.indexing += appending)
         if (start === 0) updatedCores.push(core)
@@ -705,10 +703,6 @@ module.exports = class Autobase extends ReadyResource {
       const indexing = core.indexing
       core.indexing = 0
       core._onindex(indexing)
-
-      if (core === this.system.core._source) {
-        await this.system._onindex()
-      }
     }
   }
 
@@ -751,29 +745,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return this.local.append(blocks)
-  }
-
-  async loadIndex (name) {
-    if (this.system.bootstrapping) return 0
-
-    const idx = await this.system.getIndex(name)
-    if (idx < 0) return 0
-
-    // only indexers have checkpoints
-    if (this.localWriter && this.localWriter.isIndexer) {
-      const checkpoint = await this.localWriter.getCheckpoint(idx)
-      if (checkpoint) return checkpoint.length
-    }
-
-    // todo: checkpoints should be reactive so no need for lookup
-    for (const head of this.system.digest.heads) {
-      const indexer = this._getWriterByKey(head.key)
-      const checkpoint = await indexer.getCheckpoint(idx, head.length)
-
-      if (checkpoint) return checkpoint.length
-    }
-
-    return 0
   }
 }
 

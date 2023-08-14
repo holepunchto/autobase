@@ -99,7 +99,7 @@ test('core - seek multi writer', async t => {
     for (const { value } of batch) {
       if (value === null) continue
       if (value.add) {
-        base.system.addWriter(Buffer.from(value.add, 'hex'))
+        await base.addWriter(Buffer.from(value.add, 'hex'))
         continue
       }
 
