@@ -256,7 +256,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._acking = true
 
-    await this.update({ wait: true })
+    await this.update()
 
     if (this._ackTimer && !triggered) {
       const ackSize = this.linearizer.size
