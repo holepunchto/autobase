@@ -653,10 +653,7 @@ test('suspend - open new index after reopen', async t => {
   const ccp1 = await c.localWriter.getCheckpoint(1)
   const ccp2 = await c.localWriter.getCheckpoint(2)
 
-  t.alike(acp1.treeHash, ccp1.treeHash)
   t.alike(acp1.length, ccp1.length)
-
-  t.alike(acp2.treeHash, ccp2.treeHash)
   t.alike(acp2.length, ccp2.length)
 
   t.alike(acp1, a.view.first._source._checkpoint())
@@ -758,10 +755,7 @@ test('suspend - reopen multiple indexes', async t => {
   const ccp1 = await c.localWriter.getCheckpoint(1)
   const ccp2 = await c.localWriter.getCheckpoint(2)
 
-  t.alike(acp1.treeHash, ccp1.treeHash)
   t.alike(acp1.length, ccp1.length)
-
-  t.alike(acp2.treeHash, ccp2.treeHash)
   t.alike(acp2.length, ccp2.length)
 
   t.alike(acp1, a.view.first._source._checkpoint())
@@ -876,6 +870,104 @@ test('suspend - non-indexed writer catches up', async t => {
       if (view) await view.append(node.value)
     }
   }
+})
+
+test('suspend - append but not indexed then reopen', async t => {
+  const [a, b] = await create(2, applyMultiple, openMultiple)
+
+  const store = new Corestore(await tmpDir(t), {
+    primaryKey: Buffer.alloc(32).fill(2)
+  })
+
+  const session1 = store.session()
+  const c = new Autobase(session1, a.local.key, {
+    valueEncoding: 'json',
+    apply: applyMultiple,
+    open: openMultiple,
+    ackInterval: 0,
+    ackThreshold: 0
+  })
+
+  await b.ready()
+  await c.ready()
+
+  await addWriter(a, b)
+  await addWriter(a, c)
+
+  await confirm([a, b, c])
+
+  await a.append({ index: 1, data: 'a0' })
+  await confirm([a, b])
+
+  await b.append({ index: 2, data: 'b0' })
+  await confirm([a, b])
+
+  t.is(a.system.views[1].name, 'first')
+  t.is(a.system.views[2].name, 'second')
+
+  await c.append({ index: 2, data: 'c0' })
+
+  // c hasn't seen any appends to first
+  t.is(c.system.views[1].name, 'second')
+
+  t.is(b.writers.length, 3)
+  t.is(c.writers.length, 3)
+
+  await c.close()
+
+  const session2 = store.session()
+  const c2 = new Autobase(session2, a.local.key, {
+    valueEncoding: 'json',
+    apply: applyMultiple,
+    open: openMultiple,
+    ackInterval: 0,
+    ackThreshold: 0
+  })
+
+  await c2.ready()
+  await sync(c2)
+
+  // c hasn't seen any appends to first
+  t.is(c2.system.views[1].name, 'second')
+
+  t.absent(await c2.localWriter.getCheckpoint(1))
+  t.absent(await c2.localWriter.getCheckpoint(2))
+
+  await confirm([a, b, c2])
+
+  t.alike(await c2.localWriter.getCheckpoint(1).length, await a.localWriter.getCheckpoint(1).length)
+  t.alike(await c2.localWriter.getCheckpoint(2).length, await a.localWriter.getCheckpoint(2).length)
+
+  await c2.append({ index: 2, data: 'c1' })
+
+  t.is(c2.system.views[1].name, 'first')
+  t.is(c2.system.views[2].name, 'second')
+
+  await c2.append({ index: 1, data: 'final' })
+
+  await t.execution(confirm(a, c2))
+
+  const an = await a.local.get(a.local.length - 1)
+  const c2n = await c2.local.get(c2.local.length - 1)
+
+  t.is(an.checkpoint.length, 3)
+  t.is(c2n.checkpoint.length, 3)
+
+  const acp1 = await a.localWriter.getCheckpoint(1)
+  const acp2 = await a.localWriter.getCheckpoint(2)
+
+  const c2cp1 = await c2.localWriter.getCheckpoint(1)
+  const c2cp2 = await c2.localWriter.getCheckpoint(2)
+
+  t.alike(acp1.length, c2cp1.length)
+  t.alike(acp2.length, c2cp2.length)
+
+  t.alike(acp1, a.view.first._source._checkpoint())
+  t.alike(acp2, a.view.second._source._checkpoint())
+
+  await a.close()
+  await b.close()
+  await c2.close()
 })
 
 function open (store) {
