@@ -941,7 +941,7 @@ test('basic - non-indexed writer', async t => {
   }
 
   for await (const block of b.local.createReadStream()) {
-    t.ok(block.checkpoint.length === 0)
+    t.ok(block.checkpoint === null)
   }
 
   async function applyWriter (batch, view, base) {
@@ -1059,11 +1059,11 @@ test('basic - non-indexed writers 3-of-5', async t => {
   }
 
   for await (const block of d.local.createReadStream()) {
-    t.ok(block.checkpoint.length === 0)
+    t.ok(block.checkpoint === null)
   }
 
   for await (const block of e.local.createReadStream()) {
-    t.ok(block.checkpoint.length === 0)
+    t.ok(block.checkpoint === null)
   }
 
   async function applyWriter (batch, view, base) {
