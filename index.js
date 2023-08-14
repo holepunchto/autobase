@@ -122,7 +122,7 @@ module.exports = class Autobase extends ReadyResource {
     this._restarts = 0
 
     // view opens after system is loaded
-    this.system = new SystemView(this._viewStore.get({ name: 'system', exclusive: true, cache: true }))
+    this.system = new SystemView(this._viewStore.get({ name: '_system', exclusive: true, cache: true }))
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
 
     this.ready().catch(safetyCatch)
