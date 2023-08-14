@@ -5,6 +5,7 @@ const debounceify = require('debounceify')
 const c = require('compact-encoding')
 const safetyCatch = require('safety-catch')
 const assert = require('nanoassert')
+const crypto = require('hypercore-crypto')
 
 const Linearizer = require('./lib/linearizer')
 const Autocore = require('./lib/core')
@@ -87,6 +88,8 @@ module.exports = class Autobase extends ReadyResource {
 
     this._applying = null
     this._updatedCores = null
+    this._localDigest = null
+    this._maybeUpdateDigest = true
 
     this._needsReady = []
     this._updates = []
@@ -375,18 +378,16 @@ module.exports = class Autobase extends ReadyResource {
     return w
   }
 
-  _startIndex () {
-    const bootstrap = this._makeWriter(this.bootstrap, 0)
-
-    this.writers = [bootstrap]
-    bootstrap.isIndexer = true
-
-    this.linearizer = new Linearizer([bootstrap], [], [])
-  }
-
   async _reindex (change) {
+    this._maybeUpdateDigest = true
+
     if (this.system.bootstrapping) {
-      this._startIndex()
+      const bootstrap = this._makeWriter(this.bootstrap, 0)
+
+      this.writers = [bootstrap]
+      bootstrap.isIndexer = true
+
+      this.linearizer = new Linearizer([bootstrap], [], [])
       return
     }
 
@@ -734,12 +735,39 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _flushLocal () {
-    const digest = { // TODO: use this
-      pointer: 0,
-      seed: Buffer.alloc(32),
-      indexers: this.system.indexers.map(onlyKey)
+  async _updateDigest () {
+    this._maybeUpdateDigest = false
+    if (!this.localWriter.isIndexer) return
+
+    if (this._localDigest === null) {
+      this._localDigest = await this.localWriter.getDigest()
+
+      if (this._localDigest === null) {
+        this._localDigest = {
+          pointer: 0,
+          seed: crypto.randomBytes(32),
+          indexers: []
+        }
+      }
     }
+
+    const indexers = this.linearizer.indexers.map(writerToKey)
+    if (sameKeys(indexers, this._localDigest.indexers)) return
+
+    this._localDigest.pointer = 0
+    this._localDigest.indexers = indexers
+  }
+
+  _geneateDigest () {
+    return {
+      pointer: this._localDigest.pointer,
+      seed: this._localDigest.seed,
+      indexers: this._localDigest.indexers
+    }
+  }
+
+  async _flushLocal () {
+    if (this._maybeUpdateDigest) await this._updateDigest()
 
     const cores = this._getCheckpointCores()
     const blocks = new Array(this.localWriter.length - this.local.length)
@@ -751,7 +779,7 @@ module.exports = class Autobase extends ReadyResource {
 
       blocks[i] = {
         version: this.version,
-        digest: this.localWriter.isIndexer ? digest : null,
+        digest: this.localWriter.isIndexer ? this._geneateDigest() : null,
         checkpoint: this.localWriter.isIndexer ? generateCheckpoint(cores) : null,
         node: {
           heads,
@@ -760,9 +788,11 @@ module.exports = class Autobase extends ReadyResource {
           value: value === null ? null : c.encode(this.valueEncoding, value)
         }
       }
+
+      if (this.localWriter.isIndexer) this._localDigest.pointer++
     }
 
-    return this.local.append(blocks)
+    await this.local.append(blocks)
   }
 
   _getCheckpointCores () {
@@ -794,8 +824,16 @@ function generateCheckpoint (cores) {
   return checkpoint
 }
 
-function onlyKey (o) {
-  return o.key
+function sameKeys (a, b) {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (!b4a.equals(a[i], b[i])) return false
+  }
+  return true
+}
+
+function writerToKey (w) {
+  return w.core.key
 }
 
 function toKey (k) {
