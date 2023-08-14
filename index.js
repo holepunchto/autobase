@@ -803,9 +803,8 @@ module.exports = class Autobase extends ReadyResource {
     for (let i = 0; i < this.system.views.length; i++) {
       const v = this.system.views[i]
       const core = this._viewStore.opened.get(v.name)
-      if (!core) break
+      if (!core || (!core.indexedLength && !core.indexing)) break
       core.likelyIndex = i // just in case its out of date...
-      if (!core.indexedLength && !core.indexing) continue
       cores.push(core)
     }
 
