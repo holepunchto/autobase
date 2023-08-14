@@ -86,6 +86,7 @@ module.exports = class Autobase extends ReadyResource {
     this._appending = new FIFO()
 
     this._applying = null
+    this._updatedCores = null
 
     this._needsReady = []
     this._updates = []
@@ -506,7 +507,13 @@ module.exports = class Autobase extends ReadyResource {
         await this._flushLocal()
       }
 
-      if (!changed) break
+      if (this.closing) break
+
+      if (this._updatedCores !== null) {
+        await this._flushIndexes()
+      }
+
+      if (this.closing || !changed) break
 
       await this._reindex(changed)
     }
@@ -520,6 +527,22 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return this._ensureAllCores()
+  }
+
+  async _flushIndexes () {
+    const updatedCores = this._updatedCores
+    this._updatedCores = null
+
+    for (const core of updatedCores) {
+      const batch = core.indexBatch(0, core.indexing)
+      await core.core.append(batch)
+    }
+
+    for (const core of updatedCores) {
+      const indexing = core.indexing
+      core.indexing = 0
+      core._onindex(indexing)
+    }
   }
 
   // triggered from linearized core
@@ -602,7 +625,7 @@ module.exports = class Autobase extends ReadyResource {
       const update = this._updates[j++]
       if (!update.indexers) continue
 
-      await this._flushIndexes(i)
+      this._queueIndexFlush(i)
 
       const nodes = u.indexed.slice(i).concat(u.tip)
       return { count: u.shared - i, nodes }
@@ -666,7 +689,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       if (update.indexers && indexed) {
-        await this._flushIndexes(i + 1)
+        this._queueIndexFlush(i + 1)
 
         const nodes = u.indexed.slice(i + 1).concat(u.tip)
         return { count: 0, nodes }
@@ -674,14 +697,17 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     if (u.indexed.length) {
-      await this._flushIndexes(u.indexed.length)
+      this._queueIndexFlush(u.indexed.length)
     }
 
     return null
   }
 
-  async _flushIndexes (indexed) {
-    const updatedCores = []
+  _queueIndexFlush (indexed) {
+    assert(this._updatedCores === null, 'Updated cores not flushed')
+    this._updatedCores = []
+
+    let sys = -1
 
     while (indexed > 0) {
       const u = this._updates.shift()
@@ -690,17 +716,21 @@ module.exports = class Autobase extends ReadyResource {
 
       for (const { core, appending } of u.views) {
         const start = core.indexing
-        const blocks = core.indexBatch(start, core.indexing += appending)
-        if (start === 0) updatedCores.push(core)
-
-        await core.core.append(blocks)
+        core.indexing += appending
+        if (start === 0) {
+          if (core.name === 'system') sys = this._updatedCores.length // system ALWAYS goes last
+          this._updatedCores.push(core)
+        }
       }
     }
 
-    for (const core of updatedCores) {
-      const indexing = core.indexing
-      core.indexing = 0
-      core._onindex(indexing)
+    // ensure system is always last
+    if (sys > -1 && sys < this._updatedCores.length - 1) {
+      const a = this._updatedCores[sys]
+      const b = this._updatedCores[this._updatedCores.length - 1]
+
+      this._updatedCores[sys] = b
+      this._updatedCores[this._updatedCores.length - 1] = a
     }
   }
 
@@ -745,7 +775,7 @@ module.exports = class Autobase extends ReadyResource {
       const core = this._viewStore.opened.get(v.name)
       if (!core) break
       core.index = i // just in case its out of date...
-      if (!core.indexedLength) continue
+      if (!core.indexedLength && !core.indexing) continue
       cores.push(core)
     }
 
