@@ -44,7 +44,7 @@ async function open (store) {
 async function apply (nodes, view, base) {
   for (const { value } of nodes) {
     if (value.addWriter) {
-      base.system.addWriter(value.addWriter)
+      await base.addWriter(value.addWriter, { isIndexer: true })
       continue
     }
 

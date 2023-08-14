@@ -197,7 +197,7 @@ async function applyForBee (t, batch, view, base) {
   for (const { value } of batch) {
     if (value === null) continue
     if (value.add) {
-      await base.system.addWriter(Buffer.from(value.add, 'hex'))
+      await base.addWriter(Buffer.from(value.add, 'hex'), { isIndexer: true })
     } else {
       try {
         await view.put(...value.entry, { update: false })

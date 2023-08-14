@@ -32,10 +32,10 @@ test('basic - two writers', async t => {
 
   await confirm(base1, base2, base3)
 
-  t.is(base2.system.digest.writers.length, 3)
-  t.is(base2.system.digest.writers.length, base3.system.digest.writers.length)
-  t.is(base2.system.digest.writers.length, base2.writers.length)
-  t.is(base3.system.digest.writers.length, base3.writers.length)
+  t.is(base2.system.members.active, 3)
+  t.is(base2.system.members.active, base3.system.members.active)
+  t.is(base2.system.members.active, base2.writers.length)
+  t.is(base3.system.members.active, base3.writers.length)
 
   // tests skipped: fix with linearizer update - batching
 
@@ -65,7 +65,7 @@ test('basic - view', async t => {
   const block = { message: 'hello, world!' }
   await base.append(block)
 
-  t.is(base.system.digest.writers.length, 1)
+  t.is(base.system.members.active, 1)
   t.is(base.view.indexedLength, 1)
   t.alike(await base.view.get(0), block)
 })
@@ -76,7 +76,7 @@ test('basic - view with close', async t => {
   const block = { message: 'hello, world!' }
   await base.append(block)
 
-  t.is(base.system.digest.writers.length, 1)
+  t.is(base.system.members.active, 1)
   t.is(base.view.core.indexedLength, 1)
   t.alike(await base.view.core.get(0), block)
 
@@ -138,7 +138,7 @@ test('basic - compare views', async t => {
 
   await confirm(bases)
 
-  t.is(a.system.digest.writers.length, b.system.digest.writers.length)
+  t.is(a.system.members.active, b.system.members.active)
   t.is(a.view.indexedLength, b.view.indexedLength)
 
   try {
@@ -308,19 +308,19 @@ test('basic - add 5 writers', async t => {
   await confirm(bases)
 
   t.is(a.writers.length, 5)
-  t.is(a.system.digest.writers.length, 5)
+  t.is(a.system.members.active, 5)
 
   t.is(a.writers.length, b.writers.length)
-  t.is(a.system.digest.writers.length, b.system.digest.writers.length)
+  t.is(a.system.members.active, b.system.members.active)
 
   t.is(a.writers.length, c.writers.length)
-  t.is(a.system.digest.writers.length, c.system.digest.writers.length)
+  t.is(a.system.members.active, c.system.members.active)
 
   t.is(a.writers.length, d.writers.length)
-  t.is(a.system.digest.writers.length, d.system.digest.writers.length)
+  t.is(a.system.members.active, d.system.members.active)
 
   t.is(a.writers.length, e.writers.length)
-  t.is(a.system.digest.writers.length, e.system.digest.writers.length)
+  t.is(a.system.members.active, e.system.members.active)
 })
 
 test('basic - online minorities', async t => {
@@ -561,7 +561,7 @@ test('reindex', async t => {
   await addWriter(b, d)
   await confirm(b, c, { majority: 2 })
 
-  t.is(b.system.digest.writers.length, 4)
+  t.is(b.system.members.active, 4)
 
   // trigger reindex for a
   await sync(a, b, c, d)
@@ -580,13 +580,14 @@ test('reindex', async t => {
   await addWriter(a, e)
   await confirm(a, b, c, { majority: 3 })
 
-  t.is(b.system.digest.writers.length, 5)
+  t.is(b.system.members.active, 5)
 
   // trigger reindex for a
   await sync(a, b, c, d, e)
 
-  t.is(a.system.digest.heads.length, 1)
-  t.is(a.system.digest.writers.length, bases.length)
+  t.is(a.system.heads.length, 2)
+  t.is((await a.system.getIndexedInfo()).heads.length, 1, 'only one indexed head')
+  t.is(a.system.members.active, bases.length)
 
   t.not(a.view.indexedLength, a.view.length)
 
@@ -650,10 +651,12 @@ test('sequential restarts', async t => {
   }
 
   // only bases[0] node should be head
-  t.is(bases[0].system.digest.heads.length, 1)
-  t.alike(bases[0].system.digest.heads[0].key, bases[0].local.key)
+  t.is(bases[0].system.heads.length, 9)
+  const indexedHeads = (await bases[0].system.getIndexedInfo()).heads
+  t.is(indexedHeads.length, 1)
+  t.alike(indexedHeads[0].key, bases[0].local.key)
 
-  t.is(bases[0].system.digest.writers.length, bases.length)
+  t.is(bases[0].system.members.active, bases.length)
 
   t.not(bases[0].view.indexedLength, 0)
   t.not(bases[0].view.indexedLength, bases[0].view.length)
@@ -749,7 +752,7 @@ test('basic - pass exisiting store', async t => {
 
   await confirm(base1, base2)
 
-  t.is(base2.system.digest.writers.length, 2)
+  t.is(base2.system.members.active, 2)
 
   await base2.close()
 
@@ -757,13 +760,13 @@ test('basic - pass exisiting store', async t => {
   const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
   await base3.ready()
 
-  t.is(base3.system.digest.writers.length, 2)
+  t.is(base3.system.members.active, 2)
 
   await base3.append('final')
 
   await t.execution(sync(base3, base1))
 
-  t.is(base3.system.digest.writers.length, 2)
+  t.is(base3.system.members.active, 2)
 })
 
 test('two writers write many messages, third writer joins', async t => {
@@ -802,7 +805,7 @@ test('basic - gc indexed nodes', async t => {
   await base.append({ message: '3' })
   await base.append({ message: '4' })
 
-  t.is(base.system.digest.writers.length, 1)
+  t.is(base.system.members.active, 1)
   t.is(base.view.indexedLength, 5)
   t.is(base.localWriter.nodes.size, 0)
 
@@ -874,7 +877,7 @@ test('basic - catch apply throws', async t => {
   async function applyThrow (batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
-        await base.system.addWriter(b4a.from(node.value.add, 'hex'))
+        await base.addWriter(b4a.from(node.value.add, 'hex'))
       }
 
       if (node.value === 'trigger') {
@@ -944,7 +947,7 @@ test('basic - non-indexed writer', async t => {
   async function applyWriter (batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
-        base.addWriter(b4a.from(node.value.add, 'hex'), { indexer: !!node.value.indexer })
+        await base.addWriter(b4a.from(node.value.add, 'hex'), { isIndexer: !!node.value.indexer })
         continue
       }
 
@@ -1066,7 +1069,7 @@ test('basic - non-indexed writers 3-of-5', async t => {
   async function applyWriter (batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
-        base.addWriter(b4a.from(node.value.add, 'hex'), { indexer: !!node.value.indexer })
+        await base.addWriter(b4a.from(node.value.add, 'hex'), { isIndexer: !!node.value.indexer })
         continue
       }
 
