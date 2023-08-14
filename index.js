@@ -21,8 +21,6 @@ const VIEW_NAME_USERDATA = 'autobase/view'
 const DEFAULT_ACK_INTERVAL = 10 * 1000
 const DEFAULT_ACK_THRESHOLD = 4
 
-const { FLAG_OPLOG_IS_CHECKPOINTER } = messages
-
 class LinearizedStore {
   constructor (base) {
     this.base = base
@@ -707,14 +705,13 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _flushLocal () {
-    const checkpoint = []
-    if (this.localWriter.isIndexer) {
-      for (const [, core] of this._viewStore.opened) {
-        if (!core.indexedLength) continue
-        checkpoint.push(core.checkpoint())
-      }
+    const digest = { // TODO: use this
+      pointer: 0,
+      seed: Buffer.alloc(32),
+      indexers: this.system.indexers.map(onlyKey)
     }
 
+    const cores = this._getCheckpointCores()
     const blocks = new Array(this.localWriter.length - this.local.length)
 
     for (let i = 0; i < blocks.length; i++) {
@@ -722,13 +719,10 @@ module.exports = class Autobase extends ReadyResource {
 
       if (yielded) this.localWriter.shift().clear()
 
-      let flags = 0
-      if (this.localWriter.isIndexer) flags |= FLAG_OPLOG_IS_CHECKPOINTER
-
       blocks[i] = {
-        flags,
         version: this.version,
-        checkpoint: checkpoint.sort(cmpCheckpoint),
+        digest: this.localWriter.isIndexer ? digest : null,
+        checkpoint: this.localWriter.isIndexer ? generateCheckpoint(cores) : null,
         node: {
           heads,
           abi: 0,
@@ -736,16 +730,42 @@ module.exports = class Autobase extends ReadyResource {
           value: value === null ? null : c.encode(this.valueEncoding, value)
         }
       }
-
-      if (this.localWriter.isIndexer) {
-        for (const [, core] of this._viewStore.opened) {
-          if (core.indexedLength) core.checkpointer++
-        }
-      }
     }
 
     return this.local.append(blocks)
   }
+
+  _getCheckpointCores () {
+    if (!this.localWriter.isIndexer) return []
+
+    const cores = []
+
+    for (let i = 0; i < this.system.views.length; i++) {
+      const v = this.system.views[i]
+      const core = this._viewStore.opened.get(v.name)
+      if (!core) break
+      core.index = i // just in case its out of date...
+      if (!core.indexedLength) continue
+      cores.push(core)
+    }
+
+    return cores
+  }
+}
+
+function generateCheckpoint (cores) {
+  const checkpoint = []
+
+  for (const core of cores) {
+    checkpoint.push(core.checkpoint())
+    core.checkpointer++
+  }
+
+  return checkpoint
+}
+
+function onlyKey (o) {
+  return o.key
 }
 
 function toKey (k) {
@@ -757,10 +777,5 @@ function compareHead (head, node) {
 }
 
 function isAutobaseMessage (msg) {
-  const indexer = msg.flags & FLAG_OPLOG_IS_CHECKPOINTER
-  return indexer ? msg.checkpoint.length > 0 : msg.checkpoint.length === 0
-}
-
-function cmpCheckpoint (a, b) {
-  return a.index - b.index
+  return msg.checkpoint ? msg.checkpoint.length > 0 : msg.checkpoint === null
 }
