@@ -192,6 +192,8 @@ module.exports = class Autobase extends ReadyResource {
     await this._ensureUserData(this.system.core, null)
 
     if (this.localWriter && this._ackInterval) this._startAckTimer()
+
+    await this._bump()
   }
 
   async _close () {
