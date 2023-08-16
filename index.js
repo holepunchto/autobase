@@ -101,6 +101,7 @@ module.exports = class Autobase extends ReadyResource {
     this.version = 0 // todo: set version
 
     this._openingCores = null
+    this._prebumping = null
 
     this._hasApply = !!this._handlers.apply
     this._hasOpen = !!this._handlers.open
@@ -157,10 +158,6 @@ module.exports = class Autobase extends ReadyResource {
     return this._primaryBootstrap === null ? this.local.discoveryKey : this._primaryBootstrap.discoveryKey
   }
 
-  async _openSystem () {
-    await this.system.ready()
-  }
-
   async _openCores () {
     if (!this._openingCores) this._openingCores = this._openCoresPromise()
     return this._openingCores
@@ -180,7 +177,7 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _open () {
+  async _prebump () {
     await this._openCores()
 
     // see if we can load from indexer checkpoint
@@ -192,7 +189,11 @@ module.exports = class Autobase extends ReadyResource {
     await this._ensureUserData(this.system.core, null)
 
     if (this.localWriter && this._ackInterval) this._startAckTimer()
+  }
 
+  async _open () {
+    this._prebumping = this._prebump()
+    await this._prebumping
     await this._bump()
   }
 
@@ -485,6 +486,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _advance () {
+    if (this.opened === false) await this._prebumping
+
     while (!this.closing) {
       while (!this._appending.isEmpty()) {
         const batch = this._appending.length
