@@ -100,8 +100,8 @@ module.exports = class Autobase extends ReadyResource {
 
     this.version = 0 // todo: set version
 
-    this._openingCores = null
-    this._prebumping = null
+    this._presystem = null
+    this._prebump = null
 
     this._hasApply = !!this._handlers.apply
     this._hasOpen = !!this._handlers.open
@@ -158,12 +158,7 @@ module.exports = class Autobase extends ReadyResource {
     return this._primaryBootstrap === null ? this.local.discoveryKey : this._primaryBootstrap.discoveryKey
   }
 
-  async _openCores () {
-    if (!this._openingCores) this._openingCores = this._openCoresPromise()
-    return this._openingCores
-  }
-
-  async _openCoresPromise () {
+  async _openPreSystem () {
     await this.store.ready()
     await this.local.ready()
 
@@ -177,8 +172,9 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _prebump () {
-    await this._openCores()
+  async _openPreBump () {
+    this._presystem = this._openPreSystem()
+    await this._presystem
 
     // see if we can load from indexer checkpoint
     await this.system.ready()
@@ -192,8 +188,9 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _open () {
-    this._prebumping = this._prebump()
-    await this._prebumping
+    this._prebump = this._openPreBump()
+    await this._prebump
+
     await this._bump()
   }
 
@@ -486,7 +483,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _advance () {
-    if (this.opened === false) await this._prebumping
+    if (this.opened === false) await this._prebump
 
     while (!this.closing) {
       while (!this._appending.isEmpty()) {
