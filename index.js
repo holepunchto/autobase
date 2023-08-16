@@ -236,7 +236,7 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async update (opts) {
+  async update () {
     await this.ready()
     await this._bump()
   }
