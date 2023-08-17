@@ -15,8 +15,6 @@ const Timer = require('./lib/timer')
 const Writer = require('./lib/writer')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
-const REFERRER_USERDATA = 'referrer'
-const VIEW_NAME_USERDATA = 'autobase/view'
 
 // default is to automatically ack
 const DEFAULT_ACK_INTERVAL = 10 * 1000
@@ -149,8 +147,6 @@ module.exports = class Autobase extends ReadyResource {
     // reindex to load writers
     await this._reindex(null)
 
-    await this._ensureUserData(this.system.core, null)
-
     if (this.localWriter && this._ackInterval) this._startAckTimer()
   }
 
@@ -169,18 +165,11 @@ module.exports = class Autobase extends ReadyResource {
     if (this._mainStore) await this._mainStore.close()
   }
 
-  async _ensureUserData (core, name) {
-    await core.setUserData(REFERRER_USERDATA, this.key)
-    if (name) {
-      await core.setUserData(VIEW_NAME_USERDATA, b4a.from(name))
-    }
-  }
-
   async _ensureAllCores () {
     while (this._needsReady.length > 0) {
       const core = this._needsReady.pop()
       await core.ready()
-      await this._ensureUserData(core, null)
+      await core.setUserData('referrer', this.key)
     }
   }
 
@@ -283,9 +272,9 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   static async getUserData (core) {
-    const viewName = await core.getUserData(VIEW_NAME_USERDATA)
+    const viewName = await core.getUserData('autobase/view')
     return {
-      referrer: await core.getUserData(REFERRER_USERDATA),
+      referrer: await core.getUserData('referrer'),
       view: viewName ? b4a.toString(viewName) : null
     }
   }
@@ -571,7 +560,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _applyUpdate (u) {
-    await this._viewStore.update()
+    await this._viewStore.flush()
 
     if (u.popped) this._undo(u.popped)
 
