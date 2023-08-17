@@ -28,7 +28,7 @@
     "debounceify": "^1.0.0",
     "fast-fifo": "^1.2.0",
     "hyperbee": "^2.4.2",
-    "hypercore": "^10.16.1",
+    "hypercore": "^10.19.0",
     "hypercore-crypto": "^3.4.0",
     "nanoassert": "^2.0.0",
     "ready-resource": "^1.0.0",
