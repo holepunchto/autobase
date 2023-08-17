@@ -535,7 +535,7 @@ test('suspend - non-indexed writer', async t => {
   await session2.ready()
 
   const c = new Autobase(session2, a.local.key, {
-    applyWriter,
+    apply: applyWriter,
     valueEncoding: 'json',
     open,
     ackInterval: 0,
@@ -631,13 +631,13 @@ test('suspend - open new index after reopen', async t => {
 
   t.is(c.writers.length, 2)
 
-  await c.append({ view: 1, data: 'final' })
+  await c.append({ index: 1, data: 'final' })
 
   await t.execution(sync(a, c))
 
   t.is(b.view.first.indexedLength, 1)
   t.is(c.view.first.indexedLength, 1)
-  t.is(c.view.first.length, b.view.first.length + 1)
+  t.is(c.view.first.length, b.view.first.length + 2)
 
   await t.execution(confirm(a, c))
 
@@ -652,6 +652,9 @@ test('suspend - open new index after reopen', async t => {
 
   const ccp1 = await c.localWriter.getCheckpoint(1)
   const ccp2 = await c.localWriter.getCheckpoint(2)
+
+  t.is(acp1.length, 3)
+  t.is(acp2.length, 1)
 
   t.alike(acp1.length, ccp1.length)
   t.alike(acp2.length, ccp2.length)
@@ -693,7 +696,7 @@ test('suspend - reopen multiple indexes', async t => {
 
   await b.append({ index: 2, data: 'b0' })
   await b.append({ index: 1, data: 'b1' })
-  // await b.append({ index: 1, data: 'b2' })
+
   await a.append({ index: 1, data: 'a2' })
 
   t.is(b.writers.length, 2)
@@ -733,13 +736,13 @@ test('suspend - reopen multiple indexes', async t => {
 
   t.is(c.writers.length, 2)
 
-  await c.append({ view: 1, data: 'final' })
+  await c.append({ index: 1, data: 'final' })
 
   await t.execution(sync(a, c))
 
   t.is(b.view.first.indexedLength, 1)
   t.is(c.view.first.indexedLength, 1)
-  t.is(c.view.first.length, b.view.first.length + 1)
+  t.is(c.view.first.length, b.view.first.length + 2)
 
   await t.execution(confirm(a, c))
 
@@ -754,6 +757,9 @@ test('suspend - reopen multiple indexes', async t => {
 
   const ccp1 = await c.localWriter.getCheckpoint(1)
   const ccp2 = await c.localWriter.getCheckpoint(2)
+
+  t.alike(acp1.length, 4)
+  t.alike(acp2.length, 2)
 
   t.alike(acp1.length, ccp1.length)
   t.alike(acp2.length, ccp2.length)
@@ -958,6 +964,9 @@ test('suspend - append but not indexed then reopen', async t => {
 
   const c2cp1 = await c2.localWriter.getCheckpoint(1)
   const c2cp2 = await c2.localWriter.getCheckpoint(2)
+
+  t.alike(acp1.length, 2)
+  t.alike(acp2.length, 3)
 
   t.alike(acp1.length, c2cp1.length)
   t.alike(acp2.length, c2cp2.length)

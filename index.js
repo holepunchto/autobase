@@ -495,6 +495,7 @@ module.exports = class Autobase extends ReadyResource {
     for (const core of updatedCores) {
       const batch = core.indexBatch(0, core.indexing)
       await core.core.append(batch)
+      await core.flush()
     }
 
     for (const core of updatedCores) {
