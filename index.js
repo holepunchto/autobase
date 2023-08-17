@@ -147,6 +147,9 @@ module.exports = class Autobase extends ReadyResource {
     // reindex to load writers
     await this._reindex(null)
 
+    // ready all the writer cores...
+    await this._ensureAllCores()
+
     if (this.localWriter && this._ackInterval) this._startAckTimer()
   }
 
@@ -472,8 +475,17 @@ module.exports = class Autobase extends ReadyResource {
         await this._flushIndexes()
       }
 
-      if (this.closing || !changed) break
+      if (this.closing) break
 
+      if (!changed) {
+        if (this._needsReady.length > 0) {
+          await this._ensureAllCores()
+          continue
+        }
+        break
+      }
+
+      await this._ensureAllCores()
       await this._reindex(changed)
     }
 
