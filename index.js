@@ -8,7 +8,7 @@ const assert = require('nanoassert')
 const crypto = require('hypercore-crypto')
 
 const Linearizer = require('./lib/linearizer')
-const Autocore = require('./lib/core')
+const AutoStore = require('./lib/store')
 const SystemView = require('./lib/system')
 const messages = require('./lib/messages')
 const Timer = require('./lib/timer')
@@ -21,39 +21,6 @@ const VIEW_NAME_USERDATA = 'autobase/view'
 // default is to automatically ack
 const DEFAULT_ACK_INTERVAL = 10 * 1000
 const DEFAULT_ACK_THRESHOLD = 4
-
-class LinearizedStore {
-  constructor (base) {
-    this.base = base
-    this.opened = new Map()
-    this.waiting = []
-  }
-
-  get (opts, moreOpts) {
-    if (typeof opts === 'string') opts = { name: opts }
-    if (moreOpts) opts = { ...opts, ...moreOpts }
-
-    const name = opts.name
-    const valueEncoding = opts.valueEncoding || null
-
-    if (this.opened.has(name)) return this.opened.get(name).createSession(valueEncoding)
-
-    const core = this.base.store.get({ name: 'view/' + name, cache: opts.cache, exclusive: true })
-    const ac = new Autocore(this.base, core, name)
-
-    this.waiting.push(ac)
-    this.opened.set(name, ac)
-
-    return ac.createSession(valueEncoding)
-  }
-
-  async update () {
-    while (this.waiting.length) {
-      const core = this.waiting.pop()
-      await core.ready()
-    }
-  }
-}
 
 module.exports = class Autobase extends ReadyResource {
   constructor (store, bootstrap, handlers = {}) {
@@ -107,7 +74,7 @@ module.exports = class Autobase extends ReadyResource {
     this._hasOpen = !!this._handlers.open
     this._hasClose = !!this._handlers.close
 
-    this._viewStore = new LinearizedStore(this)
+    this._viewStore = new AutoStore(this)
 
     this.view = null
     this.system = null
@@ -771,7 +738,7 @@ module.exports = class Autobase extends ReadyResource {
   async _flushLocal () {
     if (this._maybeUpdateDigest) await this._updateDigest()
 
-    const cores = this._getCheckpointCores()
+    const cores = this.localWriter.isIndexer ? this._viewStore.getIndexedCores() : []
     const blocks = new Array(this.localWriter.length - this.local.length)
 
     for (let i = 0; i < blocks.length; i++) {
@@ -795,22 +762,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     await this.local.append(blocks)
-  }
-
-  _getCheckpointCores () {
-    if (!this.localWriter.isIndexer) return []
-
-    const cores = []
-
-    for (let i = 0; i < this.system.views.length; i++) {
-      const v = this.system.views[i]
-      const core = this._viewStore.opened.get(v.name)
-      if (!core || (!core.indexedLength && !core.indexing)) break
-      core.likelyIndex = i // just in case its out of date...
-      cores.push(core)
-    }
-
-    return cores
   }
 }
 
