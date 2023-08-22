@@ -1,12 +1,12 @@
 const ram = require('random-access-memory')
 const Corestore = require('corestore')
-const b4a = require('b4a')
 
 const Autobase = require('../..')
 
 module.exports = {
   create,
   eventFlush,
+  downloadAll,
   sync,
   synced,
   addWriter,
@@ -18,11 +18,11 @@ module.exports = {
 
 async function create (n, apply, open, close, opts = {}) {
   const moreOpts = { apply, open, close, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, ...opts }
-  const bases = [new Autobase(new Corestore(ram, { primaryKey: Buffer.alloc(32).fill(0) }), null, moreOpts)]
+  const bases = [new Autobase(new Corestore(ram.reusable(), { primaryKey: Buffer.alloc(32).fill(0) }), null, moreOpts)]
   await bases[0].ready()
   if (n === 1) return bases
   for (let i = 1; i < n; i++) {
-    const base = new Autobase(new Corestore(ram, { primaryKey: Buffer.alloc(32).fill(i) }), bases[0].local.key, moreOpts)
+    const base = new Autobase(new Corestore(ram.reusable(), { primaryKey: Buffer.alloc(32).fill(i) }), bases[0].local.key, moreOpts)
     await base.ready()
     bases.push(base)
   }
@@ -86,46 +86,31 @@ async function sync (...b) {
   const [bases] = parse(b)
 
   if (bases.length === 1) {
-    await eventFlush()
-    await downloadAllWriters(bases[0])
+    await downloadAll(bases)
     return
   }
 
   const close = replicate(bases)
 
-  while (!synced(bases)) {
-    await eventFlush()
-    await Promise.all(bases.map(downloadAllWriters))
-  }
+  await downloadAll(bases)
 
   return close()
 }
 
+async function downloadAll (bases, flush = eventFlush) {
+  do {
+    await flush()
+    await Promise.all(bases.map(downloadAllWriters))
+    await flush()
+  } while (!synced(...bases))
+}
+
 function synced (...b) {
   const [bases] = parse(b)
-  const first = bases[0]
 
-  for (let i = 1; i < bases.length; i++) {
-    if (first.writers.length !== bases[i].writers.length) {
-      return false
-    }
+  for (let i = 0; i < bases.length; i++) {
     for (const w of bases[i].writers) {
-      let other = null
-      for (const o of first.writers) {
-        if (b4a.equals(o.core.key, w.core.key)) {
-          other = o
-          break
-        }
-      }
-      if (other === null) {
-        return false
-      }
-      if (w.core.length !== other.core.length) {
-        return false
-      }
-      if (w.core.contiguousLength !== other.core.contiguousLength) {
-        return false
-      }
+      if (w.core.length !== w.core.contiguousLength) return false
     }
   }
   return true
@@ -197,15 +182,20 @@ async function apply (batch, view, base) {
 
 async function downloadAllWriters (base) {
   await base.ready()
-  for (const w of base.writers) {
-    await eventFlush()
-    await w.core.update({ wait: true })
-    await downloadAll(w.core)
-  }
-  await base.update()
+  let writers = 0
+
+  do {
+    writers = base.writers.length
+    for (const w of base.writers) {
+      await eventFlush()
+      await w.core.update({ wait: true })
+      await coreDownloadAll(w.core)
+    }
+    await base.update()
+  } while (writers !== base.writers.length)
 }
 
-function downloadAll (core) {
+function coreDownloadAll (core) {
   const start = core.contiguousLength
   const end = core.length
   return core.download({ start, end }).done()
