@@ -1,14 +1,13 @@
 const ram = require('random-access-memory')
 const Corestore = require('corestore')
+const { downloadAll } = require('autobase-test-helpers')
 
 const Autobase = require('../..')
 
 module.exports = {
   create,
   eventFlush,
-  downloadAll,
   sync,
-  synced,
   addWriter,
   apply,
   confirm,
@@ -97,25 +96,6 @@ async function sync (...b) {
   return close()
 }
 
-async function downloadAll (bases, flush = eventFlush) {
-  do {
-    await flush()
-    await Promise.all(bases.map(downloadAllWriters))
-    await flush()
-  } while (!synced(...bases))
-}
-
-function synced (...b) {
-  const [bases] = parse(b)
-
-  for (let i = 0; i < bases.length; i++) {
-    for (const w of bases[i].writers) {
-      if (w.core.length !== w.core.contiguousLength) return false
-    }
-  }
-  return true
-}
-
 async function addWriter (base, add) {
   return base.append({ add: add.local.key.toString('hex') })
 }
@@ -178,25 +158,4 @@ async function apply (batch, view, base) {
 
     if (view) await view.append(value)
   }
-}
-
-async function downloadAllWriters (base) {
-  await base.ready()
-  let writers = 0
-
-  do {
-    writers = base.writers.length
-    for (const w of base.writers) {
-      await eventFlush()
-      await w.core.update({ wait: true })
-      await coreDownloadAll(w.core)
-    }
-    await base.update()
-  } while (writers !== base.writers.length)
-}
-
-function coreDownloadAll (core) {
-  const start = core.contiguousLength
-  const end = core.length
-  return core.download({ start, end }).done()
 }
