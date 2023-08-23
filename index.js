@@ -357,13 +357,9 @@ module.exports = class Autobase extends ReadyResource {
 
     const indexers = []
     const heads = []
-    const clock = []
 
     for await (const { key, value } of this.system.list()) {
       const writer = this._getWriterByKey(key, value.length)
-
-      clock.push({ writer, length: value.length })
-
       if (!value.isIndexer) continue
 
       indexers.push(writer)
@@ -379,7 +375,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this.linearizer = new Linearizer(indexers, {
       heads,
-      removed: clock,
       cacheIndex: this._restarts++
     })
 
