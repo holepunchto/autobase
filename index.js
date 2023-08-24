@@ -1,6 +1,5 @@
 const b4a = require('b4a')
 const ReadyResource = require('ready-resource')
-const FIFO = require('fast-fifo')
 const debounceify = require('debounceify')
 const c = require('compact-encoding')
 const safetyCatch = require('safety-catch')
@@ -48,8 +47,7 @@ module.exports = class Autobase extends ReadyResource {
     this.linearizer = null
 
     this.writers = []
-
-    this._appending = new FIFO()
+    this._appending = null
 
     this._applying = null
     this._updatedCores = null
@@ -248,14 +246,23 @@ module.exports = class Autobase extends ReadyResource {
     if (this.localWriter === null) {
       throw new Error('Not writable')
     }
+    if (this._appending === null) this._appending = []
 
     if (Array.isArray(value)) {
-      for (const v of value) this._appending.push(v)
+      for (const v of value) this._append(v)
     } else {
-      this._appending.push(value)
+      this._append(value)
     }
 
     await this._bump()
+  }
+
+  _append (value) {
+    // if prev value is an ack that hasnt been flushed, skip it
+    if (this._appending.length > 0 && this._appending[this._appending.length - 1] === null) {
+      this._appending.pop()
+    }
+    this._appending.push(value)
   }
 
   async checkpoint () {
@@ -417,7 +424,25 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _addHeads () {
+  _addLocalHeads () {
+    const nodes = new Array(this._appending.length)
+
+    for (let i = 0; i < this._appending.length; i++) {
+      const batch = this._appending.length - i
+      const value = this._appending[i]
+      const heads = new Set(this.linearizer.heads)
+
+      const node = this.localWriter.append(value, heads, batch)
+      this.linearizer.addHead(node)
+      nodes[i] = node
+    }
+
+    this._appending = null
+
+    return nodes
+  }
+
+  async _addRemoteHeads () {
     let added = 0
 
     while (added < 50) { // 50 here is just to reduce the bulk batches
@@ -447,28 +472,16 @@ module.exports = class Autobase extends ReadyResource {
     if (this.opened === false) await this._prebump
 
     while (!this.closing) {
-      while (!this._appending.isEmpty()) {
-        const batch = this._appending.length
-        const value = this._appending.shift()
-
-        // filter out pointless acks
-        if (value === null && !this._appending.isEmpty()) continue
-
-        const heads = new Set(this.linearizer.heads)
-
-        const node = this.localWriter.append(value, heads, batch)
-        this.linearizer.addHead(node)
-      }
-
-      await this._addHeads()
+      const localNodes = this._appending === null ? null : this._addLocalHeads()
+      await this._addRemoteHeads()
 
       const u = this.linearizer.update()
       const changed = u ? await this._applyUpdate(u) : null
 
       if (this.closing) break
 
-      if (this.localWriter !== null && this.localWriter.length > this.local.length) {
-        await this._flushLocal()
+      if (this.localWriter !== null && localNodes !== null) {
+        await this._flushLocal(localNodes)
       }
 
       if (this.closing) break
@@ -589,10 +602,8 @@ module.exports = class Autobase extends ReadyResource {
     while (i < Math.min(u.indexed.length, u.shared)) {
       const node = u.indexed[i++]
 
-      node.writer.indexed++
-      node.writer.shift().clear()
-
       if (node.batch > 1) continue
+      node.writer.shift()
 
       const update = this._updates[j++]
       if (!update.indexers) continue
@@ -606,8 +617,6 @@ module.exports = class Autobase extends ReadyResource {
     for (i = u.shared; i < u.length; i++) {
       const indexed = i < u.indexed.length
       const node = indexed ? u.indexed[i] : u.tip[i - u.indexed.length]
-
-      if (indexed) node.writer.indexed++
 
       batch++
       this.system.addHead(node)
@@ -643,15 +652,11 @@ module.exports = class Autobase extends ReadyResource {
 
       update.indexers = await this.system.flush(update)
 
-      // local flushed in _flushLocal
-      if (indexed && node.writer !== this.localWriter) {
-        node.writer.shift()
-        node.clear()
-      }
+      if (indexed) node.writer.shift()
 
       this._applying = null
 
-      batch = []
+      batch = 0
       applyBatch = []
 
       for (let k = 0; k < update.views.length; k++) {
@@ -737,16 +742,14 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _flushLocal () {
+  async _flushLocal (localNodes) {
     if (this._maybeUpdateDigest) await this._updateDigest()
 
     const cores = this.localWriter.isIndexer ? this._viewStore.getIndexedCores() : []
-    const blocks = new Array(this.localWriter.length - this.local.length)
+    const blocks = new Array(localNodes.length)
 
     for (let i = 0; i < blocks.length; i++) {
-      const { value, heads, batch, yielded } = this.localWriter.get(this.local.length + i)
-
-      if (yielded) this.localWriter.shift().clear()
+      const { value, heads, batch } = localNodes[i]
 
       blocks[i] = {
         version: this.version,
