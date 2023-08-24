@@ -123,6 +123,13 @@ module.exports = class Autobase extends ReadyResource {
     return this._primaryBootstrap === null ? this.local.discoveryKey : this._primaryBootstrap.discoveryKey
   }
 
+  heads () {
+    const nodes = new Array(this.linearizer.heads.size)
+    let i = 0
+    for (const node of this.linearizer.heads) nodes[i++] = { key: node.writer.core.key, length: node.length }
+    return nodes
+  }
+
   async _openPreSystem () {
     await this.store.ready()
     await this.local.ready()
