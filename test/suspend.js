@@ -8,10 +8,12 @@ const Autobase = require('..')
 
 const {
   create,
-  sync,
+  replicate,
+  replicateAndSync,
   apply,
   addWriter,
-  confirm
+  confirm,
+  eventFlush
 } = require('./helpers')
 
 test('suspend - pass exisiting store', async t => {
@@ -34,13 +36,13 @@ test('suspend - pass exisiting store', async t => {
     value: 'base1'
   })
 
-  await confirm(base1, base2)
+  await confirm([base1, base2])
 
   await base2.append({
     value: 'base2'
   })
 
-  await confirm(base1, base2)
+  await confirm([base1, base2])
 
   t.is(base2.writers.length, 2)
 
@@ -54,7 +56,7 @@ test('suspend - pass exisiting store', async t => {
 
   await base3.append('final')
 
-  await t.execution(sync(base3, base1))
+  await t.execution(replicateAndSync([base3, base1]))
 })
 
 test('suspend - pass exisiting fs store', async t => {
@@ -77,13 +79,13 @@ test('suspend - pass exisiting fs store', async t => {
     value: 'base1'
   })
 
-  await confirm(base1, base2)
+  await confirm([base1, base2])
 
   await base2.append({
     value: 'base2'
   })
 
-  await confirm(base1, base2)
+  await confirm([base1, base2])
 
   t.is(base2.writers.length, 2)
 
@@ -97,7 +99,7 @@ test('suspend - pass exisiting fs store', async t => {
 
   await base3.append('final')
 
-  await t.execution(sync(base3, base1))
+  await t.execution(replicateAndSync([base3, base1]))
 })
 
 test('suspend - 2 exisiting fs stores', async t => {
@@ -125,13 +127,13 @@ test('suspend - 2 exisiting fs stores', async t => {
     value: 'base1'
   })
 
-  await confirm(base1, base2)
+  await confirm([base1, base2])
 
   await base2.append({
     value: 'base2'
   })
 
-  await confirm(base1, base2)
+  await confirm([base1, base2])
 
   t.is(base2.writers.length, 2)
 
@@ -145,7 +147,7 @@ test('suspend - 2 exisiting fs stores', async t => {
 
   await base3.append('final')
 
-  await t.execution(sync(base3, base1))
+  await t.execution(replicateAndSync([base3, base1]))
 
   await base1.close()
   await base2.close()
@@ -174,11 +176,11 @@ test('suspend - reopen after index', async t => {
 
   await addWriter(a, b)
 
-  await sync(a, b)
+  await replicateAndSync([a, b])
 
   await a.append('a0')
 
-  await confirm(a, b)
+  await confirm([a, b])
 
   await b.append('b0')
   await a.append('a1')
@@ -204,7 +206,6 @@ test('suspend - reopen after index', async t => {
   })
 
   await c.ready()
-  await sync(c)
 
   t.is(c.view.length, order.length)
 
@@ -216,7 +217,7 @@ test('suspend - reopen after index', async t => {
 
   await c.append('final')
 
-  await t.execution(sync(a, c))
+  await t.execution(replicateAndSync([a, c]))
 
   t.is(b.view.indexedLength, 1)
   t.is(c.view.indexedLength, 1)
@@ -247,11 +248,11 @@ test('suspend - reopen with sync in middle', async t => {
 
   await addWriter(a, b)
 
-  await sync(a, b)
+  await replicateAndSync([a, b])
 
   await a.append('a0')
 
-  await confirm(a, b)
+  await confirm([a, b])
 
   await b.append('b0')
   await a.append('a1')
@@ -261,12 +262,10 @@ test('suspend - reopen with sync in middle', async t => {
 
   await b.close()
 
-  const s1 = a.store.replicate(true)
-  const s2 = store.replicate(false)
+  const unreplicate = replicate([a.store, store])
 
-  s1.pipe(s2).pipe(s1)
-
-  await sync(a)
+  await eventFlush()
+  await a.update()
 
   for (const [key, core] of store.cores) {
     const end = a.store.cores.get(key).length
@@ -274,13 +273,7 @@ test('suspend - reopen with sync in middle', async t => {
     await range.done()
   }
 
-  s1.destroy()
-  s2.destroy()
-
-  await Promise.all([
-    new Promise(resolve => s1.on('close', resolve)),
-    new Promise(resolve => s2.on('close', resolve))
-  ])
+  await unreplicate()
 
   const session2 = store.session()
   await session2.ready()
@@ -294,14 +287,13 @@ test('suspend - reopen with sync in middle', async t => {
   })
 
   await c.ready()
-  await sync(c)
 
   t.is(c.writers.length, 2)
   t.is(c.view.length, b.view.length + 1)
 
   await c.append('final')
 
-  await t.execution(sync(c, a))
+  await t.execution(replicateAndSync([c, a]))
 
   t.is(b.view.indexedLength, 1)
   t.is(c.view.indexedLength, 1)
@@ -333,7 +325,7 @@ test('suspend - reopen with indexing in middle', async t => {
   await addWriter(a, b)
   await addWriter(a, c)
 
-  await confirm(a, b, c)
+  await confirm([a, b, c])
 
   t.is(c.writers.length, 3)
   t.is(c.view.length, 0)
@@ -345,12 +337,12 @@ test('suspend - reopen with indexing in middle', async t => {
   // majority continues
 
   await a.append('a0')
-  await sync(a, b)
+  await replicateAndSync([a, b])
   await b.append('b0')
-  await sync(a, b)
+  await replicateAndSync([a, b])
   await a.append('a1')
 
-  await confirm(a, b)
+  await confirm([a, b])
 
   const session2 = store.session()
   await session2.ready()
@@ -364,7 +356,6 @@ test('suspend - reopen with indexing in middle', async t => {
   })
 
   await c2.ready()
-  await sync(c2)
 
   t.is(c2.writers.length, 3)
   t.is(c2.view.length, 1)
@@ -374,7 +365,7 @@ test('suspend - reopen with indexing in middle', async t => {
 
   await c2.append('final')
 
-  await t.execution(sync(c2, b))
+  await t.execution(replicateAndSync([c2, b]))
 
   t.is(b.view.indexedLength, 3)
   t.is(c2.view.indexedLength, 3)
@@ -406,7 +397,7 @@ test('suspend - reopen with indexing + sync in middle', async t => {
   await addWriter(a, b)
   await addWriter(a, c)
 
-  await confirm(a, b, c)
+  await confirm([a, b, c])
 
   t.is(c.writers.length, 3)
   t.is(c.view.length, 0)
@@ -418,19 +409,17 @@ test('suspend - reopen with indexing + sync in middle', async t => {
   // majority continues
 
   await a.append('a0')
-  await sync(a, b)
+  await replicateAndSync([a, b])
   await b.append('b0')
-  await sync(a, b)
+  await replicateAndSync([a, b])
   await a.append('a1')
 
-  await confirm(a, b)
+  await confirm([a, b])
 
-  const s1 = a.store.replicate(true)
-  const s2 = store.replicate(false)
+  const unreplicate = replicate([a.store, store])
 
-  s1.pipe(s2).pipe(s1)
-
-  await sync(a)
+  await eventFlush()
+  await a.update()
 
   for (const [key, core] of store.cores) {
     const end = a.store.cores.get(key).core.tree.length
@@ -438,13 +427,7 @@ test('suspend - reopen with indexing + sync in middle', async t => {
     await range.done()
   }
 
-  s1.destroy()
-  s2.destroy()
-
-  await Promise.all([
-    new Promise(resolve => s1.on('close', resolve)),
-    new Promise(resolve => s2.on('close', resolve))
-  ])
+  await unreplicate()
 
   const session2 = store.session()
   await session2.ready()
@@ -458,7 +441,6 @@ test('suspend - reopen with indexing + sync in middle', async t => {
   })
 
   await c2.ready()
-  await sync(c2)
 
   t.is(c2.writers.length, 3)
   t.is(c2.view.length, 4)
@@ -470,7 +452,7 @@ test('suspend - reopen with indexing + sync in middle', async t => {
 
   await c2.append('final')
 
-  await t.execution(sync(c2, b))
+  await t.execution(replicateAndSync([c2, b]))
 
   t.is(b.view.indexedLength, 3)
   t.is(c2.view.indexedLength, 3)
@@ -502,32 +484,24 @@ test('suspend - non-indexed writer', async t => {
 
   await a.append({ add: b.local.key.toString('hex'), indexer: false })
 
-  await sync(a, b)
+  await replicateAndSync([a, b])
 
   await b.append('b0')
   await b.append('b1')
 
-  await sync(a, b)
+  await replicateAndSync([a, b])
 
   await a.append('a0')
 
-  await confirm(a, b)
+  await confirm([a, b])
 
-  const s1 = a.store.replicate(true)
-  const s2 = store.replicate(false)
+  const unreplicate = replicate([a.store, store])
 
-  s1.pipe(s2).pipe(s1)
+  await eventFlush()
+  await a.update()
+  await b.update()
 
-  await sync(a)
-  await sync(b)
-
-  s1.destroy()
-  s2.destroy()
-
-  await Promise.all([
-    new Promise(resolve => s1.on('close', resolve)),
-    new Promise(resolve => s2.on('close', resolve))
-  ])
+  await unreplicate()
 
   await b.close()
 
@@ -545,7 +519,6 @@ test('suspend - non-indexed writer', async t => {
   c.debug = true
 
   await c.ready()
-  await sync(c)
 
   t.is(c.view.indexedLength, a.view.indexedLength)
   t.is(c.view.length, a.view.length)
@@ -585,11 +558,11 @@ test('suspend - open new index after reopen', async t => {
 
   await addWriter(a, b)
 
-  await sync(a, b)
+  await replicateAndSync([a, b])
 
   await a.append({ index: 1, data: 'a0' })
 
-  await confirm(a, b)
+  await confirm([a, b])
 
   await b.append({ index: 2, data: 'b0' })
   await a.append({ index: 1, data: 'a1' })
@@ -617,7 +590,6 @@ test('suspend - open new index after reopen', async t => {
   })
 
   await c.ready()
-  await sync(c)
 
   t.is(c.view.first.length + c.view.second.length, order.length)
 
@@ -633,13 +605,13 @@ test('suspend - open new index after reopen', async t => {
 
   await c.append({ index: 1, data: 'final' })
 
-  await t.execution(sync(a, c))
+  await t.execution(replicateAndSync([a, c]))
 
   t.is(b.view.first.indexedLength, 1)
   t.is(c.view.first.indexedLength, 1)
   t.is(c.view.first.length, b.view.first.length + 2)
 
-  await t.execution(confirm(a, c))
+  await t.execution(confirm([a, c]))
 
   const an = await a.local.get(a.local.length - 1)
   const cn = await c.local.get(c.local.length - 1)
@@ -687,12 +659,12 @@ test('suspend - reopen multiple indexes', async t => {
 
   await addWriter(a, b)
 
-  await sync(a, b)
+  await replicateAndSync([a, b])
 
   await a.append({ index: 1, data: 'a0' })
   await a.append({ index: 2, data: 'a1' })
 
-  await confirm(a, b)
+  await confirm([a, b])
 
   await b.append({ index: 2, data: 'b0' })
   await b.append({ index: 1, data: 'b1' })
@@ -722,7 +694,6 @@ test('suspend - reopen multiple indexes', async t => {
   })
 
   await c.ready()
-  await sync(c)
 
   t.is(c.view.first.length + c.view.second.length, order.length)
 
@@ -738,13 +709,13 @@ test('suspend - reopen multiple indexes', async t => {
 
   await c.append({ index: 1, data: 'final' })
 
-  await t.execution(sync(a, c))
+  await t.execution(replicateAndSync([a, c]))
 
   t.is(b.view.first.indexedLength, 1)
   t.is(c.view.first.indexedLength, 1)
   t.is(c.view.first.length, b.view.first.length + 2)
 
-  await t.execution(confirm(a, c))
+  await t.execution(confirm([a, c]))
 
   const an = await a.local.get(a.local.length - 1)
   const cn = await c.local.get(c.local.length - 1)
@@ -783,7 +754,7 @@ test('restart non writer', async t => {
 
   await other.ready()
 
-  await sync(base, other)
+  await replicateAndSync([base, other])
 
   await other.close()
   await base.close()
@@ -814,35 +785,27 @@ test('suspend - non-indexed writer catches up', async t => {
 
   await a.append({ add: b.local.key.toString('hex'), indexer: false })
 
-  await sync(a, b)
+  await replicateAndSync([a, b])
 
   await b.append('b0')
   await b.append('b1')
 
-  await sync(a, b)
+  await replicateAndSync([a, b])
 
   await a.append('a0')
 
-  await confirm(a, b)
+  await confirm([a, b])
 
-  const s1 = a.store.replicate(true)
-  const s2 = store.replicate(false)
+  const unreplicate = replicate([a.store, store])
 
-  s1.pipe(s2).pipe(s1)
-
-  await sync(a)
-  await sync(b)
+  await eventFlush()
+  await a.update()
+  await b.update()
 
   for (let i = 0; i < 999; i++) a.append('a')
   await a.append('final')
 
-  s1.destroy()
-  s2.destroy()
-
-  await Promise.all([
-    new Promise(resolve => s1.on('close', resolve)),
-    new Promise(resolve => s2.on('close', resolve))
-  ])
+  await unreplicate()
 
   await b.close()
 
@@ -859,9 +822,7 @@ test('suspend - non-indexed writer catches up', async t => {
 
   await c.ready()
 
-  t.pass() // will fail on core open
-
-  await sync(c)
+  t.pass('did not fail on open')
 
   await a.close()
   await c.close()
@@ -931,7 +892,6 @@ test('suspend - append but not indexed then reopen', async t => {
   })
 
   await c2.ready()
-  await sync(c2)
 
   // c hasn't seen any appends to first
   t.is(c2.system.views[1].name, 'second')
@@ -951,7 +911,7 @@ test('suspend - append but not indexed then reopen', async t => {
 
   await c2.append({ index: 1, data: 'final' })
 
-  await t.execution(confirm(a, c2))
+  await t.execution(confirm([a, c2]))
 
   const an = await a.local.get(a.local.length - 1)
   const c2n = await c2.local.get(c2.local.length - 1)

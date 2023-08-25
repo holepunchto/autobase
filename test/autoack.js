@@ -5,7 +5,6 @@ const {
   apply,
   addWriter,
   replicate,
-  sync,
   eventFlush
 } = require('./helpers')
 
@@ -14,18 +13,11 @@ test('autoack - simple', async t => {
 
   const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 10, ackThreshold: 0 })
 
-  const str1 = a.store.replicate(true)
-  const str2 = b.store.replicate(false)
-
-  str1.pipe(str2).pipe(str1)
-
-  t.teardown(() => {
-    a.close()
-    b.close()
-  })
+  const unreplicate = replicate([a, b])
+  t.teardown(unreplicate)
 
   await addWriter(a, b)
-  await sync(b)
+  await b.update()
   await b.append('b0')
 
   t.is(a.view.indexedLength, 0)
@@ -43,10 +35,11 @@ test('autoack - 5 writers', async t => {
   const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 10, ackThreshold: 0 })
   const [a, b, c, d, e] = bases
 
-  replicate(bases)
+  const unreplicate = replicate(bases)
 
-  t.teardown(() => {
-    bases.forEach(b => b.close())
+  t.teardown(async () => {
+    await unreplicate()
+    await Promise.all(bases.map(b => b.close()))
   })
 
   await addWriter(a, b)
@@ -54,7 +47,7 @@ test('autoack - 5 writers', async t => {
   await addWriter(a, d)
   await addWriter(a, e)
 
-  await Promise.all(bases.map(sync))
+  await Promise.all(bases.map(b => b.update()))
 
   t.not(e.linearizer.indexers.length, 5)
 
@@ -115,10 +108,11 @@ test('autoack - concurrent', async t => {
   const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 100, ackThreshold: 0 })
   const [a, b, c, d, e] = bases
 
-  replicate(bases)
+  const unreplicate = replicate(bases)
 
-  t.teardown(() => {
-    bases.forEach(b => b.close())
+  t.teardown(async () => {
+    await unreplicate()
+    await Promise.all(bases.map(b => b.close()))
   })
 
   await addWriter(a, b)
@@ -126,7 +120,7 @@ test('autoack - concurrent', async t => {
   await addWriter(a, d)
   await addWriter(a, e)
 
-  await Promise.all(bases.map(sync))
+  await Promise.all(bases.map(b => b.update()))
 
   await b.append(null)
 
@@ -159,25 +153,23 @@ test('autoack - threshold', async t => {
 
   const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 0, ackThreshold: 1 })
 
-  const str1 = a.store.replicate(true)
-  const str2 = b.store.replicate(false)
+  const unreplicate = replicate([a, b])
 
-  str1.pipe(str2).pipe(str1)
-
-  t.teardown(() => {
-    a.close()
-    b.close()
+  t.teardown(async () => {
+    await unreplicate()
+    await a.close()
+    await b.close()
   })
 
   await addWriter(a, b)
 
-  await sync(b)
+  await b.update()
   b.append('b0')
   b.append('b1')
   b.append('b2')
   await b.append('b3')
 
-  await sync(a)
+  await a.update()
 
   await eventFlush()
 
@@ -191,24 +183,22 @@ test('autoack - threshold with interval', async t => {
   const ackInterval = 10000
   const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval, ackThreshold: 1 })
 
-  const str1 = a.store.replicate(true)
-  const str2 = b.store.replicate(false)
+  const unreplicate = replicate([a, b])
 
-  str1.pipe(str2).pipe(str1)
-
-  t.teardown(() => {
-    a.close()
-    b.close()
+  t.teardown(async () => {
+    await unreplicate()
+    await a.close()
+    await b.close()
   })
 
   await addWriter(a, b)
 
-  await sync(b)
+  await b.update()
   b.append('b0')
   b.append('b1')
   b.append('b2')
   await b.append('b3')
-  await sync(a)
+  await a.update()
 
   await eventFlush()
 

@@ -2,7 +2,7 @@ const test = require('brittle')
 
 const {
   create,
-  sync,
+  replicateAndSync,
   addWriter,
   apply,
   confirm,
@@ -20,19 +20,19 @@ test('simple 2', async t => {
   let bi = 0
 
   await addWriter(a, b)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await a.append('a' + ai++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await b.append('b' + bi++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await a.append('a' + ai++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   // await b.append('b' + bi++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   t.alike(a.view.indexedLength, 1)
   t.alike(b.view.indexedLength, 1)
@@ -64,25 +64,25 @@ test('simple 3', async t => {
   await addWriter(a, b)
   await addWriter(a, c)
 
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await c.append('c' + ci++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await b.append('b' + bi++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await a.append('a' + ai++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await c.append('c' + ci++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await b.append('b' + bi++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await a.append('a' + ai++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   t.alike(a.view.indexedLength, b.view.indexedLength)
   t.alike(c.view.indexedLength, b.view.indexedLength)
@@ -134,42 +134,42 @@ test.skip('convergence', async t => {
   await a.append('a' + ai++)
   await b.append('b' + bi++)
 
-  await syncTo(c, b)
-  await syncTo(b, a)
+  await replicateAndSync([c, b])
+  await replicateAndSync([b, a])
 
   await b.append('b' + bi++)
   await c.append('c' + ci++)
 
-  await syncTo(a, c)
-  await syncTo(c, b)
-  await syncTo(b, a)
+  await replicateAndSync([a, c])
+  await replicateAndSync([c, b])
+  await replicateAndSync([b, a])
 
   await a.append('a' + ai++)
   await c.append('c' + ci++)
 
-  await syncTo(a, c)
-  await syncTo(c, b)
-  await syncTo(b, a)
+  await replicateAndSync([a, c])
+  await replicateAndSync([c, b])
+  await replicateAndSync([b, a])
 
   await a.append('a' + ai++)
   await b.append('b' + bi++)
 
-  await syncTo(c, b)
-  await syncTo(b, a)
+  await replicateAndSync([c, b])
+  await replicateAndSync([b, a])
 
   await b.append('b' + bi++)
   await c.append('c' + ci++)
 
-  await syncTo(a, c)
-  await syncTo(c, b)
-  await syncTo(b, a)
+  await replicateAndSync([a, c])
+  await replicateAndSync([c, b])
+  await replicateAndSync([b, a])
 
   await a.append('a' + ai++)
   await c.append('c' + ci++)
 
-  await sync(c, a)
-  await sync(b, c)
-  await sync(a, b)
+  await replicateAndSync([c, a])
+  await replicateAndSync([b, c])
+  await replicateAndSync([a, b])
 
   // --- loop ---
 
@@ -224,12 +224,12 @@ test.skip('inner majority', async t => {
   await c.append('c' + ci++)
   await d.append('d' + di++)
 
-  await syncTo(a, b)
-  await syncTo(e, d)
-  await syncTo(b, c)
-  await syncTo(d, c)
-  await syncTo(c, b)
-  await syncTo(c, d)
+  await replicateAndSync([a, b])
+  await replicateAndSync([e, d])
+  await replicateAndSync([b, c])
+  await replicateAndSync([d, c])
+  await replicateAndSync([c, b])
+  await replicateAndSync([c, d])
 
   await a.append('a' + ai++)
   await e.append('e' + ei++)
@@ -237,18 +237,18 @@ test.skip('inner majority', async t => {
   await c.append('c' + ci++)
   await d.append('d' + di++)
 
-  await syncTo(b, c)
-  await syncTo(d, c)
-  await syncTo(c, d)
-  await syncTo(c, b)
-  await syncTo(b, a)
-  await syncTo(d, e)
+  await replicateAndSync([b, c])
+  await replicateAndSync([d, c])
+  await replicateAndSync([c, d])
+  await replicateAndSync([c, b])
+  await replicateAndSync([b, a])
+  await replicateAndSync([d, e])
 
   await b.append('b' + bi++)
   await c.append('c' + ci++)
   await d.append('d' + di++)
 
-  await syncTo(b, c)
+  await replicateAndSync([b, c])
 
   await b.append('b' + bi++)
 
@@ -281,22 +281,22 @@ test('majority alone - convergence', async t => {
   // --- write ---
 
   await b.append('b' + bi++)
-  await sync(b, c, d)
+  await replicateAndSync([b, c, d])
 
   await c.append('c' + ci++)
-  await sync(b, c, d)
+  await replicateAndSync([b, c, d])
 
   await d.append('d' + di++)
-  await sync(b, c, d)
+  await replicateAndSync([b, c, d])
 
   await b.append('b' + bi++)
-  await sync(b, c, d)
+  await replicateAndSync([b, c, d])
 
   await c.append('c' + ci++)
-  await sync(b, c, d)
+  await replicateAndSync([b, c, d])
 
   await d.append('d' + di++)
-  await sync(b, c, d)
+  await replicateAndSync([b, c, d])
 
   try {
     await compare(b, c)
@@ -321,7 +321,7 @@ test('add writer', async t => {
 
   await a.append('a' + ai++)
 
-  await sync(a, b)
+  await replicateAndSync([a, b])
 
   t.is(a.view.indexedLength, 1)
   t.is(b.view.indexedLength, 1)
@@ -329,14 +329,14 @@ test('add writer', async t => {
   await t.execution(compare(a, b))
 
   await addWriter(a, b)
-  await sync(a, b)
+  await replicateAndSync([a, b])
 
   t.is(a.view.indexedLength, 1)
   t.is(b.view.indexedLength, 1)
 
   await t.execution(compare(a, b))
 
-  await sync(a, b, c)
+  await replicateAndSync([a, b, c])
 
   t.is(c.view.indexedLength, 1)
 
@@ -347,7 +347,7 @@ test('add writer', async t => {
   await b.append('b' + bi++)
   await a.append('a' + ai++)
 
-  await sync(a, b, c)
+  await replicateAndSync([a, b, c])
 
   await c.append('c' + ci++)
   await b.append('b' + bi++)
@@ -356,7 +356,7 @@ test('add writer', async t => {
   await b.append('b' + bi++)
   await a.append('a' + ai++)
 
-  await sync(a, b, c)
+  await replicateAndSync([a, b, c])
 
   t.is(a.view.indexedLength, b.view.indexedLength)
   t.is(b.view.indexedLength, c.view.indexedLength)
@@ -394,7 +394,7 @@ test('majority alone - non-convergence', async t => {
   await addWriter(a, d)
   await addWriter(a, e)
 
-  await sync(bases)
+  await replicateAndSync(bases)
 
   // --- write ---
 
@@ -402,25 +402,25 @@ test('majority alone - non-convergence', async t => {
   await c.append('c' + ci++)
   await d.append('d' + di++)
 
-  await syncTo(b, c)
-  await syncTo(d, c)
-  await syncTo(c, b)
-  await syncTo(c, d)
+  await replicateAndSync([b, c])
+  await replicateAndSync([d, c])
+  await replicateAndSync([c, b])
+  await replicateAndSync([c, d])
 
   await b.append('b' + bi++)
   await c.append('c' + ci++)
   await d.append('d' + di++)
 
-  await syncTo(b, c)
-  await syncTo(d, c)
-  await syncTo(c, b)
-  await syncTo(c, d)
+  await replicateAndSync([b, c])
+  await replicateAndSync([d, c])
+  await replicateAndSync([c, b])
+  await replicateAndSync([c, d])
 
   await b.append('b' + bi++)
   await c.append('c' + ci++)
   await d.append('d' + di++)
 
-  await syncTo(b, c)
+  await replicateAndSync([b, c])
 
   await b.append('b' + bi++)
 
@@ -430,7 +430,7 @@ test('majority alone - non-convergence', async t => {
   await t.execution(compare(a, b))
   await t.execution(compare(a, c))
 
-  await sync(bases)
+  await replicateAndSync(bases)
 
   t.is(a.linearizer.tails.size, b.linearizer.tails.size)
   t.is(b.linearizer.tails.size, c.linearizer.tails.size)
@@ -480,41 +480,41 @@ test('double fork', async t => {
   await a.append('a' + ai++)
   await e.append('e' + ei++)
 
-  await syncTo(b, a)
-  await syncTo(d, e)
+  await replicateAndSync([b, a])
+  await replicateAndSync([d, e])
 
   await b.append('b' + bi++)
   await d.append('d' + di++)
 
-  await syncTo(c, b)
+  await replicateAndSync([c, b])
   await c.append('c' + ci++)
 
-  await syncTo(a, c)
+  await replicateAndSync([a, c])
   await a.append('a' + ai++)
 
-  await syncTo(b, a)
+  await replicateAndSync([b, a])
   await b.append('b' + bi++)
 
-  await syncTo(c, b)
-  await syncTo(b, d)
+  await replicateAndSync([c, b])
+  await replicateAndSync([b, d])
 
   await b.append('b' + bi++)
   await c.append('c' + ci++)
 
-  await syncTo(a, c)
-  await syncTo(d, b)
+  await replicateAndSync([a, c])
+  await replicateAndSync([d, b])
 
   await a.append('a' + ai++)
   await d.append('d' + di++)
 
-  await syncTo(e, d)
-  await syncTo(d, a)
+  await replicateAndSync([e, d])
+  await replicateAndSync([d, a])
 
   await d.append('d' + di++)
   await e.append('e' + ei++)
 
-  await syncTo(b, e)
-  await syncTo(a, d)
+  await replicateAndSync([b, e])
+  await replicateAndSync([a, d])
 
   await b.append('b' + bi++)
   await a.append('a' + ai++)
@@ -533,18 +533,3 @@ test('double fork', async t => {
     break
   }
 })
-
-async function syncTo (a, b) {
-  const s1 = a.store.replicate(true)
-  const s2 = b.store.replicate(false)
-
-  s1.on('error', () => {})
-  s2.on('error', () => {})
-
-  s1.pipe(s2).pipe(s1)
-
-  await sync(a)
-
-  s1.destroy()
-  s2.destroy()
-}

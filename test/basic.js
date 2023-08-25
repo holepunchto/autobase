@@ -7,7 +7,7 @@ const Autobase = require('..')
 
 const {
   create,
-  sync,
+  replicateAndSync,
   apply,
   addWriter,
   confirm,
@@ -23,14 +23,14 @@ test('basic - two writers', async t => {
     debug: 'this is adding b'
   })
 
-  await confirm(base1, base2, base3)
+  await confirm([base1, base2, base3])
 
   await base2.append({
     add: base3.local.key.toString('hex'),
     debug: 'this is adding c'
   })
 
-  await confirm(base1, base2, base3)
+  await confirm([base1, base2, base3])
 
   t.is(base2.system.members.active, 3)
   t.is(base2.system.members.active, base3.system.members.active)
@@ -56,7 +56,7 @@ test('basic - writable event fires', async t => {
     debug: 'this is adding b'
   })
 
-  await confirm(base1, base2)
+  await confirm([base1, base2])
 })
 
 test('basic - view', async t => {
@@ -173,7 +173,7 @@ test('basic - online majority', async t => {
   await b.append({ message: 'b2' })
   await c.append({ message: 'c2' })
 
-  await confirm(a, b)
+  await confirm([a, b])
 
   t.not(a.view.indexedLength, indexed)
   t.is(c.view.indexedLength, indexed)
@@ -184,7 +184,7 @@ test('basic - online majority', async t => {
     t.fail(e.message)
   }
 
-  await sync(b, c)
+  await replicateAndSync([b, c])
 
   t.is(a.view.indexedLength, c.view.indexedLength)
 
@@ -220,7 +220,7 @@ test('basic - rotating majority', async t => {
   await b.append({ message: 'msg b' })
   await c.append({ message: 'msg c' })
 
-  await confirm(a, b)
+  await confirm([a, b])
 
   t.not(a.view.indexedLength, indexed)
   t.is(c.view.indexedLength, indexed)
@@ -235,7 +235,7 @@ test('basic - rotating majority', async t => {
   await b.append({ message: 'msg b' })
   await c.append({ message: 'msg c' })
 
-  await confirm(b, c)
+  await confirm([b, c])
 
   t.not(b.view.indexedLength, indexed)
   t.is(a.view.indexedLength, indexed)
@@ -250,7 +250,7 @@ test('basic - rotating majority', async t => {
   await b.append({ message: 'msg b' })
   await c.append({ message: 'msg c' })
 
-  await confirm(a, c)
+  await confirm([a, c])
 
   t.not(c.view.indexedLength, indexed)
   t.is(b.view.indexedLength, indexed)
@@ -288,7 +288,7 @@ test('basic - throws', async t => {
   await a.append({ message: 'msg2' })
   await a.append({ message: 'msg3' })
 
-  await confirm(a, b)
+  await confirm([a, b])
 
   await t.exception(b.append({ message: 'not writable' }))
   await t.exception(a.view.append({ message: 'append outside apply' }))
@@ -363,8 +363,8 @@ test('basic - online minorities', async t => {
   await d.append({ message: 'msg21' })
   await c.append({ message: 'msg22' })
 
-  await confirm(a, b)
-  await confirm(c, d)
+  await confirm([a, b])
+  await confirm([c, d])
 
   t.is(a.view.indexedLength, b.view.indexedLength)
   t.is(c.view.indexedLength, d.view.indexedLength)
@@ -469,7 +469,7 @@ test('append during reindex', async t => {
   await addWriter(a, b)
   await addWriter(a, c)
   await addWriter(a, d)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   t.ok(!!a.localWriter)
   t.ok(!!b.localWriter)
@@ -478,13 +478,7 @@ test('append during reindex', async t => {
 
   await addWriter(b, d)
 
-  const s1 = b.store.replicate(true)
-  const s2 = d.store.replicate(false)
-
-  s1.on('error', () => {})
-  s2.on('error', () => {})
-
-  s1.pipe(s2).pipe(s1)
+  const unreplicate = replicate([b, d])
 
   for (const w of d.writers) {
     if (w === d.localWriter) continue
@@ -498,6 +492,8 @@ test('append during reindex', async t => {
   await d.append('hello')
 
   t.is(await d.view.get(d.view.length - 1), 'hello')
+
+  await unreplicate()
 })
 
 test('closing an autobase', async t => {
@@ -527,7 +523,7 @@ test('flush after reindex', async t => {
   adds.push(addWriter(root, bases[8]))
 
   await Promise.all(adds)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await t.execution(bases[0].append('msg' + msg++))
   await t.execution(bases[1].append('msg' + msg++))
@@ -552,38 +548,38 @@ test('reindex', async t => {
     addWriter(a, c)
   ])
 
-  await confirm(a, b)
+  await confirm([a, b])
 
   // a sends message
   await a.append('a:' + msg++)
 
   // b and c add writer
   await addWriter(b, d)
-  await confirm(b, c, { majority: 2 })
+  await confirm([b, c], { majority: 2 })
 
   t.is(b.system.members.active, 4)
 
   // trigger reindex for a
-  await sync(a, b, c, d)
+  await replicateAndSync([a, b, c, d])
 
   await a.append('a:' + msg++)
   await b.append('b:' + msg++)
   await c.append('c:' + msg++)
   await d.append('d:' + msg++)
 
-  await sync(a, b, c, d)
+  await replicateAndSync([a, b, c, d])
 
   // d sends message
   await d.append('d:' + msg++)
 
   // a, b and c add writer
   await addWriter(a, e)
-  await confirm(a, b, c, { majority: 3 })
+  await confirm([a, b, c], { majority: 3 })
 
   t.is(b.system.members.active, 5)
 
   // trigger reindex for a
-  await sync(a, b, c, d, e)
+  await replicateAndSync([a, b, c, d, e])
 
   t.is(a.system.heads.length, 2)
   t.is((await a.system.getIndexedInfo()).heads.length, 1, 'only one indexed head')
@@ -620,9 +616,9 @@ test('sequential restarts', async t => {
 
     // confirm over this node
     // include all dag except previous addWriter
-    await sync(syncers)
+    await replicateAndSync(syncers)
     await bases[0].append(null)
-    await sync(syncers)
+    await replicateAndSync(syncers)
 
     // everyone writes a message
     for (let j = 0; j < Math.min(i, bases.length); j++) {
@@ -630,14 +626,14 @@ test('sequential restarts', async t => {
     }
 
     await Promise.all(appends)
-    await sync(syncers)
+    await replicateAndSync(syncers)
 
     // unsynced writer adds a node
     if (i < bases.length) {
       const newguy = bases[i]
       await addWriter(isolated, newguy)
 
-      await sync(isolated, newguy)
+      await replicateAndSync([isolated, newguy])
     }
 
     if (i % 2 === 1) {
@@ -661,66 +657,11 @@ test('sequential restarts', async t => {
   t.not(bases[0].view.indexedLength, 0)
   t.not(bases[0].view.indexedLength, bases[0].view.length)
 
-  await sync(bases)
+  await replicateAndSync(bases)
 
   for (let i = 1; i < bases.length; i++) {
     t.is(bases[0].view.indexedLength, bases[i].view.indexedLength)
     t.is(bases[0].view.length, bases[i].view.length)
-  }
-})
-
-// test should throw for commit f41f5544dbe8743f6ad3b9886e7aa472344bc9c7 (with debug set to false)
-test.skip('consistent writers', async t => {
-  const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }))
-
-  const [a, b, c, d, e] = bases
-
-  await addWriter(a, b)
-  await sync(bases)
-
-  await addWriter(b, c)
-  await addWriter(b, d)
-
-  await sync(bases)
-
-  // trigger reorg
-  addWriter(a, e)
-
-  const s1 = a.store.replicate(true)
-  const s2 = d.store.replicate(false)
-
-  s1.on('error', () => {})
-  s2.on('error', () => {})
-
-  s1.pipe(s2).pipe(s1)
-
-  for (const w of d.writers) {
-    if (w === d.localWriter) continue
-
-    await w.core.update({ wait: true })
-    const start = w.core.length
-    const end = w.core.core.tree.length
-
-    await w.core.download({ start, end, ifAvailable: true }).done()
-  }
-
-  d.debug = true
-  d.update().then(() => { d.debug = false })
-
-  t.ok(await checkWriters(d))
-
-  async function checkWriters (b) {
-    while (b.debug) {
-      for (const w of b.writers) {
-        for (const rem of b._removedWriters) {
-          if (b4a.equals(w.core.key, rem.core.key)) return false
-        }
-      }
-
-      await new Promise(resolve => setImmediate(resolve))
-    }
-
-    return true
   }
 })
 
@@ -744,13 +685,13 @@ test('basic - pass exisiting store', async t => {
     value: 'base1'
   })
 
-  await confirm(base1, base2)
+  await confirm([base1, base2])
 
   await base2.append({
     value: 'base2'
   })
 
-  await confirm(base1, base2)
+  await confirm([base1, base2])
 
   t.is(base2.system.members.active, 2)
 
@@ -764,13 +705,12 @@ test('basic - pass exisiting store', async t => {
 
   await base3.append('final')
 
-  await t.execution(sync(base3, base1))
+  await t.execution(replicateAndSync([base3, base1]))
 
   t.is(base3.system.members.active, 2)
 })
 
 test('two writers write many messages, third writer joins', async t => {
-  // TODO: test this passes with next linearliser version
   const [base1, base2, base3] = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
 
   await base1.append({
@@ -782,14 +722,14 @@ test('two writers write many messages, third writer joins', async t => {
     base1.append({ value: `Message${i}` })
   }
 
-  await confirm(base1, base2)
+  await confirm([base1, base2])
 
   await base1.append({
     add: base3.local.key.toString('hex'),
     debug: 'this is adding writer 3'
   })
 
-  await confirm(base1, base2, base3)
+  await confirm([base1, base2, base3])
   t.pass('Confirming did not throw')
 
   await t.execution(compare(base1, base2))
@@ -824,14 +764,14 @@ test('basic - isAutobase', async t => {
     debug: 'this is adding b'
   })
 
-  await confirm(base1, base2, base3)
+  await confirm([base1, base2, base3])
 
   await base2.append({
     add: base3.local.key.toString('hex'),
     debug: 'this is adding c'
   })
 
-  await confirm(base1, base2, base3)
+  await confirm([base1, base2, base3])
 
   t.is(await Autobase.isAutobase(base1.local), true)
   t.is(await Autobase.isAutobase(base2.local), true)
@@ -867,10 +807,10 @@ test('basic - catch apply throws', async t => {
     b.close()
   })
 
-  replicate(a, b)
+  replicate([a, b])
 
   await addWriter(a, b)
-  await sync(a)
+  await a.update()
 
   await a.append('trigger')
 
@@ -892,12 +832,12 @@ test('basic - non-indexed writer', async t => {
 
   await a.append({ add: b.local.key.toString('hex'), indexer: false })
 
-  await sync(a, b)
+  await replicateAndSync([a, b])
 
   await b.append('b0')
   await b.append('b1')
 
-  await sync(a, b)
+  await replicateAndSync([a, b])
 
   t.is(a.view.indexedLength, 0)
   t.is(b.view.indexedLength, 0)
@@ -907,7 +847,7 @@ test('basic - non-indexed writer', async t => {
 
   await a.append('a0')
 
-  await sync(a, b)
+  await replicateAndSync([a, b])
 
   t.is(a.view.indexedLength, 3)
   t.is(b.view.indexedLength, 3)
@@ -964,7 +904,7 @@ test('basic - non-indexed writers 3-of-5', async t => {
   await a.append({ add: d.local.key.toString('hex'), indexer: false })
   await a.append({ add: e.local.key.toString('hex'), indexer: false })
 
-  await sync(a, b, c, d, e)
+  await replicateAndSync([a, b, c, d, e])
 
   t.is(a.linearizer.indexers.length, 2)
   t.is(b.linearizer.indexers.length, 2)
@@ -977,7 +917,7 @@ test('basic - non-indexed writers 3-of-5', async t => {
   t.ok(e.writable)
 
   await b.append(null)
-  await sync(a, b, c, d, e)
+  await replicateAndSync([a, b, c, d, e])
 
   // b cannot unilaterally confirm
   t.is(a.linearizer.indexers.length, 2)
@@ -985,25 +925,25 @@ test('basic - non-indexed writers 3-of-5', async t => {
   t.is(c.linearizer.indexers.length, 2)
 
   await a.append(null)
-  await sync(a, b, c, d, e)
+  await replicateAndSync([a, b, c, d, e])
 
   // c is indexer now
   t.is(c.linearizer.indexers.length, 3)
 
   await e.append('e0')
-  await sync(d, e)
+  await replicateAndSync([d, e])
 
   await d.append('d0')
-  await sync(a, d)
+  await replicateAndSync([a, d])
 
   await a.append('a0') // later will only index to here
-  await sync(a, e)
+  await replicateAndSync([a, e])
 
   await e.append('e1')
-  await sync(d, e)
+  await replicateAndSync([d, e])
 
   await e.append('d1')
-  await sync(a, d, e)
+  await replicateAndSync([a, d, e])
 
   // e and d do not count
   t.is(a.view.indexedLength, 0)
@@ -1011,16 +951,16 @@ test('basic - non-indexed writers 3-of-5', async t => {
   t.is(e.view.indexedLength, 0)
 
   // confirm with only b and c
-  await sync(a, b, c)
+  await replicateAndSync([a, b, c])
   await b.append('b0')
 
-  await sync(b, c)
+  await replicateAndSync([b, c])
   await c.append('c0')
 
   // should only index up to a0
   t.is(c.view.indexedLength, 3)
 
-  await sync(a, b, c, d, e)
+  await replicateAndSync([a, b, c, d, e])
 
   t.is(a.view.indexedLength, 3)
   t.is(b.view.indexedLength, 3)

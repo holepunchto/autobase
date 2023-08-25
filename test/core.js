@@ -6,7 +6,7 @@ const {
   create,
   apply,
   addWriter,
-  sync
+  replicateAndSync
 } = require('./helpers')
 
 test('core -  no new session if closed (hypercore compat)', async t => {
@@ -66,13 +66,13 @@ test('core - seek multi writer', async t => {
   await addWriter(a, b)
 
   await a.append('hello')
-  await sync(a, b)
+  await replicateAndSync([a, b])
 
   await b.append('and')
-  await sync(a, b)
+  await replicateAndSync([a, b])
 
   await a.append('goodbye')
-  await sync(a, b)
+  await replicateAndSync([a, b])
 
   t.is(a.view.length, 3)
   t.is(a.view.byteLength, 15)

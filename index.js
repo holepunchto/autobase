@@ -19,6 +19,8 @@ const inspect = Symbol.for('nodejs.util.inspect.custom')
 const DEFAULT_ACK_INTERVAL = 10 * 1000
 const DEFAULT_ACK_THRESHOLD = 4
 
+const REMOTE_ADD_BATCH = 64
+
 module.exports = class Autobase extends ReadyResource {
   constructor (store, bootstrap, handlers = {}) {
     if (Array.isArray(bootstrap)) bootstrap = bootstrap[0] // TODO: just a quick compat, lets remove soon
@@ -45,6 +47,7 @@ module.exports = class Autobase extends ReadyResource {
     this.local = Autobase.getLocalCore(this.store)
     this.localWriter = null
     this.linearizer = null
+    this.updating = false
 
     this.writers = []
     this._appending = null
@@ -121,11 +124,14 @@ module.exports = class Autobase extends ReadyResource {
     return this._primaryBootstrap === null ? this.local.discoveryKey : this._primaryBootstrap.discoveryKey
   }
 
+  replicate (init, opts) {
+    return this.store.replicate(init, opts)
+  }
+
   heads () {
-    const nodes = new Array(this.linearizer.heads.size)
-    let i = 0
-    for (const node of this.linearizer.heads) nodes[i++] = { key: node.writer.core.key, length: node.length }
-    return nodes
+    const nodes = new Array(this.system.heads.length)
+    for (let i = 0; i < this.system.heads.length; i++) nodes[i] = this.system.heads[i]
+    return nodes.sort(compareNodes)
   }
 
   async _openPreSystem () {
@@ -201,13 +207,18 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async update () {
-    await this.ready()
+    if (this.opened === false) await this.ready()
     await this._bump()
   }
 
   // runs in bg, not allowed to throw
   async _onremotewriterchange () {
-    await this._bump()
+    try {
+      await this._bump()
+    } catch (err) {
+      if (!this.closing) throw err
+    }
+
     this._bumpAckTimer()
   }
 
@@ -445,7 +456,7 @@ module.exports = class Autobase extends ReadyResource {
   async _addRemoteHeads () {
     let added = 0
 
-    while (added < 50) { // 50 here is just to reduce the bulk batches
+    while (added < REMOTE_ADD_BATCH) {
       await this._updateAll()
 
       let advanced = 0
@@ -466,37 +477,46 @@ module.exports = class Autobase extends ReadyResource {
       if (advanced === 0) break
       added += advanced
     }
+
+    return added
   }
 
   async _advance () {
     if (this.opened === false) await this._prebump
 
+    this.updating = false
+
     while (!this.closing) {
       const localNodes = this._appending === null ? null : this._addLocalHeads()
-      await this._addRemoteHeads()
+      const remoteAdded = await this._addRemoteHeads()
+
+      if (this.closing) return
+
+      if (remoteAdded > 0 || localNodes !== null) this.updating = true
 
       const u = this.linearizer.update()
       const changed = u ? await this._applyUpdate(u) : null
 
-      if (this.closing) break
+      if (this.closing) return
 
       if (this.localWriter !== null && localNodes !== null) {
         await this._flushLocal(localNodes)
       }
 
-      if (this.closing) break
+      if (this.closing) return
 
       if (this._updatedCores !== null) {
         await this._flushIndexes()
       }
 
-      if (this.closing) break
+      if (this.closing) return
 
       if (!changed) {
         if (this._needsReady.length > 0) {
           await this._ensureAllCores()
           continue
         }
+        if (remoteAdded >= REMOTE_ADD_BATCH) continue
         break
       }
 
@@ -510,6 +530,11 @@ module.exports = class Autobase extends ReadyResource {
 
       // await here would cause deadlock, fine to run in bg
       if (this.linearizer.size >= (1 + Math.random()) * n) this._triggerAck()
+    }
+
+    if (this.updating === true) {
+      this.updating = false
+      this.emit('update')
     }
 
     return this._ensureAllCores()
@@ -557,7 +582,7 @@ module.exports = class Autobase extends ReadyResource {
     this.writers.push(writer)
 
     // fetch any nodes needed for dependents
-    this._bump()
+    this._bump().catch(safetyCatch)
   }
 
   _undo (popped) {
@@ -803,4 +828,8 @@ function compareHead (head, node) {
 
 function isAutobaseMessage (msg) {
   return msg.checkpoint ? msg.checkpoint.length > 0 : msg.checkpoint === null
+}
+
+function compareNodes (a, b) {
+  return b4a.compare(a.key, b.key)
 }

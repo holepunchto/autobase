@@ -3,7 +3,7 @@ const test = require('brittle')
 
 const {
   create,
-  sync,
+  replicateAndSync,
   addWriter,
   apply
 } = require('./helpers')
@@ -26,25 +26,25 @@ test('linearizer - simple', async t => {
   await addWriter(a, b)
   await addWriter(a, c)
 
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await c.append('c' + ci++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await b.append('b' + bi++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await a.append('a' + ai++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await c.append('c' + ci++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await b.append('b' + bi++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await a.append('a' + ai++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   t.alike(a.view.indexedLength, 4)
   t.alike(a.view.indexedLength, b.view.indexedLength)
@@ -123,23 +123,23 @@ test('linearizer - compete', async t => {
   await addWriter(a, b)
   await addWriter(a, c)
 
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await c.append('c' + ci++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await b.append('b' + bi++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await a.append('a' + ai++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await c.append('c' + ci++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await b.append('b' + bi++)
   await a.append('a' + ai++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   t.alike(a.view.indexedLength, 4)
   t.alike(a.view.indexedLength, b.view.indexedLength)
@@ -218,27 +218,27 @@ test('linearizer - count ordering', async t => {
   await addWriter(a, b)
   await addWriter(a, c)
 
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await c.append('c' + ci++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await b.append('b' + bi++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await a.append('a' + ai++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await c.append('c' + ci++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await b.append('b' + bi++)
   await a.append('a' + ai++)
 
-  await syncTo(c, b)
+  await replicateAndSync([c, b])
   await c.append('c' + ci++)
 
-  await syncTo(b, c)
+  await replicateAndSync([b, c])
 
   t.alike(a.view.indexedLength, 3)
   t.alike(c.view.indexedLength, 4)
@@ -299,7 +299,7 @@ test('linearizer - count ordering', async t => {
   await t.exception(b.view.get(6))
   await t.exception(c.view.get(6))
 
-  await sync(bases)
+  await replicateAndSync(bases)
 
   t.ok(b4a.compare(c.local.key, a.local.key) < 0)
 
@@ -344,7 +344,7 @@ test('linearizer - reordering', async t => {
   let ci = 0
 
   await addWriter(a, c)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   // a will be isolated up to a3
   await a.append('a' + ai++)
@@ -352,22 +352,22 @@ test('linearizer - reordering', async t => {
   await a.append('a' + ai++)
 
   await addWriter(c, b)
-  await syncTo(b, c)
+  await replicateAndSync([b, c])
 
   await b.append('b' + bi++)
-  await syncTo(c, b)
+  await replicateAndSync([c, b])
 
   t.is(await b.view.get(0), 'b0')
   t.is(await c.view.get(0), 'b0')
 
-  await syncTo(c, a)
+  await replicateAndSync([c, a])
 
   t.is(await b.view.get(0), 'b0')
   t.is(await c.view.get(0), 'a0')
   t.is(await c.view.get(3), 'b0')
 
   await c.append('c' + ci++)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   t.is(await a.view.get(0), 'a0')
   t.is(await b.view.get(0), 'a0')
@@ -392,24 +392,24 @@ test('linearizer - reordering after restart', async t => {
   let ci = 0
 
   await addWriter(a, b)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   // b will be isolated
   await b.append('b' + bi++)
 
   await addWriter(a, c)
-  await syncTo(c, a)
+  await replicateAndSync([c, a])
 
   await c.append('c' + ci++)
-  await syncTo(a, c)
+  await replicateAndSync([a, c])
 
   await a.append('a' + ai++)
 
   t.is(await b.view.get(0), 'b0')
 
   // trigger restart and reorder
-  await sync(bases)
-  await sync(bases)
+  await replicateAndSync(bases)
+  await replicateAndSync(bases)
 
   t.is(await b.view.get(0), 'c0')
   t.is(await b.view.get(1), 'a0')
@@ -422,10 +422,10 @@ test('linearizer - shouldAck', async t => {
   const [a, b, c] = bases
 
   await addWriter(a, b)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   await addWriter(a, c)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   t.absent(a.linearizer.shouldAck(a.localWriter))
   t.absent(b.linearizer.shouldAck(getWriter(b, a.localWriter)))
@@ -461,11 +461,11 @@ test('linearizer - no loop', async t => {
   await addWriter(a, b)
   await addWriter(a, c)
   await addWriter(a, d)
-  await sync(bases)
+  await replicateAndSync(bases)
 
   let i = 0
   while (++i < 20) {
-    await sync(bases)
+    await replicateAndSync(bases)
 
     if (a.linearizer.shouldAck(a.localWriter)) {
       await a.append('a' + ai++)
@@ -485,18 +485,3 @@ test('linearizer - no loop', async t => {
 
   t.not(i, 20)
 })
-
-async function syncTo (a, b) {
-  const s1 = a.store.replicate(true)
-  const s2 = b.store.replicate(false)
-
-  s1.on('error', () => {})
-  s2.on('error', () => {})
-
-  s1.pipe(s2).pipe(s1)
-
-  await sync(a)
-
-  s1.destroy()
-  s2.destroy()
-}
