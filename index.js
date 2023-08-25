@@ -36,12 +36,10 @@ module.exports = class Autobase extends ReadyResource {
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
     this._primaryBootstrap = null
-    this._mainStore = null
 
     if (this.bootstrap) {
       this._primaryBootstrap = this.store.get({ key: this.bootstrap })
-      this._mainStore = this.store
-      this.store = this.store.namespace(this._primaryBootstrap)
+      this.store = this.store.namespace(this._primaryBootstrap, { detach: false })
     }
 
     this.local = Autobase.getLocalCore(this.store)
@@ -176,7 +174,6 @@ module.exports = class Autobase extends ReadyResource {
     if (this._primaryBootstrap) await this._primaryBootstrap.close()
     await this.store.close()
     if (this._ackTimer) this._ackTimer.stop()
-    if (this._mainStore) await this._mainStore.close()
   }
 
   async _ensureAllCores () {

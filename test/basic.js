@@ -1017,3 +1017,15 @@ test('basic - non-indexed writers 3-of-5', async t => {
     }
   }
 })
+
+test('autobase should not detach the original store', async t => {
+  const store = new Corestore(ram)
+  const bootstrap = b4a.alloc(32)
+
+  const base = new Autobase(store, bootstrap)
+  t.ok(store !== base.store) // New session with the original attached to it
+
+  await base.close()
+  t.ok(store.closed)
+  t.ok(base.store.closed)
+})
