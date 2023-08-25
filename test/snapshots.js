@@ -6,7 +6,7 @@ const {
   confirm,
   apply,
   addWriter,
-  sync
+  replicateAndSync
 } = require('./helpers')
 
 const beeOpts = { extension: false, keyEncoding: 'binary', valueEncoding: 'binary' }
@@ -122,7 +122,7 @@ test('no inconsistent entries when using snapshot core in bee (bee snapshot)', a
 
   // Add shared entry
   await base1.append({ entry: ['1-1', '1-entry1'] })
-  await confirm(base1, base2)
+  await confirm([base1, base2])
 
   // Create 2 forks and snapshot both
   await Promise.all([
@@ -149,7 +149,7 @@ test('no inconsistent entries when using snapshot core in bee (bee snapshot)', a
   t.alike(keys2PreMerge, ['1-1', '2-1', '2-2']) // Sanity check
 
   // Merge the forks, which will result in truncates
-  await confirm(base1, base2)
+  await confirm([base1, base2])
 
   const keysPostMerge = await getBeeKeys(bee1)
   const keys2PostMerge = await getBeeKeys(bee2)
@@ -180,14 +180,14 @@ test('check cloning detached snapshot', async t => {
   await base1.append('2-1')
   await base1.append('2-2')
 
-  await confirm(base1, base3)
-  await sync(base1, base4)
+  await confirm([base1, base3])
+  await replicateAndSync([base1, base4])
 
   const resnap = orig.snapshot()
 
   await base1.append('2-3')
   await resnap.close()
-  await confirm(base1, base3)
+  await confirm([base1, base3])
 
   // todo: this test throws uncaught error
   await t.execution(confirm(bases))

@@ -17,7 +17,7 @@
     "type": "git",
     "url": "git+https://github.com/holepunchto/autobase-next.git"
   },
-  "author": "",
+  "author": "Holepunch",
   "license": "UNLICENSED",
   "bugs": {
     "url": "https://github.com/holepunchto/autobase-next/issues"
@@ -36,10 +36,11 @@
     "tiny-buffer-map": "^1.1.1"
   },
   "devDependencies": {
-    "autobase-test-helpers": "^1.0.0",
+    "autobase-test-helpers": "^2.0.1",
     "brittle": "^3.1.1",
     "corestore": "^6.8.2",
     "random-access-memory": "^6.2.0",
+    "same-data": "^1.0.0",
     "standard": "^17.0.0",
     "test-tmp": "^1.0.0"
   },
