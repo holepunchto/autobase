@@ -205,7 +205,15 @@ module.exports = class Autobase extends ReadyResource {
 
   async update () {
     if (this.opened === false) await this.ready()
-    await this._bump()
+
+    try {
+      await this._bump()
+    } catch (err) {
+      if (this.closing) return false
+      throw err
+    }
+
+    return true
   }
 
   // runs in bg, not allowed to throw
