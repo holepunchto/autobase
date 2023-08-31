@@ -46,6 +46,7 @@
   },
   "standard": {
     "ignore": [
+      "**/test/fuzz/generated/**",
       "**/test/reference/**",
       "example.mjs"
     ]
