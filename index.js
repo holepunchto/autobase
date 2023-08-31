@@ -87,8 +87,6 @@ module.exports = class Autobase extends ReadyResource {
     this._ackSize = 0
     this._acking = false
 
-    this._restarts = 0
-
     // view opens after system is loaded
     this.system = new SystemView(this._viewStore.get({ name: '_system', exclusive: true, cache: true }))
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
@@ -376,7 +374,7 @@ module.exports = class Autobase extends ReadyResource {
       this.writers = [bootstrap]
       bootstrap.isIndexer = true
 
-      this.linearizer = new Linearizer([bootstrap], [], [])
+      this.linearizer = new Linearizer([bootstrap])
       return
     }
 
@@ -403,10 +401,7 @@ module.exports = class Autobase extends ReadyResource {
       heads.push(headNode)
     }
 
-    this.linearizer = new Linearizer(indexers, {
-      heads,
-      cacheIndex: this._restarts++
-    })
+    this.linearizer = new Linearizer(indexers, { heads })
 
     if (change) this._reloadUpdate(change, heads)
   }
@@ -657,7 +652,7 @@ module.exports = class Autobase extends ReadyResource {
           from: node.writer.core,
           length: node.length,
           value: node.value,
-          heads: node.heads
+          heads: node.actualHeads
         })
       }
 

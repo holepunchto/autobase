@@ -80,6 +80,22 @@ class Writer {
   constructor (key) {
     this.core = { key }
     this.length = 0
+    this.nodes = {
+      offset: 0,
+      nodes: []
+    }
+  }
+
+  get indexed () {
+    return this.nodes.offset
+  }
+
+  get available () {
+    return this.nodes.nodes.length
+  }
+
+  get (index) {
+    return this.nodes.nodes[index]
   }
 }
 
@@ -153,7 +169,7 @@ function rollBack (n, steps, batch = 3, result = []) {
   }
 
   const nodes = new Map()
-  const graph = new Linearizer(Object.values(writers), [], [])
+  const graph = new Linearizer(Object.values(writers))
 
   let pos = 0
 
@@ -170,16 +186,17 @@ function rollBack (n, steps, batch = 3, result = []) {
       w,
       w.length + 1,
       ref,
-      null,
+      [],
       1,
       dependencies
     )
+    w.nodes.nodes.push(node)
 
     node._ref = ref
     for (const dep of dependencies) {
       node.clock.add(dep.clock)
     }
-    node.clock.set(node.writer, node.length)
+    node.clock.set(node.writer.core.key, node.length)
 
     w.length++
 
@@ -193,6 +210,7 @@ function rollBack (n, steps, batch = 3, result = []) {
       const batch = graph._shift()
       if (!batch.length) break
       for (const node of batch) {
+        node.writer.offset++
         node.steps = current
         nodes.delete(node._ref)
         yielded.push(node)

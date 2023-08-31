@@ -662,6 +662,8 @@ test('sequential restarts', async t => {
   for (let i = 1; i < bases.length; i++) {
     t.is(bases[0].view.indexedLength, bases[i].view.indexedLength)
     t.is(bases[0].view.length, bases[i].view.length)
+    t.alike(await bases[0].system.core._backingCore().treeHash(), await bases[i].system.core._backingCore().treeHash())
+    t.alike(await bases[0].view._backingCore().treeHash(), await bases[i].view._backingCore().treeHash())
   }
 })
 
