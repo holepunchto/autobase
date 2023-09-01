@@ -5,6 +5,7 @@ const {
   apply,
   addWriter,
   replicate,
+  sync,
   eventFlush
 } = require('./helpers')
 
@@ -17,7 +18,7 @@ test('autoack - simple', async t => {
   t.teardown(unreplicate)
 
   await addWriter(a, b)
-  await b.update()
+  await sync([a, b])
   await b.append('b0')
 
   t.is(a.view.indexedLength, 0)
@@ -47,7 +48,7 @@ test('autoack - 5 writers', async t => {
   await addWriter(a, d)
   await addWriter(a, e)
 
-  await Promise.all(bases.map(b => b.update()))
+  await sync(bases)
 
   t.not(e.linearizer.indexers.length, 5)
 
@@ -91,7 +92,7 @@ test('autoack - 5 writers', async t => {
   t.is(d.local.length, dlen)
   t.is(e.local.length, elen)
 
-  await Promise.all([a, b, c, d, e].map(b => b.update()))
+  await sync([a, b, c, d, e])
 
   t.is(e.linearizer.indexers.length, 5)
 
@@ -120,7 +121,7 @@ test('autoack - concurrent', async t => {
   await addWriter(a, d)
   await addWriter(a, e)
 
-  await Promise.all(bases.map(b => b.update()))
+  await sync(bases)
 
   await b.append(null)
 
@@ -163,15 +164,16 @@ test('autoack - threshold', async t => {
 
   await addWriter(a, b)
 
-  await b.update()
+  await sync([a, b])
+
   b.append('b0')
   b.append('b1')
   b.append('b2')
   await b.append('b3')
 
-  await a.update()
-
-  await eventFlush()
+  await sync([a, b])
+  await eventFlush() // allow the bg threshold to react...
+  await sync([a, b])
 
   t.is(a.view.indexedLength, 4)
   t.is(b.view.indexedLength, 4)
@@ -193,14 +195,15 @@ test('autoack - threshold with interval', async t => {
 
   await addWriter(a, b)
 
-  await b.update()
+  await sync([a, b])
+
   b.append('b0')
   b.append('b1')
   b.append('b2')
   await b.append('b3')
-  await a.update()
-
-  await eventFlush()
+  await sync([a, b])
+  await eventFlush() // allow the bg threshold to react...
+  await sync([a, b])
 
   t.is(a._ackTimer._interval, ackInterval)
   t.is(a.view.indexedLength, 4)
