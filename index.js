@@ -42,7 +42,7 @@ module.exports = class Autobase extends ReadyResource {
       this.store = this.store.namespace(this._primaryBootstrap, { detach: false })
     }
 
-    this.local = Autobase.getLocalCore(this.store)
+    this.local = Autobase.getLocalCore(this.store, handlers)
     this.localWriter = null
     this.linearizer = null
     this.updating = false
@@ -298,8 +298,9 @@ module.exports = class Autobase extends ReadyResource {
     return best
   }
 
-  static getLocalCore (store) {
-    return store.get({ name: 'local', exclusive: true, valueEncoding: messages.OplogMessage })
+  static getLocalCore (store, handlers) {
+    const opts = { ...handlers, exclusive: true, valueEncoding: messages.OplogMessage }
+    return opts.keyPair ? store.get(opts) : store.get({ ...opts, name: 'local' })
   }
 
   static async getUserData (core) {

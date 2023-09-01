@@ -2,6 +2,7 @@ const test = require('brittle')
 const ram = require('random-access-memory')
 const Corestore = require('corestore')
 const b4a = require('b4a')
+const crypto = require('hypercore-crypto')
 
 const Autobase = require('..')
 
@@ -57,6 +58,18 @@ test('basic - writable event fires', async t => {
   })
 
   await confirm([base1, base2])
+})
+
+test('basic - local key pair', async t => {
+  const keyPair = crypto.keyPair()
+  const [base] = await create(1, apply, store => store.get('test', { valueEncoding: 'json' }), null, { keyPair })
+
+  const block = { message: 'hello, world!' }
+  await base.append(block)
+
+  t.is(base.view.indexedLength, 1)
+  t.alike(await base.view.get(0), block)
+  t.is(base.local.key, keyPair.publicKey)
 })
 
 test('basic - view', async t => {
