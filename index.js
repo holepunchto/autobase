@@ -385,7 +385,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const indexers = []
-    const heads = []
 
     for await (const { key, value } of this.system.list()) {
       const writer = this._getWriterByKey(key, value.length)
@@ -395,56 +394,29 @@ module.exports = class Autobase extends ReadyResource {
       writer.isIndexer = true
     }
 
-    for (const head of this.system.heads) {
-      const writer = this._getWriterByKey(head.key)
-      const headNode = Linearizer.createNode(writer, head.length, null, [], 1, [])
-      headNode.yielded = true
-      heads.push(headNode)
+    this.linearizer = new Linearizer(indexers, { heads: this.system.heads })
+
+    for (const { key, length } of this.system.heads) {
+      const writer = this._getWriterByKey(key, length)
+      this.linearizer.writers.set(key, writer)
     }
 
-    this.linearizer = new Linearizer(indexers, { heads })
-
-    if (change) this._reloadUpdate(change, heads)
-  }
-
-  _reloadUpdate (change, heads) {
-    for (const node of change.nodes) {
-      node.yielded = false
-      node.dependents.clear()
-
-      for (let i = 0; i < node.heads.length; i++) {
-        const link = node.heads[i]
-
-        const writer = this._getWriterByKey(link.key)
-        if (node.clock.get(writer.core.key) < link.length) {
-          node.clock.set(writer.core.key, link.length)
-        }
-
-        for (const head of heads) {
-          if (compareHead(link, head)) {
-            node.dependencies.add(head)
-            break
-          }
-        }
-      }
-
-      heads.push(node)
-    }
-
-    for (const node of change.nodes) {
-      this.linearizer.addHead(node)
+    if (change) {
+      for (const node of change.nodes) node.reset()
+      for (const node of change.nodes) this.linearizer.addHead(node)
     }
   }
 
   _addLocalHeads () {
     const nodes = new Array(this._appending.length)
-
     for (let i = 0; i < this._appending.length; i++) {
+      const heads = this.linearizer.getHeads()
+      const deps = new Set(this.linearizer.heads)
       const batch = this._appending.length - i
       const value = this._appending[i]
-      const heads = new Set(this.linearizer.heads)
 
-      const node = this.localWriter.append(value, heads, batch)
+      const node = this.localWriter.append(value, heads, batch, deps)
+
       this.linearizer.addHead(node)
       nodes[i] = node
     }
@@ -821,10 +793,6 @@ function writerToKey (w) {
 
 function toKey (k) {
   return b4a.isBuffer(k) ? k : b4a.from(k, 'hex')
-}
-
-function compareHead (head, node) {
-  return head.length === node.length && b4a.equals(head.key, node.writer.core.key)
 }
 
 function isAutobaseMessage (msg) {
