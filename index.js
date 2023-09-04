@@ -230,7 +230,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _ack (triggered) {
-    if (this.localWriter === null || !this.localWriter.isIndexer || this._acking) return
+    if (this.localWriter === null || !this.localWriter.isIndexer || this._acking || this.closing) return
 
     this._acking = true
 
