@@ -12,6 +12,7 @@ const SystemView = require('./lib/system')
 const messages = require('./lib/messages')
 const Timer = require('./lib/timer')
 const Writer = require('./lib/writer')
+const ActiveWriters = require('./lib/active-writers')
 const AutoWakeup = require('./lib/wakeup')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
@@ -45,11 +46,11 @@ module.exports = class Autobase extends ReadyResource {
 
     this.local = Autobase.getLocalCore(this.store, handlers)
     this.localWriter = null
+    this.activeWriters = new ActiveWriters()
     this.linearizer = null
     this.updating = false
 
-    this.writers = []
-
+    this._checkWriters = []
     this._appending = null
     this._wakeup = new AutoWakeup(this)
 
@@ -59,7 +60,6 @@ module.exports = class Autobase extends ReadyResource {
     this._maybeUpdateDigest = true
     this._needsWakeup = true
 
-    this._checkWriters = []
     this._updates = []
     this._handlers = handlers || {}
 
@@ -187,11 +187,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _closeWriter (w) {
+    this.activeWriters.delete(w)
     await w.close()
-    const i = this.writers.indexOf(w)
-    if (i === -1) return // should never happen but who knows...
-    const top = this.writers.pop()
-    if (i < this.writers.length) this.writers[i] = top
   }
 
   async _gcWriters () {
@@ -246,6 +243,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // runs in bg, not allowed to throw
+  // TODO: refactor so this only moves the writer affected to a updated set
   async _onremotewriterchange () {
     try {
       await this._bump()
@@ -319,7 +317,7 @@ module.exports = class Autobase extends ReadyResource {
     await this.ready()
     const all = []
 
-    for (const w of this.writers) {
+    for (const w of this.activeWriters) {
       all.push(w.getCheckpoint())
     }
 
@@ -360,10 +358,10 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  // note: not parallel safe!
   async _getWriterByKey (key, len, allowGC) {
-    for (const w of this.writers) {
-      if (b4a.equals(w.core.key, key)) return w
-    }
+    let w = this.activeWriters.get(key)
+    if (w !== null) return w
 
     if (len === -1) {
       const writerInfo = await this.system.get(key)
@@ -371,7 +369,7 @@ module.exports = class Autobase extends ReadyResource {
       len = writerInfo.length
     }
 
-    const w = this._makeWriter(key, len)
+    w = this._makeWriter(key, len)
     await w.ready()
 
     if (allowGC && w.flushed()) {
@@ -379,7 +377,7 @@ module.exports = class Autobase extends ReadyResource {
       return w
     }
 
-    this.writers.push(w)
+    this.activeWriters.add(w)
     this._checkWriters.push(w)
 
     return w
@@ -387,7 +385,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _updateAll () {
     const p = []
-    for (const w of this.writers) p.push(w.update())
+    for (const w of this.activeWriters) p.push(w.update())
     return Promise.all(p)
   }
 
@@ -418,12 +416,12 @@ module.exports = class Autobase extends ReadyResource {
     if (this.system.bootstrapping) {
       const bootstrap = this._makeWriter(this.bootstrap, 0)
 
-      this.writers = [bootstrap]
+      this.activeWriters.add(bootstrap)
       this._checkWriters.push(bootstrap)
       bootstrap.isIndexer = true
       await bootstrap.ready()
 
-      this.linearizer = new Linearizer([bootstrap])
+      this.linearizer = new Linearizer([bootstrap], { heads: [], writers: this.activeWriters })
       return
     }
 
@@ -443,11 +441,10 @@ module.exports = class Autobase extends ReadyResource {
       indexers.push(writer)
     }
 
-    this.linearizer = new Linearizer(indexers, { heads: this.system.heads })
+    this.linearizer = new Linearizer(indexers, { heads: this.system.heads, writers: this.activeWriters })
 
     for (const { key, length } of this.system.heads) {
-      const writer = this._getWriterByKey(key, length, false)
-      this.linearizer.writers.set(key, writer)
+      await this._getWriterByKey(key, length, false)
     }
 
     if (change) {
@@ -483,7 +480,7 @@ module.exports = class Autobase extends ReadyResource {
 
       let advanced = 0
 
-      for (const w of this.writers) {
+      for (const w of this.activeWriters) {
         let node = w.advance()
         if (node === null) continue
 

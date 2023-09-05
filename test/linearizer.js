@@ -441,12 +441,7 @@ test('linearizer - shouldAck', async t => {
   t.absent(c.linearizer.shouldAck(c.localWriter))
 
   function getWriter (base, writer) {
-    for (const w of base.writers) {
-      if (b4a.compare(w.core.key, writer.core.key)) continue
-      return w
-    }
-
-    return null
+    return base.activeWriters.get(writer.core.key)
   }
 })
 
