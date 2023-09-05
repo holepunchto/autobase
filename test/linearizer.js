@@ -307,25 +307,25 @@ test('linearizer - count ordering', async t => {
   bval = await b.view.get(4)
   cval = await c.view.get(4)
 
-  t.is(aval, 'b1')
-  t.is(bval, 'b1')
-  t.is(cval, 'b1')
+  t.is(aval, 'a1')
+  t.is(bval, 'a1')
+  t.is(cval, 'a1')
 
   aval = await a.view.get(5)
   bval = await b.view.get(5)
   cval = await c.view.get(5)
 
-  t.is(aval, 'c2')
-  t.is(bval, 'c2')
-  t.is(cval, 'c2')
+  t.is(aval, 'b1')
+  t.is(bval, 'b1')
+  t.is(cval, 'b1')
 
   aval = await a.view.get(6)
   bval = await b.view.get(6)
   cval = await c.view.get(6)
 
-  t.is(aval, 'a1')
-  t.is(bval, 'a1')
-  t.is(cval, 'a1')
+  t.is(aval, 'c2')
+  t.is(bval, 'c2')
+  t.is(cval, 'c2')
 
   await t.exception(a.view.get(7))
   await t.exception(b.view.get(7))
@@ -363,19 +363,19 @@ test('linearizer - reordering', async t => {
   await replicateAndSync([c, a])
 
   t.is(await b.view.get(0), 'b0')
-  t.is(await c.view.get(0), 'a0')
-  t.is(await c.view.get(3), 'b0')
+  t.is(await c.view.get(0), 'b0')
+  t.is(await c.view.get(3), 'a2')
 
   await c.append('c' + ci++)
   await replicateAndSync(bases)
 
-  t.is(await a.view.get(0), 'a0')
-  t.is(await b.view.get(0), 'a0')
-  t.is(await c.view.get(0), 'a0')
+  t.is(await a.view.get(0), 'b0')
+  t.is(await b.view.get(0), 'b0')
+  t.is(await c.view.get(0), 'b0')
 
-  t.is(await a.view.get(3), 'b0')
-  t.is(await b.view.get(3), 'b0')
-  t.is(await c.view.get(3), 'b0')
+  t.is(await a.view.get(3), 'a2')
+  t.is(await b.view.get(3), 'a2')
+  t.is(await c.view.get(3), 'a2')
 
   t.is(await a.view.get(4), 'c0')
   t.is(await b.view.get(4), 'c0')
