@@ -12,6 +12,7 @@ const SystemView = require('./lib/system')
 const messages = require('./lib/messages')
 const Timer = require('./lib/timer')
 const Writer = require('./lib/writer')
+const AutoWakeup = require('./lib/wakeup')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 
@@ -48,14 +49,18 @@ module.exports = class Autobase extends ReadyResource {
     this.updating = false
 
     this.writers = []
+
     this._appending = null
+    this._wakeup = new AutoWakeup(this)
 
     this._applying = null
     this._updatedCores = null
     this._localDigest = null
     this._maybeUpdateDigest = true
+    this._needsWakeup = true
 
     this._needsReady = []
+    this._checkWriters = []
     this._updates = []
     this._handlers = handlers || {}
 
@@ -155,31 +160,68 @@ module.exports = class Autobase extends ReadyResource {
     await this._reindex(null)
 
     // ready all the writer cores...
-    await this._ensureAllCores()
+    await this._flushInternal()
 
     if (this.localWriter && this._ackInterval) this._startAckTimer()
+  }
+
+  async _wakeupHeads () {
+    const buffer = await this.local.getUserData('autobase/heads')
+    if (!buffer) return
+    const keys = c.decode(c.array(c.fixed32), buffer)
+    for (const key of keys) await this._getWriterByKey(key, -1, true)
   }
 
   async _open () {
     this._prebump = this._openPreBump()
     await this._prebump
 
+    await this._wakeup.ready()
+    await this._wakeupHeads()
+
     await this._bump()
   }
 
   async _close () {
+    await this._wakeup.close()
     if (this._hasClose) await this._handlers.close(this.view)
     if (this._primaryBootstrap) await this._primaryBootstrap.close()
     await this.store.close()
     if (this._ackTimer) this._ackTimer.stop()
   }
 
-  async _ensureAllCores () {
+  async _closeWriter (w) {
+    await w.core.close()
+    const i = this.writers.indexOf(w)
+    if (i === -1) return // should never happen but who knows...
+    const top = this.writers.pop()
+    if (i < this.writers.length) this.writers[i] = top
+  }
+
+  async _flushInternal () {
     while (this._needsReady.length > 0) {
       const core = this._needsReady.pop()
       await core.ready()
       await core.setUserData('referrer', this.key)
+      this._wakeup.add(core) // add it again incase it wasn't readied before
     }
+
+    // just return early, why not
+    if (this._checkWriters.length === 0) return
+
+    while (this._checkWriters.length > 0) {
+      const w = this._checkWriters.pop()
+      if (!w.flushed()) continue
+
+      const unqueued = this._wakeup.unqueue(w.core.key, w.core.length)
+      if (!unqueued || w.isIndexer || this.localWriter === w) continue
+
+      // TODO: keep a random set around also for less cache churn...
+
+      await this._closeWriter(w)
+    }
+
+    await this._wakeup.flush()
   }
 
   _startAckTimer () {
@@ -223,6 +265,11 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     this._bumpAckTimer()
+  }
+
+  _onwakeup () {
+    this._needsWakeup = true
+    this._bump()
   }
 
   ack () {
@@ -324,13 +371,28 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  _getWriterByKey (key, len = 0) {
+  async _getWriterByKey (key, len, allowGC) {
     for (const w of this.writers) {
       if (b4a.equals(w.core.key, key)) return w
     }
 
+    if (len === -1) {
+      const writerInfo = await this.system.get(key)
+      if (writerInfo === null) return null
+      len = writerInfo.length
+    }
+
     const w = this._makeWriter(key, len)
+
+    await this._flushInternal()
+
+    if (allowGC && w.flushed()) {
+      await w.core.close()
+      return w
+    }
+
     this.writers.push(w)
+    this._checkWriters.push(w)
 
     return w
   }
@@ -351,6 +413,7 @@ module.exports = class Autobase extends ReadyResource {
     // Small hack for now, should be fixed in hypercore (that key is set immediatly)
     core.key = key
     this._needsReady.push(core)
+    this._wakeup.add(core)
 
     const w = new Writer(this, core, length)
 
@@ -384,20 +447,21 @@ module.exports = class Autobase extends ReadyResource {
       await this.system.update()
     }
 
+    // always load local to see if relevant...
+    await this._getWriterByKey(this.local.key, -1, false)
+
     const indexers = []
 
-    for await (const { key, value } of this.system.list()) {
-      const writer = this._getWriterByKey(key, value.length)
-      if (!value.isIndexer) continue
-
-      indexers.push(writer)
+    for (const head of this.system.indexers) {
+      const writer = await this._getWriterByKey(head.key, head.length, false)
       writer.isIndexer = true
+      indexers.push(writer)
     }
 
     this.linearizer = new Linearizer(indexers, { heads: this.system.heads })
 
     for (const { key, length } of this.system.heads) {
-      const writer = this._getWriterByKey(key, length)
+      const writer = this._getWriterByKey(key, length, false)
       this.linearizer.writers.set(key, writer)
     }
 
@@ -454,8 +518,27 @@ module.exports = class Autobase extends ReadyResource {
     return added
   }
 
+  async _checkpointHeads () {
+    if (!this.linearizer.updated) return
+
+    const state = { start: 0, end: 0, buffer: null }
+
+    c.uint.preencode(state, this.linearizer.heads.size)
+    state.buffer = b4a.allocUnsafe(state.end + this.linearizer.heads.size * 32)
+
+    c.uint.encode(state, this.linearizer.heads.size)
+    for (const head of this.linearizer.heads) c.fixed32.encode(state, head.writer.core.key)
+
+    await this.local.setUserData('autobase/heads', state.buffer)
+  }
+
   async _advance () {
     if (this.opened === false) await this._prebump
+
+    if (this._needsWakeup) {
+      this._needsWakeup = false
+      for (const { key } of this._wakeup) await this._getWriterByKey(key, -1, true)
+    }
 
     this.updating = false
 
@@ -465,7 +548,10 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this.closing) return
 
-      if (remoteAdded > 0 || localNodes !== null) this.updating = true
+      if (remoteAdded > 0 || localNodes !== null) {
+        this.updating = true
+        await this._checkpointHeads()
+      }
 
       const u = this.linearizer.update()
       const changed = u ? await this._applyUpdate(u) : null
@@ -485,15 +571,15 @@ module.exports = class Autobase extends ReadyResource {
       if (this.closing) return
 
       if (!changed) {
-        if (this._needsReady.length > 0) {
-          await this._ensureAllCores()
+        if (this._needsReady.length > 0 || this._checkWriters.length > 0) {
+          await this._flushInternal()
           continue
         }
         if (remoteAdded >= REMOTE_ADD_BATCH) continue
         break
       }
 
-      await this._ensureAllCores()
+      await this._flushInternal()
       await this._reindex(changed)
     }
 
@@ -510,7 +596,7 @@ module.exports = class Autobase extends ReadyResource {
       this.emit('update')
     }
 
-    return this._ensureAllCores()
+    return this._flushInternal()
   }
 
   async _flushIndexes () {
@@ -545,14 +631,8 @@ module.exports = class Autobase extends ReadyResource {
 
     await this.system.add(key, { isIndexer })
 
-    for (const w of this.writers) {
-      if (b4a.equals(w.core.key, key)) return
-    }
-
-    const writer = this._makeWriter(key, 0)
+    const writer = (await this._getWriterByKey(key, -1, false)) || this._makeWriter(key, 0)
     if (isIndexer) writer.isIndexer = true
-
-    this.writers.push(writer)
 
     // fetch any nodes needed for dependents
     this._bump().catch(safetyCatch)
@@ -601,7 +681,7 @@ module.exports = class Autobase extends ReadyResource {
       const node = u.indexed[i++]
 
       if (node.batch > 1) continue
-      node.writer.shift()
+      this._shiftWriter(node.writer)
 
       const update = this._updates[j++]
       if (!update.indexers) continue
@@ -650,7 +730,7 @@ module.exports = class Autobase extends ReadyResource {
 
       update.indexers = await this.system.flush(update)
 
-      if (indexed) node.writer.shift()
+      if (indexed) this._shiftWriter(node.writer)
 
       this._applying = null
 
@@ -676,6 +756,11 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return null
+  }
+
+  _shiftWriter (w) {
+    w.shift()
+    if (w.flushed()) this._checkWriters.push(w)
   }
 
   _queueIndexFlush (indexed) {

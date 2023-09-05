@@ -224,7 +224,7 @@ test('autoack - no null acks', async t => {
   t.teardown(unreplicate)
 
   await addWriter(a, b)
-  await b.update()
+  await sync([a, b])
   await b.append(null)
 
   t.is(a.local.length, 1)
@@ -237,7 +237,7 @@ test('autoack - no null acks', async t => {
 })
 
 test('autoack - value beneath null values', async t => {
-  t.plan(4)
+  t.plan(6)
 
   const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 10, ackThreshold: 0 })
 
@@ -245,18 +245,20 @@ test('autoack - value beneath null values', async t => {
   t.teardown(unreplicate)
 
   await addWriter(a, b)
-  await b.update()
+  await sync([a, b])
   b.append(null)
   b.append('b0')
   await b.append(null)
-  await a.update()
+  await sync([a, b])
 
   t.is(a.local.length, 1)
-  t.is(b.local.length, 3)
+  t.is(b.local.length, 2)
 
   setTimeout(() => {
     t.not(a.local.length, 1)
-    t.not(b.local.length, 3)
+    t.not(b.local.length, 2)
+    t.is(b.view.length, b.view.indexedLength)
+    t.is(a.view.length, a.view.indexedLength)
   }, 100)
 })
 
