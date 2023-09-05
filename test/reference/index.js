@@ -273,7 +273,7 @@ class Linearizer {
     for (const indexer of this.indexers) {
       const length = parent
         ? (parent.writer === indexer) ? parent.length - 1 : parent.clock.get(indexer.core.key)
-        : indexer.available
+        : indexer.length
 
       if (this.confirms(indexer, target, acks, length)) {
         confs.add(indexer)
