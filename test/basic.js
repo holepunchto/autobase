@@ -35,8 +35,8 @@ test('basic - two writers', async t => {
 
   t.is(base2.system.members.active, 3)
   t.is(base2.system.members.active, base3.system.members.active)
-  t.is(base2.system.members.active, base2.writers.length)
-  t.is(base3.system.members.active, base3.writers.length)
+  t.is(base2.system.members.active, base2.activeWriters.size)
+  t.is(base3.system.members.active, base3.activeWriters.size)
 
   // tests skipped: fix with linearizer update - batching
 
@@ -131,8 +131,8 @@ test('basic - view/writer userdata is set', async t => {
     t.alike(viewData.referrer, base.bootstrap)
     t.is(viewData.view, 'test')
 
-    t.is(base.writers.length, 2)
-    for (const writer of base.writers) {
+    t.is(base.activeWriters.size, 2)
+    for (const writer of base.activeWriters) {
       const writerData = await Autobase.getUserData(writer.core)
       t.alike(writerData.referrer, base.bootstrap)
     }
@@ -320,19 +320,19 @@ test('basic - add 5 writers', async t => {
 
   await confirm(bases)
 
-  t.is(a.writers.length, 5)
+  t.is(a.activeWriters.size, 5)
   t.is(a.system.members.active, 5)
 
-  t.is(a.writers.length, b.writers.length)
+  t.is(a.activeWriters.size, b.activeWriters.size)
   t.is(a.system.members.active, b.system.members.active)
 
-  t.is(a.writers.length, c.writers.length)
+  t.is(a.activeWriters.size, c.activeWriters.size)
   t.is(a.system.members.active, c.system.members.active)
 
-  t.is(a.writers.length, d.writers.length)
+  t.is(a.activeWriters.size, d.activeWriters.size)
   t.is(a.system.members.active, d.system.members.active)
 
-  t.is(a.writers.length, e.writers.length)
+  t.is(a.activeWriters.size, e.activeWriters.size)
   t.is(a.system.members.active, e.system.members.active)
 })
 
@@ -493,7 +493,7 @@ test('append during reindex', async t => {
 
   const unreplicate = replicate([b, d])
 
-  for (const w of d.writers) {
+  for (const w of d.activeWriters) {
     if (w === d.localWriter) continue
 
     const start = w.core.contiguousLength

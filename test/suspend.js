@@ -44,7 +44,7 @@ test('suspend - pass exisiting store', async t => {
 
   await confirm([base1, base2])
 
-  t.is(base2.writers.length, 2)
+  t.is(base2.activeWriters.size, 2)
 
   await base2.close()
 
@@ -52,7 +52,7 @@ test('suspend - pass exisiting store', async t => {
   const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
   await base3.ready()
 
-  t.is(base3.writers.length, 2)
+  t.is(base3.activeWriters.size, 2)
 
   await base3.append('final')
 
@@ -87,7 +87,7 @@ test('suspend - pass exisiting fs store', async t => {
 
   await confirm([base1, base2])
 
-  t.is(base2.writers.length, 2)
+  t.is(base2.activeWriters.size, 2)
 
   await base2.close()
 
@@ -95,7 +95,7 @@ test('suspend - pass exisiting fs store', async t => {
   const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
   await base3.ready()
 
-  t.is(base3.writers.length, 2)
+  t.is(base3.activeWriters.size, 2)
 
   await base3.append('final')
 
@@ -135,7 +135,7 @@ test('suspend - 2 exisiting fs stores', async t => {
 
   await confirm([base1, base2])
 
-  t.is(base2.writers.length, 2)
+  t.is(base2.activeWriters.size, 2)
 
   await base2.close()
 
@@ -143,7 +143,7 @@ test('suspend - 2 exisiting fs stores', async t => {
   const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
   await base3.ready()
 
-  t.is(base3.writers.length, 2)
+  t.is(base3.activeWriters.size, 2)
 
   await base3.append('final')
 
@@ -185,7 +185,7 @@ test('suspend - reopen after index', async t => {
   await b.append('b0')
   await a.append('a1')
 
-  t.is(b.writers.length, 2)
+  t.is(b.activeWriters.size, 2)
 
   const order = []
   for (let i = 0; i < b.view.length; i++) {
@@ -213,7 +213,7 @@ test('suspend - reopen after index', async t => {
     t.alike(await c.view.get(i), order[i])
   }
 
-  t.is(c.writers.length, 2)
+  t.is(c.activeWriters.size, 2)
 
   await c.append('final')
 
@@ -257,7 +257,7 @@ test('suspend - reopen with sync in middle', async t => {
   await b.append('b0')
   await a.append('a1')
 
-  t.is(b.writers.length, 2)
+  t.is(b.activeWriters.size, 2)
   t.is(b.view.length, 2)
 
   await b.close()
@@ -288,7 +288,7 @@ test('suspend - reopen with sync in middle', async t => {
 
   await c.ready()
 
-  t.is(c.writers.length, 2)
+  t.is(c.activeWriters.size, 2)
   t.is(c.view.length, b.view.length + 1)
 
   await c.append('final')
@@ -327,7 +327,7 @@ test('suspend - reopen with indexing in middle', async t => {
 
   await confirm([a, b, c])
 
-  t.is(c.writers.length, 3)
+  t.is(c.activeWriters.size, 3)
   t.is(c.view.length, 0)
 
   await c.append('c0')
@@ -357,7 +357,7 @@ test('suspend - reopen with indexing in middle', async t => {
 
   await c2.ready()
 
-  t.is(c2.writers.length, 3)
+  t.is(c2.activeWriters.size, 3)
   t.is(c2.view.length, 1)
   t.is(c2.view.indexedLength, 0)
 
@@ -399,7 +399,7 @@ test('suspend - reopen with indexing + sync in middle', async t => {
 
   await confirm([a, b, c])
 
-  t.is(c.writers.length, 3)
+  t.is(c.activeWriters.size, 3)
   t.is(c.view.length, 0)
 
   await c.append('c0')
@@ -442,7 +442,7 @@ test('suspend - reopen with indexing + sync in middle', async t => {
 
   await c2.ready()
 
-  t.is(c2.writers.length, 3)
+  t.is(c2.activeWriters.size, 3)
   t.is(c2.view.length, 4)
   t.is(c2.view.indexedLength, 3)
 
@@ -567,7 +567,7 @@ test('suspend - open new index after reopen', async t => {
   await b.append({ index: 2, data: 'b0' })
   await a.append({ index: 1, data: 'a1' })
 
-  t.is(b.writers.length, 2)
+  t.is(b.activeWriters.size, 2)
 
   const order = []
   for (let i = 0; i < b.view.first.length; i++) {
@@ -601,7 +601,7 @@ test('suspend - open new index after reopen', async t => {
     t.alike(await c.view.second.get(i), order[i + c.view.first.length])
   }
 
-  t.is(c.writers.length, 2)
+  t.is(c.activeWriters.size, 2)
 
   await c.append({ index: 1, data: 'final' })
 
@@ -671,7 +671,7 @@ test('suspend - reopen multiple indexes', async t => {
 
   await a.append({ index: 1, data: 'a2' })
 
-  t.is(b.writers.length, 2)
+  t.is(b.activeWriters.size, 2)
 
   const order = []
   for (let i = 0; i < b.view.first.length; i++) {
@@ -705,7 +705,7 @@ test('suspend - reopen multiple indexes', async t => {
     t.alike(await c.view.second.get(i), order[i + c.view.first.length])
   }
 
-  t.is(c.writers.length, 2)
+  t.is(c.activeWriters.size, 2)
 
   await c.append({ index: 1, data: 'final' })
 
@@ -877,8 +877,8 @@ test('suspend - append but not indexed then reopen', async t => {
   // c hasn't seen any appends to first
   t.is(c.system.views[1].name, 'second')
 
-  t.is(b.writers.length, 3)
-  t.is(c.writers.length, 3)
+  t.is(b.activeWriters.size, 3)
+  t.is(c.activeWriters.size, 3)
 
   await c.close()
 
