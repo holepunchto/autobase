@@ -165,7 +165,7 @@ module.exports = class Autobase extends ReadyResource {
     const buffer = await this.local.getUserData('autobase/heads')
     if (!buffer) return
     const keys = c.decode(c.array(c.fixed32), buffer)
-    for (const key of keys) await this._getWriterByKey(key, -1, true)
+    for (const key of keys) await this._getWriterByKey(key, -1, 0, true)
   }
 
   async _open () {
@@ -359,9 +359,12 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // note: not parallel safe!
-  async _getWriterByKey (key, len, allowGC) {
+  async _getWriterByKey (key, len, seen, allowGC) {
     let w = this.activeWriters.get(key)
-    if (w !== null) return w
+    if (w !== null) {
+      w.seen(seen)
+      return w
+    }
 
     if (len === -1) {
       const writerInfo = await this.system.get(key)
@@ -370,6 +373,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     w = this._makeWriter(key, len)
+    w.seen(seen)
     await w.ready()
 
     if (allowGC && w.flushed()) {
@@ -431,12 +435,12 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     // always load local to see if relevant...
-    await this._getWriterByKey(this.local.key, -1, false)
+    await this._getWriterByKey(this.local.key, -1, 0, false)
 
     const indexers = []
 
     for (const head of this.system.indexers) {
-      const writer = await this._getWriterByKey(head.key, head.length, false)
+      const writer = await this._getWriterByKey(head.key, head.length, 0, false)
       writer.isIndexer = true
       indexers.push(writer)
     }
@@ -444,7 +448,7 @@ module.exports = class Autobase extends ReadyResource {
     this.linearizer = new Linearizer(indexers, { heads: this.system.heads, writers: this.activeWriters })
 
     for (const { key, length } of this.system.heads) {
-      await this._getWriterByKey(key, length, false)
+      await this._getWriterByKey(key, length, 0, false)
     }
 
     if (change) {
@@ -519,7 +523,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this._needsWakeup) {
       this._needsWakeup = false
-      for (const { key } of this._wakeup) await this._getWriterByKey(key, -1, true)
+      for (const { key } of this._wakeup) await this._getWriterByKey(key, -1, 0, true)
     }
 
     this.updating = false
@@ -613,7 +617,7 @@ module.exports = class Autobase extends ReadyResource {
 
     await this.system.add(key, { isIndexer })
 
-    const writer = (await this._getWriterByKey(key, -1, false)) || this._makeWriter(key, 0)
+    const writer = (await this._getWriterByKey(key, -1, 0, false)) || this._makeWriter(key, 0)
 
     if (isIndexer) writer.isIndexer = true
     await writer.ready()
