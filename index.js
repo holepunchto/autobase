@@ -59,7 +59,6 @@ module.exports = class Autobase extends ReadyResource {
     this._maybeUpdateDigest = true
     this._needsWakeup = true
 
-    this._needsReady = []
     this._checkWriters = []
     this._updates = []
     this._handlers = handlers || {}
@@ -159,9 +158,6 @@ module.exports = class Autobase extends ReadyResource {
     // reindex to load writers
     await this._reindex(null)
 
-    // ready all the writer cores...
-    await this._flushInternal()
-
     if (this.localWriter && this._ackInterval) this._startAckTimer()
   }
 
@@ -191,21 +187,14 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _closeWriter (w) {
-    await w.core.close()
+    await w.close()
     const i = this.writers.indexOf(w)
     if (i === -1) return // should never happen but who knows...
     const top = this.writers.pop()
     if (i < this.writers.length) this.writers[i] = top
   }
 
-  async _flushInternal () {
-    while (this._needsReady.length > 0) {
-      const core = this._needsReady.pop()
-      await core.ready()
-      await core.setUserData('referrer', this.key)
-      this._wakeup.add(core) // add it again incase it wasn't readied before
-    }
-
+  async _gcWriters () {
     // just return early, why not
     if (this._checkWriters.length === 0) return
 
@@ -383,11 +372,10 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const w = this._makeWriter(key, len)
-
-    await this._flushInternal()
+    await w.ready()
 
     if (allowGC && w.flushed()) {
-      await w.core.close()
+      await w.close()
       return w
     }
 
@@ -410,11 +398,6 @@ module.exports = class Autobase extends ReadyResource {
       ? this.local.session({ valueEncoding: messages.OplogMessage })
       : this.store.get({ key, valueEncoding: messages.OplogMessage })
 
-    // Small hack for now, should be fixed in hypercore (that key is set immediatly)
-    core.key = key
-    this._needsReady.push(core)
-    this._wakeup.add(core)
-
     const w = new Writer(this, core, length)
 
     if (local) {
@@ -436,7 +419,9 @@ module.exports = class Autobase extends ReadyResource {
       const bootstrap = this._makeWriter(this.bootstrap, 0)
 
       this.writers = [bootstrap]
+      this._checkWriters.push(bootstrap)
       bootstrap.isIndexer = true
+      await bootstrap.ready()
 
       this.linearizer = new Linearizer([bootstrap])
       return
@@ -571,15 +556,15 @@ module.exports = class Autobase extends ReadyResource {
       if (this.closing) return
 
       if (!changed) {
-        if (this._needsReady.length > 0 || this._checkWriters.length > 0) {
-          await this._flushInternal()
-          continue
+        if (this._checkWriters.length > 0) {
+          await this._gcWriters()
+          continue // rerun the update loop as a writer might have been added
         }
         if (remoteAdded >= REMOTE_ADD_BATCH) continue
         break
       }
 
-      await this._flushInternal()
+      await this._gcWriters()
       await this._reindex(changed)
     }
 
@@ -596,7 +581,7 @@ module.exports = class Autobase extends ReadyResource {
       this.emit('update')
     }
 
-    return this._flushInternal()
+    return this._gcWriters()
   }
 
   async _flushIndexes () {
@@ -632,7 +617,9 @@ module.exports = class Autobase extends ReadyResource {
     await this.system.add(key, { isIndexer })
 
     const writer = (await this._getWriterByKey(key, -1, false)) || this._makeWriter(key, 0)
+
     if (isIndexer) writer.isIndexer = true
+    await writer.ready()
 
     // fetch any nodes needed for dependents
     this._bump().catch(safetyCatch)
