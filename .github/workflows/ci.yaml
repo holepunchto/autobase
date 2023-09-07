@@ -21,9 +21,9 @@ jobs:
         os: [[self-hosted, non-ui, Linux], [self-hosted, non-ui, macOS]]
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: install node
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
       - run: npm install
