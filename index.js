@@ -59,6 +59,7 @@ module.exports = class Autobase extends ReadyResource {
     this._localDigest = null
     this._maybeUpdateDigest = true
     this._needsWakeup = true
+    this._addCheckpoints = false
 
     this._updates = []
     this._handlers = handlers || {}
@@ -426,6 +427,7 @@ module.exports = class Autobase extends ReadyResource {
       await bootstrap.ready()
 
       this.linearizer = new Linearizer([bootstrap], { heads: [], writers: this.activeWriters })
+      this._addCheckpoints = !!(this.localWriter && this.localWriter.isIndexer)
       return
     }
 
@@ -446,6 +448,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     this.linearizer = new Linearizer(indexers, { heads: this.system.heads, writers: this.activeWriters })
+    this._addCheckpoints = !!(this.localWriter && this.localWriter.isIndexer)
 
     for (const { key, length } of this.system.heads) {
       await this._getWriterByKey(key, length, 0, false)
@@ -621,6 +624,9 @@ module.exports = class Autobase extends ReadyResource {
 
     await writer.ready()
 
+    // If we are getting added as indexer, already start adding checkpoints while we get confirmed...
+    if (writer === this.localWriter && isIndexer) this._addCheckpoints = true
+
     // fetch any nodes needed for dependents
     this._bump().catch(safetyCatch)
   }
@@ -781,7 +787,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async _updateDigest () {
     this._maybeUpdateDigest = false
-    if (!this.localWriter.isIndexer) return
+    if (!this._addCheckpoints) return
 
     if (this._localDigest === null) {
       this._localDigest = await this.localWriter.getDigest()
@@ -813,7 +819,7 @@ module.exports = class Autobase extends ReadyResource {
   async _flushLocal (localNodes) {
     if (this._maybeUpdateDigest) await this._updateDigest()
 
-    const cores = this.localWriter.isIndexer ? this._viewStore.getIndexedCores() : []
+    const cores = this._addCheckpoints ? this._viewStore.getIndexedCores() : []
     const blocks = new Array(localNodes.length)
 
     for (let i = 0; i < blocks.length; i++) {
@@ -821,8 +827,8 @@ module.exports = class Autobase extends ReadyResource {
 
       blocks[i] = {
         version: this.version,
-        digest: this.localWriter.isIndexer ? this._geneateDigest() : null,
-        checkpoint: this.localWriter.isIndexer ? generateCheckpoint(cores) : null,
+        digest: this._addCheckpoints ? this._geneateDigest() : null,
+        checkpoint: this._addCheckpoints ? generateCheckpoint(cores) : null,
         node: {
           heads,
           abi: 0,
@@ -831,7 +837,7 @@ module.exports = class Autobase extends ReadyResource {
         }
       }
 
-      if (this.localWriter.isIndexer) this._localDigest.pointer++
+      if (this._addCheckpoints) this._localDigest.pointer++
     }
 
     await this.local.append(blocks)
