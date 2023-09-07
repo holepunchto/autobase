@@ -414,7 +414,7 @@ module.exports = class Autobase extends ReadyResource {
     return w
   }
 
-  async _reindex (change) {
+  async _reindex (nodes) {
     this._maybeUpdateDigest = true
 
     if (this.system.bootstrapping) {
@@ -429,8 +429,8 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
-    if (change) {
-      this._undo(change.count)
+    if (nodes) {
+      this._undo(this._updates.length) // undo all!
       await this.system.update()
     }
 
@@ -451,9 +451,9 @@ module.exports = class Autobase extends ReadyResource {
       await this._getWriterByKey(key, length, 0, false)
     }
 
-    if (change) {
-      for (const node of change.nodes) node.reset()
-      for (const node of change.nodes) this.linearizer.addHead(node)
+    if (nodes) {
+      for (const node of nodes) node.reset()
+      for (const node of nodes) this.linearizer.addHead(node)
     }
   }
 
@@ -675,8 +675,7 @@ module.exports = class Autobase extends ReadyResource {
 
       this._queueIndexFlush(i)
 
-      const nodes = u.indexed.slice(i).concat(u.tip)
-      return { count: u.shared - i, nodes }
+      return u.indexed.slice(i).concat(u.tip)
     }
 
     for (i = u.shared; i < u.length; i++) {
@@ -733,8 +732,7 @@ module.exports = class Autobase extends ReadyResource {
       if (update.indexers && indexed) {
         this._queueIndexFlush(i + 1)
 
-        const nodes = u.indexed.slice(i + 1).concat(u.tip)
-        return { count: 0, nodes }
+        return u.indexed.slice(i + 1).concat(u.tip)
       }
     }
 
