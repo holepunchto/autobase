@@ -619,7 +619,6 @@ module.exports = class Autobase extends ReadyResource {
 
     const writer = (await this._getWriterByKey(key, -1, 0, false)) || this._makeWriter(key, 0)
 
-    if (isIndexer) writer.isIndexer = true
     await writer.ready()
 
     // fetch any nodes needed for dependents
