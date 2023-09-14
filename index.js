@@ -369,8 +369,16 @@ module.exports = class Autobase extends ReadyResource {
 
     if (len === -1) {
       const writerInfo = await this.system.get(key)
-      if (writerInfo === null) return null
-      len = writerInfo.length
+
+      // TODO: this indirectly disables backwards-dag-walk - we should reenable when FF is enabled
+      //       this is because the remote writer might not have our next heads in mem if it knows
+      //       that following the indexed sets makes that redundant. tmp(?) solution for now is to
+      //       just inflate the writers anyway - if FF is enabled simply jumping ahead is likely a better solution
+      // if (writerInfo === null) return null
+      // len = writerInfo.length
+
+      if (!allowGC && writerInfo === null) return null
+      len = writerInfo === null ? 0 : writerInfo.length
     }
 
     w = this._makeWriter(key, len)
