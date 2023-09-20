@@ -88,8 +88,10 @@ module.exports = class Autobase extends ReadyResource {
 
     this._ackInterval = ackInterval
     this._ackThreshold = ackThreshold
+    this._ackTickThreshold = ackThreshold
+    this._ackTick = 0
+
     this._ackTimer = null
-    this._ackSize = 0
     this._acking = false
 
     // view opens after system is loaded
@@ -180,11 +182,15 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _close () {
+    if (this._ackTimer) {
+      this._ackTimer.stop()
+      await this._ackTimer.flush()
+    }
+
     await this._wakeup.close()
     if (this._hasClose) await this._handlers.close(this.view)
     if (this._primaryBootstrap) await this._primaryBootstrap.close()
     await this.store.close()
-    if (this._ackTimer) this._ackTimer.stop()
   }
 
   async _closeWriter (w) {
@@ -213,7 +219,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _startAckTimer () {
     if (this._ackTimer) return
-    this._ackTimer = new Timer(this._ack.bind(this), this._ackInterval)
+    this._ackTimer = new Timer(this.ack.bind(this), this._ackInterval)
     this._bumpAckTimer()
   }
 
@@ -223,11 +229,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _triggerAck () {
-    if (this._ackTimer) {
-      return this._ackTimer.trigger()
-    } else {
-      return this._ack(true)
-    }
+    if (this._ackTimer) this._ackTimer.bump()
+    return this.ack()
   }
 
   async update () {
@@ -260,30 +263,18 @@ module.exports = class Autobase extends ReadyResource {
     this._bump()
   }
 
-  ack () {
-    return this._ack(false)
-  }
-
-  async _ack (triggered) {
+  async ack () {
     if (this.localWriter === null || !this.localWriter.isIndexer || this._acking || this.closing) return
 
     this._acking = true
 
     await this.update()
 
-    if (this._ackTimer && !triggered) {
-      const ackSize = this.linearizer.size
-      if (this._ackSize < ackSize) {
-        this._ackTimer.extend()
-      } else {
-        this._ackTimer.reset()
-      }
-
-      this._ackSize = ackSize
-    }
-
-    if (this.linearizer.shouldAck(this.localWriter)) {
+    if (!this.closing && this.linearizer.shouldAck(this.localWriter)) {
       await this.append(null)
+
+      this._updateAckThreshold()
+      this._bumpAckTimer()
     }
 
     this._acking = false
@@ -436,6 +427,7 @@ module.exports = class Autobase extends ReadyResource {
 
       this.linearizer = new Linearizer([bootstrap], { heads: [], writers: this.activeWriters })
       this._addCheckpoints = !!(this.localWriter && this.localWriter.isIndexer)
+      this._updateAckThreshold()
       return
     }
 
@@ -457,6 +449,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this.linearizer = new Linearizer(indexers, { heads: this.system.heads, writers: this.activeWriters })
     this._addCheckpoints = !!(this.localWriter && this.localWriter.isIndexer)
+    this._updateAckThreshold()
 
     for (const { key, length } of this.system.heads) {
       await this._getWriterByKey(key, length, 0, false)
@@ -581,11 +574,9 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     // skip threshold check while acking
-    if (!this.closing && this._ackThreshold && !this._acking) {
-      const n = this._ackThreshold * this.linearizer.indexers.length
-
-      // await here would cause deadlock, fine to run in bg
-      if (this.linearizer.size >= (1 + Math.random()) * n) this._triggerAck()
+    if (!this.closing && this._ackTickThreshold && !this._acking && this._ackTick >= this._ackTickThreshold) {
+      if (this._ackTimer) this._ackTimer.asap()
+      else this._triggerAck()
     }
 
     if (this.updating === true) {
@@ -664,10 +655,24 @@ module.exports = class Autobase extends ReadyResource {
     return this.system.add(this.bootstrap, { isIndexer: true })
   }
 
+  _updateAckThreshold () {
+    if (this._ackThreshold === 0) return
+    if (this._ackTimer) this._ackTimer.bau()
+    this._ackTickThreshold = random2over1(this.linearizer.indexers.length * this._ackThreshold)
+  }
+
+  _resetAckTick () {
+    this._ackTick = 0
+    if (this._ackTimer) this._ackTimer.bau()
+  }
+
   async _applyUpdate (u) {
     await this._viewStore.flush()
 
     if (u.popped) this._undo(u.popped)
+
+    // if anything was indexed reset the ticks
+    if (u.indexed.length) this._resetAckTick()
 
     // make sure the latest changes is reflected on the system...
     await this.system.update()
@@ -695,6 +700,12 @@ module.exports = class Autobase extends ReadyResource {
     for (i = u.shared; i < u.length; i++) {
       const indexed = i < u.indexed.length
       const node = indexed ? u.indexed[i] : u.tip[i - u.indexed.length]
+
+      if (node.writer === this.localWriter) {
+        this._resetAckTick()
+      } else if (!indexed) {
+        this._ackTick++
+      }
 
       batch++
       this.system.addHead(node)
@@ -885,4 +896,8 @@ function isAutobaseMessage (msg) {
 
 function compareNodes (a, b) {
   return b4a.compare(a.key, b.key)
+}
+
+function random2over1 (n) {
+  return Math.floor(n + Math.random() * n)
 }
