@@ -244,15 +244,13 @@ test('autoack - value beneath null values', async t => {
   t.plan(6)
 
   const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 10, ackThreshold: 0 })
-
   const unreplicate = replicate([a, b])
   t.teardown(unreplicate)
 
   await addWriter(a, b)
   await sync([a, b])
-  b.append(null)
-  b.append('b0')
   await b.append(null)
+  await b.append('b0')
   await sync([a, b])
 
   t.is(a.local.length, 1)
