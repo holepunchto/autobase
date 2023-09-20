@@ -299,8 +299,11 @@ module.exports = class Autobase extends ReadyResource {
 
   _append (value) {
     // if prev value is an ack that hasnt been flushed, skip it
-    if (this._appending.length > 0 && this._appending[this._appending.length - 1] === null) {
-      this._appending.pop()
+    if (this._appending.length > 0) {
+      if (value === null) return
+      if (this._appending[this._appending.length - 1] === null) {
+        this._appending.pop()
+      }
     }
     this._appending.push(value)
   }
