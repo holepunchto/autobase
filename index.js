@@ -37,14 +37,15 @@ module.exports = class Autobase extends ReadyResource {
     this.bootstrap = bootstrap ? toKey(bootstrap) : null
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
+    this.encryptionKey = handlers.encryptionKey || null
     this._primaryBootstrap = null
 
     if (this.bootstrap) {
-      this._primaryBootstrap = this.store.get({ key: this.bootstrap })
+      this._primaryBootstrap = this.store.get({ key: this.bootstrap, encryptionKey: this.encryptionKey })
       this.store = this.store.namespace(this._primaryBootstrap, { detach: false })
     }
 
-    this.local = Autobase.getLocalCore(this.store, handlers)
+    this.local = Autobase.getLocalCore(this.store, handlers, this.encryptionKey)
     this.localWriter = null
     this.activeWriters = new ActiveWriters()
     this.linearizer = null
@@ -139,7 +140,20 @@ module.exports = class Autobase extends ReadyResource {
 
   async _openPreSystem () {
     await this.store.ready()
+
     await this.local.ready()
+    await this.local.setUserData('referrer', this.key)
+
+    if (this.encryptionKey) {
+      await this.local.setUserData('autobase/encryption', this.encryptionKey)
+    } else {
+      this.encryptionKey = await this.local.getUserData('autobase/encryption')
+      if (this.encryptionKey) {
+        this.local.setEncryptionKey(this.encryptionKey)
+        // not needed but, just for good meassure
+        if (this._primaryBootstrap) this._primaryBootstrap.setEncryptionKey(this.encryptionKey)
+      }
+    }
 
     const sysCore = this.system.core._backingCore()
     await sysCore.ready()
@@ -327,8 +341,8 @@ module.exports = class Autobase extends ReadyResource {
     return best
   }
 
-  static getLocalCore (store, handlers) {
-    const opts = { ...handlers, exclusive: true, valueEncoding: messages.OplogMessage }
+  static getLocalCore (store, handlers, encryptionKey) {
+    const opts = { ...handlers, exclusive: true, valueEncoding: messages.OplogMessage, encryptionKey }
     return opts.keyPair ? store.get(opts) : store.get({ ...opts, name: 'local' })
   }
 
@@ -400,8 +414,8 @@ module.exports = class Autobase extends ReadyResource {
     const local = b4a.equals(key, this.local.key)
 
     const core = local
-      ? this.local.session({ valueEncoding: messages.OplogMessage })
-      : this.store.get({ key, valueEncoding: messages.OplogMessage })
+      ? this.local.session({ valueEncoding: messages.OplogMessage, encryptionKey: this.encryptionKey })
+      : this.store.get({ key, valueEncoding: messages.OplogMessage, encryptionKey: this.encryptionKey })
 
     const w = new Writer(this, core, length)
 
