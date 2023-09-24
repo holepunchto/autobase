@@ -27,10 +27,10 @@ test('basic - two writers', async t => {
 
   await confirm([base1, base2, base3])
 
-  t.is(base2.system.members.active, 3)
-  t.is(base2.system.members.active, base3.system.members.active)
-  t.is(base2.system.members.active, base2.activeWriters.size)
-  t.is(base3.system.members.active, base3.activeWriters.size)
+  t.is(base2.system.members, 3)
+  t.is(base2.system.members, base3.system.members)
+  t.is(base2.system.members, base2.activeWriters.size)
+  t.is(base3.system.members, base3.activeWriters.size)
 
   // tests skipped: fix with linearizer update - batching
 
@@ -69,7 +69,7 @@ test('basic - view', async t => {
   const block = { message: 'hello, world!' }
   await base.append(block)
 
-  t.is(base.system.members.active, 1)
+  t.is(base.system.members, 1)
   t.is(base.view.indexedLength, 1)
   t.alike(await base.view.get(0), block)
 })
@@ -80,7 +80,7 @@ test('basic - view with close', async t => {
   const block = { message: 'hello, world!' }
   await base.append(block)
 
-  t.is(base.system.members.active, 1)
+  t.is(base.system.members, 1)
   t.is(base.view.core.indexedLength, 1)
   t.alike(await base.view.core.get(0), block)
 
@@ -139,7 +139,7 @@ test('basic - compare views', async t => {
 
   await confirm(bases)
 
-  t.is(a.system.members.active, b.system.members.active)
+  t.is(a.system.members, b.system.members)
   t.is(a.view.indexedLength, b.view.indexedLength)
 
   await t.execution(compare(a, b))
@@ -293,19 +293,19 @@ test('basic - add 5 writers', async t => {
   await confirm(bases)
 
   t.is(a.activeWriters.size, 5)
-  t.is(a.system.members.active, 5)
+  t.is(a.system.members, 5)
 
   t.is(a.activeWriters.size, b.activeWriters.size)
-  t.is(a.system.members.active, b.system.members.active)
+  t.is(a.system.members, b.system.members)
 
   t.is(a.activeWriters.size, c.activeWriters.size)
-  t.is(a.system.members.active, c.system.members.active)
+  t.is(a.system.members, c.system.members)
 
   t.is(a.activeWriters.size, d.activeWriters.size)
-  t.is(a.system.members.active, d.system.members.active)
+  t.is(a.system.members, d.system.members)
 
   t.is(a.activeWriters.size, e.activeWriters.size)
-  t.is(a.system.members.active, e.system.members.active)
+  t.is(a.system.members, e.system.members)
 })
 
 test('basic - online minorities', async t => {
@@ -534,7 +534,7 @@ test('reindex', async t => {
   await addWriter(b, d)
   await confirm([b, c, d], { majority: 2 })
 
-  t.is(b.system.members.active, 4)
+  t.is(b.system.members, 4)
 
   // trigger reindex for a
   await replicateAndSync([a, b, c, d])
@@ -553,14 +553,14 @@ test('reindex', async t => {
   await addWriter(a, e)
   await confirm([a, b, c, e], { majority: 3 })
 
-  t.is(b.system.members.active, 5)
+  t.is(b.system.members, 5)
 
   // trigger reindex for a
   await replicateAndSync([a, b, c, d, e])
 
   t.is(a.system.heads.length, 2)
   t.is((await a.system.getIndexedInfo()).heads.length, 1, 'only one indexed head')
-  t.is(a.system.members.active, bases.length)
+  t.is(a.system.members, bases.length)
 
   t.not(a.view.indexedLength, a.view.length)
 
@@ -629,7 +629,7 @@ test('sequential restarts', async t => {
   t.is(indexedHeads.length, 1)
   t.alike(indexedHeads[0].key, bases[0].local.key)
 
-  t.is(bases[0].system.members.active, bases.length)
+  t.is(bases[0].system.members, bases.length)
 
   t.not(bases[0].view.indexedLength, 0)
   t.not(bases[0].view.indexedLength, bases[0].view.length)
@@ -673,7 +673,7 @@ test('basic - gc indexed nodes', async t => {
   await base.append({ message: '3' })
   await base.append({ message: '4' })
 
-  t.is(base.system.members.active, 1)
+  t.is(base.system.members, 1)
   t.is(base.view.indexedLength, 5)
   t.is(base.localWriter.nodes.size, 0)
 
