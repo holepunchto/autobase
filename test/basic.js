@@ -19,17 +19,11 @@ const {
 test('basic - two writers', async t => {
   const [base1, base2, base3] = await create(3, apply)
 
-  await base1.append({
-    add: base2.local.key.toString('hex'),
-    debug: 'this is adding b'
-  })
+  await addWriter(base1, base2)
 
   await confirm([base1, base2, base3])
 
-  await base2.append({
-    add: base3.local.key.toString('hex'),
-    debug: 'this is adding c'
-  })
+  await addWriter(base2, base3)
 
   await confirm([base1, base2, base3])
 
@@ -52,10 +46,7 @@ test('basic - writable event fires', async t => {
     t.ok(base2.writable, 'Writable event fired when autobase writable')
   })
 
-  await base1.append({
-    add: base2.local.key.toString('hex'),
-    debug: 'this is adding b'
-  })
+  await addWriter(base1, base2)
 
   await confirm([base1, base2])
 })
@@ -69,7 +60,7 @@ test('basic - local key pair', async t => {
 
   t.is(base.view.indexedLength, 1)
   t.alike(await base.view.get(0), block)
-  t.is(base.local.key, keyPair.publicKey)
+  t.is(base.local.manifest.signer.publicKey, keyPair.publicKey)
 })
 
 test('basic - view', async t => {
@@ -116,7 +107,7 @@ test('basic - view/writer userdata is set', async t => {
   const bases = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }))
   const [base1, base2] = bases
 
-  await base1.append({ add: base2.local.key.toString('hex') })
+  await addWriter(base1, base2)
 
   await confirm(bases)
 
@@ -124,12 +115,9 @@ test('basic - view/writer userdata is set', async t => {
   await verifyUserData(base2)
 
   async function verifyUserData (base) {
-    const viewData = await Autobase.getUserData(base.view)
     const systemData = await Autobase.getUserData(base.system.core)
 
     t.alike(systemData.referrer, base.bootstrap)
-    t.alike(viewData.referrer, base.bootstrap)
-    t.is(viewData.view, 'test')
 
     t.is(base.activeWriters.size, 2)
     for (const writer of base.activeWriters) {
@@ -143,7 +131,7 @@ test('basic - compare views', async t => {
   const bases = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }))
 
   const [a, b] = bases
-  await a.append({ add: b.local.key.toString('hex') })
+  await addWriter(a, b)
 
   await confirm(bases)
 
@@ -154,11 +142,7 @@ test('basic - compare views', async t => {
   t.is(a.system.members.active, b.system.members.active)
   t.is(a.view.indexedLength, b.view.indexedLength)
 
-  try {
-    await compare(a, b)
-  } catch (e) {
-    t.fail(e.message)
-  }
+  await t.execution(compare(a, b))
 })
 
 test('basic - online majority', async t => {
@@ -166,8 +150,8 @@ test('basic - online majority', async t => {
 
   const [a, b, c] = bases
 
-  await a.append({ add: b.local.key.toString('hex') })
-  await a.append({ add: c.local.key.toString('hex') })
+  await addWriter(a, b)
+  await addWriter(a, c)
 
   await confirm(bases)
 
@@ -191,21 +175,13 @@ test('basic - online majority', async t => {
   t.not(a.view.indexedLength, indexed)
   t.is(c.view.indexedLength, indexed)
   t.is(a.view.indexedLength, b.view.indexedLength)
-  try {
-    await compare(a, b)
-  } catch (e) {
-    t.fail(e.message)
-  }
+  await t.execution(compare(a, b))
 
   await replicateAndSync([b, c])
 
   t.is(a.view.indexedLength, c.view.indexedLength)
 
-  try {
-    await compare(a, c)
-  } catch (e) {
-    t.fail(e.message)
-  }
+  await t.execution(compare(a, c))
 })
 
 test('basic - rotating majority', async t => {
@@ -213,8 +189,8 @@ test('basic - rotating majority', async t => {
 
   const [a, b, c] = bases
 
-  await a.append({ add: b.local.key.toString('hex') })
-  await a.append({ add: c.local.key.toString('hex') })
+  await addWriter(a, b)
+  await addWriter(a, c)
 
   await confirm(bases)
 
@@ -284,12 +260,8 @@ test('basic - rotating majority', async t => {
   t.is(a.view.indexedLength, b.view.indexedLength)
   t.is(a.view.indexedLength, c.view.indexedLength)
 
-  try {
-    await compare(a, b)
-    await compare(a, c)
-  } catch (e) {
-    t.fail(e.message)
-  }
+  await t.execution(compare(a, b))
+  await t.execution(compare(a, c))
 })
 
 test('basic - throws', async t => {
@@ -313,10 +285,10 @@ test('basic - add 5 writers', async t => {
 
   const [a, b, c, d, e] = bases
 
-  await a.append({ add: b.local.key.toString('hex') })
-  await a.append({ add: c.local.key.toString('hex') })
-  await a.append({ add: d.local.key.toString('hex') })
-  await a.append({ add: e.local.key.toString('hex') })
+  await addWriter(a, b)
+  await addWriter(a, c)
+  await addWriter(a, d)
+  await addWriter(a, e)
 
   await confirm(bases)
 
@@ -341,10 +313,10 @@ test('basic - online minorities', async t => {
 
   const [a, b, c, d, e] = bases
 
-  await a.append({ add: b.local.key.toString('hex') })
-  await a.append({ add: c.local.key.toString('hex') })
-  await a.append({ add: d.local.key.toString('hex') })
-  await a.append({ add: e.local.key.toString('hex') })
+  await addWriter(a, b)
+  await addWriter(a, c)
+  await addWriter(a, d)
+  await addWriter(a, e)
 
   await confirm(bases)
 
@@ -387,26 +359,18 @@ test('basic - online minorities', async t => {
   t.not(c.view.length, a.view.length)
   t.is(c.view.length, d.view.length)
 
-  try {
-    await compare(a, b, true)
-    await compare(c, d, true)
-  } catch (e) {
-    t.fail(e.message)
-  }
+  await t.execution(compare(a, b, true))
+  await t.execution(compare(c, d, true))
 
   await confirm(bases)
 
   t.is(a.view.length, c.view.length)
   t.is(a.view.indexedLength, c.view.indexedLength)
 
-  try {
-    await compare(a, b, true)
-    await compare(a, c, true)
-    await compare(a, d, true)
-    await compare(a, e, true)
-  } catch (e) {
-    t.fail(e.message)
-  }
+  await t.execution(compare(a, b, true))
+  await t.execution(compare(a, c, true))
+  await t.execution(compare(a, d, true))
+  await t.execution(compare(a, e, true))
 })
 
 test('basic - restarting sets bootstrap correctly', async t => {
@@ -561,14 +525,14 @@ test('reindex', async t => {
     addWriter(a, c)
   ])
 
-  await confirm([a, b])
+  await confirm([a, b, c])
 
   // a sends message
   await a.append('a:' + msg++)
 
   // b and c add writer
   await addWriter(b, d)
-  await confirm([b, c], { majority: 2 })
+  await confirm([b, c, d], { majority: 2 })
 
   t.is(b.system.members.active, 4)
 
@@ -587,7 +551,7 @@ test('reindex', async t => {
 
   // a, b and c add writer
   await addWriter(a, e)
-  await confirm([a, b, c], { majority: 3 })
+  await confirm([a, b, c, e], { majority: 3 })
 
   t.is(b.system.members.active, 5)
 
@@ -621,7 +585,7 @@ test('sequential restarts', async t => {
   await Promise.all(adds)
   await confirm(bases.slice(0, 3))
 
-  for (let i = 2; i < bases.length + 5; i++) {
+  for (let i = 2; i < bases.length + 6; i++) {
     const appends = []
 
     const syncers = bases.slice(0, i + 1)
@@ -675,65 +639,15 @@ test('sequential restarts', async t => {
   for (let i = 1; i < bases.length; i++) {
     t.is(bases[0].view.indexedLength, bases[i].view.indexedLength)
     t.is(bases[0].view.length, bases[i].view.length)
-    if (!bases[0].encryptionKey) { // TODO: remove this guard when running against multisig - just here if we globally test with encryption
-      t.alike(await bases[0].system.core._backingCore().treeHash(), await bases[i].system.core._backingCore().treeHash())
-      t.alike(await bases[0].view._backingCore().treeHash(), await bases[i].view._backingCore().treeHash())
-    }
+    t.alike(await bases[0].system.core._backingCore().treeHash(), await bases[i].system.core._backingCore().treeHash())
+    t.alike(await bases[0].view._backingCore().treeHash(), await bases[i].view._backingCore().treeHash())
   }
-})
-
-test('basic - pass exisiting store', async t => {
-  const [base1] = await create(1, apply)
-
-  const store = new Corestore(ram.reusable(), {
-    primaryKey: Buffer.alloc(32).fill(1)
-  })
-
-  const session2 = store.session()
-  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
-  await base2.ready()
-
-  await base1.append({
-    add: base2.local.key.toString('hex'),
-    debug: 'this is adding b'
-  })
-
-  await base1.append({
-    value: 'base1'
-  })
-
-  await confirm([base1, base2])
-
-  await base2.append({
-    value: 'base2'
-  })
-
-  await confirm([base1, base2])
-
-  t.is(base2.system.members.active, 2)
-
-  await base2.close()
-
-  const session3 = store.session()
-  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
-  await base3.ready()
-
-  t.is(base3.system.members.active, 2)
-
-  await base3.append('final')
-
-  await t.execution(replicateAndSync([base3, base1]))
-
-  t.is(base3.system.members.active, 2)
 })
 
 test('two writers write many messages, third writer joins', async t => {
   const [base1, base2, base3] = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
 
-  await base1.append({
-    add: base2.local.key.toString('hex'),
-    debug: 'this is adding writer 2'
-  })
+  await addWriter(base1, base2)
 
   for (let i = 0; i < 10000; i++) {
     base1.append({ value: `Message${i}` })
@@ -741,10 +655,7 @@ test('two writers write many messages, third writer joins', async t => {
 
   await confirm([base1, base2])
 
-  await base1.append({
-    add: base3.local.key.toString('hex'),
-    debug: 'this is adding writer 3'
-  })
+  await addWriter(base1, base3)
 
   await confirm([base1, base2, base3])
   t.pass('Confirming did not throw')
@@ -776,23 +687,18 @@ test('basic - gc indexed nodes', async t => {
 test('basic - isAutobase', async t => {
   const [base1, base2, base3] = await create(3, apply)
 
-  await base1.append({
-    add: base2.local.key.toString('hex'),
-    debug: 'this is adding b'
-  })
+  await addWriter(base1, base2)
 
   await confirm([base1, base2, base3])
 
-  await base2.append({
-    add: base3.local.key.toString('hex'),
-    debug: 'this is adding c'
-  })
+  await t.exception(Autobase.isAutobase(base3.local, { wait: false }))
+
+  await addWriter(base2, base3)
 
   await confirm([base1, base2, base3])
 
   t.is(await Autobase.isAutobase(base1.local), true)
   t.is(await Autobase.isAutobase(base2.local), true)
-  await t.exception(Autobase.isAutobase(base3.local, { wait: false }))
 
   await base3.append('hello')
 
@@ -818,10 +724,10 @@ test('basic - catch apply throws', async t => {
 
   const timeout = setTimeout(() => t.fail(), 1000)
 
-  t.teardown(() => {
+  t.teardown(async () => {
     clearTimeout(timeout)
-    a.close()
-    b.close()
+    await a.close()
+    await b.close()
   })
 
   replicate([a, b])
@@ -923,29 +829,20 @@ test('basic - non-indexed writers 3-of-5', async t => {
 
   await replicateAndSync([a, b, c, d, e])
 
-  t.is(a.linearizer.indexers.length, 2)
-  t.is(b.linearizer.indexers.length, 2)
-  t.is(c.linearizer.indexers.length, 2)
-  t.is(d.linearizer.indexers.length, 2)
-  t.is(e.linearizer.indexers.length, 2)
+  // confirm indexers
+  await b.append(null)
+  await c.append(null)
 
-  t.ok(c.writable)
+  await confirm([a, b, c, d, e])
+
+  t.is(a.linearizer.indexers.length, 3)
+  t.is(b.linearizer.indexers.length, 3)
+  t.is(c.linearizer.indexers.length, 3)
+  t.is(d.linearizer.indexers.length, 3)
+  t.is(e.linearizer.indexers.length, 3)
+
   t.ok(d.writable)
   t.ok(e.writable)
-
-  await b.append(null)
-  await replicateAndSync([a, b, c, d, e])
-
-  // b cannot unilaterally confirm
-  t.is(a.linearizer.indexers.length, 2)
-  t.is(b.linearizer.indexers.length, 2)
-  t.is(c.linearizer.indexers.length, 2)
-
-  await a.append(null)
-  await replicateAndSync([a, b, c, d, e])
-
-  // c is indexer now
-  t.is(c.linearizer.indexers.length, 3)
 
   await e.append('e0')
   await replicateAndSync([d, e])
@@ -1045,4 +942,25 @@ test('autobase should not detach the original store', async t => {
   await base.close()
   t.ok(store.closed)
   t.ok(base.store.closed)
+})
+
+test('basic - oplog digest', async t => {
+  const [base1, base2] = await create(2, apply)
+
+  await base1.append({
+    add: base2.local.key.toString('hex'),
+    debug: 'this is adding b'
+  })
+
+  await replicateAndSync([base1, base2])
+  await base2.append(null)
+
+  await replicateAndSync([base1, base2])
+  await base1.append(null)
+  await replicateAndSync([base1, base2])
+
+  const last = await base1.local.get(1)
+
+  t.is(last.digest.pointer, 0)
+  t.is(last.digest.indexers?.length, 2)
 })

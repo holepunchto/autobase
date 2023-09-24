@@ -3,7 +3,7 @@ const test = require('brittle')
 const {
   create,
   replicateAndSync,
-  addWriter,
+  addWriterAndSync,
   apply,
   confirm,
   compare
@@ -19,7 +19,7 @@ test('simple 2', async t => {
   let ai = 0
   let bi = 0
 
-  await addWriter(a, b)
+  await addWriterAndSync(a, b)
   await replicateAndSync(bases)
 
   await a.append('a' + ai++)
@@ -37,11 +37,7 @@ test('simple 2', async t => {
   t.alike(a.view.indexedLength, 1)
   t.alike(b.view.indexedLength, 1)
 
-  try {
-    await compare(a, b)
-  } catch (e) {
-    t.fail(e.message)
-  }
+  await t.execution(compare(a, b))
 
   t.is(a.linearizer.tails.size, 1)
 })
@@ -61,8 +57,8 @@ test('simple 3', async t => {
   let bi = 0
   let ci = 0
 
-  await addWriter(a, b)
-  await addWriter(a, c)
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c)
 
   await replicateAndSync(bases)
 
@@ -88,12 +84,8 @@ test('simple 3', async t => {
   t.alike(c.view.indexedLength, b.view.indexedLength)
   t.alike(a.view.indexedLength, c.view.indexedLength)
 
-  try {
-    await compare(a, b)
-    await compare(a, c)
-  } catch (e) {
-    t.fail(e.message)
-  }
+  await t.execution(compare(a, b))
+  await t.execution(compare(a, c))
 
   t.is(a.linearizer.tails.size, 1)
 })
@@ -124,8 +116,8 @@ test.skip('convergence', async t => {
   let bi = 0
   let ci = 0
 
-  await addWriter(a, b)
-  await addWriter(a, c)
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c)
 
   await confirm(bases)
 
@@ -179,12 +171,8 @@ test.skip('convergence', async t => {
 
   t.is(a.linearizer.tails.size, 1)
 
-  try {
-    await compare(a, b)
-    await compare(a, c)
-  } catch (e) {
-    t.fail(e.message)
-  }
+  await t.execution(compare(a, b))
+  await t.execution(compare(a, c))
 })
 
 /*
@@ -211,10 +199,10 @@ test.skip('inner majority', async t => {
   let di = 0
   let ei = 0
 
-  await addWriter(a, b)
-  await addWriter(a, c)
-  await addWriter(a, d)
-  await addWriter(a, e)
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c)
+  await addWriterAndSync(a, d)
+  await addWriterAndSync(a, e)
 
   await confirm(bases)
 
@@ -271,12 +259,18 @@ test('majority alone - convergence', async t => {
   let ci = 0
   let di = 0
 
-  await addWriter(a, b)
-  await addWriter(a, c)
-  await addWriter(a, d)
-  await addWriter(a, e)
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c)
+  await addWriterAndSync(a, d)
+  await addWriterAndSync(a, e)
 
   await confirm(bases)
+
+  t.is(a.linearizer.indexers.length, 5)
+  t.is(b.linearizer.indexers.length, 5)
+  t.is(c.linearizer.indexers.length, 5)
+  t.is(d.linearizer.indexers.length, 5)
+  t.is(e.linearizer.indexers.length, 5)
 
   // --- write ---
 
@@ -298,12 +292,8 @@ test('majority alone - convergence', async t => {
   await d.append('d' + di++)
   await replicateAndSync([b, c, d])
 
-  try {
-    await compare(b, c)
-    await compare(b, d)
-  } catch (e) {
-    t.fail(e.message)
-  }
+  await t.execution(compare(b, c))
+  await t.execution(compare(b, d))
 
   t.is(b.view.indexedLength, 2)
   t.is(c.view.indexedLength, 2)
@@ -328,7 +318,7 @@ test('add writer', async t => {
 
   await t.execution(compare(a, b))
 
-  await addWriter(a, b)
+  await addWriterAndSync(a, b)
   await replicateAndSync([a, b])
 
   t.is(a.view.indexedLength, 1)
@@ -342,7 +332,7 @@ test('add writer', async t => {
 
   await t.execution(compare(a, c))
 
-  await addWriter(a, c)
+  await addWriterAndSync(a, c)
 
   await b.append('b' + bi++)
   await a.append('a' + ai++)
@@ -389,10 +379,10 @@ test('majority alone - non-convergence', async t => {
   let ci = 0
   let di = 0
 
-  await addWriter(a, b)
-  await addWriter(a, c)
-  await addWriter(a, d)
-  await addWriter(a, e)
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c)
+  await addWriterAndSync(a, d)
+  await addWriterAndSync(a, e)
 
   await replicateAndSync(bases)
 
@@ -470,10 +460,10 @@ test('double fork', async t => {
   let di = 0
   let ei = 0
 
-  await addWriter(a, b)
-  await addWriter(a, c)
-  await addWriter(a, d)
-  await addWriter(a, e)
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c)
+  await addWriterAndSync(a, d)
+  await addWriterAndSync(a, e)
 
   await confirm(bases)
 

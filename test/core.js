@@ -6,6 +6,7 @@ const {
   create,
   apply,
   addWriter,
+  confirm,
   replicateAndSync
 } = require('./helpers')
 
@@ -64,6 +65,7 @@ test('core - seek multi writer', async t => {
   const [a, b] = await create(2, scopedApply, store => store.get('test'))
 
   await addWriter(a, b)
+  await confirm([a, b])
 
   await a.append('hello')
   await replicateAndSync([a, b])

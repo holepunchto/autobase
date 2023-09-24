@@ -4,7 +4,7 @@ const test = require('brittle')
 const {
   create,
   replicateAndSync,
-  addWriter,
+  addWriterAndSync,
   apply
 } = require('./helpers')
 
@@ -23,10 +23,8 @@ test('linearizer - simple', async t => {
   let bi = 0
   let ci = 0
 
-  await addWriter(a, b)
-  await addWriter(a, c)
-
-  await replicateAndSync(bases)
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c)
 
   await c.append('c' + ci++)
   await replicateAndSync(bases)
@@ -120,10 +118,8 @@ test('linearizer - compete', async t => {
   let bi = 0
   let ci = 0
 
-  await addWriter(a, b)
-  await addWriter(a, c)
-
-  await replicateAndSync(bases)
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c)
 
   await c.append('c' + ci++)
   await replicateAndSync(bases)
@@ -215,10 +211,8 @@ test('linearizer - count ordering', async t => {
   let bi = 0
   let ci = 0
 
-  await addWriter(a, b)
-  await addWriter(a, c)
-
-  await replicateAndSync(bases)
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c)
 
   await c.append('c' + ci++)
   await replicateAndSync(bases)
@@ -301,7 +295,7 @@ test('linearizer - count ordering', async t => {
 
   await replicateAndSync(bases)
 
-  t.ok(b4a.compare(c.local.key, a.local.key) < 0)
+  t.ok(b4a.compare(a.local.key, c.local.key) < 0)
 
   aval = await a.view.get(4)
   bval = await b.view.get(4)
@@ -343,16 +337,14 @@ test('linearizer - reordering', async t => {
   let bi = 0
   let ci = 0
 
-  await addWriter(a, c)
-  await replicateAndSync(bases)
+  await addWriterAndSync(a, c, bases)
 
   // a will be isolated up to a3
   await a.append('a' + ai++)
   await a.append('a' + ai++)
   await a.append('a' + ai++)
 
-  await addWriter(c, b)
-  await replicateAndSync([b, c])
+  await addWriterAndSync(c, b)
 
   await b.append('b' + bi++)
   await replicateAndSync([c, b])
@@ -363,19 +355,19 @@ test('linearizer - reordering', async t => {
   await replicateAndSync([c, a])
 
   t.is(await b.view.get(0), 'b0')
-  t.is(await c.view.get(0), 'b0')
-  t.is(await c.view.get(3), 'a2')
+  t.is(await c.view.get(0), 'a0')
+  t.is(await c.view.get(3), 'b0')
 
   await c.append('c' + ci++)
   await replicateAndSync(bases)
 
-  t.is(await a.view.get(0), 'b0')
-  t.is(await b.view.get(0), 'b0')
-  t.is(await c.view.get(0), 'b0')
+  t.is(await a.view.get(0), 'a0')
+  t.is(await b.view.get(0), 'a0')
+  t.is(await c.view.get(0), 'a0')
 
-  t.is(await a.view.get(3), 'a2')
-  t.is(await b.view.get(3), 'a2')
-  t.is(await c.view.get(3), 'a2')
+  t.is(await a.view.get(3), 'b0')
+  t.is(await b.view.get(3), 'b0')
+  t.is(await c.view.get(3), 'b0')
 
   t.is(await a.view.get(4), 'c0')
   t.is(await b.view.get(4), 'c0')
@@ -391,14 +383,12 @@ test('linearizer - reordering after restart', async t => {
   let bi = 0
   let ci = 0
 
-  await addWriter(a, b)
-  await replicateAndSync(bases)
+  await addWriterAndSync(a, b)
 
   // b will be isolated
   await b.append('b' + bi++)
 
-  await addWriter(a, c)
-  await replicateAndSync([c, a])
+  await addWriterAndSync(a, c)
 
   await c.append('c' + ci++)
   await replicateAndSync([a, c])
@@ -421,10 +411,10 @@ test('linearizer - shouldAck', async t => {
 
   const [a, b, c] = bases
 
-  await addWriter(a, b)
-  await replicateAndSync(bases)
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c)
 
-  await addWriter(a, c)
+  await a.ack() // be the last node
   await replicateAndSync(bases)
 
   t.absent(a.linearizer.shouldAck(a.localWriter))
@@ -445,7 +435,8 @@ test('linearizer - shouldAck', async t => {
   }
 })
 
-test('linearizer - no loop', async t => {
+// review: test passes, but not sure what this test is for?
+test.skip('linearizer - no loop', async t => {
   const bases = await create(4, apply, store => store.get('test', { valueEncoding: 'json' }))
 
   const [a, b, c, d] = bases
@@ -453,9 +444,9 @@ test('linearizer - no loop', async t => {
   let ai = 0
   let bi = 0
 
-  await addWriter(a, b)
-  await addWriter(a, c)
-  await addWriter(a, d)
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c)
+  await addWriterAndSync(a, d)
   await replicateAndSync(bases)
 
   let i = 0

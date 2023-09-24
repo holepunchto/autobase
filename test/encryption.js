@@ -5,10 +5,6 @@ const b4a = require('b4a')
 
 const Autobase = require('..')
 
-const {
-  apply
-} = require('./helpers')
-
 test('encryption - basic', async t => {
   const store = new Corestore(ram.reusable())
   const base = new Autobase(store, { apply, open, ackInterval: 0, ackThreshold: 0, encryptionKey: b4a.alloc(32).fill('secret') })
@@ -18,6 +14,8 @@ test('encryption - basic', async t => {
   await base.append('you should not see me')
 
   t.alike(await base.view.get(0), 'you should not see me')
+  t.is(base.view._source.signedLength, 1)
+  t.is(base.system.core._source.signedLength, 4)
 
   let found = false
   for (const core of store.cores.values()) {
@@ -70,4 +68,10 @@ test('encryption - restart', async t => {
 
 function open (store) {
   return store.get('view', { valueEncoding: 'json' })
+}
+
+async function apply (batch, view, base) {
+  for (const { value } of batch) {
+    await view.append(value.toString())
+  }
 }
