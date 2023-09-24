@@ -4,7 +4,6 @@ const debounceify = require('debounceify')
 const c = require('compact-encoding')
 const safetyCatch = require('safety-catch')
 const assert = require('nanoassert')
-const crypto = require('hypercore-crypto')
 
 const Linearizer = require('./lib/linearizer')
 const AutoStore = require('./lib/store')
@@ -41,7 +40,7 @@ module.exports = class Autobase extends ReadyResource {
     this._primaryBootstrap = null
 
     if (this.bootstrap) {
-      this._primaryBootstrap = this.store.get({ key: this.bootstrap, encryptionKey: this.encryptionKey })
+      this._primaryBootstrap = this.store.get({ key: this.bootstrap, compat: false, encryptionKey: this.encryptionKey })
       this.store = this.store.namespace(this._primaryBootstrap, { detach: false })
     }
 
@@ -61,6 +60,7 @@ module.exports = class Autobase extends ReadyResource {
     this._maybeUpdateDigest = true
     this._needsWakeup = true
     this._addCheckpoints = false
+    this._firstCheckpoint = true
 
     this._updates = []
     this._handlers = handlers || {}
@@ -95,7 +95,10 @@ module.exports = class Autobase extends ReadyResource {
     this._ackTimer = null
     this._acking = false
 
-    // view opens after system is loaded
+    this._pendingCheckpoints = new Map()
+    this._needsFlush = new Set()
+    this._initialSystem = null
+
     this.system = new SystemView(this._viewStore.get({ name: '_system', exclusive: true, cache: true }))
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
 
@@ -138,6 +141,24 @@ module.exports = class Autobase extends ReadyResource {
     return nodes.sort(compareNodes)
   }
 
+  // any pending indexers
+  hasPendingIndexers () {
+    if (this.system.pendingIndexers.length > 0) return true
+    return this.hasUnflushedIndexers()
+  }
+
+  // confirmed indexers that aren't in linearizer yet
+  hasUnflushedIndexers () {
+    if (this.linearizer.indexers.length !== this.system.indexers.length) return true
+
+    for (let i = 0; i < this.system.indexers.length; i++) {
+      const w = this.linearizer.indexers[i]
+      if (!b4a.equals(w.core.key, this.system.indexers[i].key)) return true
+    }
+
+    return false
+  }
+
   async _openPreSystem () {
     await this.store.ready()
 
@@ -155,13 +176,32 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
-    const sysCore = this.system.core._backingCore()
-    await sysCore.ready()
+    if (this._primaryBootstrap) {
+      await this._primaryBootstrap.ready()
+    }
 
-    const bootstrapping = sysCore.length < 2 // record 0 is just metadata...
+    const { bootstrap, system } = await this._loadSystemInfo()
 
-    if (bootstrapping && !this.bootstrap) {
-      this.bootstrap = this.local.key // new autobase!
+    this.bootstrap = bootstrap
+    this._initialSystem = system
+
+    await this._makeLinearizer(system)
+  }
+
+  async _loadSystemInfo () {
+    const pointer = await this.local.getUserData('autobase/system')
+    const bootstrap = this.bootstrap || (await this.local.getUserData('referrer')) || this.local.key
+    if (!pointer) return { bootstrap, system: null }
+
+    const { key, length } = c.decode(messages.SystemPointer, pointer)
+    const encryptionKey = this.encryptionKey
+    const system = length ? new SystemView(this.store.get({ key, exclusive: false, cache: true, compat: false, encryptionKey }), length) : null
+
+    if (system) await system.ready()
+
+    return {
+      bootstrap,
+      system
     }
   }
 
@@ -169,11 +209,20 @@ module.exports = class Autobase extends ReadyResource {
     this._presystem = this._openPreSystem()
     await this._presystem
 
+    await this._viewStore.flush()
+
     // see if we can load from indexer checkpoint
     await this.system.ready()
 
-    // reindex to load writers
-    await this._reindex(null)
+    if (this._initialSystem) {
+      await this._initialSystem.close()
+      this._initialSystem = null
+    }
+
+    // load previous digest if available
+    if (this.localWriter && !this.system.bootstrapping) {
+      await this._updateDigest()
+    }
 
     if (this.localWriter && this._ackInterval) this._startAckTimer()
   }
@@ -231,6 +280,15 @@ module.exports = class Autobase extends ReadyResource {
     await this._wakeup.flush()
   }
 
+  async _advanceSystemPointer () {
+    await this.local.ready() // todo: remove
+    await this.local.setUserData('autobase/system', c.encode(messages.SystemPointer, {
+      key: this.system.core.key,
+      length: this.system.core._source.signedLength,
+      signature: this.system.core._source.core.session.core.tree.signature
+    }))
+  }
+
   _startAckTimer () {
     if (this._ackTimer) return
     this._ackTimer = new Timer(this.ack.bind(this), this._ackInterval)
@@ -252,6 +310,7 @@ module.exports = class Autobase extends ReadyResource {
 
     try {
       await this._bump()
+      if (this._acking) await this._bump() // if acking just rebump incase it was triggered from above...
     } catch (err) {
       if (this.closing) return false
       throw err
@@ -274,21 +333,44 @@ module.exports = class Autobase extends ReadyResource {
 
   _onwakeup () {
     this._needsWakeup = true
-    this._bump()
+    this._bump().catch(safetyCatch)
+  }
+
+  _isPending () {
+    for (const key of this.system.pendingIndexers) {
+      if (b4a.equals(key, this.local.key)) return true
+    }
+    return false
   }
 
   async ack () {
-    if (this.localWriter === null || !this.localWriter.isIndexer || this._acking || this.closing) return
+    if (this.localWriter === null) return
+
+    const isPendingIndexer = this._isPending()
+    const isIndexer = this.localWriter.isIndexer || isPendingIndexer
+
+    if (!isIndexer || this._acking || this.closing) return
 
     this._acking = true
 
-    await this.update()
+    try {
+      await this._bump()
+    } catch (err) {
+      if (!this.closing) throw err
+    }
 
-    if (!this.closing && this.linearizer.shouldAck(this.localWriter)) {
-      await this.append(null)
+    const unflushed = this.hasUnflushedIndexers()
+    if (!this.closing && (isPendingIndexer || this.linearizer.shouldAck(this.localWriter, unflushed))) {
+      try {
+        await this.append(null)
+      } catch (err) {
+        if (!this.closing) throw err
+      }
 
-      this._updateAckThreshold()
-      this._bumpAckTimer()
+      if (!this.closing) {
+        this._updateAckThreshold()
+        this._bumpAckTimer()
+      }
     }
 
     this._acking = false
@@ -342,7 +424,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   static getLocalCore (store, handlers, encryptionKey) {
-    const opts = { ...handlers, exclusive: true, valueEncoding: messages.OplogMessage, encryptionKey }
+    const opts = { ...handlers, compat: false, exclusive: true, valueEncoding: messages.OplogMessage, encryptionKey }
     return opts.keyPair ? store.get(opts) : store.get({ ...opts, name: 'local' })
   }
 
@@ -367,8 +449,21 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  getNamespace (key, core) {
+    const w = this.activeWriters.get(key)
+    if (!w) return null
+
+    const namespace = w.deriveNamespace(core.name)
+    const publicKey = w.core.manifest.signer.publicKey
+
+    return {
+      namespace,
+      publicKey
+    }
+  }
+
   // note: not parallel safe!
-  async _getWriterByKey (key, len, seen, allowGC) {
+  async _getWriterByKey (key, len, seen, allowGC, system) {
     let w = this.activeWriters.get(key)
     if (w !== null) {
       w.seen(seen)
@@ -376,7 +471,8 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     if (len === -1) {
-      const writerInfo = await this.system.get(key)
+      const sys = system || this.system
+      const writerInfo = await sys.get(key)
 
       // TODO: this indirectly disables backwards-dag-walk - we should reenable when FF is enabled
       //       this is because the remote writer might not have our next heads in mem if it knows
@@ -410,67 +506,90 @@ module.exports = class Autobase extends ReadyResource {
     return Promise.all(p)
   }
 
-  _makeWriter (key, length) {
+  _makeWriterCore (key) {
     const local = b4a.equals(key, this.local.key)
 
     const core = local
       ? this.local.session({ valueEncoding: messages.OplogMessage, encryptionKey: this.encryptionKey })
-      : this.store.get({ key, valueEncoding: messages.OplogMessage, encryptionKey: this.encryptionKey })
+      : this.store.get({ key, compat: false, writable: false, valueEncoding: messages.OplogMessage, encryptionKey: this.encryptionKey })
 
+    return core
+  }
+
+  _makeWriter (key, length) {
+    const core = this._makeWriterCore(key)
     const w = new Writer(this, core, length)
 
-    if (local) {
+    if (core.writable) {
       this.localWriter = w
       if (this._ackInterval) this._startAckTimer()
       this.emit('writable')
     } else {
       core.on('append', this._onremotewriterchangeBound)
       core.on('download', this._onremotewriterchangeBound)
+      core.on('manifest', this._onremotewriterchangeBound)
     }
 
     return w
   }
 
-  async _reindex (nodes) {
+  _updateLinearizer (indexers, heads) {
+    this.linearizer = new Linearizer(indexers, { heads, writers: this.activeWriters })
+    this._addCheckpoints = !!(this.localWriter && (this.localWriter.isIndexer || this._isPending()))
+    this._maybeUpdateDigest = true
+    this._updateAckThreshold()
+  }
+
+  _migrateViews () {
+    this._viewStore.migrate(this.linearizer.indexers)
+  }
+
+  async _bootstrapLinearizer () {
+    const bootstrap = this._makeWriter(this.bootstrap, 0)
+
+    this.activeWriters.add(bootstrap)
+    this._checkWriters.push(bootstrap)
+    bootstrap.isIndexer = true
+    await bootstrap.ready()
+
+    this._updateLinearizer([bootstrap], [])
+    this._updateDigest([bootstrap])
+  }
+
+  async _makeLinearizer (sys) {
     this._maybeUpdateDigest = true
 
-    if (this.system.bootstrapping) {
-      const bootstrap = this._makeWriter(this.bootstrap, 0)
-
-      this.activeWriters.add(bootstrap)
-      this._checkWriters.push(bootstrap)
-      bootstrap.isIndexer = true
-      await bootstrap.ready()
-
-      this.linearizer = new Linearizer([bootstrap], { heads: [], writers: this.activeWriters })
-      this._addCheckpoints = !!(this.localWriter && this.localWriter.isIndexer)
-      this._updateAckThreshold()
-      return
+    if (sys === null) {
+      return this._bootstrapLinearizer()
     }
+
+    // always load local to see if relevant...
+    await this._getWriterByKey(this.local.key, -1, 0, false, sys)
+
+    const indexers = []
+
+    for (const head of sys.indexers) {
+      const writer = await this._getWriterByKey(head.key, head.length, 0, false, sys)
+      writer.isIndexer = true
+      indexers.push(writer)
+    }
+
+    this._updateLinearizer(indexers, sys.heads)
+
+    for (const { key, length } of sys.heads) {
+      await this._getWriterByKey(key, length, 0, false, sys)
+    }
+  }
+
+  async _reindex (nodes) {
+    this._maybeUpdateDigest = true
 
     if (nodes) {
       this._undo(this._updates.length) // undo all!
       await this.system.update()
     }
 
-    // always load local to see if relevant...
-    await this._getWriterByKey(this.local.key, -1, 0, false)
-
-    const indexers = []
-
-    for (const head of this.system.indexers) {
-      const writer = await this._getWriterByKey(head.key, head.length, 0, false)
-      writer.isIndexer = true
-      indexers.push(writer)
-    }
-
-    this.linearizer = new Linearizer(indexers, { heads: this.system.heads, writers: this.activeWriters })
-    this._addCheckpoints = !!(this.localWriter && this.localWriter.isIndexer)
-    this._updateAckThreshold()
-
-    for (const { key, length } of this.system.heads) {
-      await this._getWriterByKey(key, length, 0, false)
-    }
+    await this._makeLinearizer(this.system)
 
     if (nodes) {
       for (const node of nodes) node.reset()
@@ -550,8 +669,8 @@ module.exports = class Autobase extends ReadyResource {
     this.updating = false
 
     while (!this.closing) {
-      const localNodes = this._appending === null ? null : this._addLocalHeads()
       const remoteAdded = await this._addRemoteHeads()
+      const localNodes = this._appending === null ? null : this._addLocalHeads()
 
       if (this.closing) return
 
@@ -571,8 +690,10 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this.closing) return
 
-      if (this._updatedCores !== null) {
-        await this._flushIndexes()
+      if (this._updatedCores !== null || this._needsFlush.size) {
+        if (await this._flushIndexes()) {
+          await this._advanceSystemPointer()
+        }
       }
 
       if (this.closing) return
@@ -588,12 +709,22 @@ module.exports = class Autobase extends ReadyResource {
 
       await this._gcWriters()
       await this._reindex(changed)
+      this._migrateViews()
     }
 
     // skip threshold check while acking
     if (!this.closing && this._ackTickThreshold && !this._acking && this._ackTick >= this._ackTickThreshold) {
       if (this._ackTimer) this._ackTimer.asap()
       else this._triggerAck()
+    }
+
+    if (!this.closing && this.system.pendingIndexers.length > 0) {
+      for (const key of this.system.pendingIndexers) {
+        if (b4a.equals(key, this.local.key) && !b4a.equals(key, this.bootstrap)) {
+          this._triggerAck()
+          break
+        }
+      }
     }
 
     if (this.updating === true) {
@@ -605,17 +736,51 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _flushIndexes () {
-    const updatedCores = this._updatedCores
-    this._updatedCores = null
+    const needsFlush = this._needsFlush
+    this._needsFlush = new Set()
 
-    for (const core of updatedCores) {
-      await core.flush()
+    let complete = !!(this._updatedCores && this._updatedCores.length)
+
+    if (this._updatedCores) {
+      const updatedCores = this._updatedCores
+      this._updatedCores = null
+
+      for (const core of updatedCores) {
+        if (!await core.flush()) complete &&= false
+        needsFlush.delete(core)
+      }
+
+      for (const core of updatedCores) {
+        const indexing = core.indexing
+        core.indexing = 0
+        core._onindex(indexing)
+      }
     }
 
-    for (const core of updatedCores) {
-      const indexing = core.indexing
-      core.indexing = 0
-      core._onindex(indexing)
+    for (const core of needsFlush) {
+      if (!await core.flush()) complete &&= false
+    }
+
+    return complete
+  }
+
+  _onindexercheckpoint (indexer, checkpoints) {
+    if (!checkpoints) return // todo: this shouldn't fire without checkpoints
+
+    const indexed = this._viewStore.getIndexedCores()
+
+    for (let i = 0; i < checkpoints.length; i++) {
+      const { checkpoint, checkpointer } = checkpoints[i]
+      if (checkpointer > 0) continue
+
+      if (i < indexed.length) {
+        if (indexed[i].signer._oncheckpoint({ indexer, checkpoint })) {
+          this._needsFlush.add(indexed[i])
+        }
+        continue
+      }
+
+      this._pendingCheckpoints.set(i, { indexer, checkpoint })
     }
   }
 
@@ -633,15 +798,14 @@ module.exports = class Autobase extends ReadyResource {
   // triggered from apply
   async addWriter (key, { indexer = true, isIndexer = indexer } = {}) { // just compat for old version
     assert(this._applying !== null, 'System changes are only allowed in apply')
-
-    await this.system.add(key, { isIndexer })
+    await this.system.add(key, { isIndexer, isPending: true })
 
     const writer = (await this._getWriterByKey(key, -1, 0, false)) || this._makeWriter(key, 0)
-
     await writer.ready()
 
     // If we are getting added as indexer, already start adding checkpoints while we get confirmed...
     if (writer === this.localWriter && isIndexer) this._addCheckpoints = true
+    if (isIndexer) this._maybeUpdateDigest = true
 
     // fetch any nodes needed for dependents
     this._bump().catch(safetyCatch)
@@ -668,8 +832,18 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  async _getManifest (indexer, len) {
+    for (const w of this.linearizer.indexers) {
+      const d = await w.getDigest(len)
+      if (!d) continue
+      if (d.indexers.length > indexer) return d.indexers[indexer]
+    }
+
+    return null
+  }
+
   _bootstrap () {
-    return this.system.add(this.bootstrap, { isIndexer: true })
+    return this.system.add(this.bootstrap, { isIndexer: true, isPending: false })
   }
 
   _updateAckThreshold () {
@@ -725,7 +899,8 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       batch++
-      this.system.addHead(node)
+
+      if (this.system.addHead(node)) this._maybeUpdateDigest = true
 
       if (node.value !== null) {
         applyBatch.push({
@@ -750,7 +925,7 @@ module.exports = class Autobase extends ReadyResource {
         try {
           await this._handlers.apply(applyBatch, this.view, this)
         } catch (err) {
-          this.close()
+          await this.close()
           this.emit('error', err)
           return null
         }
@@ -807,6 +982,12 @@ module.exports = class Autobase extends ReadyResource {
         if (start === 0) {
           if (core._isSystem()) sys = this._updatedCores.length // system ALWAYS goes last
           this._updatedCores.push(core)
+
+          const pending = this._pendingCheckpoints.get(core.likelyIndex)
+          if (!pending) continue
+
+          core.signer._oncheckpoint(pending)
+          this._pendingCheckpoints.delete(core.likelyIndex)
         }
       }
     }
@@ -831,25 +1012,59 @@ module.exports = class Autobase extends ReadyResource {
       if (this._localDigest === null) {
         this._localDigest = {
           pointer: 0,
-          seed: crypto.randomBytes(32),
           indexers: []
         }
       }
+      return
     }
 
-    const indexers = this.linearizer.indexers.map(writerToKey)
-    if (sameKeys(indexers, this._localDigest.indexers)) return
+    const indexers = []
+
+    const pending = this.system.core._source.pendingIndexedLength
+    const info = await this.system.getIndexedInfo(pending)
+
+    for (const { key } of info.indexers) {
+      const w = await this._getWriterByKey(key)
+      indexers.push({
+        signature: 0,
+        namespace: w.core.manifest.signer.namespace,
+        publicKey: w.core.manifest.signer.publicKey
+      })
+    }
+
+    let same = indexers.length === this._localDigest.indexers.length
+
+    for (let i = 0; i < indexers.length; i++) {
+      if (!same) break
+
+      const a = indexers[i]
+      const b = this._localDigest.indexers[i]
+
+      if (a.signature !== b.signature || !b4a.equals(a.namespace, b.namespace) || !b4a.equals(a.publicKey, b.publicKey)) {
+        same = false
+      }
+    }
+
+    if (same) return
 
     this._localDigest.pointer = 0
     this._localDigest.indexers = indexers
   }
 
-  _geneateDigest () {
+  _generateDigest () {
     return {
       pointer: this._localDigest.pointer,
-      seed: this._localDigest.seed,
       indexers: this._localDigest.indexers
     }
+  }
+
+  _generateCheckpoint (cores) {
+    if (this._firstCheckpoint) {
+      this._firstCheckpoint = false
+      return generateCheckpoint(this._viewStore.opened.values())
+    }
+
+    return generateCheckpoint(cores)
   }
 
   async _flushLocal (localNodes) {
@@ -863,7 +1078,7 @@ module.exports = class Autobase extends ReadyResource {
 
       blocks[i] = {
         version: this.version,
-        digest: this._addCheckpoints ? this._geneateDigest() : null,
+        digest: this._addCheckpoints ? this._generateDigest() : null,
         checkpoint: this._addCheckpoints ? generateCheckpoint(cores) : null,
         node: {
           heads,
@@ -873,7 +1088,10 @@ module.exports = class Autobase extends ReadyResource {
         }
       }
 
-      if (this._addCheckpoints) this._localDigest.pointer++
+      if (this._addCheckpoints) {
+        this._localDigest.pointer++
+        this._onindexercheckpoint(this.local.key, blocks[i].checkpoint)
+      }
     }
 
     await this.local.append(blocks)
@@ -889,18 +1107,6 @@ function generateCheckpoint (cores) {
   }
 
   return checkpoint
-}
-
-function sameKeys (a, b) {
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i++) {
-    if (!b4a.equals(a[i], b[i])) return false
-  }
-  return true
-}
-
-function writerToKey (w) {
-  return w.core.key
 }
 
 function toKey (k) {
