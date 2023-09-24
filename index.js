@@ -1082,9 +1082,12 @@ module.exports = class Autobase extends ReadyResource {
         checkpoint: this._addCheckpoints ? generateCheckpoint(cores) : null,
         node: {
           heads,
-          abi: 0,
           batch,
           value: value === null ? null : c.encode(this.valueEncoding, value)
+        },
+        additional: {
+          pointer: 0,
+          data: {}
         }
       }
 
