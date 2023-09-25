@@ -282,7 +282,7 @@ test('suspend - reopen with sync in middle', async t => {
 
   // sync next views
   for (const ac of [a.system.core, a.view]) {
-    const remote = ac._backingCore().session
+    const remote = ac.getBackingCore().session
     const local = store.get({ key: remote.key, compat: false })
     await local.ready()
     await local.download({ start: 0, end: remote.length }).done()
@@ -456,7 +456,7 @@ test('suspend - reopen with indexing + sync in middle', async t => {
 
   // sync next views
   for (const ac of [a.system.core, a.view]) {
-    const remote = ac._backingCore().session
+    const remote = ac.getBackingCore().session
     const local = store.get({ key: remote.key, compat: false })
     await local.ready()
     await local.download({ start: 0, end: remote.length }).done()
@@ -979,6 +979,94 @@ test.skip('suspend - append but not indexed then reopen', async t => {
   await a.close()
   await b.close()
   await c2.close()
+})
+
+test('suspend - migrations', async t => {
+  const [a] = await create(1, apply, open)
+
+  const store = new Corestore(await tmpDir(t), {
+    primaryKey: Buffer.alloc(32).fill(1)
+  })
+
+  await a.append('a0')
+  await a.append('a1')
+
+  t.is(a.view.indexedLength, 2)
+  t.is(a.view.signedLength, 2)
+
+  const session1 = store.session()
+  const b = new Autobase(session1, a.local.key, {
+    apply,
+    valueEncoding: 'json',
+    open: store => store.get('view', {
+      valueEncoding: 'json'
+    }),
+    ackInterval: 0,
+    ackThreshold: 0
+  })
+
+  b.debug = true
+  await b.ready()
+
+  await addWriter(a, b)
+
+  await replicateAndSync([a, b])
+
+  await b.append('b0')
+  await confirm([a, b])
+
+  await a.append('a1')
+  await replicateAndSync([a, b])
+
+  t.is(a.view.indexedLength, 3)
+  t.is(a.view.signedLength, 3)
+
+  t.is(b.activeWriters.size, 2)
+  t.is(b.view.indexedLength, 3)
+  t.is(b.view.signedLength, 3)
+
+  const order = []
+  for (let i = 0; i < b.view.length; i++) {
+    order.push(await b.view.get(i))
+  }
+
+  await b.close()
+
+  const session2 = store.session()
+  const c = new Autobase(session2, a.local.key, {
+    apply,
+    valueEncoding: 'json',
+    open: store => store.get('view', {
+      valueEncoding: 'json'
+    }),
+    ackInterval: 0,
+    ackThreshold: 0
+  })
+
+  await c.ready()
+
+  t.is(c.view.length, order.length)
+  t.is(c.view.indexedLength, 3)
+  t.is(c.view.signedLength, 3)
+  t.is(c.view.getBackingCore().indexedLength, 3)
+
+  for (let i = 0; i < c.view.length; i++) {
+    t.alike(await c.view.get(i), order[i])
+  }
+
+  t.is(c.activeWriters.size, 2)
+
+  await c.append('final')
+
+  await t.execution(replicateAndSync([a, c]))
+
+  t.is(b.view.indexedLength, 3)
+  t.is(c.view.indexedLength, 3)
+  t.is(c.view.length, b.view.length + 1)
+
+  await a.close()
+  await b.close()
+  await c.close()
 })
 
 function open (store) {
