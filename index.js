@@ -163,7 +163,6 @@ module.exports = class Autobase extends ReadyResource {
     await this.store.ready()
 
     await this.local.ready()
-    await this.local.setUserData('referrer', this.key)
 
     if (this.encryptionKey) {
       await this.local.setUserData('autobase/encryption', this.encryptionKey)
@@ -175,6 +174,15 @@ module.exports = class Autobase extends ReadyResource {
         if (this._primaryBootstrap) this._primaryBootstrap.setEncryptionKey(this.encryptionKey)
       }
     }
+
+    // stateless open
+    const ref = await this.local.getUserData('referrer')
+    if (ref && !b4a.equals(ref, this.local.key) && !this._primaryBootstrap) {
+      this._primaryBootstrap = this.store.get({ key: ref, compat: false, encryptionKey: this.encryptionKey })
+      this.store = this.store.namespace(this._primaryBootstrap, { detach: false })
+    }
+
+    await this.local.setUserData('referrer', this.key)
 
     if (this._primaryBootstrap) {
       await this._primaryBootstrap.ready()
