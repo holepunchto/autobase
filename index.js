@@ -194,8 +194,8 @@ module.exports = class Autobase extends ReadyResource {
     if (!pointer) return { bootstrap, system: null }
 
     const { key, length } = c.decode(messages.SystemPointer, pointer)
-    const encryptionKey = this.encryptionKey
-    const system = length ? new SystemView(this.store.get({ key, exclusive: false, cache: true, compat: false, encryptionKey }), length) : null
+    const encryptionKey = AutoStore.getBlockKey(bootstrap, this.encryptionKey, '_system')
+    const system = length ? new SystemView(this.store.get({ key, exclusive: false, cache: true, compat: false, encryptionKey, isBlockKey: true }), length) : null
 
     if (system) await system.ready()
 
@@ -284,8 +284,7 @@ module.exports = class Autobase extends ReadyResource {
     await this.local.ready() // todo: remove
     await this.local.setUserData('autobase/system', c.encode(messages.SystemPointer, {
       key: this.system.core.key,
-      length: this.system.core._source.signedLength,
-      signature: this.system.core._source.core.session.core.tree.signature
+      length: this.system.core._source.signedLength
     }))
   }
 
