@@ -29,6 +29,7 @@
     "hyperbee": "^2.4.2",
     "hypercore": "^10.19.0",
     "hypercore-crypto": "^3.4.0",
+    "hypercore-id-encoding": "^1.2.0",
     "nanoassert": "^2.0.0",
     "ready-resource": "^1.0.0",
     "safety-catch": "^1.0.2",
