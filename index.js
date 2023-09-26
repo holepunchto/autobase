@@ -3,6 +3,7 @@ const ReadyResource = require('ready-resource')
 const debounceify = require('debounceify')
 const c = require('compact-encoding')
 const safetyCatch = require('safety-catch')
+const hypercoreId = require('hypercore-id-encoding')
 const assert = require('nanoassert')
 
 const Linearizer = require('./lib/linearizer')
@@ -1120,7 +1121,7 @@ function generateCheckpoint (cores) {
 }
 
 function toKey (k) {
-  return b4a.isBuffer(k) ? k : b4a.from(k, 'hex')
+  return b4a.isBuffer(k) ? k : hypercoreId.decode(k)
 }
 
 function isAutobaseMessage (msg) {
