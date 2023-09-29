@@ -56,7 +56,7 @@ module.exports = class Autobase extends ReadyResource {
     this._wakeup = new AutoWakeup(this)
 
     this._applying = null
-    this._updatedCores = null
+    this._updatingCores = false
     this._localDigest = null
     this._maybeUpdateDigest = true
     this._needsWakeup = true
@@ -96,7 +96,6 @@ module.exports = class Autobase extends ReadyResource {
     this._ackTimer = null
     this._acking = false
 
-    this._pendingCheckpoints = new Map()
     this._needsFlush = new Set()
     this._initialSystem = null
 
@@ -698,10 +697,8 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this.closing) return
 
-      if (this._updatedCores !== null || this._needsFlush.size) {
-        if (await this._flushIndexes()) {
-          await this._advanceSystemPointer()
-        }
+      if (await this._flushIndexes()) {
+        await this._advanceSystemPointer()
       }
 
       if (this.closing) return
@@ -744,52 +741,22 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _flushIndexes () {
-    const needsFlush = this._needsFlush
-    this._needsFlush = new Set()
+    let complete = true
+    this._updatingCores = false
 
-    let complete = !!(this._updatedCores && this._updatedCores.length)
-
-    if (this._updatedCores) {
-      const updatedCores = this._updatedCores
-      this._updatedCores = null
-
-      for (const core of updatedCores) {
-        if (!await core.flush()) complete &&= false
-        needsFlush.delete(core)
-      }
-
-      for (const core of updatedCores) {
-        const indexing = core.indexing
-        core.indexing = 0
-        core._onindex(indexing)
-      }
-    }
-
-    for (const core of needsFlush) {
+    for (const core of this._viewStore.opened.values()) {
       if (!await core.flush()) complete &&= false
     }
 
-    return complete
-  }
-
-  _onindexercheckpoint (indexer, checkpoints) {
-    if (!checkpoints) return // todo: this shouldn't fire without checkpoints
-
-    const indexed = this._viewStore.getIndexedCores()
-
-    for (let i = 0; i < checkpoints.length; i++) {
-      const { checkpoint, checkpointer } = checkpoints[i]
-      if (checkpointer > 0) continue
-
-      if (i < indexed.length) {
-        if (indexed[i].signer._oncheckpoint({ indexer, checkpoint })) {
-          this._needsFlush.add(indexed[i])
-        }
-        continue
-      }
-
-      this._pendingCheckpoints.set(i, { indexer, checkpoint })
+    // updates emitted sync
+    for (const core of this._viewStore.opened.values()) {
+      if (core.indexing === 0) continue
+      const indexing = core.indexing
+      core.indexing = 0
+      core._onindex(indexing)
     }
+
+    return complete
   }
 
   // triggered from linearized core
@@ -974,10 +941,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _queueIndexFlush (indexed) {
-    assert(this._updatedCores === null, 'Updated cores not flushed')
-    this._updatedCores = []
-
-    let sys = -1
+    assert(this._updatingCores === false, 'Updated cores not flushed')
+    this._updatingCores = true
 
     while (indexed > 0) {
       const u = this._updates.shift()
@@ -985,28 +950,8 @@ module.exports = class Autobase extends ReadyResource {
       indexed -= u.batch
 
       for (const { core, appending } of u.views) {
-        const start = core.indexing
         core.indexing += appending
-        if (start === 0) {
-          if (core._isSystem()) sys = this._updatedCores.length // system ALWAYS goes last
-          this._updatedCores.push(core)
-
-          const pending = this._pendingCheckpoints.get(core.likelyIndex)
-          if (!pending) continue
-
-          core.signer._oncheckpoint(pending)
-          this._pendingCheckpoints.delete(core.likelyIndex)
-        }
       }
-    }
-
-    // ensure system is always last
-    if (sys > -1 && sys < this._updatedCores.length - 1) {
-      const a = this._updatedCores[sys]
-      const b = this._updatedCores[this._updatedCores.length - 1]
-
-      this._updatedCores[sys] = b
-      this._updatedCores[this._updatedCores.length - 1] = a
     }
   }
 
@@ -1099,13 +1044,15 @@ module.exports = class Autobase extends ReadyResource {
         }
       }
 
-      if (this._addCheckpoints) {
-        this._localDigest.pointer++
-        this._onindexercheckpoint(this.local.key, blocks[i].checkpoint)
-      }
+      if (this._addCheckpoints) this._localDigest.pointer++
     }
 
     await this.local.append(blocks)
+
+    if (this._addCheckpoints) {
+      const { checkpoint } = blocks[blocks.length - 1]
+      await this.localWriter.addCheckpoint(this.local.length - 1, checkpoint)
+    }
   }
 }
 
