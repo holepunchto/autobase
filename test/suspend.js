@@ -50,7 +50,7 @@ test('suspend - pass exisiting store', async t => {
   await base2.close()
 
   const session3 = store.session()
-  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
+  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false })
   await base3.ready()
 
   t.is(base3.activeWriters.size, 2)
@@ -68,7 +68,7 @@ test('suspend - pass exisiting fs store', async t => {
   })
 
   const session2 = store.session()
-  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
+  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false })
   await base2.ready()
 
   await base1.append({
@@ -93,7 +93,7 @@ test('suspend - pass exisiting fs store', async t => {
   await base2.close()
 
   const session3 = store.session()
-  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
+  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false })
   await base3.ready()
 
   t.is(base3.activeWriters.size, 2)
@@ -108,7 +108,7 @@ test('suspend - 2 exisiting fs stores', async t => {
     primaryKey: Buffer.alloc(32).fill(0)
   })
 
-  const base1 = new Autobase(store, null, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
+  const base1 = new Autobase(store, null, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false })
   await base1.ready()
 
   const store2 = new Corestore(await tmpDir(t), {
@@ -116,7 +116,7 @@ test('suspend - 2 exisiting fs stores', async t => {
   })
 
   const session2 = store2.session()
-  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
+  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false })
   await base2.ready()
 
   await base1.append({
@@ -141,7 +141,7 @@ test('suspend - 2 exisiting fs stores', async t => {
   await base2.close()
 
   const session3 = store2.session()
-  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
+  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false })
   await base3.ready()
 
   t.is(base3.activeWriters.size, 2)
@@ -170,7 +170,8 @@ test('suspend - reopen after index', async t => {
       valueEncoding: 'json'
     }),
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await b.ready()
@@ -204,7 +205,8 @@ test('suspend - reopen after index', async t => {
       valueEncoding: 'json'
     }),
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await c.ready()
@@ -243,7 +245,8 @@ test('suspend - reopen with sync in middle', async t => {
     valueEncoding: 'json',
     open,
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await b.ready()
@@ -305,7 +308,8 @@ test('suspend - reopen with sync in middle', async t => {
     valueEncoding: 'json',
     open,
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await b2.ready()
@@ -339,7 +343,8 @@ test('suspend - reopen with indexing in middle', async t => {
     valueEncoding: 'json',
     open,
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await c.ready()
@@ -374,7 +379,8 @@ test('suspend - reopen with indexing in middle', async t => {
     valueEncoding: 'json',
     open,
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await c2.ready()
@@ -411,7 +417,8 @@ test('suspend - reopen with indexing + sync in middle', async t => {
     valueEncoding: 'json',
     open,
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await c.ready()
@@ -480,7 +487,8 @@ test('suspend - reopen with indexing + sync in middle', async t => {
     valueEncoding: 'json',
     open,
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await c2.ready()
@@ -519,7 +527,8 @@ test('suspend - non-indexed writer', async t => {
     valueEncoding: 'json',
     open,
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await b.ready()
@@ -556,7 +565,8 @@ test('suspend - non-indexed writer', async t => {
     valueEncoding: 'json',
     open,
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   c.debug = true
@@ -594,7 +604,8 @@ test('suspend - open new index after reopen', async t => {
     apply: applyMultiple,
     open: openMultiple,
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await b.ready()
@@ -629,7 +640,8 @@ test('suspend - open new index after reopen', async t => {
     apply: applyMultiple,
     open: openMultiple,
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await b2.ready()
@@ -694,7 +706,8 @@ test('suspend - reopen multiple indexes', async t => {
     apply: applyMultiple,
     open: openMultiple,
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await b.ready()
@@ -732,7 +745,8 @@ test('suspend - reopen multiple indexes', async t => {
     apply: applyMultiple,
     open: openMultiple,
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await c.ready()
@@ -789,7 +803,7 @@ test('restart non writer', async t => {
   const storeA = new Corestore(ram.reusable())
   const storeB = new Corestore(ram.reusable())
 
-  const base = new Autobase(storeA, { apply, valueEncoding: 'json' })
+  const base = new Autobase(storeA, { apply, valueEncoding: 'json', fastForward: false })
   await base.append({ hello: 'world' })
 
   const other = new Autobase(storeB.session(), base.key, { apply, valueEncoding: 'json' })
@@ -819,7 +833,8 @@ test('suspend - non-indexed writer catches up', async t => {
     valueEncoding: 'json',
     open,
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await b.ready()
@@ -859,7 +874,8 @@ test('suspend - non-indexed writer catches up', async t => {
     valueEncoding: 'json',
     open,
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await c.ready()
@@ -894,7 +910,8 @@ test.skip('suspend - append but not indexed then reopen', async t => {
     apply: applyMultiple,
     open: openMultiple,
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await b.ready()
@@ -930,7 +947,8 @@ test.skip('suspend - append but not indexed then reopen', async t => {
     apply: applyMultiple,
     open: openMultiple,
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await c2.ready()
@@ -1002,7 +1020,8 @@ test('suspend - migrations', async t => {
       valueEncoding: 'json'
     }),
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   b.debug = true
@@ -1040,7 +1059,8 @@ test('suspend - migrations', async t => {
       valueEncoding: 'json'
     }),
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    fastForward: false
   })
 
   await c.ready()
