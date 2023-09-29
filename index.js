@@ -816,7 +816,7 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
-    for (const w of this.activeWriters) w.range.destroy()
+    for (const w of this.activeWriters) w.pause()
 
     this.fastForwardTo = { key: core.session.key, length: this.fastForwardingTo }
     this.fastForwardingTo = 0
@@ -833,6 +833,7 @@ module.exports = class Autobase extends ReadyResource {
     // TODO: if we simply load the core from the corestore the key check isn't needed
     // getting rid of that is essential for dbl ff, but for now its ok with some safety from migrations
     if (!b4a.equals(core.key, this.fastForwardTo.key) || this.fastForwardTo.length <= from) {
+      for (const w of this.activeWriters) w.resume()
       this.fastForwardTo = null
       return
     }
@@ -846,6 +847,7 @@ module.exports = class Autobase extends ReadyResource {
     for (const v of system.views) {
       const view = this._viewStore.getByKey(v.key)
       if (!view && view.core.session.length < v.length) {
+        for (const w of this.activeWriters) w.resume()
         this.fastForwardTo = null // something wrong somewhere, likely a bug, just safety
         return
       }
