@@ -18,12 +18,13 @@ module.exports = {
 }
 
 async function create (n, apply, open, close, opts = {}) {
-  const moreOpts = { apply, open, close, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, ...opts }
-  const bases = [new Autobase(new Corestore(ram.reusable(), { primaryKey: Buffer.alloc(32).fill(0), encryptionKey }), null, moreOpts)]
+  const storage = opts.storage || (() => ram.reusable())
+  const moreOpts = { apply, open, close, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false, ...opts }
+  const bases = [new Autobase(new Corestore(await storage(), { primaryKey: Buffer.alloc(32).fill(0), encryptionKey }), null, moreOpts)]
   await bases[0].ready()
   if (n === 1) return bases
   for (let i = 1; i < n; i++) {
-    const base = new Autobase(new Corestore(ram.reusable(), { primaryKey: Buffer.alloc(32).fill(i), encryptionKey }), bases[0].local.key, moreOpts)
+    const base = new Autobase(new Corestore(await storage(), { primaryKey: Buffer.alloc(32).fill(i), encryptionKey }), bases[0].local.key, moreOpts)
     await base.ready()
     bases.push(base)
   }

@@ -21,6 +21,8 @@ const inspect = Symbol.for('nodejs.util.inspect.custom')
 const DEFAULT_ACK_INTERVAL = 10 * 1000
 const DEFAULT_ACK_THRESHOLD = 4
 
+const FF_THRESHOLD = 16
+
 const REMOTE_ADD_BATCH = 64
 
 module.exports = class Autobase extends ReadyResource {
@@ -51,6 +53,9 @@ module.exports = class Autobase extends ReadyResource {
     this.linearizer = null
     this.updating = false
 
+    this.fastForwardingTo = handlers.fastForward !== false ? 0 : -1
+    this.fastForwardTo = null
+
     this._checkWriters = []
     this._appending = null
     this._wakeup = new AutoWakeup(this)
@@ -60,6 +65,7 @@ module.exports = class Autobase extends ReadyResource {
     this._localDigest = null
     this._maybeUpdateDigest = true
     this._needsWakeup = true
+    this._needsWakeupHeads = true
     this._addCheckpoints = false
     this._firstCheckpoint = true
 
@@ -96,7 +102,6 @@ module.exports = class Autobase extends ReadyResource {
     this._ackTimer = null
     this._acking = false
 
-    this._needsFlush = new Set()
     this._initialSystem = null
 
     this.system = new SystemView(this._viewStore.get({ name: '_system', exclusive: true, cache: true }))
@@ -159,6 +164,10 @@ module.exports = class Autobase extends ReadyResource {
     return false
   }
 
+  _queueBump () {
+    this._bump().catch(safetyCatch)
+  }
+
   async _openPreSystem () {
     await this.store.ready()
 
@@ -201,7 +210,9 @@ module.exports = class Autobase extends ReadyResource {
     const bootstrap = this.bootstrap || (await this.local.getUserData('referrer')) || this.local.key
     if (!pointer) return { bootstrap, system: null }
 
-    const { key, length } = c.decode(messages.SystemPointer, pointer)
+    const { indexed } = c.decode(messages.SystemPointer, pointer)
+    const { key, length } = indexed
+
     const encryptionKey = AutoStore.getBlockKey(bootstrap, this.encryptionKey, '_system')
     const system = length ? new SystemView(this.store.get({ key, exclusive: false, cache: true, compat: false, encryptionKey, isBlockKey: true }), length) : null
 
@@ -235,21 +246,12 @@ module.exports = class Autobase extends ReadyResource {
     if (this.localWriter && this._ackInterval) this._startAckTimer()
   }
 
-  async _wakeupHeads () {
-    const buffer = await this.local.getUserData('autobase/heads')
-    if (!buffer) return
-    const keys = c.decode(c.array(c.fixed32), buffer)
-    for (const key of keys) await this._getWriterByKey(key, -1, 0, true)
-  }
-
   async _open () {
     this._prebump = this._openPreBump()
     await this._prebump
 
     await this._wakeup.ready()
-    await this._wakeupHeads()
-
-    await this._bump()
+    await this._drain()
   }
 
   async _close () {
@@ -286,14 +288,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     await this._wakeup.flush()
-  }
-
-  async _advanceSystemPointer () {
-    await this.local.ready() // todo: remove
-    await this.local.setUserData('autobase/system', c.encode(messages.SystemPointer, {
-      key: this.system.core.key,
-      length: this.system.core._source.signedLength
-    }))
   }
 
   _startAckTimer () {
@@ -340,7 +334,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _onwakeup () {
     this._needsWakeup = true
-    this._bump().catch(safetyCatch)
+    this._queueBump()
   }
 
   _isPending () {
@@ -350,10 +344,19 @@ module.exports = class Autobase extends ReadyResource {
     return false
   }
 
+  _isFastForwarding () {
+    if (this.fastForwardTo !== null) return true
+    return this.fastForwardingTo > 0 && this.fastForwardingTo > this.system.core.getBackingCore().length
+  }
+
   async ack () {
     if (this.localWriter === null) return
 
     const isPendingIndexer = this._isPending()
+
+    // if no one is waiting for our index manifest, wait for FF before pushing an ack
+    if (!isPendingIndexer && this._isFastForwarding()) return
+
     const isIndexer = this.localWriter.isIndexer || isPendingIndexer
 
     if (!isIndexer || this._acking || this.closing) return
@@ -651,31 +654,21 @@ module.exports = class Autobase extends ReadyResource {
     return added
   }
 
-  async _checkpointHeads () {
-    if (!this.linearizer.updated) return
-
-    const state = { start: 0, end: 0, buffer: null }
-
-    c.uint.preencode(state, this.linearizer.heads.size)
-    state.buffer = b4a.allocUnsafe(state.end + this.linearizer.heads.size * 32)
-
-    c.uint.encode(state, this.linearizer.heads.size)
-    for (const head of this.linearizer.heads) c.fixed32.encode(state, head.writer.core.key)
-
-    await this.local.setUserData('autobase/heads', state.buffer)
+  async _advanceSystemPointer () {
+    await this.local.setUserData('autobase/system', c.encode(messages.SystemPointer, {
+      indexed: {
+        key: this.system.core.key,
+        length: this.system.core._source.signedLength
+      },
+      heads: this.system.heads
+    }))
   }
 
-  async _advance () {
-    if (this.opened === false) await this._prebump
-
-    if (this._needsWakeup) {
-      this._needsWakeup = false
-      for (const { key } of this._wakeup) await this._getWriterByKey(key, -1, 0, true)
-    }
-
-    this.updating = false
-
+  // TODO: support offline bool here that ONLY applies up to autobase/system.heads
+  async _drain () {
     while (!this.closing) {
+      if (this.fastForwardTo !== null) await this._applyFastForward()
+
       const remoteAdded = await this._addRemoteHeads()
       const localNodes = this._appending === null ? null : this._addLocalHeads()
 
@@ -683,7 +676,6 @@ module.exports = class Autobase extends ReadyResource {
 
       if (remoteAdded > 0 || localNodes !== null) {
         this.updating = true
-        await this._checkpointHeads()
       }
 
       const u = this.linearizer.update()
@@ -697,7 +689,7 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this.closing) return
 
-      if (await this._flushIndexes()) {
+      if ((await this._flushIndexes()) || this.updated) {
         await this._advanceSystemPointer()
       }
 
@@ -716,6 +708,33 @@ module.exports = class Autobase extends ReadyResource {
       await this._reindex(changed)
       this._migrateViews()
     }
+  }
+
+  async _drainWakeup () { // TODO: parallel load the writers here later
+    this._needsWakeup = false
+    for (const { key } of this._wakeup) {
+      await this._getWriterByKey(key, -1, 0, true)
+    }
+
+    if (this._needsWakeupHeads === false) return
+    this._needsWakeupHeads = false
+
+    const buffer = await this.local.getUserData('autobase/system')
+    if (!buffer) return
+
+    const { heads } = c.decode(messages.SystemPointer, buffer)
+    for (const { key } of heads) {
+      await this._getWriterByKey(key, -1, 0, true)
+    }
+  }
+
+  async _advance () {
+    if (this.opened === false) await this.ready()
+
+    // note: this might block due to network i/o
+    if (this._needsWakeup === true) await this._drainWakeup()
+
+    await this._drain()
 
     // skip threshold check while acking
     if (!this.closing && this._ackTickThreshold && !this._acking && this._ackTick >= this._ackTickThreshold) {
@@ -738,6 +757,127 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return this._gcWriters()
+  }
+
+  // NOTE: runs in parallel with everything, can never fail
+  async queueFastForward () {
+    // if already FFing, let the finish. TODO: auto kill the attempt after a while and move to latest?
+    if (this.fastForwardingTo !== 0) return
+
+    const core = this.system.core.getBackingCore()
+
+    if (core.session.length <= core.length + FF_THRESHOLD) return
+    if (this.fastForwardTo !== null && core.session.length <= this.fastForwardTo.length + FF_THRESHOLD) return
+
+    this.fastForwardingTo = core.session.length
+    this._bumpAckTimer()
+
+    try {
+      // sys runs open with wait false, so get head block first for low complexity
+      if (!(await core.session.has(this.fastForwardingTo - 1))) {
+        await core.session.get(this.fastForwardingTo - 1)
+      }
+
+      const system = new SystemView(core.session.session(), this.fastForwardingTo)
+      await system.ready()
+
+      const pendingViews = []
+
+      for (const v of system.views) {
+        const view = this._viewStore.getByKey(v.key)
+        if (!view || !b4a.equals(view.key, v.key)) {
+          this.fastForwardingTo = 0
+          return
+        }
+
+        // same as below, we technically just need to check that we have the hash, not the block
+        if (v.length > 0 && !(await view.core.session.has(v.length - 1))) {
+          pendingViews.push({ view, length: v.length })
+        }
+      }
+
+      const promises = []
+      for (const { view, length } of pendingViews) {
+        // we could just get the hash here, but likely user wants the block so yolo
+        promises.push(view.core.session.get(length - 1))
+      }
+
+      await Promise.all(promises)
+      await system.close()
+    } catch (err) {
+      this.fastForwardingTo = 0
+      safetyCatch(err)
+      return
+    }
+
+    // if it migrated underneath us, ignore for now
+    if (core !== this.system.core.getBackingCore()) {
+      this.fastForwardingTo = 0
+      return
+    }
+
+    for (const w of this.activeWriters) w.range.destroy()
+
+    this.fastForwardTo = { key: core.session.key, length: this.fastForwardingTo }
+    this.fastForwardingTo = 0
+
+    this._bumpAckTimer()
+    this._queueBump()
+  }
+
+  async _applyFastForward () {
+    const core = this.system.core.getBackingCore()
+    const from = core.length
+
+    // just extra sanity check
+    // TODO: if we simply load the core from the corestore the key check isn't needed
+    // getting rid of that is essential for dbl ff, but for now its ok with some safety from migrations
+    if (!b4a.equals(core.key, this.fastForwardTo.key) || this.fastForwardTo.length <= from) {
+      this.fastForwardTo = null
+      return
+    }
+
+    const system = new SystemView(core.session.session(), this.fastForwardTo.length)
+    await system.ready()
+
+    const views = new Map()
+
+    let i = 0
+    for (const v of system.views) {
+      const view = this._viewStore.getByKey(v.key)
+      if (!view && view.core.session.length < v.length) {
+        this.fastForwardTo = null // something wrong somewhere, likely a bug, just safety
+        return
+      }
+
+      views.set(view, v)
+      view.likelyIndex = i++
+    }
+
+    await system.close()
+
+    for (const w of this.activeWriters) {
+      await w.close()
+      this.activeWriters.delete(w)
+    }
+
+    this._undoAll()
+
+    for (const view of this._viewStore.opened.values()) {
+      await view.catchup(views.get(view))
+    }
+
+    await this.system.update()
+
+    await this._makeLinearizer(this.system)
+    await this._advanceSystemPointer()
+
+    const to = this.fastForwardTo.length
+
+    this.fastForwardTo = null
+    this.updating = true
+
+    this.emit('fast-forward', to, from)
   }
 
   async _flushIndexes () {
@@ -783,7 +923,7 @@ module.exports = class Autobase extends ReadyResource {
     if (isIndexer) this._maybeUpdateDigest = true
 
     // fetch any nodes needed for dependents
-    this._bump().catch(safetyCatch)
+    this._queueBump()
   }
 
   _undoAll () {
@@ -1022,6 +1162,7 @@ module.exports = class Autobase extends ReadyResource {
   _generateCheckpoint (cores) {
     if (this._firstCheckpoint) {
       this._firstCheckpoint = false
+      // TODO: unsafe, use an array instead for views as the order is important
       return generateCheckpoint(this._viewStore.opened.values())
     }
 
