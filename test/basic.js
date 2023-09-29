@@ -637,6 +637,9 @@ test('sequential restarts', async t => {
   await replicateAndSync(bases)
 
   for (let i = 1; i < bases.length; i++) {
+    t.is(bases[i].system.core._source.queued, -1)
+    t.alike(bases[0].system.core.key, bases[i].system.core.key)
+    t.alike(bases[0].view.key, bases[i].view.key)
     t.is(bases[0].view.indexedLength, bases[i].view.indexedLength)
     t.is(bases[0].view.length, bases[i].view.length)
     t.alike(await bases[0].system.core.getBackingCore().treeHash(), await bases[i].system.core.getBackingCore().treeHash())
