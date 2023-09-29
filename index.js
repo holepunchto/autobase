@@ -592,7 +592,7 @@ module.exports = class Autobase extends ReadyResource {
     this._maybeUpdateDigest = true
 
     if (nodes) {
-      this._undo(this._updates.length) // undo all!
+      this._undoAll()
       await this.system.update()
     }
 
@@ -784,6 +784,14 @@ module.exports = class Autobase extends ReadyResource {
 
     // fetch any nodes needed for dependents
     this._bump().catch(safetyCatch)
+  }
+
+  _undoAll () {
+    let count = 0
+    for (const u of this._updates) {
+      count += u.batch
+    }
+    return this._undo(count)
   }
 
   _undo (popped) {
