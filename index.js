@@ -880,6 +880,9 @@ module.exports = class Autobase extends ReadyResource {
     this.updating = true
 
     this.emit('fast-forward', to, from)
+
+    // requeue in case we can do another jump!
+    this.queueFastForward()
   }
 
   async _flushIndexes () {
