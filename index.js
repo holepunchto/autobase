@@ -825,6 +825,12 @@ module.exports = class Autobase extends ReadyResource {
     this._queueBump()
   }
 
+  _clearFastForward () {
+    for (const w of this.activeWriters) w.resume()
+    this.fastForwardTo = null
+    this.queueFastForward() // queue in case we lost an ff while applying this one
+  }
+
   async _applyFastForward () {
     const core = this.system.core.getBackingCore()
     const from = core.length
@@ -833,8 +839,7 @@ module.exports = class Autobase extends ReadyResource {
     // TODO: if we simply load the core from the corestore the key check isn't needed
     // getting rid of that is essential for dbl ff, but for now its ok with some safety from migrations
     if (!b4a.equals(core.key, this.fastForwardTo.key) || this.fastForwardTo.length <= from) {
-      for (const w of this.activeWriters) w.resume()
-      this.fastForwardTo = null
+      this._clearFastForward()
       return
     }
 
@@ -847,8 +852,7 @@ module.exports = class Autobase extends ReadyResource {
     for (const v of system.views) {
       const view = this._viewStore.getByKey(v.key)
       if (!view && view.core.session.length < v.length) {
-        for (const w of this.activeWriters) w.resume()
-        this.fastForwardTo = null // something wrong somewhere, likely a bug, just safety
+        this._clearFastForward() // something wrong somewhere, likely a bug, just safety
         return
       }
 
