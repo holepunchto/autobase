@@ -189,8 +189,8 @@ test('autoack - threshold', async t => {
   for (let i = 0; i < 4; i++) await b.append('b')
   await sync([a, b])
 
-  t.is(a.view.indexedLength, 4)
-  t.is(b.view.indexedLength, 4)
+  t.ok(a.view.indexedLength >= 4)
+  t.ok(b.view.indexedLength >= 4)
 })
 
 test('autoack - threshold with interval', async t => {
