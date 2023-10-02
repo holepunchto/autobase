@@ -112,11 +112,20 @@ test('fast-forward - fast forward after migrate', async t => {
   await a.append('lets index some nodes')
   await confirm([a, b])
 
-  for (let i = 0; i < 1000; i++) {
-    await b.append('b' + i)
-  }
+  for (let i = 0; i < 5; i++) {
+    const unreplicate = replicate([a, b])
+    await eventFlush()
 
-  await confirm([a, b])
+    for (let i = 0; i < 300; i++) {
+      b.append('b' + i)
+      a.append('a' + i)
+
+      if (i % 2 === 0) await eventFlush()
+    }
+
+    await unreplicate()
+    await confirm([a, b])
+  }
 
   await replicateAndSync([a, b, c])
 
@@ -126,11 +135,15 @@ test('fast-forward - fast forward after migrate', async t => {
   t.is(c.linearizer.indexers.length, 2)
 
   t.ok(sparse > 2000)
+
   t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
 test('fast-forward - multiple writers added', async t => {
   t.plan(2)
+
+  const MESSAGES_PER_ROUND = 200
 
   const open = store => store.get('view', { valueEncoding: 'json' })
   const [a, b, c, d] = await create(4, apply, open, null, {
@@ -149,34 +162,30 @@ test('fast-forward - multiple writers added', async t => {
 
   await confirm([a, b, c])
 
-  let unreplicate = replicate([a, b, c])
+  const online = [a, b, c]
 
-  d.debug = true
-  for (let i = 0; i < 50; i++) {
-    const appends = []
+  for (let i = 0; i < 5; i++) {
+    const unreplicate = replicate(online)
+    await eventFlush()
 
-    for (let i = 0; i < Math.random() * 10; i++) {
-      appends.push(a.append('a' + i))
+    const as = Math.random() * MESSAGES_PER_ROUND
+    const bs = Math.random() * MESSAGES_PER_ROUND
+    const cs = Math.random() * MESSAGES_PER_ROUND
+
+    for (let j = 0; j < Math.max(as, bs, cs); j++) {
+      if (j < as) a.append('a' + j)
+      if (j < bs) b.append('b' + j)
+      if (j < cs) c.append('c' + j)
+
+      if (j % 2 === 0) await eventFlush()
     }
 
-    for (let i = 0; i < Math.random() * 10; i++) {
-      appends.push(b.append('b' + i))
-    }
+    await unreplicate()
+    await confirm(online)
 
-    for (let i = 0; i < Math.random() * 10; i++) {
-      appends.push(c.append('c' + i))
-    }
-
-    await Promise.all(appends)
-    if (i % 20 === 0) {
-      await unreplicate()
-      await confirm([a, b, c])
-      unreplicate = replicate([a, b, c, d])
-      await eventFlush()
-    }
+    if (i === 3) online.push(d)
   }
 
-  await unreplicate()
   const core = d.view.getBackingCore()
   const sparse = await isSparse(core)
 
@@ -184,6 +193,7 @@ test('fast-forward - multiple writers added', async t => {
 
   t.ok(sparse > 0)
   t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
 async function isSparse (core) {
