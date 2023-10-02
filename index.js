@@ -654,11 +654,11 @@ module.exports = class Autobase extends ReadyResource {
     return added
   }
 
-  async _advanceSystemPointer () {
+  async _advanceSystemPointer (length = this.system.core.getBackingCore().indexedLength) {
     await this.local.setUserData('autobase/system', c.encode(messages.SystemPointer, {
       indexed: {
         key: this.system.core.key,
-        length: this.system.core._source.signedLength
+        length
       },
       heads: this.system.heads
     }))
@@ -876,7 +876,7 @@ module.exports = class Autobase extends ReadyResource {
     await this.system.update()
 
     await this._makeLinearizer(this.system)
-    await this._advanceSystemPointer()
+    await this._advanceSystemPointer(this.fastForwardTo.length)
 
     const to = this.fastForwardTo.length
 
