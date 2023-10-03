@@ -164,7 +164,7 @@ test('fast-forward - multiple writers added', async t => {
 
   const online = [a, b, c]
 
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 10; i++) {
     const unreplicate = replicate(online)
     await eventFlush()
 
@@ -183,7 +183,7 @@ test('fast-forward - multiple writers added', async t => {
     await unreplicate()
     await confirm(online)
 
-    if (i === 3) online.push(d)
+    if (i === 8) online.push(d)
   }
 
   const core = d.view.getBackingCore()
