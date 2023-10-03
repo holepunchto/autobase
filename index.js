@@ -1209,7 +1209,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this._addCheckpoints) {
       const { checkpoint } = blocks[blocks.length - 1]
-      await this.localWriter._addCheckpoints(checkpoint)
+      this.localWriter._addCheckpoints(checkpoint)
     }
   }
 }
