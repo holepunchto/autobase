@@ -285,6 +285,9 @@ test('basic - add 5 writers', async t => {
 
   const [a, b, c, d, e] = bases
 
+  let migrate = 0
+  e.system.core.on('migrate', () => migrate++)
+
   await addWriter(a, b)
   await addWriter(a, c)
   await addWriter(a, d)
@@ -306,6 +309,8 @@ test('basic - add 5 writers', async t => {
 
   t.is(a.activeWriters.size, e.activeWriters.size)
   t.is(a.system.members, e.system.members)
+
+  t.ok(migrate > 0)
 })
 
 test('basic - online minorities', async t => {
