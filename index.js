@@ -59,6 +59,7 @@ module.exports = class Autobase extends ReadyResource {
     this._checkWriters = []
     this._appending = null
     this._wakeup = new AutoWakeup(this)
+    this._wakeupHints = new Set()
 
     this._applying = null
     this._updatingCores = false
@@ -68,6 +69,7 @@ module.exports = class Autobase extends ReadyResource {
     this._needsWakeupHeads = true
     this._addCheckpoints = false
     this._firstCheckpoint = true
+    this._hadUpdateSinceWakeup = true // just init to true, easier
 
     this._updates = []
     this._handlers = handlers || {}
@@ -164,6 +166,14 @@ module.exports = class Autobase extends ReadyResource {
     return false
   }
 
+  hintWakeup (keys) {
+    if (!Array.isArray(keys)) keys = [keys]
+    for (const key of keys) {
+      this._wakeupHints.add(b4a.toString(key, 'hex'))
+    }
+    this._queueBump()
+  }
+
   _queueBump () {
     this._bump().catch(safetyCatch)
   }
@@ -252,6 +262,9 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._wakeup.ready()
     await this._drain()
+
+    // queue a full bump that handles wakeup etc (not legal to wait for that here)
+    this._queueBump()
   }
 
   async _close () {
@@ -274,6 +287,8 @@ module.exports = class Autobase extends ReadyResource {
   async _gcWriters () {
     // just return early, why not
     if (this._checkWriters.length === 0) return
+
+    this.system.broadcastWakeup()
 
     while (this._checkWriters.length > 0) {
       const w = this._checkWriters.pop()
@@ -712,29 +727,46 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _drainWakeup () { // TODO: parallel load the writers here later
-    this._needsWakeup = false
-    for (const { key } of this._wakeup) {
-      await this._getWriterByKey(key, -1, 0, true)
-    }
-
-    if (this._needsWakeupHeads === false) return
-    this._needsWakeupHeads = false
-
+  async _getLocallyStoredHeads () {
     const buffer = await this.local.getUserData('autobase/system')
-    if (!buffer) return
+    if (!buffer) return []
+    return c.decode(messages.SystemPointer, buffer).heads
+  }
 
-    const { heads } = c.decode(messages.SystemPointer, buffer)
-    for (const { key } of heads) {
-      await this._getWriterByKey(key, -1, 0, true)
+  async _drainWakeup () { // TODO: parallel load the writers here later
+    if (this._needsWakeup === true) {
+      this._needsWakeup = false
+
+      for (const { key } of this._wakeup) {
+        await this._getWriterByKey(key, -1, 0, true)
+      }
+
+      if (this._needsWakeupHeads === true) {
+        this._needsWakeupHeads = false
+
+        for (const { key } of await this._getLocallyStoredHeads()) {
+          await this._getWriterByKey(key, -1, 0, true)
+        }
+      }
     }
+
+    for (const hex of this._wakeupHints) {
+      const key = b4a.from(hex, 'hex')
+      const w = await this._getWriterByKey(key, -1, 0, true)
+      if (!w) continue
+      // we should have a connection to the peer who hinted, so wait for any proof to drain
+      // should be enough to trigger the general wakeup (needs an overall refactor)
+      await w.core.update({ wait: true })
+    }
+
+    this._wakeupHints.clear()
   }
 
   async _advance () {
     if (this.opened === false) await this.ready()
 
     // note: this might block due to network i/o
-    if (this._needsWakeup === true) await this._drainWakeup()
+    if (this._needsWakeup === true || this._wakeupHints.size > 0) await this._drainWakeup()
 
     await this._drain()
 
@@ -754,11 +786,26 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     if (this.updating === true) {
+      this._hadUpdateSinceWakeup = true
       this.updating = false
       this.emit('update')
     }
 
-    return this._gcWriters()
+    await this._gcWriters()
+
+    // TODO: prop only needed if new peers joined since we last requested wakeup really
+    // but better to overrequest atm and fix later
+    if (this._idle() && this._hadUpdateSinceWakeup) {
+      this._hadUpdateSinceWakeup = false
+      this.system.requestWakeup()
+    }
+  }
+
+  _idle () {
+    for (const w of this.activeWriters) {
+      if (w.isIndexer && !w.idle()) return false
+    }
+    return true
   }
 
   // NOTE: runs in parallel with everything, can never fail
@@ -1059,8 +1106,8 @@ module.exports = class Autobase extends ReadyResource {
         try {
           await this._handlers.apply(applyBatch, this.view, this)
         } catch (err) {
-          await this.close()
           this.emit('error', err)
+          await this.close()
           return null
         }
       }
