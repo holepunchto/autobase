@@ -752,11 +752,7 @@ module.exports = class Autobase extends ReadyResource {
 
     for (const hex of this._wakeupHints) {
       const key = b4a.from(hex, 'hex')
-      const w = await this._getWriterByKey(key, -1, 0, true)
-      if (!w) continue
-      // we should have a connection to the peer who hinted, so wait for any proof to drain
-      // should be enough to trigger the general wakeup (needs an overall refactor)
-      await w.core.update({ wait: true })
+      await this._getWriterByKey(key, -1, 0, true)
     }
 
     this._wakeupHints.clear()
