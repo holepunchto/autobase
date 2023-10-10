@@ -14,8 +14,8 @@ test('encryption - basic', async t => {
   await base.append('you should not see me')
 
   t.alike(await base.view.get(0), 'you should not see me')
-  t.is(base.view._source.signedLength, 1)
-  t.is(base.system.core._source.signedLength, 4)
+  t.is(base.view.signedLength, 1)
+  t.is(base.system.core.signedLength, 4)
 
   let found = false
   for (const core of store.cores.values()) {
