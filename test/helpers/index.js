@@ -14,6 +14,7 @@ module.exports = {
   apply,
   confirm,
   compare,
+  compareViews,
   ...helpers
 }
 
@@ -79,5 +80,38 @@ async function apply (batch, view, base) {
     }
 
     if (view) await view.append(value)
+  }
+}
+
+function compareViews (bases, t) {
+  const missing = bases.slice()
+
+  const a = missing.shift()
+
+  for (const b of missing) {
+    for (const [name, left] of a._viewStore.opened) {
+      const right = b._viewStore.opened.get(name)
+      if (!right) {
+        t.fail(`missing view ${name}`)
+        continue
+      }
+
+      if (!b4a.equals(left.key, right.key)) {
+        t.fail(`view key: ${name}`)
+        continue
+      }
+
+      if (left.core.indexedLength !== right.core.indexedLength) {
+        t.fail(`view length: ${name}`)
+        continue
+      }
+
+      if (!b4a.equals(left.core.treeHash(), right.core.treeHash())) {
+        t.fail(`view treeHash: ${name}`)
+        continue
+      }
+
+      t.pass(`consistent ${name}`)
+    }
   }
 }

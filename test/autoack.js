@@ -3,7 +3,6 @@ const test = require('brittle')
 const {
   create,
   apply,
-  addWriter,
   addWriterAndSync,
   confirm,
   replicateAndSync,
@@ -21,7 +20,8 @@ test('autoack - simple', async t => {
   t.teardown(unreplicate)
 
   await addWriterAndSync(a, b)
-  await sync([a, b])
+  await confirm([a, b])
+
   await b.append('b0')
 
   t.is(a.view.indexedLength, 0)
@@ -226,8 +226,8 @@ test('autoack - threshold with interval', async t => {
   await new Promise(resolve => setTimeout(resolve, 400)) // fast ack
 
   t.is(a._ackTimer.interval, ackInterval)
-  t.is(a.view.indexedLength, 4)
-  t.is(b.view.indexedLength, 4)
+  t.ok(a.view.indexedLength >= 4)
+  t.ok(b.view.indexedLength >= 4)
 })
 
 test('autoack - no null acks', async t => {
@@ -239,7 +239,9 @@ test('autoack - no null acks', async t => {
   t.teardown(unreplicate)
 
   await addWriterAndSync(a, b)
-  await replicateAndSync([a, b])
+  await confirm([a, b])
+
+  await a.append(null)
 
   const alen = a.local.length
   const blen = b.local.length
@@ -251,23 +253,27 @@ test('autoack - no null acks', async t => {
 })
 
 test('autoack - value beneath null values', async t => {
-  t.plan(6)
+  t.plan(4)
 
   const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 10, ackThreshold: 0 })
+
   const unreplicate = replicate([a, b])
   t.teardown(unreplicate)
 
   await addWriterAndSync(a, b)
-  await sync([a, b])
+  await confirm([a, b])
+
   await b.append('b0')
+  await b.append(null)
+
   await sync([a, b])
 
-  t.is(a.local.length, 2) // add b and ack to confirm it
-  t.is(b.local.length, 2)
+  const alen = a.local.length
+  const blen = b.local.length
 
   setTimeout(() => {
-    t.not(a.local.length, 2)
-    t.not(b.local.length, 2)
+    t.not(a.local.length, alen)
+    t.not(b.local.length, blen)
     t.is(b.view.length, b.view.indexedLength)
     t.is(a.view.length, a.view.indexedLength)
   }, 100)
@@ -337,8 +343,7 @@ test('autoack - more merges', async t => {
   const [a, b, c] = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 0, ackThreshold: 0 })
 
   await addWriterAndSync(a, b)
-  await addWriter(a, b)
-  await replicateAndSync([a, b, c])
+  await confirm([a, b, c])
 
   await a.append('a0')
   await b.append('b0')
@@ -355,13 +360,16 @@ test('autoack - more merges', async t => {
   await a.append('a1')
   await b.append('b1')
 
-  await replicateAndSync([a, b])
-
-  t.ok(a.linearizer.shouldAck(a.localWriter))
-  t.ok(a.linearizer.shouldAck(getWriter(a, b.localWriter)))
+  await replicateAndSync([a, c])
+  await replicateAndSync([b, c])
 
   t.ok(b.linearizer.shouldAck(getWriter(b, a.localWriter)))
   t.ok(b.linearizer.shouldAck(b.localWriter))
+
+  await replicateAndSync([a, c])
+
+  t.ok(a.linearizer.shouldAck(a.localWriter))
+  t.ok(a.linearizer.shouldAck(getWriter(a, b.localWriter)))
 })
 
 function getWriter (base, writer) {

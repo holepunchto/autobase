@@ -6,7 +6,7 @@ const {
   addWriterAndSync,
   apply,
   confirm,
-  compare
+  compareViews
 } = require('./helpers')
 
 // a - b - a
@@ -37,7 +37,7 @@ test('simple 2', async t => {
   t.alike(a.view.indexedLength, 1)
   t.alike(b.view.indexedLength, 1)
 
-  await t.execution(compare(a, b))
+  compareViews([a, b], t)
 
   t.is(a.linearizer.tails.size, 1)
 })
@@ -59,6 +59,8 @@ test('simple 3', async t => {
 
   await addWriterAndSync(a, b)
   await addWriterAndSync(a, c)
+
+  await confirm(bases)
 
   await replicateAndSync(bases)
 
@@ -84,8 +86,7 @@ test('simple 3', async t => {
   t.alike(c.view.indexedLength, b.view.indexedLength)
   t.alike(a.view.indexedLength, c.view.indexedLength)
 
-  await t.execution(compare(a, b))
-  await t.execution(compare(a, c))
+  compareViews([a, b, c], t)
 
   t.is(a.linearizer.tails.size, 1)
 })
@@ -171,8 +172,7 @@ test.skip('convergence', async t => {
 
   t.is(a.linearizer.tails.size, 1)
 
-  await t.execution(compare(a, b))
-  await t.execution(compare(a, c))
+  compareViews([a, b, c], t)
 })
 
 /*
@@ -292,8 +292,7 @@ test('majority alone - convergence', async t => {
   await d.append('d' + di++)
   await replicateAndSync([b, c, d])
 
-  await t.execution(compare(b, c))
-  await t.execution(compare(b, d))
+  compareViews([b, c, d], t)
 
   t.is(b.view.indexedLength, 2)
   t.is(c.view.indexedLength, 2)
@@ -316,7 +315,7 @@ test('add writer', async t => {
   t.is(a.view.indexedLength, 1)
   t.is(b.view.indexedLength, 1)
 
-  await t.execution(compare(a, b))
+  compareViews([a, b], t)
 
   await addWriterAndSync(a, b)
   await replicateAndSync([a, b])
@@ -324,13 +323,13 @@ test('add writer', async t => {
   t.is(a.view.indexedLength, 1)
   t.is(b.view.indexedLength, 1)
 
-  await t.execution(compare(a, b))
+  compareViews([a, b], t)
 
   await replicateAndSync([a, b, c])
 
   t.is(c.view.indexedLength, 1)
 
-  await t.execution(compare(a, c))
+  compareViews([a, c], t)
 
   await addWriterAndSync(a, c)
 
@@ -351,8 +350,8 @@ test('add writer', async t => {
   t.is(a.view.indexedLength, b.view.indexedLength)
   t.is(b.view.indexedLength, c.view.indexedLength)
 
-  await t.execution(compare(a, b))
-  await t.execution(compare(a, c))
+  compareViews([a, b], t)
+  compareViews([a, c], t)
 
   t.is(a.linearizer.tails.size, b.linearizer.tails.size)
   t.is(b.linearizer.tails.size, c.linearizer.tails.size)
@@ -384,7 +383,7 @@ test('majority alone - non-convergence', async t => {
   await addWriterAndSync(a, d)
   await addWriterAndSync(a, e)
 
-  await replicateAndSync(bases)
+  await confirm(bases)
 
   // --- write ---
 
@@ -417,8 +416,7 @@ test('majority alone - non-convergence', async t => {
   t.is(a.view.indexedLength, b.view.indexedLength)
   t.is(b.view.indexedLength, c.view.indexedLength)
 
-  await t.execution(compare(a, b))
-  await t.execution(compare(a, c))
+  compareViews([a, b, c], t)
 
   await replicateAndSync(bases)
 

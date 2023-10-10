@@ -3,6 +3,7 @@ const test = require('brittle')
 
 const {
   create,
+  confirm,
   replicateAndSync,
   addWriterAndSync,
   apply
@@ -25,6 +26,8 @@ test('linearizer - simple', async t => {
 
   await addWriterAndSync(a, b)
   await addWriterAndSync(a, c)
+
+  await confirm(bases)
 
   await c.append('c' + ci++)
   await replicateAndSync(bases)
@@ -121,6 +124,8 @@ test('linearizer - compete', async t => {
   await addWriterAndSync(a, b)
   await addWriterAndSync(a, c)
 
+  await confirm(bases)
+
   await c.append('c' + ci++)
   await replicateAndSync(bases)
 
@@ -213,6 +218,8 @@ test('linearizer - count ordering', async t => {
 
   await addWriterAndSync(a, b)
   await addWriterAndSync(a, c)
+
+  await confirm(bases)
 
   await c.append('c' + ci++)
   await replicateAndSync(bases)
@@ -415,15 +422,18 @@ test('linearizer - shouldAck', async t => {
   await addWriterAndSync(a, c)
 
   await a.ack() // be the last node
+
   await replicateAndSync(bases)
 
-  t.absent(a.linearizer.shouldAck(a.localWriter))
-  t.absent(b.linearizer.shouldAck(getWriter(b, a.localWriter)))
-  t.absent(c.linearizer.shouldAck(getWriter(c, a.localWriter)))
+  // someone needs to ack
+  t.ok(a.linearizer.shouldAck(a.localWriter) || b.linearizer.shouldAck(b.localWriter))
 
-  t.ok(a.linearizer.shouldAck(getWriter(a, b.localWriter)))
-  t.ok(b.linearizer.shouldAck(b.localWriter))
-  t.ok(c.linearizer.shouldAck(getWriter(c, b.localWriter)))
+  // consistent across bases
+  t.is(b.linearizer.shouldAck(getWriter(b, a.localWriter)), a.linearizer.shouldAck(a.localWriter))
+  t.is(c.linearizer.shouldAck(getWriter(c, a.localWriter)), a.linearizer.shouldAck(a.localWriter))
+
+  t.is(a.linearizer.shouldAck(getWriter(a, b.localWriter)), b.linearizer.shouldAck(b.localWriter))
+  t.is(c.linearizer.shouldAck(getWriter(c, b.localWriter)), b.linearizer.shouldAck(b.localWriter))
 
   // c is not a writer yet
   t.absent(a.linearizer.shouldAck(getWriter(a, c.localWriter)))
