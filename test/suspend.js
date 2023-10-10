@@ -1024,7 +1024,6 @@ test('suspend - migrations', async t => {
     fastForward: false
   })
 
-  b.debug = true
   await b.ready()
 
   await addWriter(a, b)

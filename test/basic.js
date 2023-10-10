@@ -13,7 +13,8 @@ const {
   addWriter,
   confirm,
   replicate,
-  compare
+  compare,
+  compareViews
 } = require('./helpers')
 
 test('basic - two writers', async t => {
@@ -142,7 +143,7 @@ test('basic - compare views', async t => {
   t.is(a.system.members, b.system.members)
   t.is(a.view.indexedLength, b.view.indexedLength)
 
-  await t.execution(compare(a, b))
+  compareViews([a, b], t)
 })
 
 test('basic - online majority', async t => {
@@ -175,13 +176,14 @@ test('basic - online majority', async t => {
   t.not(a.view.indexedLength, indexed)
   t.is(c.view.indexedLength, indexed)
   t.is(a.view.indexedLength, b.view.indexedLength)
-  await t.execution(compare(a, b))
+
+  compareViews([a, b], t)
 
   await replicateAndSync([b, c])
 
   t.is(a.view.indexedLength, c.view.indexedLength)
 
-  await t.execution(compare(a, c))
+  compareViews([a, b, c], t)
 })
 
 test('basic - rotating majority', async t => {
@@ -260,8 +262,7 @@ test('basic - rotating majority', async t => {
   t.is(a.view.indexedLength, b.view.indexedLength)
   t.is(a.view.indexedLength, c.view.indexedLength)
 
-  await t.execution(compare(a, b))
-  await t.execution(compare(a, c))
+  compareViews([a, b, c], t)
 })
 
 test('basic - throws', async t => {
@@ -356,13 +357,13 @@ test('basic - online minorities', async t => {
   await confirm([a, b])
   await confirm([c, d])
 
-  t.is(a.view.indexedLength, b.view.indexedLength)
-  t.is(c.view.indexedLength, d.view.indexedLength)
-
   t.not(a.view.length, a.view.indexedLength)
   t.is(a.view.length, b.view.length)
   t.not(c.view.length, a.view.length)
   t.is(c.view.length, d.view.length)
+
+  compareViews([a, b], t)
+  compareViews([c, d], t)
 
   await t.execution(compare(a, b, true))
   await t.execution(compare(c, d, true))
@@ -371,6 +372,8 @@ test('basic - online minorities', async t => {
 
   t.is(a.view.length, c.view.length)
   t.is(a.view.indexedLength, c.view.indexedLength)
+
+  compareViews(bases, t)
 
   await t.execution(compare(a, b, true))
   await t.execution(compare(a, c, true))
@@ -563,7 +566,8 @@ test('reindex', async t => {
   // trigger reindex for a
   await replicateAndSync([a, b, c, d, e])
 
-  t.is(a.system.heads.length, 2)
+  compareViews(bases, t)
+
   t.is((await a.system.getIndexedInfo()).heads.length, 1, 'only one indexed head')
   t.is(a.system.members, bases.length)
 
@@ -628,8 +632,6 @@ test('sequential restarts', async t => {
     }
   }
 
-  // only bases[0] node should be head
-  t.is(bases[0].system.heads.length, 9)
   const indexedHeads = (await bases[0].system.getIndexedInfo()).heads
   t.is(indexedHeads.length, 1)
   t.alike(indexedHeads[0].key, bases[0].local.key)
@@ -641,15 +643,12 @@ test('sequential restarts', async t => {
 
   await replicateAndSync(bases)
 
+  // fully migrated
   for (let i = 1; i < bases.length; i++) {
     t.is(bases[i].system.core._source.queued, -1)
-    t.alike(bases[0].system.core.key, bases[i].system.core.key)
-    t.alike(bases[0].view.key, bases[i].view.key)
-    t.is(bases[0].view.indexedLength, bases[i].view.indexedLength)
-    t.is(bases[0].view.length, bases[i].view.length)
-    t.alike(await bases[0].system.core.getBackingCore().treeHash(), await bases[i].system.core.getBackingCore().treeHash())
-    t.alike(await bases[0].view.getBackingCore().treeHash(), await bases[i].view.getBackingCore().treeHash())
   }
+
+  compareViews(bases, t)
 })
 
 test('two writers write many messages, third writer joins', async t => {
@@ -668,8 +667,7 @@ test('two writers write many messages, third writer joins', async t => {
   await confirm([base1, base2, base3])
   t.pass('Confirming did not throw')
 
-  await t.execution(compare(base1, base2))
-  await t.execution(compare(base1, base3))
+  compareViews([base1, base2, base3], t)
 })
 
 test('basic - gc indexed nodes', async t => {
@@ -807,6 +805,8 @@ test('basic - non-indexed writer', async t => {
   t.ok(await Autobase.isAutobase(a.local))
   t.ok(await Autobase.isAutobase(b.local))
 
+  compareViews([a, b], t)
+
   for await (const block of a.local.createReadStream()) {
     t.ok(block.checkpoint.length !== 0)
   }
@@ -897,10 +897,7 @@ test('basic - non-indexed writers 3-of-5', async t => {
   t.is(a1, 'd0')
   t.is(a2, 'a0')
 
-  await t.execution(compare(a, b))
-  await t.execution(compare(a, c))
-  await t.execution(compare(a, d))
-  await t.execution(compare(a, e))
+  compareViews([a, b, c, d, e], t)
 
   t.ok(await Autobase.isAutobase(a.local))
   t.ok(await Autobase.isAutobase(b.local))
