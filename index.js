@@ -70,6 +70,7 @@ module.exports = class Autobase extends ReadyResource {
     this._addCheckpoints = false
     this._firstCheckpoint = true
     this._hadUpdateSinceWakeup = true // just init to true, easier
+    this._hasPendingCheckpoint = false
 
     this._updates = []
     this._handlers = handlers || {}
@@ -384,7 +385,7 @@ module.exports = class Autobase extends ReadyResource {
       if (!this.closing) throw err
     }
 
-    const unflushed = this.hasUnflushedIndexers()
+    const unflushed = this._hasPendingCheckpoint || this.hasUnflushedIndexers()
     if (!this.closing && (isPendingIndexer || this.linearizer.shouldAck(this.localWriter, unflushed))) {
       try {
         await this.append(null)
@@ -766,19 +767,9 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._drain()
 
-    // skip threshold check while acking
-    if (!this.closing && this._ackTickThreshold && !this._acking && this._ackTick >= this._ackTickThreshold) {
+    if (!this.closing && this.localWriter && this._ackIsNeeded()) {
       if (this._ackTimer) this._ackTimer.asap()
       else this._triggerAck()
-    }
-
-    if (!this.closing && this.system.pendingIndexers.length > 0) {
-      for (const key of this.system.pendingIndexers) {
-        if (b4a.equals(key, this.local.key) && !b4a.equals(key, this.bootstrap)) {
-          this._triggerAck()
-          break
-        }
-      }
     }
 
     if (this.updating === true) {
@@ -802,6 +793,39 @@ module.exports = class Autobase extends ReadyResource {
       if (w.isIndexer && !w.idle()) return false
     }
     return true
+  }
+
+  _ackIsNeeded () {
+    if (!this._addCheckpoints) return false // ack has no impact
+
+    // flush if threshold is reached and we are not already acking
+    if (this._ackTickThreshold && !this._acking && this._ackTick >= this._ackTickThreshold) {
+      return true
+    }
+
+    // flush any pending indexers
+    if (this.system.pendingIndexers.length > 0) {
+      for (const key of this.system.pendingIndexers) {
+        if (b4a.equals(key, this.local.key) && !b4a.equals(key, this.bootstrap)) {
+          return true
+        }
+      }
+    }
+
+    // flush any pending migrates
+    for (const view of this._viewStore.opened.values()) {
+      if (view.queued === -1) continue
+
+      const checkpoint = view.signer.bestCheckpoint(this.localWriter)
+      const length = checkpoint ? checkpoint.length : 0
+
+      if (length < view.queued && length < view.indexedLength) {
+        this._hasPendingCheckpoint = true
+        return true
+      }
+    }
+
+    return false
   }
 
   // NOTE: runs in parallel with everything, can never fail
@@ -1255,6 +1279,8 @@ module.exports = class Autobase extends ReadyResource {
     if (this._addCheckpoints) {
       const { checkpoint } = blocks[blocks.length - 1]
       this.localWriter._addCheckpoints(checkpoint)
+
+      this._hasPendingCheckpoint = false
     }
   }
 }
