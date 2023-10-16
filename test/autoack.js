@@ -3,6 +3,7 @@ const test = require('brittle')
 const {
   create,
   apply,
+  addWriter,
   addWriterAndSync,
   confirm,
   replicateAndSync,
@@ -370,6 +371,53 @@ test('autoack - more merges', async t => {
 
   t.ok(a.linearizer.shouldAck(a.localWriter))
   t.ok(a.linearizer.shouldAck(getWriter(a, b.localWriter)))
+})
+
+test('autoack - pending writers', async t => {
+  t.plan(5)
+
+  const [a, b, c] = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 0, ackThreshold: 0 })
+
+  t.teardown(await replicate([a, b, c]))
+
+  await addWriter(a, b)
+  await addWriter(a, c)
+
+  await eventFlush()
+
+  t.ok(b.local.length > 0)
+  t.ok(c.local.length > 0)
+
+  t.is(a.system.indexers.length, 3)
+  t.is(b.system.indexers.length, 3)
+  t.is(c.system.indexers.length, 3)
+})
+
+test('autoack - pending migrates', async t => {
+  t.plan(5)
+
+  const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 0, ackThreshold: 0 })
+
+  t.teardown(await replicate([a, b]))
+
+  await addWriter(a, b)
+  await eventFlush()
+
+  await new Promise(resolve => setTimeout(resolve, 100))
+
+  await sync([a, b])
+
+  await a.append(null)
+
+  await sync([a, b])
+
+  t.ok(b.local.length > 0)
+
+  t.is(b.system.core._source._indexers, 2)
+  t.is(b.system.core._source.queued, -1)
+
+  t.is(a.system.core._source._indexers, 2)
+  t.is(a.system.core._source.queued, -1)
 })
 
 function getWriter (base, writer) {
