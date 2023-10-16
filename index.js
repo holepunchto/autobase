@@ -672,7 +672,21 @@ module.exports = class Autobase extends ReadyResource {
     return added
   }
 
+  async _checkViewsFlushed (length) {
+    const info = await this.system.getIndexedInfo(length)
+
+    for (const { key, length } of info.views) {
+      const view = this._viewStore.getByKey(key)
+      if (view.core.indexedLength < length) return false
+    }
+
+    return true
+  }
+
   async _advanceSystemPointer (length = this.system.core.getBackingCore().indexedLength) {
+    // todo: find the actual bug and remove this check
+    if (!(await this._checkViewsFlushed(length))) return
+
     await this.local.setUserData('autobase/system', c.encode(messages.SystemPointer, {
       indexed: {
         key: this.system.core.key,
