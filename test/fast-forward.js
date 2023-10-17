@@ -1,8 +1,10 @@
 const test = require('brittle')
 const Corestore = require('corestore')
 const tmpDir = require('test-tmp')
+const cenc = require('compact-encoding')
 
 const Autobase = require('..')
+const { SystemPointer } = require('../lib/messages')
 
 const {
   addWriterAndSync,
@@ -194,6 +196,84 @@ test('fast-forward - multiple writers added', async t => {
   t.ok(sparse > 0)
   t.comment('sparse blocks: ' + sparse)
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+})
+
+test('fast-forward - multiple queues', async t => {
+  const open = store => store.get('view', { valueEncoding: 'json' })
+  const [a, b, c, d] = await create(4, apply, open, null, {
+    valueEncoding: 'json',
+    ackInterval: 0,
+    ackThreshold: 0,
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  // this value should be long enough that 2 fast-forwards are
+  // queued (ie. we don't just replicate the last state), but short
+  // enough that the second is queued before the first has completed
+  const DELAY = 20
+
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c, false)
+
+  await b.append('b')
+  await c.append('c')
+
+  await confirm([a, b, c])
+  await replicateAndSync([a, b, c, d])
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append('a' + i)
+  }
+
+  await confirm([a, b, c])
+
+  const midLength = a.system.core.indexedLength
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append('a' + i)
+  }
+
+  await confirm([a, b])
+
+  // trigger 1st fast-forward
+  const s1 = c.replicate(true)
+  const s2 = d.replicate(false)
+
+  s1.pipe(s2).pipe(s1)
+
+  await new Promise(resolve => s2.on('open', resolve))
+
+  // trigger 2nd fast-forward
+  setTimeout(() => t.teardown(replicate([a, b, d])), DELAY)
+
+  const to = await new Promise(resolve => d.on('fast-forward', resolve))
+  const next = new Promise(resolve => d.on('fast-forward', resolve))
+  let done = false
+
+  {
+    const pointer = await d.local.getUserData('autobase/system')
+    const { indexed } = cenc.decode(SystemPointer, pointer)
+    t.is(indexed.length, to)
+
+    done = to > midLength
+  }
+
+  if (done) {
+    // vary value of DELAY, but make sure the first fast-forward
+    // has not completed when the second is queued
+    // (check fastForwardTo !== null in queueFastForward)
+    t.fail('test failed due to timing')
+    return
+  }
+
+  const final = await next
+
+  {
+    const pointer = await d.local.getUserData('autobase/system')
+    const { indexed } = cenc.decode(SystemPointer, pointer)
+    t.is(indexed.length, final)
+  }
 })
 
 async function isSparse (core) {

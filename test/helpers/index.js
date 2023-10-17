@@ -32,12 +32,12 @@ async function create (n, apply, open, close, opts = {}) {
   return bases
 }
 
-async function addWriter (base, add) {
-  return base.append({ add: add.local.key.toString('hex') })
+async function addWriter (base, add, indexer = true) {
+  return base.append({ add: add.local.key.toString('hex'), indexer })
 }
 
-async function addWriterAndSync (base, add, bases = [base, add]) {
-  await addWriter(base, add)
+async function addWriterAndSync (base, add, indexer = true, bases = [base, add]) {
+  await addWriter(base, add, indexer)
   await helpers.replicateAndSync(bases)
   await base.ack()
   await helpers.replicateAndSync(bases)
@@ -75,7 +75,8 @@ async function compare (a, b, full = false) {
 async function apply (batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
-      await base.addWriter(Buffer.from(value.add, 'hex'))
+      const key = Buffer.from(value.add, 'hex')
+      await base.addWriter(key, { indexer: value.indexer })
       continue
     }
 

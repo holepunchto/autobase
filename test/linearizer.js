@@ -344,7 +344,7 @@ test('linearizer - reordering', async t => {
   let bi = 0
   let ci = 0
 
-  await addWriterAndSync(a, c, bases)
+  await addWriterAndSync(a, c, true, bases)
 
   // a will be isolated up to a3
   await a.append('a' + ai++)
