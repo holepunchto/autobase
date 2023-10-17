@@ -672,21 +672,7 @@ module.exports = class Autobase extends ReadyResource {
     return added
   }
 
-  async _checkViewsFlushed (length) {
-    const info = await this.system.getIndexedInfo(length)
-
-    for (const { key, length } of info.views) {
-      const view = this._viewStore.getByKey(key)
-      if (view.core.indexedLength < length) return false
-    }
-
-    return true
-  }
-
   async _advanceSystemPointer (length = this.system.core.getBackingCore().indexedLength) {
-    // todo: find the actual bug and remove this check
-    if (!(await this._checkViewsFlushed(length))) return
-
     await this.local.setUserData('autobase/system', c.encode(messages.SystemPointer, {
       indexed: {
         key: this.system.core.key,
@@ -918,15 +904,18 @@ module.exports = class Autobase extends ReadyResource {
     const core = this.system.core.getBackingCore()
     const from = core.length
 
+    // remember these in case another fast forward gets queued
+    const { key, length } = this.fastForwardTo
+
     // just extra sanity check
     // TODO: if we simply load the core from the corestore the key check isn't needed
     // getting rid of that is essential for dbl ff, but for now its ok with some safety from migrations
-    if (!b4a.equals(core.key, this.fastForwardTo.key) || this.fastForwardTo.length <= from) {
+    if (!b4a.equals(core.key, key) || length <= from) {
       this._clearFastForward()
       return
     }
 
-    const system = new SystemView(core.session.session(), this.fastForwardTo.length)
+    const system = new SystemView(core.session.session(), length)
     await system.ready()
 
     const views = new Map()
@@ -959,11 +948,14 @@ module.exports = class Autobase extends ReadyResource {
     await this.system.update()
 
     await this._makeLinearizer(this.system)
-    await this._advanceSystemPointer(this.fastForwardTo.length)
+    await this._advanceSystemPointer(length)
 
-    const to = this.fastForwardTo.length
+    const to = length
 
-    this.fastForwardTo = null
+    if (b4a.equals(this.fastForwardTo.key, key) && this.fastForwardTo.length === length) {
+      this.fastForwardTo = null
+    }
+
     this.updating = true
 
     this.emit('fast-forward', to, from)
