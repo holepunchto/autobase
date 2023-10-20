@@ -413,12 +413,14 @@ test('majority alone - non-convergence', async t => {
 
   await b.append('b' + bi++)
 
-  t.is(a.view.indexedLength, b.view.indexedLength)
-  t.is(b.view.indexedLength, c.view.indexedLength)
+  t.is(b.system.indexedLength, c.system.indexedLength)
+  t.is(b.system.indexedLength, d.system.indexedLength)
 
-  compareViews([a, b, c], t)
+  compareViews([b, c, d], t)
 
   await replicateAndSync(bases)
+
+  compareViews([a, b, c, d, e], t)
 
   t.is(a.linearizer.tails.size, b.linearizer.tails.size)
   t.is(b.linearizer.tails.size, c.linearizer.tails.size)
