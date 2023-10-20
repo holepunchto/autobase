@@ -556,6 +556,11 @@ module.exports = class Autobase extends ReadyResource {
       core.on('manifest', this._onremotewriterchangeBound)
     }
 
+    w.updating.then(() => {
+      this._checkWriters.push(w)
+      this._queueBump()
+    })
+
     return w
   }
 
