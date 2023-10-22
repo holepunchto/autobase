@@ -854,6 +854,7 @@ module.exports = class Autobase extends ReadyResource {
 
       for (const v of system.views) {
         const view = this._viewStore.getByKey(v.key)
+        if (view && !view.opened) await view.ready()
         if (!view || !b4a.equals(view.key, v.key)) {
           this.fastForwardingTo = 0
           return
