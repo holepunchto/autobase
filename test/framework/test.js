@@ -1,7 +1,7 @@
 const RAM = require('random-access-memory')
 const b4a = require('b4a')
 const test = require('brittle')
-const { Base } = require('./')
+const { Base, Room } = require('./')
 
 test('framework', async t => {
   const base = new Base(RAM.reusable())
@@ -121,4 +121,157 @@ test('framework - 3 indexers', async t => {
 
   t.is(root.base.view.length, 0)
   t.is(root.base.view.indexedLength, 0)
+})
+
+test('framework - room', async t => {
+  const room = new Room(() => RAM.reusable(), { size: 2 })
+  await room.ready()
+
+  room.replicate()
+
+  await room.root.spam(100)
+
+  await room.sync()
+
+  for (const member of room) {
+    t.is(member.base.view.length, 100)
+    t.is(member.base.view.indexedLength, 100)
+  }
+})
+
+test('framework - add writers', async t => {
+  const room = new Room(() => RAM.reusable())
+  await room.ready()
+
+  room.replicate()
+
+  const members = await room.createMembers(2)
+  await room.addWriters(members, { indexer: true })
+
+  t.is(room.indexers.length, room.root.base.linearizer.indexers.length)
+  t.is(room.indexers.length, 3)
+
+  await room.root.spam(100)
+  await room.sync()
+
+  for (const member of room) {
+    t.is(member.base.view.length, 100)
+    t.is(member.base.view.indexedLength, 0)
+  }
+
+  await room.confirm()
+
+  for (const member of room) {
+    t.is(member.base.view.indexedLength, 100)
+  }
+})
+
+test('framework - add writers', async t => {
+  const room = new Room(() => RAM.reusable())
+  await room.ready()
+
+  room.replicate()
+
+  const members = await room.createMembers(2)
+  await room.addWriters(members, { indexer: true })
+
+  t.is(room.indexers.length, room.root.base.linearizer.indexers.length)
+  t.is(room.indexers.length, 3)
+
+  await room.root.spam(100)
+  await room.sync()
+
+  for (const member of room) {
+    t.is(member.base.view.length, 100)
+    t.is(member.base.view.indexedLength, 0)
+  }
+
+  await room.confirm()
+
+  for (const member of room) {
+    t.is(member.base.view.indexedLength, 100)
+  }
+})
+
+test('framework - room spam', async t => {
+  const room = new Room(() => RAM.reusable())
+  await room.ready()
+
+  room.replicate()
+
+  const members = await room.createMembers(2)
+  await room.addWriters(members, { indexer: true })
+
+  t.is(room.indexers.length, room.root.base.linearizer.indexers.length)
+  t.is(room.indexers.length, 3)
+
+  await room.spam(members, [100, 50])
+  await room.sync()
+
+  for (const member of room) {
+    t.is(member.base.view.length, 150)
+  }
+
+  await room.confirm()
+
+  for (const member of room) {
+    t.is(member.base.view.indexedLength, 150)
+  }
+})
+
+test('framework - room netsplit', async t => {
+  const room = new Room(() => RAM.reusable())
+  await room.ready()
+
+  room.replicate()
+
+  const members = await room.createMembers(4)
+  await room.addWriters(members, { indexer: true })
+
+  t.is(room.indexers.length, room.root.base.linearizer.indexers.length)
+  t.is(room.indexers.length, 5)
+
+  const left = room.indexers.slice(0, 2) // minority
+  const right = room.indexers.slice(2) // majority
+
+  await room.netsplit(left, right)
+
+  await room.spam(left, [100, 50])
+  await room.spam(right, [90, 200])
+
+  await room.sync(left)
+
+  for (const member of left) {
+    t.is(member.base.view.length, 150)
+  }
+
+  await room.sync(right)
+
+  for (const member of right) {
+    t.is(member.base.view.length, 290)
+  }
+
+  await room.confirm(right)
+
+  for (const member of left) {
+    t.is(member.base.view.indexedLength, 0)
+  }
+
+  for (const member of right) {
+    t.is(member.base.view.indexedLength, 290)
+  }
+
+  room.replicate()
+  await room.sync()
+
+  for (const member of room) {
+    t.is(member.base.view.indexedLength, 290)
+  }
+
+  // trigger autoack
+  await new Promise(resolve => setTimeout(resolve, 2000))
+
+  for (const member of room) {
+    t.is(member.base.view.indexedLength, 440)
+  }
 })
