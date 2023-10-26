@@ -50,6 +50,7 @@ class Base {
   }
 
   addWriter (key, indexer) {
+    if (!this.base.writable) throw new Error('Not writable.')
     return this.base.append(this._addWriter(key, indexer))
   }
 
@@ -124,9 +125,7 @@ class Base {
 class Network {
   constructor (members) {
     this.members = members
-    this.cleared = false
-
-    this.replicate()
+    this.up()
   }
 
   * [Symbol.iterator] () {
@@ -138,12 +137,10 @@ class Network {
   }
 
   has (member) {
-    if (this.cleared) return false
     return this.members.includes(member)
   }
 
   add (member) {
-    if (this.cleared) throw new Error('Network has been cleared.')
     if (!this.has(member)) this.members.push(member)
 
     for (const m of this.members) {
@@ -154,7 +151,7 @@ class Network {
   delete (member) {
     if (!this.has(member)) return
 
-    this.members.splice(this.members.indexOf(member),  1)
+    this.members.splice(this.members.indexOf(member), 1)
 
     const leaves = []
     for (const m of this.members) {
@@ -164,11 +161,8 @@ class Network {
   }
 
   merge (set) {
-    if (this.cleared) throw new Error('Network has been cleared.')
-    const [from, to] = this.size > set.size ? set : this 
-
-    for (const member of from.members) to.add(member)
-    from.clear()
+    for (const member of set.members) this.add(member)
+    set.clear()
   }
 
   sync () {
@@ -176,8 +170,6 @@ class Network {
   }
 
   async split (n) {
-    if (this.cleared) throw new Error('Network has been cleared.')
-
     let i = 0
 
     const left = []
@@ -205,7 +197,21 @@ class Network {
     ]
   }
 
-  replicate () {
+  replicate (base) {
+    for (const member of this.members) {
+      base.replicate(member)
+    }
+  }
+
+  unreplicate (base) {
+    const leaves = []
+    for (const member of this.members) {
+      leaves.push(member.unreplicate(base))
+    }
+    return Promise.all(leaves)
+  }
+
+  up () {
     const missing = this.members.slice()
     while (missing.length) {
       const a = missing.pop()
@@ -213,24 +219,7 @@ class Network {
     }
   }
 
-  unreplicate () {
-    for (const m of this.members) {}
-    return Promise.all(this.members.map(m => this._unreplicate(m)))
-  }
-
-  _unreplicate (member) {
-    const leaves = []
-    for (const m of this.members) {
-      leaves.push(member.unreplicate(m))
-    }
-    return Promise.all(leaves)
-  }
-
-  clear () {
-    this.members = []
-  }
-
-  destroy () {
+  down () {
     const leaves = []
 
     const missing = this.members.slice()
@@ -242,8 +231,16 @@ class Network {
       }
     }
 
-    this.clear()
     return Promise.all(leaves)
+  }
+
+  clear () {
+    this.members = []
+  }
+
+  async destroy () {
+    await this.down()
+    this.clear()
   }
 }
 
@@ -251,11 +248,12 @@ class Network {
 class Room {
   constructor (storage, opts = {}) {
     this._storage = storage
-    this.root = new Base(this._storage(), opts)
+    this.root = opts.root || new Base(this._storage(), opts)
     this.opts = { ...opts, root: this.root }
 
     this.members = new Map()
     this.indexers = []
+    this.rng = opts.rng || Math.random
 
     this.size = opts.size === undefined ? 1 : opts.size
     this.opened = false
@@ -329,6 +327,10 @@ class Room {
     return new Network(bases)
   }
 
+  async addIndexers (writers, opts) {
+    return this.addWriters(writers, { ...opts, indexer: true })
+  }
+
   async addWriters (writers, { indexers = this.indexers, indexer = false, serial = false, random = false } = {}) {
     const joins = []
     const start = this.indexers.length
@@ -336,7 +338,7 @@ class Room {
     for (let i = 0; i < writers.length; i++) {
       const writer = writers[i]
       const base = random
-        ? indexers[random(indexers.length) - 1]
+        ? indexers[getRandom(indexers.length, this.rng) - 1]
         : this.root
 
       const join = writer.join({ indexer, base })
@@ -349,6 +351,8 @@ class Room {
 
     while (this.indexers.length < start + writers.length) {
       await this._confirm()
+      this.replicate()
+      await this.sync()
     }
   }
 
@@ -360,32 +364,28 @@ class Room {
   async _confirm (indexers = this.indexers) {
     const maj = (this.indexers.length >> 1) + 1
 
-    const selected = shuffle(indexers).slice(0, maj)
-    const idx = new Network(selected)
+    if (indexers.length < maj) throw new Error('Not enough indexers to confirm.')
 
-    await idx.sync()
+    const selected = shuffle(indexers, this.rng).slice(0, maj)
+
+    await sync(selected.map(s => s.base))
     await selected[selected.length - 1].append(null)
 
     for (let i = 0; i < maj; i++) {
-      await idx.sync()
+      await sync(selected.map(s => s.base))
       await selected[i].append(null)
     }
 
-    await idx.sync()
-    return idx.unreplicate()
-  }
-
-  netsplit (left, right) {
-    const waits = []
-    for (const base of left) {
-      waits.push(base.unreplicate(right))
-    }
-    return Promise.all(waits)
+    await sync(selected.map(s => s.base))
   }
 
   spam (writers, messages) {
     if (typeof messages === 'number') {
       messages = writers.map(() => messages)
+    } else {
+      while (messages.length < writers.length) {
+        messages.push(messages[0])
+      }
     }
 
     const complete = []
@@ -425,7 +425,9 @@ function validateOpts (opts) {
   if (opts.open) baseOpts.open = opts.open
   if (opts.close) baseOpts.close = opts.close
   if (opts.valueEncoding) baseOpts.valueEncoding = opts.valueEncoding
-  if (opts.ackInterval) baseOpts.ackInterval = opts.ackInterval
+  if (opts.ackInterval !== undefined) baseOpts.ackInterval = opts.ackInterval
+  if (opts.ackThreshold !== undefined) baseOpts.ackThreshold = opts.ackThreshold
+  if (opts.fastForward !== undefined) baseOpts.fastForward = opts.fastForward
 
   return baseOpts
 }
@@ -455,11 +457,15 @@ function streamGc (s) {
   }
 }
 
-function shuffle (arr, random = Math.random) {
+function getRandom (n, rng) {
+  return Math.floor(rng() * n)
+}
+
+function shuffle (arr, rng) {
   const shuffled = arr.slice()
   const len = shuffled.length
   for (let i = 0; i < shuffled.length; i++) {
-    const offset = i + Math.floor(random() * (len - i))
+    const offset = i + Math.floor(rng() * (len - i))
 
     const swap = shuffled[offset]
     shuffled[offset] = shuffled[i]

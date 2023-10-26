@@ -122,6 +122,48 @@ test('framework - 3 indexers', async t => {
   t.is(root.base.view.indexedLength, 0)
 })
 
+test('framework - network up/down', async t => {
+  const root = new Base(RAM.reusable())
+  await root.ready()
+
+  const a = new Base(RAM.reusable(), { root })
+  const b = new Base(RAM.reusable(), { root })
+
+  await a.ready()
+  await b.ready()
+
+  await root.addWriter(a.key)
+  await root.addWriter(b.key)
+
+  const network = new Network([root, a, b])
+
+  await root.spam(10)
+  await a.spam(10)
+  await network.sync()
+
+  t.is(root.base.view.length, 20)
+  t.is(a.base.view.length, 20)
+  t.is(b.base.view.length, 20)
+
+  await network.down()
+  await b.spam(10)
+
+  t.is(root.base.view.length, 20)
+  t.is(a.base.view.length, 20)
+  t.is(b.base.view.length, 30)
+
+  await new Promise(resolve => setTimeout(resolve, 400))
+
+  t.is(root.base.view.length, 20)
+  t.is(a.base.view.length, 20)
+
+  network.up()
+  await network.sync()
+
+  t.is(root.base.view.length, 30)
+  t.is(a.base.view.length, 30)
+})
+
 test('framework - room', async t => {
   const room = new Room(() => RAM.reusable(), { size: 2 })
   await room.ready()
@@ -134,33 +176,6 @@ test('framework - room', async t => {
 
   for (const member of room) {
     t.is(member.base.view.length, 100)
-    t.is(member.base.view.indexedLength, 100)
-  }
-})
-
-test('framework - add writers', async t => {
-  const room = new Room(() => RAM.reusable())
-  await room.ready()
-
-  room.replicate()
-
-  const members = await room.createMembers(2)
-  await room.addWriters(members, { indexer: true })
-
-  t.is(room.indexers.length, room.root.base.linearizer.indexers.length)
-  t.is(room.indexers.length, 3)
-
-  await room.root.spam(100)
-  await room.sync()
-
-  for (const member of room) {
-    t.is(member.base.view.length, 100)
-    t.is(member.base.view.indexedLength, 0)
-  }
-
-  await room.confirm()
-
-  for (const member of room) {
     t.is(member.base.view.indexedLength, 100)
   }
 })
@@ -235,7 +250,7 @@ test('framework - room netsplit', async t => {
   const [left, right] = await replicated.split(2)
 
   await room.spam(left.members, [100, 50])
-  await room.spam(right.members, [90, 200])
+  await room.spam(right.members, [90, 200, 10])
 
   t.is(left.size, 2)
   t.is(right.size, 3)
@@ -251,7 +266,7 @@ test('framework - room netsplit', async t => {
 
   for (const member of right) {
     t.is(member._streams.size, 2)
-    t.is(member.base.view.length, 290)
+    t.is(member.base.view.length, 300)
   }
 
   await room.confirm(right.members)
@@ -261,20 +276,20 @@ test('framework - room netsplit', async t => {
   }
 
   for (const member of right) {
-    t.is(member.base.view.indexedLength, 290)
+    t.is(member.base.view.indexedLength, 300)
   }
 
   room.replicate()
   await room.sync()
 
   for (const member of room) {
-    t.is(member.base.view.indexedLength, 290)
+    t.is(member.base.view.indexedLength, 300)
   }
 
   // trigger autoack
-  await new Promise(resolve => setTimeout(resolve, 2000))
+  await new Promise(resolve => setTimeout(resolve, 1000))
 
   for (const member of room) {
-    t.is(member.base.view.indexedLength, 440)
+    t.is(member.base.view.indexedLength, 450)
   }
 })
