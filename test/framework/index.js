@@ -124,7 +124,7 @@ class Base {
 class Network {
   constructor (members) {
     this.members = members
-    this._gc = []
+    this.cleared = false
 
     this.replicate()
   }
@@ -134,14 +134,16 @@ class Network {
   }
 
   get size () {
-    return this.members.length
+    return this.cleared ? -1 : this.members.length
   }
 
   has (member) {
+    if (this.cleared) return false
     return this.members.includes(member)
   }
 
   add (member) {
+    if (this.cleared) throw new Error('Network has been cleared.')
     if (!this.has(member)) this.members.push(member)
 
     for (const m of this.members) {
@@ -150,6 +152,8 @@ class Network {
   }
 
   delete (member) {
+    if (!this.has(member)) return
+
     this.members.splice(this.members.indexOf(member),  1)
 
     const leaves = []
@@ -160,14 +164,11 @@ class Network {
   }
 
   merge (set) {
+    if (this.cleared) throw new Error('Network has been cleared.')
     const [from, to] = this.size > set.size ? set : this 
 
     for (const member of from.members) to.add(member)
     from.clear()
-  }
-
-  clear () {
-    this.members = []
   }
 
   sync () {
@@ -175,6 +176,8 @@ class Network {
   }
 
   async split (n) {
+    if (this.cleared) throw new Error('Network has been cleared.')
+
     let i = 0
 
     const left = []
@@ -194,6 +197,7 @@ class Network {
     }
 
     await Promise.all(leaves)
+    this.clear()
 
     return [
       new Network(left),
@@ -222,6 +226,10 @@ class Network {
     return Promise.all(leaves)
   }
 
+  clear () {
+    this.members = []
+  }
+
   destroy () {
     const leaves = []
 
@@ -234,6 +242,7 @@ class Network {
       }
     }
 
+    this.clear()
     return Promise.all(leaves)
   }
 }
