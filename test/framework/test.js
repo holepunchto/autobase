@@ -1,7 +1,7 @@
 const RAM = require('random-access-memory')
 const b4a = require('b4a')
 const test = require('brittle')
-const { Base, Room } = require('./')
+const { Base, Network, Room } = require('./')
 
 test('framework', async t => {
   const base = new Base(RAM.reusable())
@@ -86,34 +86,33 @@ test('framework - 3 indexers', async t => {
   await a.ready()
   await b.ready()
 
-  a.replicate([root, b])
-  b.replicate([root, a])
+  const network = new Network([root, a, b])
 
-  await a.sync()
+  await network.sync()
   await a.join({ indexer: true })
 
-  await b.sync()
+  await network.sync()
   await b.join({ indexer: true })
 
   // confirm
-  await a.sync()
+  await network.sync()
   await a.append(null)
-  await root.sync()
+  await network.sync()
   await root.append(null)
 
   // offline
-  await root.offline()
+  await network.delete(root)
 
   t.is(b.getState().indexers.length, 3)
 
   await a.append('msg')
 
   // confirm
-  await b.sync()
+  await network.sync()
   await b.append(null)
-  await a.sync()
+  await network.sync()
   await a.append(null)
-  await b.sync()
+  await network.sync()
   await b.append(null)
 
   t.is(a.base.view.indexedLength, 1)
@@ -223,35 +222,39 @@ test('framework - room netsplit', async t => {
   const room = new Room(() => RAM.reusable())
   await room.ready()
 
-  room.replicate()
-
   const members = await room.createMembers(4)
   await room.addWriters(members, { indexer: true })
+
+  const replicated = room.replicate()
 
   t.is(room.indexers.length, room.root.base.linearizer.indexers.length)
   t.is(room.indexers.length, 5)
 
-  const left = room.indexers.slice(0, 2) // minority
-  const right = room.indexers.slice(2) // majority
+  t.is(replicated.size, 5)
 
-  await room.netsplit(left, right)
+  const [left, right] = await replicated.split(2)
 
-  await room.spam(left, [100, 50])
-  await room.spam(right, [90, 200])
+  await room.spam(left.members, [100, 50])
+  await room.spam(right.members, [90, 200])
 
-  await room.sync(left)
+  t.is(left.size, 2)
+  t.is(right.size, 3)
+
+  await left.sync()
 
   for (const member of left) {
+    t.is(member._streams.size, 1)
     t.is(member.base.view.length, 150)
   }
 
-  await room.sync(right)
+  await right.sync()
 
   for (const member of right) {
+    t.is(member._streams.size, 2)
     t.is(member.base.view.length, 290)
   }
 
-  await room.confirm(right)
+  await room.confirm(right.members)
 
   for (const member of left) {
     t.is(member.base.view.indexedLength, 0)

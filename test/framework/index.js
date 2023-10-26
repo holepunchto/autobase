@@ -64,17 +64,7 @@ class Base {
     return sync([this.base, ...this._streams.keys()])
   }
 
-  replicate (bases) {
-    if (!Array.isArray(bases)) bases = [bases]
-    const added = []
-    for (const base of bases) {
-      if (this._replicate(base)) added.push(base)
-    }
-
-    return added
-  }
-
-  _replicate (remote) {
+  replicate (remote) {
     if (this._streams.has(remote.base) || remote === this) {
       return false
     }
@@ -93,20 +83,17 @@ class Base {
     return true
   }
 
-  unreplicate (bases) {
-    if (!bases) return this.offline()
-    if (!Array.isArray(bases)) bases = [bases]
+  unreplicate (base) {
+    if (!base) return this.offline()
 
     const closing = []
-    for (const base of bases) {
-      const gc = this._streams.get(base.base)
-      if (gc) closing.push(gc())
-    }
+    const gc = this._streams.get(base.base)
+    if (gc) closing.push(gc())
 
     return Promise.all(closing)
   }
 
-  offline (bases) {
+  offline () {
     const closing = []
     for (const gc of this._streams.values()) {
       closing.push(gc())
@@ -134,6 +121,124 @@ class Base {
   }
 }
 
+class Network {
+  constructor (members) {
+    this.members = members
+    this._gc = []
+
+    this.replicate()
+  }
+
+  * [Symbol.iterator] () {
+    yield * this.members
+  }
+
+  get size () {
+    return this.members.length
+  }
+
+  has (member) {
+    return this.members.includes(member)
+  }
+
+  add (member) {
+    if (!this.has(member)) this.members.push(member)
+
+    for (const m of this.members) {
+      member.replicate(m)
+    }
+  }
+
+  delete (member) {
+    this.members.splice(this.members.indexOf(member),  1)
+
+    const leaves = []
+    for (const m of this.members) {
+      leaves.push(member.unreplicate(m))
+    }
+    return Promise.all(leaves)
+  }
+
+  merge (set) {
+    const [from, to] = this.size > set.size ? set : this 
+
+    for (const member of from.members) to.add(member)
+    from.clear()
+  }
+
+  clear () {
+    this.members = []
+  }
+
+  sync () {
+    return sync(this.members.map(b => b.base))
+  }
+
+  async split (n) {
+    let i = 0
+
+    const left = []
+    const right = []
+    const leaves = []
+
+    for (const m of this.members) {
+      if (i++ < n) {
+        left.push(m)
+      } else {
+        right.push(m)
+
+        for (const l of left) {
+          leaves.push(l.unreplicate(m))
+        }
+      }
+    }
+
+    await Promise.all(leaves)
+
+    return [
+      new Network(left),
+      new Network(right)
+    ]
+  }
+
+  replicate () {
+    const missing = this.members.slice()
+    while (missing.length) {
+      const a = missing.pop()
+      for (const b of missing) b.replicate(a)
+    }
+  }
+
+  unreplicate () {
+    for (const m of this.members) {}
+    return Promise.all(this.members.map(m => this._unreplicate(m)))
+  }
+
+  _unreplicate (member) {
+    const leaves = []
+    for (const m of this.members) {
+      leaves.push(member.unreplicate(m))
+    }
+    return Promise.all(leaves)
+  }
+
+  destroy () {
+    const leaves = []
+
+    const missing = this.members.slice()
+    while (missing.length) {
+      const a = missing.pop()
+
+      for (const b of missing) {
+        leaves.push(b.unreplicate(a))
+      }
+    }
+
+    return Promise.all(leaves)
+  }
+}
+
+// entire autobase system
 class Room {
   constructor (storage, opts = {}) {
     this._storage = storage
@@ -212,22 +317,7 @@ class Room {
   }
 
   replicate (bases = [...this.members.values()]) {
-    const adds = []
-    for (const left of bases) {
-      // todo: maybe double loop too slow at one point
-      const added = left.replicate(bases)
-      if (added.length) adds.push(left, added)
-    }
-
-    return unreplicate
-
-    async function unreplicate () {
-      const closing = []
-      for (const [base, others] of adds) {
-        closing.push(base.unreplicate(others))
-      }
-      return Promise.all(closing)
-    }
+    return new Network(bases)
   }
 
   async addWriters (writers, { indexers = this.indexers, indexer = false, serial = false, random = false } = {}) {
@@ -261,19 +351,19 @@ class Room {
   async _confirm (indexers = this.indexers) {
     const maj = (this.indexers.length >> 1) + 1
 
-    const idx = shuffle(indexers).slice(0, maj)
-    const added = idx[0].replicate(idx)
+    const selected = shuffle(indexers).slice(0, maj)
+    const idx = new Network(selected)
 
-    await idx[0].sync(idx)
-    await idx[idx.length - 1].append(null)
+    await idx.sync()
+    await selected[selected.length - 1].append(null)
 
     for (let i = 0; i < maj; i++) {
-      await idx[i].sync()
-      await idx[i].append(null)
+      await idx.sync()
+      await selected[i].append(null)
     }
 
-    await idx[0].sync(idx)
-    return idx[0].unreplicate(added)
+    await idx.sync()
+    return idx.unreplicate()
   }
 
   netsplit (left, right) {
@@ -299,7 +389,7 @@ class Room {
   }
 }
 
-module.exports = { Base, Room }
+module.exports = { Base, Network, Room }
 
 function defaultAddWriter (key, indexer) {
   return {
