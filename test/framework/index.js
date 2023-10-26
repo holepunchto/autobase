@@ -270,6 +270,10 @@ class Room {
     await this.createMembers(this.size - 1)
   }
 
+  get key () {
+    return this.root.base.bootstrap
+  }
+
   * [Symbol.iterator] () {
     yield * this.members.values()
   }

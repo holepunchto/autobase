@@ -168,6 +168,8 @@ test('framework - room', async t => {
   const room = new Room(() => RAM.reusable(), { size: 2 })
   await room.ready()
 
+  t.alike(room.key, room.root.base.bootstrap)
+
   room.replicate()
 
   await room.root.spam(100)
