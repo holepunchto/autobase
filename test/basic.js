@@ -969,3 +969,26 @@ test('basic - oplog digest', async t => {
   t.is(last.digest.pointer, 0)
   t.is(last.digest.indexers?.length, 2)
 })
+
+test('basic - close during apply', async t => {
+  const [a] = await create(
+    1,
+    async function apply (nodes, view, base) {
+      for (const node of nodes) {
+        if (node.value.add) {
+          await base.addWriter(b4a.from(node.value.add, 'hex'))
+          continue
+        }
+
+        const core = view._source.core.session
+        await core.get(core.length) // can never resolve
+      }
+    },
+    store => store.get('test', { valueEncoding: 'json' })
+  )
+
+  const promise = a.append('hello')
+  setImmediate(() => a.close())
+
+  await t.execution(promise)
+})

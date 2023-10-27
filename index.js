@@ -75,7 +75,12 @@ module.exports = class Autobase extends ReadyResource {
     this._updates = []
     this._handlers = handlers || {}
 
-    this._bump = debounceify(this._advance.bind(this))
+    this._advancing = null
+    this._bump = debounceify(() => {
+      this._advancing = this._advance()
+      return this._advancing
+    })
+
     this._onremotewriterchangeBound = this._onremotewriterchange.bind(this)
 
     this.version = 0 // todo: set version
@@ -269,15 +274,19 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _close () {
+    const closing = this._advancing.catch(safetyCatch)
+
     if (this._ackTimer) {
       this._ackTimer.stop()
       await this._ackTimer.flush()
     }
 
     await this._wakeup.close()
+
     if (this._hasClose) await this._handlers.close(this.view)
     if (this._primaryBootstrap) await this._primaryBootstrap.close()
     await this.store.close()
+    await closing
   }
 
   async _closeWriter (w) {
@@ -329,11 +338,9 @@ module.exports = class Autobase extends ReadyResource {
       await this._bump()
       if (this._acking) await this._bump() // if acking just rebump incase it was triggered from above...
     } catch (err) {
-      if (this.closing) return false
+      if (this.closing) return
       throw err
     }
-
-    return true
   }
 
   // runs in bg, not allowed to throw
@@ -1133,8 +1140,8 @@ module.exports = class Autobase extends ReadyResource {
         try {
           await this._handlers.apply(applyBatch, this.view, this)
         } catch (err) {
-          this.emit('error', err)
-          await this.close()
+          if (!this.closing) this.emit('error', err)
+          this.close().catch(safetyCatch)
           return null
         }
       }
