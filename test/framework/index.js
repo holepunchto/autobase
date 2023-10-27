@@ -1,4 +1,5 @@
 const Corestore = require('corestore')
+const { Replicator, Network } = require('replication-simulator')
 const { sync } = require('autobase-test-helpers')
 const b4a = require('b4a')
 
@@ -15,12 +16,16 @@ class Base {
     const bootstrap = this.root ? this.root.base.bootstrap : null
 
     this.base = new Autobase(this.store, bootstrap, baseOpts)
+    this.replicator = new Replicator(this, { replicate: Base.replicate })
 
-    this._streams = new Map()
     this._addWriter = opts.addWriter || defaultAddWriter
     this._message = opts.message || defaultMessage
 
     this.messageCount = 0
+  }
+
+  static replicate (base, isInitiator) {
+    return base.store.replicate(isInitiator)
   }
 
   ready () {
@@ -62,44 +67,24 @@ class Base {
   }
 
   _syncAll () {
-    return sync([this.base, ...this._streams.keys()])
+    const peers = [this, ...this.replicator.peers.keys()]
+    return sync(peers.map(p => p.base))
   }
 
   replicate (remote) {
-    if (this._streams.has(remote.base) || remote === this) {
-      return false
-    }
-
     const s1 = this.store.replicate(true)
     const s2 = remote.store.replicate(false)
 
-    this._streams.set(remote.base, streamGc(s1))
-    remote._streams.set(this.base, streamGc(s2))
-
-    s1.on('close', () => this._streams.delete(remote.base))
-    s2.on('close', () => remote._streams.delete(this.base))
-
     s1.pipe(s2).pipe(s1)
 
-    return true
-  }
+    return close
 
-  unreplicate (base) {
-    if (!base) return this.offline()
+    async function close () {
+      const p = new Promise(resolve => s1.on('close', resolve))
+      s1.destroy()
 
-    const closing = []
-    const gc = this._streams.get(base.base)
-    if (gc) closing.push(gc())
-
-    return Promise.all(closing)
-  }
-
-  offline () {
-    const closing = []
-    for (const gc of this._streams.values()) {
-      closing.push(gc())
+      return p
     }
-    return Promise.all(closing)
   }
 
   append (data) {
@@ -119,128 +104,6 @@ class Base {
     while (messages-- > 0) {
       await this.append(this._message(this.messageCount++))
     }
-  }
-}
-
-class Network {
-  constructor (members) {
-    this.members = members
-    this.up()
-  }
-
-  * [Symbol.iterator] () {
-    yield * this.members
-  }
-
-  get size () {
-    return this.cleared ? -1 : this.members.length
-  }
-
-  has (member) {
-    return this.members.includes(member)
-  }
-
-  add (member) {
-    if (!this.has(member)) this.members.push(member)
-
-    for (const m of this.members) {
-      member.replicate(m)
-    }
-  }
-
-  delete (member) {
-    if (!this.has(member)) return
-
-    this.members.splice(this.members.indexOf(member), 1)
-
-    const leaves = []
-    for (const m of this.members) {
-      leaves.push(member.unreplicate(m))
-    }
-    return Promise.all(leaves)
-  }
-
-  merge (set) {
-    for (const member of set.members) this.add(member)
-    set.clear()
-  }
-
-  sync () {
-    return sync(this.members.map(b => b.base))
-  }
-
-  async split (n) {
-    let i = 0
-
-    const left = []
-    const right = []
-    const leaves = []
-
-    for (const m of this.members) {
-      if (i++ < n) {
-        left.push(m)
-      } else {
-        right.push(m)
-
-        for (const l of left) {
-          leaves.push(l.unreplicate(m))
-        }
-      }
-    }
-
-    await Promise.all(leaves)
-    this.clear()
-
-    return [
-      new Network(left),
-      new Network(right)
-    ]
-  }
-
-  replicate (base) {
-    for (const member of this.members) {
-      base.replicate(member)
-    }
-  }
-
-  unreplicate (base) {
-    const leaves = []
-    for (const member of this.members) {
-      leaves.push(member.unreplicate(base))
-    }
-    return Promise.all(leaves)
-  }
-
-  up () {
-    const missing = this.members.slice()
-    while (missing.length) {
-      const a = missing.pop()
-      for (const b of missing) b.replicate(a)
-    }
-  }
-
-  down () {
-    const leaves = []
-
-    const missing = this.members.slice()
-    while (missing.length) {
-      const a = missing.pop()
-
-      for (const b of missing) {
-        leaves.push(b.unreplicate(a))
-      }
-    }
-
-    return Promise.all(leaves)
-  }
-
-  clear () {
-    this.members = []
-  }
-
-  async destroy () {
-    await this.down()
-    this.clear()
   }
 }
 
@@ -280,7 +143,10 @@ class Room {
 
   async createMember () {
     const member = new Base(this._storage(), this.opts)
+    const unreplicate = this.root.replicate(member)
+
     await member.ready()
+    await unreplicate()
 
     this.members.set(member.hex, member)
     return member
@@ -292,16 +158,7 @@ class Room {
       create.push(this.createMember())
     }
 
-    const members = await Promise.all(create)
-
-    for (const base of this.members.values()) {
-      for (const other of this.members.values()) {
-        if (base === other) continue
-        base.replicate(other)
-      }
-    }
-
-    return members
+    return Promise.all(create)
   }
 
   _addIndexer (base) {
@@ -328,7 +185,7 @@ class Room {
   }
 
   replicate (bases = [...this.members.values()]) {
-    return new Network(bases)
+    return new Network(bases.map(b => b.replicator))
   }
 
   async addIndexers (writers, opts) {
@@ -402,7 +259,7 @@ class Room {
   }
 }
 
-module.exports = { Base, Network, Room }
+module.exports = { Base, Room }
 
 function defaultAddWriter (key, indexer) {
   return {
@@ -449,15 +306,6 @@ async function defaultApply (nodes, view, base) {
     }
 
     await view.append(node.value)
-  }
-}
-
-function streamGc (s) {
-  return () => {
-    s.destroy()
-    return new Promise(resolve => {
-      s.on('close', resolve)
-    })
   }
 }
 

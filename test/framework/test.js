@@ -1,9 +1,10 @@
 const RAM = require('random-access-memory')
 const b4a = require('b4a')
 const test = require('brittle')
-const { Base, Network, Room } = require('./')
 
-test('framework', async t => {
+const { Base, Room } = require('./')
+
+test('framework - base', async t => {
   const base = new Base(RAM.reusable())
 
   await t.execution(base.ready())
@@ -16,7 +17,7 @@ test('framework', async t => {
   }
 })
 
-test('framework - sync', async t => {
+test('framework - base - sync', async t => {
   const root = new Base(RAM.reusable())
   await root.ready()
 
@@ -35,7 +36,7 @@ test('framework - sync', async t => {
   }
 })
 
-test('framework - unreplicate', async t => {
+test('framework - base - unreplicate', async t => {
   const root = new Base(RAM.reusable())
   await root.ready()
 
@@ -44,10 +45,10 @@ test('framework - unreplicate', async t => {
   const base = new Base(RAM.reusable(), { root })
   await base.ready()
 
-  base.replicate(root)
-  await base.sync()
+  const unreplicate = base.replicate(root)
+  await base.sync(root)
 
-  await base.unreplicate()
+  await unreplicate()
 
   await root.append('msg2')
 
@@ -58,7 +59,7 @@ test('framework - unreplicate', async t => {
   t.is(b.view.length, 1)
 })
 
-test('framework - add writer', async t => {
+test('framework - base - add writer', async t => {
   const root = new Base(RAM.reusable())
   await root.ready()
 
@@ -70,13 +71,13 @@ test('framework - add writer', async t => {
   await base.join()
 
   await base.append('msg')
-  await root.sync()
+  await root.sync(base)
 
   t.is(root.base.view.length, 1)
   t.is(base.base.view.length, 1)
 })
 
-test('framework - 3 indexers', async t => {
+test('framework - base - 3 indexers', async t => {
   const root = new Base(RAM.reusable())
   await root.ready()
 
@@ -86,33 +87,38 @@ test('framework - 3 indexers', async t => {
   await a.ready()
   await b.ready()
 
-  const network = new Network([root, a, b])
+  const rootADown = root.replicate(a)
+  const rootBDown = root.replicate(b)
+  a.replicate(b)
 
-  await network.sync()
+  await root.sync([a, b])
   await a.join({ indexer: true })
 
-  await network.sync()
+  await root.sync([a, b])
   await b.join({ indexer: true })
 
   // confirm
-  await network.sync()
+  await root.sync([a, b])
   await a.append(null)
-  await network.sync()
+  await root.sync([a, b])
   await root.append(null)
 
-  // offline
-  await network.delete(root)
+  // root offline
+  await Promise.all([
+    rootADown(),
+    rootBDown()
+  ])
 
   t.is(b.getState().indexers.length, 3)
 
   await a.append('msg')
 
   // confirm
-  await network.sync()
+  await a.sync(b)
   await b.append(null)
-  await network.sync()
+  await a.sync(b)
   await a.append(null)
-  await network.sync()
+  await a.sync(b)
   await b.append(null)
 
   t.is(a.base.view.indexedLength, 1)
@@ -120,48 +126,6 @@ test('framework - 3 indexers', async t => {
 
   t.is(root.base.view.length, 0)
   t.is(root.base.view.indexedLength, 0)
-})
-
-test('framework - network up/down', async t => {
-  const root = new Base(RAM.reusable())
-  await root.ready()
-
-  const a = new Base(RAM.reusable(), { root })
-  const b = new Base(RAM.reusable(), { root })
-
-  await a.ready()
-  await b.ready()
-
-  await root.addWriter(a.key)
-  await root.addWriter(b.key)
-
-  const network = new Network([root, a, b])
-
-  await root.spam(10)
-  await a.spam(10)
-  await network.sync()
-
-  t.is(root.base.view.length, 20)
-  t.is(a.base.view.length, 20)
-  t.is(b.base.view.length, 20)
-
-  await network.down()
-  await b.spam(10)
-
-  t.is(root.base.view.length, 20)
-  t.is(a.base.view.length, 20)
-  t.is(b.base.view.length, 30)
-
-  await new Promise(resolve => setTimeout(resolve, 400))
-
-  t.is(root.base.view.length, 20)
-  t.is(a.base.view.length, 20)
-
-  network.up()
-  await network.sync()
-
-  t.is(root.base.view.length, 30)
-  t.is(a.base.view.length, 30)
 })
 
 test('framework - room', async t => {
@@ -182,7 +146,7 @@ test('framework - room', async t => {
   }
 })
 
-test('framework - add writers', async t => {
+test('framework - room - add writers', async t => {
   const room = new Room(() => RAM.reusable())
   await room.ready()
 
@@ -209,7 +173,7 @@ test('framework - add writers', async t => {
   }
 })
 
-test('framework - room spam', async t => {
+test('framework - room - spam', async t => {
   const room = new Room(() => RAM.reusable())
   await room.ready()
 
@@ -235,7 +199,7 @@ test('framework - room spam', async t => {
   }
 })
 
-test('framework - room netsplit', async t => {
+test('framework - room - netsplit', async t => {
   const room = new Room(() => RAM.reusable())
   await room.ready()
 
@@ -251,27 +215,25 @@ test('framework - room netsplit', async t => {
 
   const [left, right] = await replicated.split(2)
 
-  await room.spam(left.members, [100, 50])
-  await room.spam(right.members, [90, 200, 10])
+  await room.spam(left.members(), [100, 50])
+  await room.spam(right.members(), [90, 200, 10])
 
   t.is(left.size, 2)
   t.is(right.size, 3)
 
-  await left.sync()
+  await room.sync(left.members())
 
   for (const member of left) {
-    t.is(member._streams.size, 1)
     t.is(member.base.view.length, 150)
   }
 
-  await right.sync()
+  await room.sync(right.members())
 
   for (const member of right) {
-    t.is(member._streams.size, 2)
     t.is(member.base.view.length, 300)
   }
 
-  await room.confirm(right.members)
+  await room.confirm(right.members())
 
   for (const member of left) {
     t.is(member.base.view.indexedLength, 0)
