@@ -992,3 +992,11 @@ test('basic - close during apply', async t => {
 
   await t.execution(promise)
 })
+
+test('basic - constructor throws', async t => {
+  await t.exception(create(1, undefined, open), /Synthetic./)
+
+  function open () {
+    throw new Error('Synthetic.')
+  }
+})
