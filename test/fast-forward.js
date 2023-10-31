@@ -276,6 +276,99 @@ test('fast-forward - multiple queues', async t => {
   }
 })
 
+test('fast-forward - open with no remote io', async t => {
+  const store = new Corestore(await tmpDir(t), {
+    primaryKey: Buffer.alloc(32).fill(0)
+  })
+
+  const store2 = new Corestore(await tmpDir(t), {
+    primaryKey: Buffer.alloc(32).fill(1)
+  })
+
+  const a = new Autobase(store.session(), null, {
+    apply: applyOldState,
+    open: store => store.get('view', { valueEncoding: 'json' }),
+    valueEncoding: 'json',
+    ackInterval: 0,
+    ackThreshold: 0
+  })
+
+  await a.ready()
+
+  const b = new Autobase(store2.session(), a.local.key, {
+    apply: applyOldState,
+    open: store => store.get('view', { valueEncoding: 'json' }),
+    valueEncoding: 'json',
+    ackInterval: 0,
+    ackThreshold: 0
+  })
+
+  await b.ready()
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append('a' + i)
+  }
+
+  await addWriterAndSync(a, b)
+  const unreplicate = replicate([a, b])
+
+  const core = b.view.getBackingCore()
+  const sparse = await isSparse(core)
+
+  t.ok(sparse > 0)
+  t.comment('sparse blocks: ' + sparse)
+
+  await b.append('b1')
+  await b.append('b2')
+  await b.append('b3')
+
+  await unreplicate()
+
+  await a.append('a1001')
+
+  await b.close()
+
+  const local = a.local
+  const remote = store2.get({ key: local.key })
+
+  const s1 = local.replicate(true)
+  const s2 = remote.replicate(false)
+
+  s1.pipe(s2).pipe(s1)
+
+  await remote.download({ end: local.length }).downloaded()
+  s1.destroy()
+  await new Promise(resolve => s2.on('close', resolve))
+
+  const b2 = new Autobase(store2.session(), a.local.key, {
+    apply: applyOldState,
+    open: store => store.get('view', { valueEncoding: 'json' }),
+    valueEncoding: 'json',
+    ackInterval: 0,
+    ackThreshold: 0
+  })
+
+  await b2.ready()
+  await t.execution(b2.ready())
+
+  async function applyOldState (batch, view, base) {
+    for (const { value } of batch) {
+      if (value.add) {
+        const key = Buffer.from(value.add, 'hex')
+        await base.addWriter(key, { indexer: value.indexer })
+        continue
+      }
+
+      if (view) await view.append(value)
+      const core = view._source.core.session
+
+      // get well distributed unique index
+      const index = (view.length * 67 + view.length * 89) % core.length
+      if (core.length) await core.get(index)
+    }
+  }
+})
+
 async function isSparse (core) {
   let n = 0
   for (let i = 0; i < core.length; i++) {
