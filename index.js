@@ -636,15 +636,23 @@ module.exports = class Autobase extends ReadyResource {
     const stack = []
     const visited = new Set()
     const writers = new Map()
+    const indexedClock = new Map()
 
     for (const { key, length } of this.system.heads) {
-      visited.add(b4a.toString(key, 'hex') + '/' + length)
+      const hex = b4a.toString(key, 'hex')
+      visited.add(hex + '/' + length)
+      indexedClock.set(hex, length)
     }
+
+    const { system } = await this._loadSystemInfo()
+    if (system) await system.ready()
 
     for (const { key, length } of await this._getLocallyStoredHeads()) {
       const hex = b4a.toString(key, 'hex')
+
       if (visited.has(hex + '/' + length)) continue
-      stack.push({ key, length })
+      if (!indexedClock.has(hex)) indexedClock.set(hex, system ? await system.getLocalLength(key) : 0)
+      if (indexedClock.get(hex) < length) stack.push({ key, length })
     }
 
     while (stack.length) {
@@ -673,10 +681,12 @@ module.exports = class Autobase extends ReadyResource {
         const hex = b4a.toString(key, 'hex')
 
         if (visited.has(hex + '/' + length)) continue
-        stack.push({ key, length })
+        if (!indexedClock.has(hex)) indexedClock.set(hex, system ? await system.getLocalLength(key) : 0)
+        if (indexedClock.get(hex) < length) stack.push({ key, length })
       }
     }
 
+    if (system) await system.close()
     const ws = []
 
     for (const { core, start, end } of writers.values()) {
