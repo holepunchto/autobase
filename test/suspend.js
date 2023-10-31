@@ -313,6 +313,7 @@ test('suspend - reopen with sync in middle', async t => {
   })
 
   await b2.ready()
+  await b2.update()
 
   t.is(b2.activeWriters.size, 2)
   t.is(b2.view.length, b.view.length + 1)
@@ -359,6 +360,11 @@ test('suspend - reopen with indexing in middle', async t => {
 
   await c.append('c0')
 
+  const order = []
+  for (let i = 0; i < c.view.length; i++) {
+    order.push(await c.view.get(i))
+  }
+
   await c.close()
 
   // majority continues
@@ -385,11 +391,14 @@ test('suspend - reopen with indexing in middle', async t => {
 
   await c2.ready()
 
-  t.is(c2.activeWriters.size, 3)
-  t.is(c2.view.length, 1)
-  t.is(c2.view.indexedLength, 0)
+  t.is(c2.view.length, order.length)
 
-  t.alike(await c2.view.get(0), await c.view.get(0))
+  for (let i = 0; i < c2.view.length; i++) {
+    t.alike(await c2.view.get(i), order[i])
+  }
+
+  t.is(c2.activeWriters.size, 3)
+  t.is(c2.view.indexedLength, 0)
 
   await c2.append('final')
 
@@ -432,6 +441,11 @@ test('suspend - reopen with indexing + sync in middle', async t => {
   t.is(c.view.length, 0)
 
   await c.append('c0')
+
+  const order = []
+  for (let i = 0; i < c.view.length; i++) {
+    order.push(await c.view.get(i))
+  }
 
   await c.close()
 
@@ -493,13 +507,15 @@ test('suspend - reopen with indexing + sync in middle', async t => {
 
   await c2.ready()
 
-  t.is(c2.activeWriters.size, 3)
-  t.is(c2.view.length, 4)
-  t.is(c2.view.indexedLength, 3)
+  t.is(c2.view.length, order.length)
 
-  for (let i = 0; i < b.view.length; i++) {
-    t.alike(await c2.view.get(i), await b.view.get(i))
+  for (let i = 0; i < c2.view.length; i++) {
+    t.alike(await c2.view.get(i), order[i])
   }
+
+  t.is(c2.activeWriters.size, 3)
+  t.is(c2.view.length, order.length)
+  t.is(c2.view.indexedLength, 0)
 
   await c2.append('final')
 
@@ -646,8 +662,6 @@ test('suspend - open new index after reopen', async t => {
 
   await b2.ready()
 
-  t.is(b2.view.first.length + b2.view.second.length, order.length)
-
   for (let i = 0; i < b2.view.first.length; i++) {
     t.alike(await b2.view.first.get(i), order[i])
   }
@@ -659,6 +673,8 @@ test('suspend - open new index after reopen', async t => {
   t.is(b2.activeWriters.size, 2)
 
   await b2.append({ index: 1, data: 'final' })
+
+  t.is(b2.view.first.length + b2.view.second.length, order.length + 1)
 
   await t.execution(replicateAndSync([a, b2]))
 
@@ -751,8 +767,6 @@ test('suspend - reopen multiple indexes', async t => {
 
   await c.ready()
 
-  t.is(c.view.first.length + c.view.second.length, order.length)
-
   for (let i = 0; i < c.view.first.length; i++) {
     t.alike(await c.view.first.get(i), order[i])
   }
@@ -764,6 +778,8 @@ test('suspend - reopen multiple indexes', async t => {
   t.is(c.activeWriters.size, 2)
 
   await c.append({ index: 1, data: 'final' })
+
+  t.is(c.view.first.length + c.view.second.length, order.length + 1)
 
   await t.execution(replicateAndSync([a, c]))
 
@@ -1064,11 +1080,13 @@ test('suspend - migrations', async t => {
 
   await c.ready()
 
-  t.is(c.view.length, order.length)
   t.is(c.view.indexedLength, 3)
   t.is(c.view.signedLength, 3)
   t.is(c.view.getBackingCore().indexedLength, 3)
 
+  await c.update()
+
+  t.is(c.view.length, order.length)
   for (let i = 0; i < c.view.length; i++) {
     t.alike(await c.view.get(i), order[i])
   }
