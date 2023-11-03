@@ -326,11 +326,6 @@ module.exports = class Autobase extends ReadyResource {
     this._ackTimer.bump()
   }
 
-  _triggerAck () {
-    if (this._ackTimer) this._ackTimer.bump()
-    return this.ack()
-  }
-
   async update () {
     if (this.opened === false) await this.ready()
 
@@ -872,7 +867,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (!this.closing && this.localWriter && this._ackIsNeeded()) {
       if (this._ackTimer) this._ackTimer.asap()
-      else this._triggerAck()
+      else this.ack()
     }
 
     if (this.updating === true) {
@@ -901,11 +896,6 @@ module.exports = class Autobase extends ReadyResource {
   _ackIsNeeded () {
     if (!this._addCheckpoints) return false // ack has no impact
 
-    // flush if threshold is reached and we are not already acking
-    if (this._ackTickThreshold && !this._acking && this._ackTick >= this._ackTickThreshold) {
-      return true
-    }
-
     // flush any pending indexers
     if (this.system.pendingIndexers.length > 0) {
       for (const key of this.system.pendingIndexers) {
@@ -926,6 +916,19 @@ module.exports = class Autobase extends ReadyResource {
         this._hasPendingCheckpoint = true
         return true
       }
+    }
+
+    // flush if threshold is reached and we are not already acking
+    if (this._ackTickThreshold && !this._acking && this._ackTick >= this._ackTickThreshold) {
+      if (this._ackTimer) { // the bool in this case is implicitly an "asap" signal
+        for (const w of this.linearizer.indexers) {
+          if (w.core.length > w.length) return false // wait for the normal ack cycle in this case
+        }
+
+        return this.linearizer.shouldAck(this.localWriter, this.hasUnflushedIndexers())
+      }
+
+      return true
     }
 
     return false
