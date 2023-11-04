@@ -105,6 +105,7 @@ class Linearizer {
     this.pending = []
     this.shifted = []
     this.writers = new Map() // tmp solution...
+    this.yielding = null
 
     for (const idx of indexers) {
       this.writers.set(idx.core.key, idx)
@@ -132,7 +133,7 @@ class Linearizer {
       this.heads.delete(dep)
     }
 
-    if (node.dependencies.length > 1) this.merges.unshift(node)
+    if (node.dependencies.length > 1) this.merges.push(node)
 
     this.heads.add(node)
     this.indexerHeads.set(node.writer, node)
@@ -333,26 +334,45 @@ class Linearizer {
     if (this.debug) console.log(this.debug + ':', ...m)
   }
 
-  _yield (node) {
-    if (node.dependencies.length === 0) return this._remove(node)
-    if (node.dependencies.length === 1) return this._yield(node.dependencies[0])
+  _yield (node, skip) {
+    this.yielding = node
 
-    for (const t of this._tailsAndMerges(node)) {
-      if (this._isConfirmed(t, node)) {
-        return this._yield(t)
+    // only stop when we find a tail
+    while (node.dependencies.length) {
+      // easy with only one dependency
+      if (node.dependencies.length === 1) {
+        node = node.dependencies[0]
+        continue
       }
+
+      let next = null
+
+      if (!skip) {
+        // for merges check if one fork is confirmed
+        for (const t of this._tailsAndMerges(node)) {
+          if (this._isConfirmed(t, node)) {
+            this.yielding = next = t
+            break
+          }
+        }
+      }
+
+      // otherwise tiebreak between current tails
+      if (!next) {
+        for (const t of this._tails(node)) {
+          if (next && !tieBreak(t.writer, next.writer)) continue
+          next = t
+        }
+      }
+
+      node = next
     }
 
-    let best = null
-    for (const t of this._tails(node)) {
-      if (best === null || tieBreak(t.writer, best.writer)) {
-        best = t
-      }
+    if (this.yielding === node) {
+      this.yielding = null
     }
 
-    if (!best) return
-
-    return this._yield(best)
+    return this._remove(node)
   }
 
   shift () {
@@ -360,16 +380,33 @@ class Linearizer {
     return this.shifted.length ? this.shifted.shift() : null
   }
 
+  _sameTails (a, b) {
+    const t1 = this._tails(a)
+    const t2 = this._tails(b)
+
+    if (t1.size !== t2.size) return false
+
+    for (const t of t1) {
+      if (!t2.has(t)) return false
+    }
+
+    return true
+  }
+
   _shift () {
+    if (this.yielding) {
+      return this._yield(this.yielding, true)
+    }
+
     for (const merge of this.merges) {
       if (this._isConfirmed(merge)) {
-        return this._yield(merge)
+        return this._yield(merge, false)
       }
     }
 
     for (const tail of this.tails) {
       if (this._isConfirmed(tail)) {
-        return this._yield(tail)
+        return this._yield(tail, false)
       }
     }
 
