@@ -963,7 +963,7 @@ module.exports = class Autobase extends ReadyResource {
         const view = this.store.get(v.key)
 
         // same as below, we technically just need to check that we have the hash, not the block
-        if (await view.has(v.length - 1)) {
+        if (v.length === 0 || await view.has(v.length - 1)) {
           await view.close()
         } else {
           pendingViews.push({ view, length: v.length })
