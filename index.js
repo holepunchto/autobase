@@ -230,7 +230,8 @@ module.exports = class Autobase extends ReadyResource {
     const { key, length } = indexed
 
     const encryptionKey = AutoStore.getBlockKey(bootstrap, this.encryptionKey, '_system')
-    const system = length ? new SystemView(this.store.get({ key, exclusive: false, cache: true, compat: false, encryptionKey, isBlockKey: true }), length) : null
+    const core = this.store.get({ key, exclusive: false, cache: true, compat: false, encryptionKey, isBlockKey: true }).batch({ restore: true, session: false })
+    const system = length ? new SystemView(core, length) : null
 
     if (system) await system.ready()
 
@@ -760,7 +761,7 @@ module.exports = class Autobase extends ReadyResource {
     return added
   }
 
-  async _advanceSystemPointer (length = this.system.core.getBackingCore().indexedLength) {
+  async _advanceSystemPointer (length = this.system.core.getBackingCore().flushedLength) {
     await this.local.setUserData('autobase/system', c.encode(messages.SystemPointer, {
       indexed: {
         key: this.system.core.key,
