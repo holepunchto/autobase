@@ -960,15 +960,12 @@ module.exports = class Autobase extends ReadyResource {
       const pendingViews = []
 
       for (const v of system.views) {
-        const view = this._viewStore.getByKey(v.key)
-        if (view && !view.opened) await view.ready()
-        if (!view || !b4a.equals(view.key, v.key)) {
-          this.fastForwardingTo = 0
-          return
-        }
+        const view = this.store.get(v.key)
 
         // same as below, we technically just need to check that we have the hash, not the block
-        if (v.length > 0 && !(await view.core.session.has(v.length - 1))) {
+        if (await view.has(v.length - 1)) {
+          await view.close()
+        } else {
           pendingViews.push({ view, length: v.length })
         }
       }
@@ -976,7 +973,7 @@ module.exports = class Autobase extends ReadyResource {
       const promises = []
       for (const { view, length } of pendingViews) {
         // we could just get the hash here, but likely user wants the block so yolo
-        promises.push(view.core.session.get(length - 1))
+        promises.push(view.get(length - 1))
       }
 
       await Promise.all(promises)
@@ -1078,7 +1075,7 @@ module.exports = class Autobase extends ReadyResource {
     this._updatingCores = false
 
     for (const core of this._viewStore.opened.values()) {
-      if (!await core.flush()) complete &&= false
+      if (!await core.flush()) complete = false
     }
 
     // updates emitted sync
