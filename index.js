@@ -762,6 +762,14 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _advanceSystemPointer (length = this.system.core.getBackingCore().flushedLength) {
+    if (length) { // TODO: remove when we are 100% we never hit the return in this if
+      const { views } = await this.system.getIndexedInfo(length)
+      for (const { key, length } of views) {
+        const view = this._viewStore.getByKey(key)
+        if (!view || (view.length < length)) return
+      }
+    }
+
     await this.local.setUserData('autobase/system', c.encode(messages.SystemPointer, {
       indexed: {
         key: this.system.core.key,
