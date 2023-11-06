@@ -71,6 +71,7 @@ module.exports = class Autobase extends ReadyResource {
     this._firstCheckpoint = true
     this._hadUpdateSinceWakeup = true // just init to true, easier
     this._hasPendingCheckpoint = false
+    this._systemPointer = 0
 
     this._updates = []
     this._handlers = handlers || {}
@@ -229,6 +230,8 @@ module.exports = class Autobase extends ReadyResource {
     const { indexed } = c.decode(messages.SystemPointer, pointer)
     const { key, length } = indexed
 
+    this._systemPointer = length
+
     const encryptionKey = AutoStore.getBlockKey(bootstrap, this.encryptionKey, '_system')
     const core = length ? this.store.get({ key, exclusive: false, cache: true, compat: false, encryptionKey, isBlockKey: true }).batch({ checkout: length, session: false }) : null
     const system = length ? new SystemView(core, length) : null
@@ -243,9 +246,15 @@ module.exports = class Autobase extends ReadyResource {
 
   async _openPreBump () {
     this._presystem = this._openPreSystem()
-    await this._presystem
 
-    await this._viewStore.flush()
+    try {
+      await this._presystem
+      await this._viewStore.flush()
+    } catch (err) {
+      safetyCatch(err)
+      await this.local.setUserData('autobase/system', null)
+      throw err
+    }
 
     // see if we can load from indexer checkpoint
     await this.system.ready()
@@ -762,14 +771,19 @@ module.exports = class Autobase extends ReadyResource {
     return added
   }
 
-  async _advanceSystemPointer (length = this.system.core.getBackingCore().flushedLength) {
+  async _advanceSystemPointer (length) {
     if (length) { // TODO: remove when we are 100% we never hit the return in this if
       const { views } = await this.system.getIndexedInfo(length)
       for (const { key, length } of views) {
         const view = this._viewStore.getByKey(key)
-        if (!view || (view.length < length)) return
+        if (!view || (view.core.flushedLength < length)) {
+          // TODO: this fires in some FF scenarios cause the core above is another core, should be fine
+          return
+        }
       }
     }
+
+    this._systemPointer = length
 
     await this.local.setUserData('autobase/system', c.encode(messages.SystemPointer, {
       indexed: {
@@ -817,9 +831,8 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this.closing) return
 
-      if ((await this._flushIndexes()) || this.updated) {
-        await this._advanceSystemPointer()
-      }
+      const flushed = (await this._flushIndexes()) ? this.system.core.getBackingCore().flushedLength : this._systemPointer
+      if (this.updating || flushed > this._systemPointer) await this._advanceSystemPointer(flushed)
 
       if (this.closing) return
 
