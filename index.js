@@ -230,7 +230,7 @@ module.exports = class Autobase extends ReadyResource {
     const { key, length } = indexed
 
     const encryptionKey = AutoStore.getBlockKey(bootstrap, this.encryptionKey, '_system')
-    const core = this.store.get({ key, exclusive: false, cache: true, compat: false, encryptionKey, isBlockKey: true }).batch({ restore: true, session: false })
+    const core = length ? this.store.get({ key, exclusive: false, cache: true, compat: false, encryptionKey, isBlockKey: true }).batch({ checkout: length, session: false }) : null
     const system = length ? new SystemView(core, length) : null
 
     if (system) await system.ready()
