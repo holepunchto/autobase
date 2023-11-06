@@ -272,6 +272,7 @@ module.exports = class Autobase extends ReadyResource {
 
     // queue a full bump that handles wakeup etc (not legal to wait for that here)
     this._queueBump()
+    this.queueFastForward()
   }
 
   async _close () {
@@ -792,7 +793,9 @@ module.exports = class Autobase extends ReadyResource {
 
   async _drain () {
     while (!this.closing) {
-      if (this.fastForwardTo !== null) await this._applyFastForward()
+      if (this.fastForwardTo !== null) {
+        await this._applyFastForward()
+      }
 
       const remoteAdded = await this._addRemoteHeads()
       const localNodes = this._appending === null ? null : this._addLocalHeads()
@@ -985,6 +988,11 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       await Promise.all(promises)
+
+      for (const { view } of pendingViews) {
+        await view.close()
+      }
+
       await system.close()
     } catch (err) {
       this.fastForwardingTo = 0
@@ -1036,7 +1044,7 @@ module.exports = class Autobase extends ReadyResource {
     let i = 0
     for (const v of system.views) {
       const view = this._viewStore.getByKey(v.key)
-      if (!view && view.core.session.length < v.length) {
+      if (!view || view.core.session.length < v.length) {
         this._clearFastForward() // something wrong somewhere, likely a bug, just safety
         return
       }
