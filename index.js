@@ -276,7 +276,6 @@ module.exports = class Autobase extends ReadyResource {
     await this._prebump
 
     await this._wakeup.ready()
-    await this._drainPreready()
 
     this.system.requestWakeup()
 
@@ -645,92 +644,6 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _reAddLocalNodes () {
-    const stack = []
-    const visited = new Set()
-    const writers = new Map()
-    const indexedClock = new Map()
-
-    for (const { key, length } of this.system.heads) {
-      const hex = b4a.toString(key, 'hex')
-      visited.add(hex + '/' + length)
-      indexedClock.set(hex, length)
-    }
-
-    const { system } = await this._loadSystemInfo()
-    if (system) await system.ready()
-
-    for (const { key, length } of await this._getLocallyStoredHeads()) {
-      const hex = b4a.toString(key, 'hex')
-
-      if (visited.has(hex + '/' + length)) continue
-      if (!indexedClock.has(hex)) indexedClock.set(hex, system ? await system.getLocalLength(key) : 0)
-      if (indexedClock.get(hex) < length) stack.push({ key, length })
-    }
-
-    while (stack.length) {
-      const { key, length } = stack.pop()
-      const hex = b4a.toString(key, 'hex')
-
-      visited.add(hex + '/' + length)
-
-      let w = writers.get(hex)
-
-      if (!w) {
-        w = {
-          core: this._makeWriterCore(key),
-          start: length - 1,
-          end: length
-        }
-        writers.set(hex, w)
-      }
-
-      if (length > w.end) w.end = length
-      if (length - 1 < w.start) w.start = length - 1
-
-      const block = await w.core.get(length - 1)
-
-      for (const { key, length } of block.node.heads) {
-        const hex = b4a.toString(key, 'hex')
-
-        if (visited.has(hex + '/' + length)) continue
-        if (!indexedClock.has(hex)) indexedClock.set(hex, system ? await system.getLocalLength(key) : 0)
-        if (indexedClock.get(hex) < length) stack.push({ key, length })
-      }
-    }
-
-    if (system) await system.close()
-    const ws = []
-
-    for (const { core, start, end } of writers.values()) {
-      await core.ready()
-
-      ws.push({
-        writer: await this._getWriterByKey(core.key, start, start, false),
-        missing: end - start
-      })
-
-      await core.close()
-    }
-
-    // TODO: instead of linear polling the writers, we could build a stack above to avoid that
-    while (ws.length) {
-      for (let i = 0; i < ws.length; i++) {
-        const w = ws[i]
-
-        await w.writer.update()
-        const node = w.writer.advance()
-        if (!node) continue
-        this.linearizer.addHead(node)
-
-        if (--w.missing > 0) continue
-
-        const last = ws.pop()
-        if (last !== w) ws[i--] = last
-      }
-    }
-  }
-
   _addLocalHeads () {
     const nodes = new Array(this._appending.length)
     for (let i = 0; i < this._appending.length; i++) {
@@ -799,17 +712,6 @@ module.exports = class Autobase extends ReadyResource {
       },
       heads: this.system.heads
     }))
-  }
-
-  async _drainPreready () {
-    // only readd the state we have locally
-    await this._reAddLocalNodes()
-
-    const u = this.linearizer.update()
-    if (u) await this._applyUpdate(u)
-
-    await this._flushIndexes()
-    await this._gcWriters()
   }
 
   async _drain () {
