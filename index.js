@@ -328,7 +328,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _startAckTimer () {
     if (this._ackTimer) return
-    this._ackTimer = new Timer(this.ack.bind(this), this._ackInterval)
+    this._ackTimer = new Timer(this._backgroundAck.bind(this), this._ackInterval)
     this._bumpAckTimer()
   }
 
@@ -378,7 +378,11 @@ module.exports = class Autobase extends ReadyResource {
     return this.fastForwardingTo > 0 && this.fastForwardingTo > this.system.core.getBackingCore().length
   }
 
-  async ack () {
+  _backgroundAck () {
+    return this.ack(true)
+  }
+
+  async ack (bg = false) {
     if (this.localWriter === null) return
 
     const isPendingIndexer = this._isPending()
@@ -397,6 +401,10 @@ module.exports = class Autobase extends ReadyResource {
     } catch (err) {
       if (!this.closing) throw err
     }
+
+    // avoid lumping acks together due to the bump wait here
+    if (this._ackTimer && bg) await this._ackTimer.asapStandalone()
+    if (this.closing) return
 
     const unflushed = this._hasPendingCheckpoint || this.hasUnflushedIndexers()
     if (!this.closing && (isPendingIndexer || this.linearizer.shouldAck(this.localWriter, unflushed))) {
