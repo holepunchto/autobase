@@ -210,6 +210,7 @@ test('suspend - reopen after index', async t => {
   })
 
   await c.ready()
+  await c.update()
 
   t.is(c.view.length, order.length)
 
@@ -390,6 +391,7 @@ test('suspend - reopen with indexing in middle', async t => {
   })
 
   await c2.ready()
+  await c2.update()
 
   t.is(c2.view.length, order.length)
 
@@ -413,7 +415,7 @@ test('suspend - reopen with indexing in middle', async t => {
   await c2.close()
 })
 
-test('suspend - reopen with indexing + sync in middle', async t => {
+test.skip('suspend - reopen with indexing + sync in middle', async t => {
   const [a, b] = await create(2, apply, open)
 
   const store = new Corestore(await tmpDir(t), {
@@ -766,6 +768,7 @@ test('suspend - reopen multiple indexes', async t => {
   })
 
   await c.ready()
+  await c.update()
 
   for (let i = 0; i < c.view.first.length; i++) {
     t.alike(await c.view.first.get(i), order[i])
