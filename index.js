@@ -69,7 +69,6 @@ module.exports = class Autobase extends ReadyResource {
     this._needsWakeupHeads = true
     this._addCheckpoints = false
     this._firstCheckpoint = true
-    this._hadUpdateSinceWakeup = true // just init to true, easier
     this._hasPendingCheckpoint = false
     this._systemPointer = 0
 
@@ -279,6 +278,8 @@ module.exports = class Autobase extends ReadyResource {
     await this._wakeup.ready()
     await this._drainPreready()
 
+    this.system.requestWakeup()
+
     // queue a full bump that handles wakeup etc (not legal to wait for that here)
     this._queueBump()
     this.queueFastForward()
@@ -308,8 +309,6 @@ module.exports = class Autobase extends ReadyResource {
   async _gcWriters () {
     // just return early, why not
     if (this._checkWriters.length === 0) return
-
-    this.system.broadcastWakeup()
 
     while (this._checkWriters.length > 0) {
       const w = this._checkWriters.pop()
@@ -817,6 +816,7 @@ module.exports = class Autobase extends ReadyResource {
     while (!this.closing) {
       if (this.fastForwardTo !== null) {
         await this._applyFastForward()
+        this.system.requestWakeup()
       }
 
       const remoteAdded = await this._addRemoteHeads()
@@ -904,26 +904,11 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     if (this.updating === true) {
-      this._hadUpdateSinceWakeup = true
       this.updating = false
       this.emit('update')
     }
 
     await this._gcWriters()
-
-    // TODO: prop only needed if new peers joined since we last requested wakeup really
-    // but better to overrequest atm and fix later
-    if (this._idle() && this._hadUpdateSinceWakeup) {
-      this._hadUpdateSinceWakeup = false
-      this.system.requestWakeup()
-    }
-  }
-
-  _idle () {
-    for (const w of this.activeWriters) {
-      if (w.isIndexer && !w.idle()) return false
-    }
-    return true
   }
 
   _ackIsNeeded () {
