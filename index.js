@@ -352,13 +352,13 @@ module.exports = class Autobase extends ReadyResource {
   // runs in bg, not allowed to throw
   // TODO: refactor so this only moves the writer affected to a updated set
   async _onremotewriterchange () {
+    this._bumpAckTimer()
+
     try {
       await this._bump()
     } catch (err) {
       if (!this.closing) throw err
     }
-
-    this._bumpAckTimer()
   }
 
   _onwakeup () {
