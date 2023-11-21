@@ -496,6 +496,17 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  // no guarantees where the user data is stored, just that its associated with the base
+  async setUserData (key, val) {
+    await this._presystem
+    await this._primaryBootstrap.setUserData(key, val)
+  }
+
+  async getUserData (key) {
+    await this._presystem
+    return await this._primaryBootstrap.getUserData(key)
+  }
+
   getNamespace (key, core) {
     const w = this.activeWriters.get(key)
     if (!w) return null
