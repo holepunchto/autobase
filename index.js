@@ -92,6 +92,8 @@ module.exports = class Autobase extends ReadyResource {
     this._hasOpen = !!this._handlers.open
     this._hasClose = !!this._handlers.close
 
+    this.onindex = handlers.onindex || noop
+
     this._viewStore = new AutoStore(this)
 
     this.view = null
@@ -732,6 +734,7 @@ module.exports = class Autobase extends ReadyResource {
 
       const u = this.linearizer.update()
       const changed = u ? await this._applyUpdate(u) : null
+      const indexed = !!this._updatingCores
 
       if (this.closing) return
 
@@ -743,6 +746,8 @@ module.exports = class Autobase extends ReadyResource {
 
       const flushed = (await this._flushIndexes()) ? this.system.core.getBackingCore().flushedLength : this._systemPointer
       if (this.updating || flushed > this._systemPointer) await this._advanceSystemPointer(flushed)
+
+      if (indexed) await this.onindex(this)
 
       if (this.closing) return
 
@@ -1347,3 +1352,5 @@ function compareNodes (a, b) {
 function random2over1 (n) {
   return Math.floor(n + Math.random() * n)
 }
+
+function noop () {}

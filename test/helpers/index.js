@@ -8,6 +8,7 @@ const Autobase = require('../..')
 const encryptionKey = process.env && process.env.ENCRYPT_ALL ? b4a.alloc(32).fill('autobase-encryption-test') : undefined
 
 module.exports = {
+  createStores,
   create,
   addWriter,
   addWriterAndSync,
@@ -17,6 +18,15 @@ module.exports = {
   compare,
   compareViews,
   ...helpers
+}
+
+async function createStores (n, opts = {}) {
+  const storage = opts.storage || (() => ram.reusable())
+  const stores = []
+  for (let i = 0; i < n; i++) {
+    stores.push(new Corestore(await storage(), { primaryKey: Buffer.alloc(32).fill(i), encryptionKey }))
+  }
+  return stores
 }
 
 async function create (n, apply, open, close, opts = {}) {

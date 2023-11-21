@@ -6,6 +6,7 @@ const {
   create,
   apply,
   addWriter,
+  addWriterAndSync,
   confirm,
   replicateAndSync
 } = require('./helpers')
@@ -138,4 +139,56 @@ test('core - properties', async t => {
   t.is(base.view.id, base.view._source.core.id)
   t.is(base.view.key, base.view._source.core.key)
   t.is(base.view.discoveryKey, base.view._source.core.discoveryKey)
+})
+
+test('core - indexed view', async t => {
+  const [a, b] = await create(2, apply, store => store.get('test'))
+
+  const normal = a.view.session({ snapshot: false })
+  const indexed = a.view.session({ snapshot: false, indexed: true })
+
+  await normal.ready()
+  await indexed.ready()
+
+  t.absent(normal.indexed)
+  t.ok(indexed.indexed)
+
+  let normals = 0
+  let indexeds = 0
+
+  normal.on('append', () => { normals++ })
+  indexed.on('append', () => { indexeds++ })
+
+  a.view._source.debug = true
+  await a.append('hello, world!')
+
+  await new Promise(resolve => setImmediate(resolve))
+
+  t.is(normals, 1)
+  t.is(indexeds, 1)
+
+  await addWriterAndSync(a, b)
+
+  await a.append('bicycle!')
+
+  t.is(a.linearizer.indexers.length, 2)
+
+  await new Promise(resolve => setImmediate(resolve))
+
+  t.is(normals, 2)
+  t.is(indexeds, 1)
+
+  t.is(normal.length, 2)
+  t.is(indexed.length, 1)
+
+  await confirm([a, b])
+
+  // get sigs back and forth
+  await b.append(null)
+  await replicateAndSync([a, b])
+  await a.append(null)
+  await replicateAndSync([a, b])
+
+  t.is(indexed.length, 2)
+  t.is(indexeds, 2)
 })
