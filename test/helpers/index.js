@@ -13,6 +13,7 @@ module.exports = {
   addWriterAndSync,
   apply,
   confirm,
+  printTip,
   compare,
   compareViews,
   ...helpers
@@ -34,6 +35,44 @@ async function create (n, apply, open, close, opts = {}) {
 
 async function addWriter (base, add, indexer = true) {
   return base.append({ add: add.local.key.toString('hex'), indexer })
+}
+
+function printTip (tip, indexers) {
+  let string = '```mermaid\n'
+  string += 'graph TD;\n'
+
+  for (const node of tip) {
+    for (const dep of node.dependencies) {
+      if (!tip.includes(dep)) continue
+
+      let label = node.ref
+      let depLabel = dep.ref
+
+      if (indexers) {
+        const index = indexers.indexOf(node.writer)
+        const depIndex = indexers.indexOf(dep.writer)
+
+        if (index !== -1) {
+          const char = String.fromCharCode(0x41 + index)
+          label = char + ':' + node.length
+        }
+
+        if (depIndex !== -1) {
+          const char = String.fromCharCode(0x41 + depIndex)
+          depLabel = char + ':' + dep.length
+        }
+      }
+
+      string += `  ${labelNonNull(label, node)}-->${labelNonNull(depLabel, dep)};\n`
+    }
+  }
+
+  string += '```'
+  return string
+
+  function labelNonNull (label, node) {
+    return label + (node.value !== null ? '*' : '')
+  }
 }
 
 async function addWriterAndSync (base, add, indexer = true, bases = [base, add]) {
