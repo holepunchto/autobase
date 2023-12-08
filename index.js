@@ -213,6 +213,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this._primaryBootstrap) {
       await this._primaryBootstrap.ready()
+      if (this.encryptionKey) await this._primaryBootstrap.setUserData('autobase/encryption', this.encryptionKey)
     }
 
     const { bootstrap, system } = await this._loadSystemInfo()
