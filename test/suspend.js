@@ -1109,6 +1109,50 @@ test('suspend - migrations', async t => {
   await c.close()
 })
 
+test('suspend - append waits for drain after boot', async t => {
+  const [a] = await create(1, applyMultiple, openMultiple)
+
+  const store = new Corestore(await tmpDir(t), {
+    primaryKey: Buffer.alloc(32).fill(1)
+  })
+
+  const b = new Autobase(store.session(), a.local.key, {
+    valueEncoding: 'json',
+    apply: applyMultiple,
+    open: openMultiple,
+    ackInterval: 0,
+    ackThreshold: 0,
+    fastForward: false
+  })
+
+  await b.ready()
+
+  await addWriterAndSync(a, b)
+
+  await replicateAndSync([a, b])
+
+  for (let i = 0; i < 100; i++) await b.append({ tick: true })
+
+  await b.close()
+
+  const b2 = new Autobase(store.session(), a.local.key, {
+    valueEncoding: 'json',
+    apply: applyMultiple,
+    open: openMultiple,
+    ackInterval: 0,
+    ackThreshold: 0,
+    fastForward: false
+  })
+
+  await b2.append({ last: true })
+
+  const { node } = await b2.localWriter.core.get(b2.localWriter.core.length - 1)
+  t.is(node.heads.length, 1)
+  t.is(node.heads[0].length, 101) // links the last node
+
+  await store.close()
+})
+
 function open (store) {
   return store.get('view', { valueEncoding: 'json' })
 }
