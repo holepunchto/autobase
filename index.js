@@ -76,6 +76,8 @@ module.exports = class Autobase extends ReadyResource {
     this._handlers = handlers || {}
 
     this._advancing = null
+    this._advanced = null
+
     this._bump = debounceify(() => {
       this._advancing = this._advance()
       return this._advancing
@@ -284,6 +286,8 @@ module.exports = class Autobase extends ReadyResource {
 
     // queue a full bump that handles wakeup etc (not legal to wait for that here)
     this._queueBump()
+    this._advanced = this._advancing
+
     this.queueFastForward()
   }
 
@@ -426,6 +430,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async append (value) {
     if (!this.opened) await this.ready()
+    await this._advanced // ensure all local state has been applied, only needed until persistent batches
 
     if (this.localWriter === null) {
       throw new Error('Not writable')
