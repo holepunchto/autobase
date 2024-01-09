@@ -1148,7 +1148,7 @@ test('suspend - append waits for drain after boot', async t => {
 
   const { node } = await b2.localWriter.core.get(b2.localWriter.core.length - 1)
   t.is(node.heads.length, 1)
-  t.is(node.heads[0].length, 101) // links the last node
+  t.is(node.heads[0].length, 102) // links the last node
 
   await store.close()
 })
