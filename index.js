@@ -307,6 +307,11 @@ module.exports = class Autobase extends ReadyResource {
     await closing
   }
 
+  _onError (err) {
+    if (!this.closing) this.emit('error', err)
+    this.close().catch(safetyCatch)
+  }
+
   async _closeWriter (w) {
     this.activeWriters.delete(w)
     await w.close()
@@ -820,7 +825,12 @@ module.exports = class Autobase extends ReadyResource {
     // note: this might block due to network i/o
     if (this._needsWakeup === true || this._wakeupHints.size > 0) await this._drainWakeup()
 
-    await this._drain()
+    try {
+      await this._drain()
+    } catch (err) {
+      this._onError(err)
+      return
+    }
 
     if (!this.closing && this.localWriter && this._ackIsNeeded()) {
       if (this._ackTimer) this._ackTimer.asap()
@@ -1184,8 +1194,7 @@ module.exports = class Autobase extends ReadyResource {
         try {
           await this._handlers.apply(applyBatch, this.view, this)
         } catch (err) {
-          if (!this.closing) this.emit('error', err)
-          this.close().catch(safetyCatch)
+          this._onError(err)
           return null
         }
       }
