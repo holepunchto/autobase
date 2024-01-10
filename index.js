@@ -292,6 +292,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _close () {
+    await Promise.resolve() // defer one tick
+
     const closing = this._advancing.catch(safetyCatch)
 
     if (this._ackTimer) {
@@ -308,8 +310,9 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _onError (err) {
-    if (!this.closing) this.emit('error', err)
+    if (this.closing) return
     this.close().catch(safetyCatch)
+    this.emit('error', err)
   }
 
   async _closeWriter (w) {
