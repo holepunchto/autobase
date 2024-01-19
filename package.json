@@ -27,7 +27,7 @@
     "b4a": "^1.6.1",
     "debounceify": "^1.0.0",
     "hyperbee": "^2.4.2",
-    "hypercore": "^10.29.2",
+    "hypercore": "^10.32.3",
     "hypercore-crypto": "^3.4.0",
     "hypercore-id-encoding": "^1.2.0",
     "nanoassert": "^2.0.0",
@@ -39,7 +39,7 @@
   "devDependencies": {
     "autobase-test-helpers": "^2.0.1",
     "brittle": "^3.1.1",
-    "corestore": "^6.15.3",
+    "corestore": "^6.16.1",
     "random-access-memory": "^6.2.0",
     "same-data": "^1.0.0",
     "standard": "^17.0.0",

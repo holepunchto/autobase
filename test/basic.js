@@ -61,7 +61,7 @@ test('basic - local key pair', async t => {
 
   t.is(base.view.indexedLength, 1)
   t.alike(await base.view.get(0), block)
-  t.is(base.local.manifest.signer.publicKey, keyPair.publicKey)
+  t.is(base.local.manifest.signers[0].publicKey, keyPair.publicKey)
 })
 
 test('basic - view', async t => {

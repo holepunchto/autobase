@@ -526,7 +526,7 @@ module.exports = class Autobase extends ReadyResource {
     if (!w) return null
 
     const namespace = w.deriveNamespace(core.name)
-    const publicKey = w.core.manifest.signer.publicKey
+    const publicKey = w.core.manifest.signers[0].publicKey
 
     return {
       namespace,
@@ -1276,8 +1276,8 @@ module.exports = class Autobase extends ReadyResource {
       const w = await this._getWriterByKey(key)
       indexers.push({
         signature: 0,
-        namespace: w.core.manifest.signer.namespace,
-        publicKey: w.core.manifest.signer.publicKey
+        namespace: w.core.manifest.signers[0].namespace,
+        publicKey: w.core.manifest.signers[0].publicKey
       })
     }
 
