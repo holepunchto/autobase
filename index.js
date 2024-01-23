@@ -60,6 +60,7 @@ module.exports = class Autobase extends ReadyResource {
     this._appending = null
     this._wakeup = new AutoWakeup(this)
     this._wakeupHints = new Set()
+    this._queueViewReset = false
 
     this._applying = null
     this._updatingCores = false
@@ -732,13 +733,12 @@ module.exports = class Autobase extends ReadyResource {
 
     this._systemPointer = length
 
-    await this.local.setUserData('autobase/system', c.encode(messages.SystemPointer, {
-      indexed: {
-        key: this.system.core.key,
-        length
-      },
-      heads: this.system.heads
-    }))
+    await this._setSystemPointer(this.system.core.key, length, this.system.heads)
+  }
+
+  async _setSystemPointer (key, length, heads) {
+    const pointer = c.encode(messages.SystemPointer, { indexed: { key, length }, heads })
+    await this.local.setUserData('autobase/system', pointer)
   }
 
   async _drain () {
@@ -775,6 +775,13 @@ module.exports = class Autobase extends ReadyResource {
       if (indexed) await this.onindex(this)
 
       if (this.closing) return
+
+      // force reset state in worst case
+      if (this._queueViewReset) {
+        this._queueViewReset = false
+        await this._forceResetViews()
+        continue
+      }
 
       if (!changed) {
         if (this._checkWriters.length > 0) {
@@ -887,6 +894,33 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return false
+  }
+
+  forceResetViews () {
+    this._queueViewReset = true
+    return this._bump()
+  }
+
+  async _forceResetViews () {
+    const length = this.system.core.getBackingCore().indexedLength
+    const info = await this.system.getIndexedInfo(length)
+
+    this._undoAll()
+    this._systemPointer = length
+    await this._setSystemPointer(this.system.core.key, length, info.heads)
+
+    for (const { key, length } of info.views) {
+      const core = this._viewStore.getByKey(key)
+      await core.reset(length)
+    }
+
+    for (const w of this.activeWriters) {
+      await w.close()
+      this.activeWriters.delete(w)
+    }
+
+    await this.system.update()
+    await this._makeLinearizer(this.system)
   }
 
   // NOTE: runs in parallel with everything, can never fail
