@@ -441,6 +441,9 @@ module.exports = class Autobase extends ReadyResource {
     if (!this.opened) await this.ready()
     await this._advanced // ensure all local state has been applied, only needed until persistent batches
 
+    // if a reset is scheduled await those
+    while (this._queueViewReset && !this.closing) await this._bump()
+
     if (this.localWriter === null) {
       throw new Error('Not writable')
     }
@@ -777,7 +780,7 @@ module.exports = class Autobase extends ReadyResource {
       if (this.closing) return
 
       // force reset state in worst case
-      if (this._queueViewReset) {
+      if (this._queueViewReset && this._appending === null) {
         this._queueViewReset = false
         await this._forceResetViews()
         continue
@@ -896,9 +899,13 @@ module.exports = class Autobase extends ReadyResource {
     return false
   }
 
-  forceResetViews () {
+  async forceResetViews () {
+    if (!this.opened) await this.ready()
+
     this._queueViewReset = true
-    return this._bump()
+    this._queueBump()
+    this._advanced = this._advancing
+    await this._advanced
   }
 
   async _forceResetViews () {
