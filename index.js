@@ -233,15 +233,37 @@ module.exports = class Autobase extends ReadyResource {
     if (!pointer) return { bootstrap, system: null }
 
     const { indexed } = c.decode(messages.SystemPointer, pointer)
-    const { key, length } = indexed
-
-    this._systemPointer = length
+    let { key, length } = indexed
 
     const encryptionKey = AutoStore.getBlockKey(bootstrap, this.encryptionKey, '_system')
-    const core = length ? this.store.get({ key, exclusive: false, cache: true, compat: false, encryptionKey, isBlockKey: true }).batch({ checkout: length, session: false }) : null
+    const actualCore = length ? this.store.get({ key, exclusive: false, cache: true, compat: false, encryptionKey, isBlockKey: true }) : null
+
+    // TODO: remove this post our migration
+    const isBorkedRoom = b4a.equals(this.key, b4a.from('26644f779a94f615b91edb72faa7f01d610364ec56b6f49dcffc89a0a9cff058', 'hex'))
+    let fallback = false
+
+    if (isBorkedRoom && length > 0) {
+      await actualCore.ready()
+
+      if (actualCore.length < 23000 && actualCore.length < length) {
+        const b = await actualCore.batch({ clear: true })
+        await b.flush()
+        await b.close()
+
+        length = actualCore.length
+        fallback = true
+      }
+    }
+
+    const core = length ? actualCore.batch({ checkout: length, session: false }) : null
     const system = length ? new SystemView(core, length) : null
 
-    if (system) await system.ready()
+    if (system) {
+      await system.ready()
+      if (fallback) await this._setSystemPointer(system.core.key, length, system.heads)
+    }
+
+    this._systemPointer = length
 
     return {
       bootstrap,
@@ -966,6 +988,19 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const promises = []
+      const indexers = []
+
+      for (const { key, length } of system.indexers) {
+        if (length === 0) continue
+        const core = this.store.get(key)
+        await core.ready()
+        indexers.push({ core, length })
+      }
+
+      for (const { core, length } of indexers) {
+        if (core.length === 0 && length > 0) promises.push(core.get(length - 1))
+      }
+
       for (const { view, length } of pendingViews) {
         // we could just get the hash here, but likely user wants the block so yolo
         promises.push(view.get(length - 1))
@@ -1027,10 +1062,15 @@ module.exports = class Autobase extends ReadyResource {
 
     let i = 0
     for (const v of system.views) {
-      const view = this._viewStore.getByKey(v.key)
+      let view = this._viewStore.getByKey(v.key)
+
       if (!view || view.core.session.length < v.length) {
-        this._clearFastForward() // something wrong somewhere, likely a bug, just safety
-        return
+        const fallback = TMP_KNOWN_FALLBACK(v.key, this._viewStore)
+        if (fallback) view = fallback
+        else {
+          this._clearFastForward() // something wrong somewhere, likely a bug, just safety
+          return
+        }
       }
 
       views.set(view, v)
@@ -1202,6 +1242,10 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     for (i = u.shared; i < u.length; i++) {
+      if (this.fastForwardTo !== null && this.fastForwardTo.length > this.system.core.length && b4a.equals(this.fastForwardTo.key, this.system.core.key)) {
+        return null
+      }
+
       const indexed = i < u.indexed.length
       const node = indexed ? u.indexed[i] : u.tip[i - u.indexed.length]
 
@@ -1424,3 +1468,11 @@ function random2over1 (n) {
 }
 
 function noop () {}
+
+function TMP_KNOWN_FALLBACK (key, store) {
+  return b4a.equals(key, b4a.from('f4a2de93568b68bfbaa95ba6b831c4fa7199813d94ee7f2edcbb183d33545843', 'hex'))
+    ? store.getByKey(b4a.from('eb2e2bb3d7a3ee6ab6b96ece6f3d7758ba7dedc49eca73a2e648954dc2f12d01', 'hex'))
+    : b4a.equals(key, b4a.from('ff894ffc4f44ec3e62fff9f38c43669105b18487c63ba4f46fb33883854f75f1', 'hex'))
+      ? store.getByKey(b4a.from('4e7774b5f94e58b62bf0250af64f5369f387eec6c85672733898cfb082dc7a76', 'hex'))
+      : null
+}
