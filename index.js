@@ -765,7 +765,6 @@ module.exports = class Autobase extends ReadyResource {
     while (!this.closing) {
       if (this.fastForwardTo !== null) {
         await this._applyFastForward()
-        console.log('did FF!!!!!')
         this.system.requestWakeup()
       }
 
