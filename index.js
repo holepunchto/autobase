@@ -240,20 +240,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._systemPointer = length
 
-    // TODO: remove this post our migration
-    const isBorkedRoom = b4a.equals(this.key, b4a.from('26644f779a94f615b91edb72faa7f01d610364ec56b6f49dcffc89a0a9cff058', 'hex'))
-
     if (actualCore) await actualCore.ready()
-    if (isBorkedRoom && (length === 0 || !actualCore.manifest || actualCore.manifest.signers.length < 3)) {
-      await clearAndCloseCore(this.store.get('7e50ebd21b7edee041f02d05a0924b1b5f1f1a06a2e08d020d9b46dbcd209889'))
-      await clearAndCloseCore(this.store.get('eb2e2bb3d7a3ee6ab6b96ece6f3d7758ba7dedc49eca73a2e648954dc2f12d01'))
-      await clearAndCloseCore(this.store.get('f4a2de93568b68bfbaa95ba6b831c4fa7199813d94ee7f2edcbb183d33545843'))
-      if (actualCore) await clearAndCloseCore(actualCore)
-
-      await this.local.setUserData('autobase/system', null)
-      this._systemPointer = 0
-      return { bootstrap, system: null }
-    }
 
     const core = length ? actualCore.batch({ checkout: length, session: false }) : null
     const system = length ? new SystemView(core, length) : null
@@ -1064,15 +1051,11 @@ module.exports = class Autobase extends ReadyResource {
 
     let i = 0
     for (const v of system.views) {
-      let view = this._viewStore.getByKey(v.key)
+      const view = this._viewStore.getByKey(v.key)
 
       if (!view || view.core.session.length < v.length) {
-        const fallback = TMP_KNOWN_FALLBACK(v.key, this._viewStore)
-        if (fallback) view = fallback
-        else {
-          this._clearFastForward() // something wrong somewhere, likely a bug, just safety
-          return
-        }
+        this._clearFastForward() // something wrong somewhere, likely a bug, just safety
+        return
       }
 
       views.set(view, v)
@@ -1470,19 +1453,3 @@ function random2over1 (n) {
 }
 
 function noop () {}
-
-async function clearAndCloseCore (core) {
-  const b = core.batch({ clear: true })
-  await b.flush()
-  await b.close()
-  await core.truncate(0, { fork: 0 })
-  await core.close()
-}
-
-function TMP_KNOWN_FALLBACK (key, store) {
-  return b4a.equals(key, b4a.from('f4a2de93568b68bfbaa95ba6b831c4fa7199813d94ee7f2edcbb183d33545843', 'hex'))
-    ? store.getByKey(b4a.from('eb2e2bb3d7a3ee6ab6b96ece6f3d7758ba7dedc49eca73a2e648954dc2f12d01', 'hex'))
-    : b4a.equals(key, b4a.from('ff894ffc4f44ec3e62fff9f38c43669105b18487c63ba4f46fb33883854f75f1', 'hex'))
-      ? store.getByKey(b4a.from('4e7774b5f94e58b62bf0250af64f5369f387eec6c85672733898cfb082dc7a76', 'hex'))
-      : null
-}
