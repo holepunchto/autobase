@@ -583,6 +583,7 @@ module.exports = class Autobase extends ReadyResource {
     await w.ready()
 
     if (allowGC && w.flushed()) {
+      this._wakeup.unqueue(key, len)
       await w.close()
       return w
     }
