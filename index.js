@@ -464,6 +464,12 @@ module.exports = class Autobase extends ReadyResource {
     if (this.localWriter === null) {
       throw new Error('Not writable')
     }
+
+    // make sure all local nodes are processed before continuing
+    while (!this.closing && this.localWriter.core.length > this.localWriter.length) {
+      await this.bump()
+    }
+
     if (this._appending === null) this._appending = []
 
     if (Array.isArray(value)) {
