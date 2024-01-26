@@ -704,8 +704,8 @@ test('suspend - open new index after reopen', async t => {
   t.alike(acp1.length, bcp1.length)
   // t.alike(acp2.length, bcp2.length)
 
-  t.alike(acp1, a.view.first._source._checkpoint())
-  // t.alike(acp2, a.view.second._source._checkpoint())
+  t.alike(acp1, await a.view.first._source._checkpoint())
+  // t.alike(acp2, await a.view.second._source._checkpoint())
 
   await a.close()
   await b2.close()
@@ -810,8 +810,8 @@ test('suspend - reopen multiple indexes', async t => {
   t.alike(acp1.length, ccp1.length)
   t.alike(acp2.length, ccp2.length)
 
-  t.alike(acp1, a.view.first._source._checkpoint())
-  t.alike(acp2, a.view.second._source._checkpoint())
+  t.alike(acp1, await a.view.first._source._checkpoint())
+  t.alike(acp2, await a.view.second._source._checkpoint())
 
   await a.close()
   await b.close()
@@ -1010,8 +1010,8 @@ test.skip('suspend - append but not indexed then reopen', async t => {
   t.alike(acp1.length, c2cp1.length)
   // t.alike(acp2.length, c2cp2.length)
 
-  t.alike(acp1, a.view.first._source._checkpoint())
-  // t.alike(acp2, a.view.second._source._checkpoint())
+  t.alike(acp1, await a.view.first._source._checkpoint())
+  // t.alike(acp2, await a.view.second._source._checkpoint())
 
   await a.close()
   await b.close()
@@ -1148,9 +1148,86 @@ test('suspend - append waits for drain after boot', async t => {
 
   const { node } = await b2.localWriter.core.get(b2.localWriter.core.length - 1)
   t.is(node.heads.length, 1)
-  t.is(node.heads[0].length, 102) // links the last node
+  t.is(node.heads[0].length, 101) // links the last node
 
   await store.close()
+})
+
+test('suspend - incomplete migrate', async t => {
+  const [a] = await create(1, apply, open)
+
+  const store = new Corestore(await tmpDir(t), {
+    primaryKey: Buffer.alloc(32).fill(1)
+  })
+
+  await a.append('a0')
+  await a.append('a1')
+
+  t.is(a.view.indexedLength, 2)
+  t.is(a.view.signedLength, 2)
+
+  const session1 = store.session()
+  const b = new Autobase(session1, a.local.key, {
+    apply,
+    valueEncoding: 'json',
+    open: store => store.get('view', {
+      valueEncoding: 'json'
+    }),
+    ackInterval: 0,
+    ackThreshold: 0,
+    fastForward: false
+  })
+
+  await b.ready()
+
+  await addWriter(a, b)
+
+  await replicateAndSync([a, b])
+
+  await b.append('b0')
+
+  await replicateAndSync([a, b])
+
+  await a.append('a1')
+  await replicateAndSync([a, b])
+
+  await b.append('b1')
+
+  t.is(b.view.indexedLength, 3)
+  t.is(b.view.signedLength, 2)
+
+  await b.close()
+
+  const session2 = store.session()
+  const b2 = new Autobase(session2, a.local.key, {
+    apply,
+    valueEncoding: 'json',
+    open: store => store.get('view', {
+      valueEncoding: 'json'
+    }),
+    ackInterval: 0,
+    ackThreshold: 0,
+    fastForward: false
+  })
+
+  await b2.ready()
+
+  t.is(a.view.indexedLength, 2)
+  t.is(a.view.signedLength, 2)
+  t.is(a.view.getBackingCore().indexedLength, 2)
+
+  t.is(b2.view.indexedLength, 3)
+  t.is(b2.view.signedLength, 2)
+  t.is(b2.view.getBackingCore().indexedLength, 2)
+
+  await b2.update()
+
+  t.is(b2.activeWriters.size, 2)
+
+  await t.execution(replicateAndSync([a, b2]))
+
+  await a.close()
+  await b2.close()
 })
 
 function open (store) {

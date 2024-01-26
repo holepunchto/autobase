@@ -11,6 +11,7 @@ const {
   replicateAndSync,
   apply,
   addWriter,
+  addWriterAndSync,
   confirm,
   replicate,
   compare,
@@ -643,11 +644,6 @@ test('sequential restarts', async t => {
 
   await replicateAndSync(bases)
 
-  // fully migrated
-  for (let i = 1; i < bases.length; i++) {
-    t.is(bases[i].system.core._source.queued, -1)
-  }
-
   compareViews(bases, t)
 })
 
@@ -999,4 +995,31 @@ test('basic - constructor throws', async t => {
   function open () {
     throw new Error('Synthetic.')
   }
+})
+
+test('basic - never sign past pending migration', async t => {
+  const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }))
+
+  const [a, b, c, d, e] = bases
+
+  let migrate = 0
+  e.system.core.on('migrate', () => migrate++)
+
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c)
+  await addWriterAndSync(a, d)
+  await addWriterAndSync(a, e)
+
+  await confirm(bases)
+
+  await a.append('trigger')
+
+  const session = a.system.core.getBackingCore().session
+  const info = await a.system.getIndexedInfo(session.length)
+  const signers = session.manifest.signers
+
+  // we should only ever sign a view's core up
+  // to the point when it is replaced by a migration,
+  // otherwise others may ff to a minority signed index
+  t.ok(info.indexers.length - signers.length <= 1)
 })

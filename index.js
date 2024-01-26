@@ -116,6 +116,7 @@ module.exports = class Autobase extends ReadyResource {
     this._acking = false
 
     this._initialSystem = null
+    this._initialViews = null
 
     this.system = new SystemView(this._viewStore.get({ name: '_system', exclusive: true, cache: true }))
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
@@ -232,20 +233,28 @@ module.exports = class Autobase extends ReadyResource {
     const bootstrap = this.bootstrap || (await this.local.getUserData('referrer')) || this.local.key
     if (!pointer) return { bootstrap, system: null }
 
-    const { indexed } = c.decode(messages.SystemPointer, pointer)
+    const { indexed, views } = c.decode(messages.SystemPointer, pointer)
     const { key, length } = indexed
-
-    const encryptionKey = AutoStore.getBlockKey(bootstrap, this.encryptionKey, '_system')
-    const actualCore = length ? this.store.get({ key, exclusive: false, cache: true, compat: false, encryptionKey, isBlockKey: true }) : null
 
     this._systemPointer = length
 
-    if (actualCore) await actualCore.ready()
+    if (!length) return { bootstrap, system: null }
 
-    const core = length ? actualCore.batch({ checkout: length, session: false }) : null
-    const system = length ? new SystemView(core, length) : null
+    const encryptionKey = AutoStore.getBlockKey(bootstrap, this.encryptionKey, '_system')
+    const actualCore = this.store.get({ key, exclusive: false, cache: true, compat: false, encryptionKey, isBlockKey: true })
 
-    if (system) await system.ready()
+    await actualCore.ready()
+
+    const core = actualCore.batch({ checkout: length, session: false })
+    const system = new SystemView(core, length)
+
+    await system.ready()
+
+    this._initialViews = [{ name: '_system', key, length }]
+
+    for (let i = 0; i < system.views.length; i++) {
+      this._initialViews.push({ name: views[i], ...system.views[i] })
+    }
 
     return {
       bootstrap,
@@ -271,6 +280,7 @@ module.exports = class Autobase extends ReadyResource {
     if (this._initialSystem) {
       await this._initialSystem.close()
       this._initialSystem = null
+      this._initialViews = null
     }
 
     // load previous digest if available
@@ -627,10 +637,6 @@ module.exports = class Autobase extends ReadyResource {
     this._updateAckThreshold()
   }
 
-  _migrateViews () {
-    this._viewStore.migrate(this.linearizer.indexers)
-  }
-
   async _bootstrapLinearizer () {
     const bootstrap = this._makeWriter(this.bootstrap, 0)
 
@@ -679,6 +685,9 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     await this._makeLinearizer(this.system)
+    await this._viewStore.migrate()
+
+    this.queueFastForward()
 
     if (nodes) {
       for (const node of nodes) node.reset()
@@ -747,11 +756,18 @@ module.exports = class Autobase extends ReadyResource {
 
     this._systemPointer = length
 
-    await this._setSystemPointer(this.system.core.key, length, this.system.heads)
+    const cores = this._viewStore.getIndexedCores()
+    const views = new Array(cores.length - 1)
+    for (const core of cores) {
+      if (core.systemIndex === -1) continue
+      views[core.systemIndex] = core.name
+    }
+
+    await this._setSystemPointer(this.system.core.key, length, this.system.heads, views)
   }
 
-  async _setSystemPointer (key, length, heads) {
-    const pointer = c.encode(messages.SystemPointer, { indexed: { key, length }, heads })
+  async _setSystemPointer (key, length, heads, views) {
+    const pointer = c.encode(messages.SystemPointer, { indexed: { key, length }, heads, views })
     await this.local.setUserData('autobase/system', pointer)
   }
 
@@ -808,7 +824,6 @@ module.exports = class Autobase extends ReadyResource {
 
       await this._gcWriters()
       await this._reindex(changed)
-      this._migrateViews()
     }
   }
 
@@ -925,7 +940,11 @@ module.exports = class Autobase extends ReadyResource {
 
     this._undoAll()
     this._systemPointer = length
-    await this._setSystemPointer(this.system.core.key, length, info.heads)
+
+    const pointer = await this.local.getUserData('autobase/system')
+    const { views } = c.decode(messages.SystemPointer, pointer)
+
+    await this._setSystemPointer(this.system.core.key, length, info.heads, views)
 
     for (const { key, length } of info.views) {
       const core = this._viewStore.getByKey(key)
@@ -954,6 +973,12 @@ module.exports = class Autobase extends ReadyResource {
     this.fastForwardingTo = core.session.length
     this._bumpAckTimer()
 
+    const fastForwardTo = {
+      key: core.session.key,
+      length: this.fastForwardingTo,
+      migrate: null
+    }
+
     try {
       // sys runs open with wait false, so get head block first for low complexity
       if (!(await core.session.has(this.fastForwardingTo - 1))) {
@@ -963,21 +988,13 @@ module.exports = class Autobase extends ReadyResource {
       const system = new SystemView(core.session.session(), this.fastForwardingTo)
       await system.ready()
 
-      const pendingViews = []
+      const sys = this.system.core.getBackingCore().session
+      let sysCore = sys.session()
 
-      for (const v of system.views) {
-        const view = this.store.get(v.key)
+      const migrated = sameIndexers(system, this.linearizer)
 
-        // same as below, we technically just need to check that we have the hash, not the block
-        if (v.length === 0 || await view.has(v.length - 1)) {
-          await view.close()
-        } else {
-          pendingViews.push({ view, length: v.length })
-        }
-      }
-
-      const promises = []
       const indexers = []
+      const pendingViews = []
 
       for (const { key, length } of system.indexers) {
         if (length === 0) continue
@@ -986,22 +1003,55 @@ module.exports = class Autobase extends ReadyResource {
         indexers.push({ core, length })
       }
 
+      // handle system migration
+      if (migrated) {
+        await sysCore.close() // close unused session
+
+        const idx = []
+        for (const { key } of system.indexers) idx.push(await this._getWriterByKey(key))
+
+        const hash = sys.core.tree.hash()
+        const name = this.system.core._source.name
+        const prologue = { hash, length: this.fastForwardingTo }
+        const key = this.deriveKey(name, idx, prologue)
+
+        fastForwardTo.migrate = { key }
+        sysCore = this.store.get(key)
+      }
+
+      pendingViews.push({ core: sysCore, length: this.fastForwardingTo })
+
+      // handle rest of views
+      for (const v of system.views) {
+        const core = this.store.get(v.key)
+
+        // same as below, we technically just need to check that we have the hash, not the block
+        if (v.length === 0 || await core.has(v.length - 1)) {
+          await core.close()
+        } else {
+          pendingViews.push({ core, length: v.length })
+        }
+      }
+
+      const promises = []
+
       for (const { core, length } of indexers) {
         if (core.length === 0 && length > 0) promises.push(core.get(length - 1))
       }
 
-      for (const { view, length } of pendingViews) {
+      for (const { core, length } of pendingViews) {
         // we could just get the hash here, but likely user wants the block so yolo
-        promises.push(view.get(length - 1))
+        promises.push(core.get(length - 1))
       }
 
       await Promise.all(promises)
 
-      for (const { view } of pendingViews) {
-        await view.close()
+      for (const { core } of pendingViews) {
+        await core.close()
       }
 
       await system.close()
+      await sysCore.close()
     } catch (err) {
       this.fastForwardingTo = 0
       safetyCatch(err)
@@ -1016,8 +1066,8 @@ module.exports = class Autobase extends ReadyResource {
 
     for (const w of this.activeWriters) w.pause()
 
-    this.fastForwardTo = { key: core.session.key, length: this.fastForwardingTo }
     this.fastForwardingTo = 0
+    this.fastForwardTo = fastForwardTo
 
     this._bumpAckTimer()
     this._queueBump()
@@ -1034,7 +1084,7 @@ module.exports = class Autobase extends ReadyResource {
     const from = core.length
 
     // remember these in case another fast forward gets queued
-    const { key, length } = this.fastForwardTo
+    const { key, length, migrate } = this.fastForwardTo
 
     // just extra sanity check
     // TODO: if we simply load the core from the corestore the key check isn't needed
@@ -1047,11 +1097,36 @@ module.exports = class Autobase extends ReadyResource {
     const system = new SystemView(core.session.session(), length)
     await system.ready()
 
+    const indexers = [] // only used in migrate branch
+    if (migrate) {
+      for (const { key } of system.indexers) {
+        indexers.push(await this._getWriterByKey(key))
+      }
+    }
+
     const views = new Map()
 
-    let i = 0
-    for (const v of system.views) {
-      const view = this._viewStore.getByKey(v.key)
+    const sysView = this.system.core._source
+    const sysInfo = { key: migrate ? migrate.key : key, length }
+
+    views.set(sysView, sysInfo)
+
+    for (let i = 0; i < system.views.length; i++) {
+      const v = system.views[i]
+
+      // TODO: check behaviour if new view keys (+ double FF)
+      let view = this._viewStore.getByKey(v.key)
+
+      // search for corresponding view
+      if (!view && migrate) {
+        for (view of this._viewStore.opened.values()) {
+          const hash = view.core.session.core.tree.hash()
+          const key = this.deriveKey(view.name, indexers, { hash, length: v.length })
+
+          if (b4a.equals(key, v.key)) break
+          view = null
+        }
+      }
 
       if (!view || view.core.session.length < v.length) {
         this._clearFastForward() // something wrong somewhere, likely a bug, just safety
@@ -1059,7 +1134,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       views.set(view, v)
-      view.likelyIndex = i++
+      view.systemIndex = i
     }
 
     await system.close()
@@ -1272,7 +1347,9 @@ module.exports = class Autobase extends ReadyResource {
         }
       }
 
-      update.indexers = await this.system.flush(update)
+      update.indexers = !!this.system.indexerUpdate
+
+      await this.system.flush(await this._getViewInfo(update.indexers))
 
       if (indexed) this._shiftWriter(node.writer)
 
@@ -1301,6 +1378,32 @@ module.exports = class Autobase extends ReadyResource {
     return null
   }
 
+  async _getViewInfo (indexerUpdate) {
+    const indexers = []
+
+    for (const { key } of this.system.indexers) {
+      const indexer = await this._getWriterByKey(key)
+      indexers.push(indexer)
+    }
+
+    // construct view keys to be passed to system
+    const views = []
+    for (const view of this._viewStore.opened.values()) {
+      if (!view.length || view._isSystem()) continue // system is omitted
+
+      const length = view.systemIndex !== -1
+        ? this.system.views[view.systemIndex].length
+        : 0
+
+      const needsKey = !length || indexerUpdate
+      const key = needsKey ? await view.deriveKey(indexers, length) : null
+
+      views.push({ view, key })
+    }
+
+    return views
+  }
+
   _shiftWriter (w) {
     w.shift()
     if (w.flushed()) this._checkWriters.push(w)
@@ -1319,6 +1422,10 @@ module.exports = class Autobase extends ReadyResource {
         core.indexing += appending
       }
     }
+  }
+
+  deriveKey (name, indexers, prologue) {
+    return this._viewStore.deriveKey(name, indexers, prologue)
   }
 
   async _updateDigest () {
@@ -1399,7 +1506,7 @@ module.exports = class Autobase extends ReadyResource {
       blocks[i] = {
         version: this.version,
         digest: this._addCheckpoints ? this._generateDigest() : null,
-        checkpoint: this._addCheckpoints ? generateCheckpoint(cores) : null,
+        checkpoint: this._addCheckpoints ? await generateCheckpoint(cores) : null,
         node: {
           heads,
           batch,
@@ -1433,7 +1540,17 @@ function generateCheckpoint (cores) {
     core.checkpointer++
   }
 
-  return checkpoint
+  return Promise.all(checkpoint)
+}
+
+function sameIndexers (sys, lin) {
+  if (sys.indexers.length !== lin.indexers.length) return true
+
+  for (let i = 0; i < sys.indexers.length; i++) {
+    if (!b4a.equals(sys.indexers[i].key, lin.indexers[i].core.key)) return true
+  }
+
+  return false
 }
 
 function toKey (k) {
