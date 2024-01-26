@@ -369,6 +369,68 @@ test('fast-forward - open with no remote io', async t => {
   }
 })
 
+test('fast-forward - force reset then ff', async t => {
+  t.plan(9)
+
+  const open = store => store.get('view', { valueEncoding: 'json' })
+  const [a, b, c] = await create(3, apply, open, null, {
+    valueEncoding: 'json',
+    ackInterval: 0,
+    ackThreshold: 0,
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c)
+  await confirm([a, b, c])
+
+  t.is(a.system.core.getBackingCore().manifest.signers.length, 3)
+
+  for (let i = 0; i < 2000; i++) {
+    await a.append('a' + i)
+  }
+
+  await replicateAndSync([a, b])
+  await b.append(null)
+  await replicateAndSync([a, b])
+  await a.append(null)
+  await replicateAndSync([a, b])
+
+  for (let i = 0; i < 2000; i++) {
+    await a.append('a' + i)
+  }
+
+  t.ok(b.system.core.getBackingCore().flushedLength > 2000)
+  t.ok(b.system.core.getBackingCore().indexedLength < 40)
+
+  await confirm([a, c])
+
+  t.ok(a.system.core.getBackingCore().indexedLength > 4000)
+
+  const truncate = new Promise(resolve => b.system.core.on('truncate', resolve))
+
+  t.not(b.system.core.getBackingCore().indexedLength, a.system.core.getBackingCore().indexedLength)
+
+  await b.forceResetViews()
+
+  await replicateAndSync([a, b, c])
+
+  await t.execution(truncate)
+
+  t.is(b.system.core.getBackingCore().indexedLength, a.system.core.getBackingCore().indexedLength)
+
+  await replicateAndSync([a, c])
+
+  const core = b.system.core.getBackingCore()
+  const sparse = await isSparse(core)
+
+  t.is(c.linearizer.indexers.length, 3)
+
+  t.ok(sparse > 0)
+  t.comment('sparse blocks: ' + sparse)
+})
+
 async function isSparse (core) {
   let n = 0
   for (let i = 0; i < core.length; i++) {
