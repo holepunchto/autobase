@@ -6,6 +6,7 @@ const Linearizer = require('../../lib/linearizer')
 module.exports = {
   fuzz,
   rollBack,
+  printGraph,
   formatResult
 }
 
@@ -45,11 +46,12 @@ class SkeletonNode {
 }
 
 class SkeletonWriter {
-  constructor (key, majority) {
+  constructor (key, majority, indexer) {
     this.key = key
     this.seq = 0
     this.head = null
     this.majority = majority
+    this.isIndexer = !!indexer
   }
 
   add (links = []) {
@@ -77,13 +79,15 @@ class SkeletonWriter {
 // placeholder class
 
 class Writer {
-  constructor (key) {
+  constructor (key, indexer) {
     this.core = { key }
+    this.isIndexer = true
     this.length = 0
     this.nodes = {
       offset: 0,
       nodes: []
     }
+    this.isIndexer = !!indexer
   }
 
   get indexed () {
@@ -101,7 +105,7 @@ class Writer {
 
 // fuzzer
 
-function fuzz (w, n, b, logLevel, dir) {
+function fuzz (w, idx, n, b, logLevel, dir) {
   const start = Date.now()
   for (let i = 0; true; i++) {
     // timing
@@ -110,17 +114,17 @@ function fuzz (w, n, b, logLevel, dir) {
       console.log(timerLabel(w, n, i), (interval / i).toFixed(2), 'ms')
     }
 
-    const { nodes, writers } = dagGen(w, n, b)
+    const { nodes, writers } = dagGen(w, idx, n, b)
     const steps = nodes.map(n => n.toDetails())
 
-    const result = rollBack(w, steps, 3)
+    const result = rollBack(w, idx, steps, 3)
     if (!result.pass) return fail(result, w, steps)
 
     const midway = result.nodes.length
     const majority = writers.slice(0, (writers.length >>> 1) + 1)
     continueWriting(nodes, majority, n, b)
 
-    let more = rollBack(w, nodes.map(n => n.toDetails()), 3)
+    let more = rollBack(w, idx, nodes.map(n => n.toDetails()), 3)
     if (!more.pass) return fail(more, w, nodes.map(n => n.toDetails()))
 
     let retry = 0
@@ -128,7 +132,7 @@ function fuzz (w, n, b, logLevel, dir) {
       continueWriting(nodes, majority, n, b)
       const dag = nodes.map(n => n.toDetails())
 
-      more = rollBack(w, dag, 3)
+      more = rollBack(w, idx, dag, 3)
       if (!more.pass) return fail(more, w, dag)
 
       if (++retry > 5) {
@@ -159,26 +163,29 @@ function fuzz (w, n, b, logLevel, dir) {
 
 // test function
 
-function rollBack (n, steps, batch = 3, result = []) {
+function rollBack (n, idx, steps, batch = 3, result = []) {
   const writers = {}
   const writersLength = n
 
+  const indexers = []
   for (let i = 0; i < n; i++) {
     const key = String.fromCharCode(0x61 + i)
-    writers[key] = new Writer(Buffer.from(key))
+    const writer = new Writer(Buffer.from(key), i < idx)
+    writers[key] = writer
+    if (i < idx) indexers.push(writer)
   }
 
   const nodes = new Map()
-  const graph = new Linearizer(Object.values(writers))
+  const graph = new Linearizer(indexers)
 
   let pos = 0
 
   for (let i = 0; i < steps.length; i++) {
     const { args, deps, ref } = steps[i]
 
-    const dependencies = []
+    const dependencies = new Set()
     for (const d of deps) {
-      if (nodes.has(d)) dependencies.push(nodes.get(d))
+      if (nodes.has(d)) dependencies.add(nodes.get(d))
     }
 
     const w = writers[args[0]]
@@ -252,17 +259,39 @@ function rollBack (n, steps, batch = 3, result = []) {
     }
   }
 
-  return rollBack(n, next, batch, result)
+  return rollBack(n, idx, next, batch, result)
 }
 
 // generating dags
 
-function dagGen (w = 3, size = 10, branchFactor = 0.3) {
+function dagGen (w = 3, idx = w, size = 10, branchFactor = 0.3) {
   const writers = []
   const majority = Math.floor(w / 2) + 1
-  for (let i = 0; i < w; i++) writers.push(new SkeletonWriter(String.fromCharCode(0x61 + i), majority))
+  for (let i = 0; i < w; i++) writers.push(new SkeletonWriter(String.fromCharCode(0x61 + i), majority, i < idx))
 
   return createDag(writers, size, branchFactor)
+}
+
+function printGraph (graph) {
+  let str = '```mermaid\n'
+  str += 'graph TD;'
+
+  const visited = new Set()
+  const stack = [...graph.tails]
+
+  while (stack.length) {
+    const node = stack.pop()
+
+    if (visited.has(node)) continue
+    visited.add(node)
+
+    for (const dep of node.dependents) {
+      str += `  ${dep.ref}-->${node.ref};\n`
+    }
+  }
+
+  str += '```'
+  return str
 }
 
 function createDag (writers, size, branch) {
