@@ -1023,3 +1023,231 @@ test('basic - never sign past pending migration', async t => {
   // otherwise others may ff to a minority signed index
   t.ok(info.indexers.length - signers.length <= 1)
 })
+
+test('basic - remove writer', async t => {
+  const [a, b, c] = await create(3, applyWithRemove)
+
+  await addWriter(a, b, false)
+
+  await confirm([a, b, c])
+
+  await addWriter(b, c, false)
+
+  await confirm([a, b, c])
+
+  t.is(b.system.members, 3)
+  t.is(b.system.members, c.system.members)
+
+  await a.append({ remove: b4a.toString(c.local.key, 'hex') })
+
+  await confirm([a, b, c])
+
+  t.is(b.system.members, 2)
+  t.is(b.system.members, c.system.members)
+})
+
+test('basic - remove indexer', async t => {
+  const [a, b, c] = await create(3, applyWithRemove)
+
+  await addWriterAndSync(a, b)
+  await b.append(null)
+  await replicateAndSync([a, b, c])
+
+  await confirm([a, b, c])
+
+  await addWriterAndSync(b, c)
+  await c.append(null)
+  await replicateAndSync([a, b, c])
+
+  await confirm([a, b, c])
+
+  t.is(b.system.members, 3)
+  t.is(b.system.members, c.system.members)
+
+  t.is(b.system.indexers.length, 3)
+
+  await a.append({ remove: b4a.toString(c.local.key, 'hex') })
+  await confirm([a, b, c])
+
+  t.is(c.writable, false)
+
+  t.is(b.system.members, 2)
+  t.is(b.system.indexers.length, 2)
+  t.is(b.system.members, c.system.members)
+})
+
+test('basic - remove indexer and continue indexing', async t => {
+  const [a, b, c] = await create(3, applyWithRemove, store => store.get('test'))
+
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(b, c)
+
+  await c.append('c1')
+
+  await confirm([a, b, c])
+
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 3)
+
+  await a.append({ remove: b4a.toString(c.local.key, 'hex') })
+  await confirm([a, b, c])
+
+  t.is(c.writable, false)
+  await t.exception(c.append('fail'), /Not writable/)
+
+  const length = a.view.indexedLength
+
+  await t.execution(b.append('hello'))
+  await t.execution(confirm([a, b, c]))
+
+  t.not(a.view.indexedLength, length)
+
+  t.is(b.linearizer.indexers.length, 2)
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 2)
+})
+
+test('basic - remove indexer back to previously used indexer set', async t => {
+  const [a, b, c] = await create(3, applyWithRemove, store => store.get('test'))
+
+  await addWriterAndSync(a, b)
+
+  await b.append('b1')
+
+  await confirm([a, b, c])
+
+  t.is(b.view.indexedLength, 1)
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 2)
+
+  await addWriterAndSync(b, c)
+
+  await c.append('c1')
+
+  await confirm([a, b, c])
+
+  t.is(b.view.indexedLength, 2)
+
+  const manifest1 = b.system.core.getBackingCore().session.manifest
+  t.is(manifest1.signers.length, 3)
+  t.is(b.system.indexers.length, 3)
+
+  await a.append({ remove: b4a.toString(c.local.key, 'hex') })
+  await confirm([a, b, c])
+
+  t.is(c.writable, false)
+  await t.exception(c.append('fail'), /Not writable/)
+
+  await t.execution(b.append('hello'))
+  await t.execution(confirm([a, b, c]))
+
+  t.is(b.linearizer.indexers.length, 2)
+  t.is(b.view.indexedLength, 3)
+  t.is(c.view.indexedLength, 3)
+
+  const manifest2 = b.system.core.getBackingCore().session.manifest
+  t.is(manifest2.signers.length, 2)
+
+  t.not(manifest1.prologue.length, manifest2.prologue.length)
+  t.unlike(manifest1.prologue.hash, manifest2.prologue.hash)
+})
+
+test('basic - remove an indexer when 2-of-2', async t => {
+  const [a, b] = await create(2, applyWithRemove, store => store.get('test'))
+
+  await addWriterAndSync(a, b)
+
+  await b.append('b1')
+
+  await confirm([a, b])
+
+  t.is(b.view.indexedLength, 1)
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 2)
+
+  const manifest = b.system.core.getBackingCore().session.manifest
+
+  t.is(manifest.signers.length, 2)
+  t.is(b.system.indexers.length, 2)
+  t.is(b.linearizer.indexers.length, 2)
+
+  await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+  await confirm([a, b])
+
+  t.is(b.writable, false)
+  await t.exception(b.append('fail'), /Not writable/)
+
+  await t.execution(a.append('hello'))
+  await t.execution(confirm([a, b]))
+
+  t.is(a.linearizer.indexers.length, 1)
+  t.is(a.view.indexedLength, 2)
+
+  t.is(b.linearizer.indexers.length, 1)
+  t.is(b.view.indexedLength, 2)
+
+  const finalManifest = b.system.core.getBackingCore().session.manifest
+
+  t.is(finalManifest.signers.length, 1)
+  t.not(finalManifest.prologue.length, 0)
+})
+
+test('basic - remove multiple indexers concurrently', async t => {
+  const [a, b, c] = await create(3, apply, store => store.get('test'))
+
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(b, c)
+
+  await c.append('c1')
+
+  await confirm([a, b, c])
+
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 3)
+
+  await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+  await a.append({ remove: b4a.toString(c.local.key, 'hex') })
+
+  await confirm([a, b, c])
+
+  t.is(b.writable, false)
+  t.is(c.writable, false)
+
+  await t.exception(b.append('fail'), /Not writable/)
+  await t.exception(c.append('fail'), /Not writable/)
+
+  const length = a.view.indexedLength
+  await t.execution(a.append('hello'))
+
+  t.not(a.view.indexedLength, length) // 1 indexer
+
+  t.is(b.linearizer.indexers.length, 1)
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 1)
+
+  async function apply (batch, view, base) {
+    for (const { value } of batch) {
+      if (value.add) {
+        await base.addWriter(b4a.from(value.add, 'hex'))
+        continue
+      }
+
+      if (value.remove) {
+        await base.removeWriter(b4a.from(value.remove, 'hex'))
+        continue
+      }
+
+      await view.append(value)
+    }
+  }
+})
+
+async function applyWithRemove (batch, view, base) {
+  for (const { value } of batch) {
+    if (value.add) {
+      await base.addWriter(b4a.from(value.add, 'hex'), { indexer: value.indexer !== false })
+      continue
+    }
+
+    if (value.remove) {
+      await base.removeWriter(b4a.from(value.remove, 'hex'))
+      continue
+    }
+
+    await view.append(value)
+  }
+}

@@ -71,6 +71,8 @@ module.exports = class Autobase extends ReadyResource {
     this._addCheckpoints = false
     this._firstCheckpoint = true
     this._hasPendingCheckpoint = false
+    this._pendingRemoval = false
+    this._completeRemovalAt = null
     this._systemPointer = 0
 
     this._updates = []
@@ -693,6 +695,20 @@ module.exports = class Autobase extends ReadyResource {
       for (const node of nodes) node.reset()
       for (const node of nodes) this.linearizer.addHead(node)
     }
+
+    if (!this._pendingRemoval) return
+
+    this._pendingRemoval = false
+    for (const idx of this.linearizer.indexers) {
+      if (idx !== this.localWriter) continue
+      this._pendingRemoval = true
+      break
+    }
+
+    if (this._pendingRemoval) return // still pending
+
+    this._addCheckpoints = false
+    this.localWriter = null
   }
 
   _addLocalHeads () {
@@ -886,6 +902,8 @@ module.exports = class Autobase extends ReadyResource {
 
   _ackIsNeeded () {
     if (!this._addCheckpoints) return false // ack has no impact
+
+    if (this._pendingRemoval) return true
 
     // flush any pending indexers
     if (this.system.pendingIndexers.length > 0) {
@@ -1213,6 +1231,21 @@ module.exports = class Autobase extends ReadyResource {
     if (isIndexer) this._maybeUpdateDigest = true
 
     // fetch any nodes needed for dependents
+    this._queueBump()
+  }
+
+  // triggered from apply
+  async removeWriter (key) { // just compat for old version
+    assert(this._applying !== null, 'System changes are only allowed in apply')
+    const wasIndexer = await this.system.remove(key)
+
+    if (b4a.equals(key, this.local.key)) {
+      if (this._addCheckpoints) this._pendingRemoval = true
+      else this.localWriter = null // immediately remove
+    }
+
+    if (wasIndexer) this._maybeUpdateDigest = true
+
     this._queueBump()
   }
 
