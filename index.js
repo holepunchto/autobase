@@ -15,6 +15,8 @@ const Writer = require('./lib/writer')
 const ActiveWriters = require('./lib/active-writers')
 const AutoWakeup = require('./lib/wakeup')
 
+const { AUTOBASE_VERSION } = require('./lib/constants')
+
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 
 // default is to automatically ack
@@ -88,7 +90,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._onremotewriterchangeBound = this._onremotewriterchange.bind(this)
 
-    this.version = 0 // todo: set version
+    this.maxSupportedVersion = AUTOBASE_VERSION // working version
 
     this._presystem = null
     this._prebump = null
@@ -103,6 +105,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this.view = null
     this.system = null
+    this.version = -1
 
     const {
       ackInterval = DEFAULT_ACK_INTERVAL,
@@ -223,6 +226,12 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const { bootstrap, system } = await this._loadSystemInfo()
+
+    this.version = system
+      ? system.version
+      : this.bootstrap && !b4a.equals(this.bootstrap, this.local.key)
+        ? 0
+        : this.maxSupportedVersion
 
     this.bootstrap = bootstrap
     this._initialSystem = system
@@ -712,6 +721,16 @@ module.exports = class Autobase extends ReadyResource {
     this.localWriter = null
   }
 
+  _onUpgrade (version) {
+    if (version > this.maxSupportedVersion) {
+      this._onError(new Error('Autobase upgrade required'))
+      return false
+    }
+
+    this.version = version
+    return true
+  }
+
   _addLocalHeads () {
     const nodes = new Array(this._appending.length)
     for (let i = 0; i < this._appending.length; i++) {
@@ -720,7 +739,7 @@ module.exports = class Autobase extends ReadyResource {
       const batch = this._appending.length - i
       const value = this._appending[i]
 
-      const node = this.localWriter.append(value, heads, batch, deps)
+      const node = this.localWriter.append(value, heads, batch, deps, this.maxSupportedVersion)
 
       this.linearizer.addHead(node)
       nodes[i] = node
@@ -1007,10 +1026,18 @@ module.exports = class Autobase extends ReadyResource {
       const system = new SystemView(core.session.session(), this.fastForwardingTo)
       await system.ready()
 
-      const sys = this.system.core.getBackingCore().session
-      let sysCore = sys.session()
+      if (system.version > this.maxSupportedVersion) {
+        const upgrade = {
+          version: system.version,
+          length: this.fastForwardingTo
+        }
 
-      const migrated = sameIndexers(system, this.linearizer)
+        this.fastForwardingTo = 0
+        this.emit('upgrade-available', upgrade)
+        return
+      }
+
+      const migrated = system.sameIndexers(this.linearizer.indexers)
 
       const indexers = []
       const pendingViews = []
@@ -1022,17 +1049,19 @@ module.exports = class Autobase extends ReadyResource {
         indexers.push({ core, length })
       }
 
+      let sysCore = system.core
+
       // handle system migration
       if (migrated) {
-        await sysCore.close() // close unused session
-
         const idx = []
         for (const { key } of system.indexers) idx.push(await this._getWriterByKey(key))
 
-        const hash = sys.core.tree.hash()
+        const hash = sysCore.core.tree.hash()
         const name = this.system.core._source.name
         const prologue = { hash, length: this.fastForwardingTo }
         const key = this.deriveKey(name, idx, prologue)
+
+        await sysCore.close() // close unused session
 
         fastForwardTo.migrate = { key }
         sysCore = this.store.get(key)
@@ -1070,7 +1099,6 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       await system.close()
-      await sysCore.close()
     } catch (err) {
       this.fastForwardingTo = 0
       safetyCatch(err)
@@ -1317,6 +1345,7 @@ module.exports = class Autobase extends ReadyResource {
 
     let batch = 0
     let applyBatch = []
+    let versionUpgrade = false
 
     let j = 0
 
@@ -1328,7 +1357,15 @@ module.exports = class Autobase extends ReadyResource {
       this._shiftWriter(node.writer)
 
       const update = this._updates[j++]
-      if (!update.indexers) continue
+
+      // autobase version was bumped
+      let upgraded = false
+      if (update.version > this.version) {
+        if (!this._onUpgrade(update.version)) return // failed
+        upgraded = true
+      }
+
+      if (!update.indexers && !upgraded) continue
 
       this._queueIndexFlush(i)
 
@@ -1342,6 +1379,8 @@ module.exports = class Autobase extends ReadyResource {
 
       const indexed = i < u.indexed.length
       const node = indexed ? u.indexed[i] : u.tip[i - u.indexed.length]
+
+      if (node.version > this.system.version) versionUpgrade = true
 
       if (node.writer === this.localWriter) {
         this._resetAckTick()
@@ -1365,7 +1404,16 @@ module.exports = class Autobase extends ReadyResource {
 
       if (node.batch > 1) continue
 
-      const update = { batch, indexers: false, views: [] }
+      if (versionUpgrade) {
+        this.system.version = await this._checkVersion()
+      }
+
+      const update = {
+        batch,
+        indexers: false,
+        views: [],
+        version: this.system.version
+      }
 
       this._updates.push(update)
       this._applying = update
@@ -1385,8 +1433,6 @@ module.exports = class Autobase extends ReadyResource {
 
       await this.system.flush(await this._getViewInfo(update.indexers))
 
-      if (indexed) this._shiftWriter(node.writer)
-
       this._applying = null
 
       batch = 0
@@ -1398,11 +1444,22 @@ module.exports = class Autobase extends ReadyResource {
         u.core.appending = 0
       }
 
-      if (update.indexers && indexed) {
-        this._queueIndexFlush(i + 1)
+      if (!indexed) continue
 
-        return u.indexed.slice(i + 1).concat(u.tip)
+      this._shiftWriter(node.writer)
+
+      // autobase version was bumped
+      let upgraded = false
+      if (update.version > this.version) {
+        if (!this._onUpgrade(update.version)) return // failed
+        upgraded = true
       }
+
+      if (!update.indexers && !upgraded) continue
+
+      // indexer set has updated
+      this._queueIndexFlush(i + 1)
+      return u.indexed.slice(i + 1).concat(u.tip)
     }
 
     if (u.indexed.length) {
@@ -1436,6 +1493,52 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return views
+  }
+
+  async _checkVersion () {
+    const maj = (this.system.indexers.length >> 1) + 1
+
+    const fetch = []
+
+    let localUnflushed = false
+    for (const { key, length } of this.system.indexers) {
+      const w = await this._getWriterByKey(key, -1)
+
+      if (length > w.core.length) localUnflushed = true // local writer has nodes in mem
+      else fetch.push(w.core.get(length - 1))
+    }
+
+    const heads = await Promise.all(fetch)
+
+    const tally = new Map()
+    const versions = []
+
+    // count ourself
+    if (localUnflushed) {
+      const local = { version: this.maxSupportedVersion, n: 1 }
+      versions.push(local)
+      tally.set(this.maxSupportedVersion, local)
+    }
+
+    for (const { versionSignal: version } of heads) {
+      let v = tally.get(version)
+
+      if (!v) {
+        v = { version, n: 0 }
+
+        tally.set(version, v)
+        versions.push(v)
+      }
+
+      if (++v.n >= maj) return version
+    }
+
+    let count = 0
+    for (const { version, n } of versions.sort(descendingVersion)) {
+      if ((count += n) >= maj) return version
+    }
+
+    assert(false, 'Failed to determine version')
   }
 
   _shiftWriter (w) {
@@ -1558,7 +1661,7 @@ module.exports = class Autobase extends ReadyResource {
       const { value, heads, batch } = localNodes[i]
 
       blocks[i] = {
-        version: this.version,
+        version: 0,
         digest: this._addCheckpoints ? this._generateDigest() : null,
         checkpoint: this._addCheckpoints ? await generateCheckpoint(cores, migrated) : null,
         node: {
@@ -1569,7 +1672,8 @@ module.exports = class Autobase extends ReadyResource {
         additional: {
           pointer: 0,
           data: {}
-        }
+        },
+        versionSignal: this.maxSupportedVersion
       }
 
       if (this._addCheckpoints) this._localDigest.pointer++
@@ -1598,16 +1702,6 @@ function generateCheckpoint (cores, migrated) {
   return Promise.all(checkpoint)
 }
 
-function sameIndexers (sys, lin) {
-  if (sys.indexers.length !== lin.indexers.length) return true
-
-  for (let i = 0; i < sys.indexers.length; i++) {
-    if (!b4a.equals(sys.indexers[i].key, lin.indexers[i].core.key)) return true
-  }
-
-  return false
-}
-
 function toKey (k) {
   return b4a.isBuffer(k) ? k : hypercoreId.decode(k)
 }
@@ -1618,6 +1712,10 @@ function isAutobaseMessage (msg) {
 
 function compareNodes (a, b) {
   return b4a.compare(a.key, b.key)
+}
+
+function descendingVersion (a, b) {
+  return b.version - a.version
 }
 
 function random2over1 (n) {
