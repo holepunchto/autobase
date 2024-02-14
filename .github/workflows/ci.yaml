@@ -9,8 +9,6 @@ on:
   pull_request:
     branches:
       - main
-  workflow_dispatch:
-
 env:
   BRITTLE_TIMEOUT: 60000
 jobs:
@@ -20,7 +18,7 @@ jobs:
     strategy:
       matrix:
         node-version: [lts/*]
-        os: [[self-hosted, non-ui, Linux], [self-hosted, non-ui, macOS]]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1 https://github.com/actions/checkout/releases/tag/v4.1.1
