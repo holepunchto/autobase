@@ -1,6 +1,6 @@
 {
   "name": "autobase",
-  "version": "5.5.16",
+  "version": "6.0.0-rc0",
   "description": "",
   "main": "index.js",
   "scripts": {
