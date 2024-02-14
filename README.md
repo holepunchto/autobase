@@ -1,8 +1,8 @@
-# Autobase Next
+# Autobase
 
 ## Install
 
-`npm i autobase-next`
+`npm i autobase`
 
 ## Usage
 
