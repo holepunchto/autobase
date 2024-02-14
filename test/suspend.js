@@ -99,7 +99,7 @@ test('suspend - pass exisiting fs store', async t => {
   t.teardown(() => Promise.all([
     base1.close(),
     base3.close()
-  ])
+  ]))
 
   t.is(base3.activeWriters.size, 2)
 

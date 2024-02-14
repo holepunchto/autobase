@@ -16,7 +16,7 @@ const {
   create
 } = require('./helpers')
 
-test('fast-forward - simple', async t => {
+test.solo('fast-forward - simple', async t => {
   t.plan(1)
 
   const store = new Corestore(await tmpDir(t), {
@@ -237,7 +237,7 @@ test('fast-forward - multiple queues', async t => {
     b.close(),
     c.close(),
     d.close()
-  ]))
+  ]), { order: 1 })
 
   // this value should be long enough that 2 fast-forwards are
   // queued (ie. we don't just replicate the last state), but short
