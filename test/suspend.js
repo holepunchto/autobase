@@ -96,6 +96,11 @@ test('suspend - pass exisiting fs store', async t => {
   const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false })
   await base3.ready()
 
+  t.teardown(() => Promise.all([
+    base1.close(),
+    base3.close()
+  ])
+
   t.is(base3.activeWriters.size, 2)
 
   await base3.append('final')
