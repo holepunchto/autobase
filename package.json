@@ -1,5 +1,5 @@
 {
-  "name": "@holepunchto/autobase",
+  "name": "autobase",
   "version": "5.5.16",
   "description": "",
   "main": "index.js",
@@ -18,7 +18,7 @@
     "url": "git+https://github.com/holepunchto/autobase-next.git"
   },
   "author": "Holepunch",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/holepunchto/autobase-next/issues"
   },
