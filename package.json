@@ -13,6 +13,12 @@
     "index.js",
     "lib/**"
   ],
+  "imports": {
+    "events": {
+      "bare": "bare-events",
+      "default": "events"
+    }
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/holepunchto/autobase-next.git"
@@ -44,6 +50,9 @@
     "same-data": "^1.0.0",
     "standard": "^17.0.0",
     "test-tmp": "^1.0.0"
+  },
+  "optionalDependencies": {
+    "bare-events": "^2.2.0"
   },
   "standard": {
     "ignore": [
