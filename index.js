@@ -560,8 +560,7 @@ module.exports = class Autobase extends ReadyResource {
     const w = this.activeWriters.get(key)
     if (!w) return null
 
-    const { prologue } = core.core.manifest
-    const namespace = w.deriveNamespace(core.name, prologue)
+    const namespace = w.deriveNamespace(core.name)
     const publicKey = w.core.manifest.signers[0].publicKey
 
     return {
@@ -1624,20 +1623,13 @@ module.exports = class Autobase extends ReadyResource {
   async _generateCheckpoint (cores) {
     if (!this._addCheckpoints) return null
 
-    // indexer set to sign for
-    const length = this.system.core._source.pendingIndexedLength
-    const checkout = await this.system.checkout(length)
-
-    const migrated = checkout.sameIndexers(this.linearizer.indexers)
-    await checkout.close()
-
     if (this._firstCheckpoint) {
       this._firstCheckpoint = false
       // TODO: unsafe, use an array instead for views as the order is important
-      return generateCheckpoint(this._viewStore.opened.values(), migrated)
+      return generateCheckpoint(this._viewStore.opened.values())
     }
 
-    return generateCheckpoint(cores, migrated)
+    return generateCheckpoint(cores)
   }
 
   async _flushLocal (localNodes) {
@@ -1646,24 +1638,13 @@ module.exports = class Autobase extends ReadyResource {
     const cores = this._addCheckpoints ? this._viewStore.getIndexedCores() : []
     const blocks = new Array(localNodes.length)
 
-    let migrated = false
-    let closing = null
-
-    if (this._addCheckpoints) {
-      const length = this.system.core._source.pendingIndexedLength
-      const checkout = await this.system.checkout(length)
-
-      migrated = checkout.sameIndexers(this.linearizer.indexers)
-      closing = checkout.close()
-    }
-
     for (let i = 0; i < blocks.length; i++) {
       const { value, heads, batch } = localNodes[i]
 
       blocks[i] = {
         version: 0,
         digest: this._addCheckpoints ? this._generateDigest() : null,
-        checkpoint: this._addCheckpoints ? await generateCheckpoint(cores, migrated) : null,
+        checkpoint: this._addCheckpoints ? await generateCheckpoint(cores) : null,
         node: {
           heads,
           batch,
@@ -1680,7 +1661,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     await this.local.append(blocks)
-    await closing
 
     if (this._addCheckpoints) {
       const { checkpoint } = blocks[blocks.length - 1]
@@ -1691,11 +1671,11 @@ module.exports = class Autobase extends ReadyResource {
   }
 }
 
-function generateCheckpoint (cores, migrated) {
+function generateCheckpoint (cores) {
   const checkpoint = []
 
   for (const core of cores) {
-    checkpoint.push(core.checkpoint(migrated))
+    checkpoint.push(core.checkpoint())
     core.checkpointer++
   }
 
