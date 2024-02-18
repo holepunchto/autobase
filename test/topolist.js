@@ -343,6 +343,40 @@ test('shift whole chain', function (t) {
   t.is(u.indexed.length, 7)
 })
 
+test('shift whole chain out of order', function (t) {
+  const tip = new Topolist()
+
+  const a0 = makeNode('a', 0, [])
+  const c0 = makeNode('c', 0, [a0])
+  const b0 = makeNode('b', 0, [a0])
+  const c1 = makeNode('c', 1, [])
+  const b1 = makeNode('b', 1, [c1])
+  const d0 = makeNode('d', 0, [c1])
+  const c2 = makeNode('c', 2, [c1])
+
+  tip.add(a0)
+  tip.add(c0)
+  tip.add(c1)
+  tip.add(b0)
+  tip.add(b1)
+
+  tip.mark()
+
+  t.is(tip.pushed, 0)
+  t.is(tip.popped, 0)
+  t.is(tip.shared, 5)
+
+  tip.add(d0)
+  tip.add(c2)
+
+  const u = tip.flush([a0, c0, b0, c1, b1, c2, d0])
+
+  t.is(u.popped, 4)
+  t.is(u.pushed, 6)
+  t.is(u.shared, 1)
+  t.is(u.indexed.length, 7)
+})
+
 function makeNode (key, length, dependencies, value = null) {
   return {
     writer: { core: { key: b4a.from(key) } },
