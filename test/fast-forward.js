@@ -47,10 +47,10 @@ test.solo('fast-forward - simple', async t => {
 
   await b.ready()
 
-  t.teardown(() => Promise.all([
-    a.close(),
-    b.close()
-  ]))
+  t.teardown(async () => {
+    await a.close()
+    await b.close()
+  })
 
   for (let i = 0; i < 1000; i++) {
     await a.append('a' + i)

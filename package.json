@@ -52,7 +52,7 @@
     "random-access-memory": "^6.2.0",
     "same-data": "^1.0.0",
     "standard": "^17.0.0",
-    "test-tmp": "github:chm-diederichs/test-tmp#a900debd22ebf347671e0830c0ff01b4e000ff68"
+    "test-tmp": "^1.2.0"
   },
   "standard": {
     "ignore": [
