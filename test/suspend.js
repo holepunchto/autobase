@@ -96,6 +96,12 @@ test('suspend - pass exisiting fs store', async t => {
   const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false })
   await base3.ready()
 
+  t.teardown(async () => {
+    await base1.close()
+    await base3.close()
+    await store.close()
+  })
+
   t.is(base3.activeWriters.size, 2)
 
   await base3.append('final')
@@ -144,15 +150,18 @@ test('suspend - 2 exisiting fs stores', async t => {
   const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false })
   await base3.ready()
 
+  t.teardown(async () => {
+    await base1.close()
+    await base3.close()
+    await store.close()
+    await store2.close()
+  })
+
   t.is(base3.activeWriters.size, 2)
 
   await base3.append('final')
 
   await t.execution(replicateAndSync([base3, base1]))
-
-  await base1.close()
-  await base2.close()
-  await base3.close()
 })
 
 test('suspend - reopen after index', async t => {
@@ -198,7 +207,7 @@ test('suspend - reopen after index', async t => {
   await b.close()
 
   const session2 = store.session()
-  const c = new Autobase(session2, a.local.key, {
+  const b2 = new Autobase(session2, a.local.key, {
     apply,
     valueEncoding: 'json',
     open: store => store.get('view', {
@@ -209,28 +218,30 @@ test('suspend - reopen after index', async t => {
     fastForward: false
   })
 
-  await c.ready()
-  await c.update()
+  t.teardown(async () => {
+    await a.close()
+    await b2.close()
+    await store.close()
+  })
 
-  t.is(c.view.length, order.length)
+  await b2.ready()
+  await b2.update()
 
-  for (let i = 0; i < c.view.length; i++) {
-    t.alike(await c.view.get(i), order[i])
+  t.is(b2.view.length, order.length)
+
+  for (let i = 0; i < b2.view.length; i++) {
+    t.alike(await b2.view.get(i), order[i])
   }
 
-  t.is(c.activeWriters.size, 2)
+  t.is(b2.activeWriters.size, 2)
 
-  await c.append('final')
+  await b2.append('final')
 
-  await t.execution(replicateAndSync([a, c]))
+  await t.execution(replicateAndSync([a, b2]))
 
   t.is(b.view.indexedLength, 1)
-  t.is(c.view.indexedLength, 1)
-  t.is(c.view.length, b.view.length + 2)
-
-  await a.close()
-  await b.close()
-  await c.close()
+  t.is(b2.view.indexedLength, 1)
+  t.is(b2.view.length, b.view.length + 2)
 })
 
 test('suspend - reopen with sync in middle', async t => {
@@ -313,6 +324,12 @@ test('suspend - reopen with sync in middle', async t => {
     fastForward: false
   })
 
+  t.teardown(async () => {
+    await a.close()
+    await b2.close()
+    await store.close()
+  })
+
   await b2.ready()
   await b2.update()
 
@@ -326,10 +343,6 @@ test('suspend - reopen with sync in middle', async t => {
   t.is(b.view.indexedLength, 1)
   t.is(b2.view.indexedLength, 1)
   t.is(b2.view.length, b.view.length + 2)
-
-  await a.close()
-  await b.close()
-  await b2.close()
 })
 
 test('suspend - reopen with indexing in middle', async t => {
@@ -390,6 +403,12 @@ test('suspend - reopen with indexing in middle', async t => {
     fastForward: false
   })
 
+  t.teardown(async () => {
+    await a.close()
+    await c2.close()
+    await store.close()
+  })
+
   await c2.ready()
   await c2.update()
 
@@ -409,10 +428,6 @@ test('suspend - reopen with indexing in middle', async t => {
   t.is(b.view.indexedLength, 3)
   t.is(c2.view.indexedLength, 3)
   t.is(c2.view.length, 5)
-
-  await a.close()
-  await b.close()
-  await c2.close()
 })
 
 test.skip('suspend - reopen with indexing + sync in middle', async t => {
@@ -507,6 +522,12 @@ test.skip('suspend - reopen with indexing + sync in middle', async t => {
     fastForward: false
   })
 
+  t.teardown(async () => {
+    await a.close()
+    await c2.close()
+    await store.close()
+  })
+
   await c2.ready()
 
   t.is(c2.view.length, order.length)
@@ -526,10 +547,6 @@ test.skip('suspend - reopen with indexing + sync in middle', async t => {
   t.is(b.view.indexedLength, 3)
   t.is(c2.view.indexedLength, 3)
   t.is(c2.view.length, 5)
-
-  await a.close()
-  await b.close()
-  await c2.close()
 })
 
 test('suspend - non-indexed writer', async t => {
@@ -578,7 +595,7 @@ test('suspend - non-indexed writer', async t => {
   const session2 = store.session()
   await session2.ready()
 
-  const c = new Autobase(session2, a.local.key, {
+  const b2 = new Autobase(session2, a.local.key, {
     apply: applyWriter,
     valueEncoding: 'json',
     open,
@@ -587,15 +604,16 @@ test('suspend - non-indexed writer', async t => {
     fastForward: false
   })
 
-  c.debug = true
+  t.teardown(async () => {
+    await a.close()
+    await b2.close()
+    await store.close()
+  })
 
-  await c.ready()
+  await b2.ready()
 
-  t.is(c.view.indexedLength, a.view.indexedLength)
-  t.is(c.view.length, a.view.length)
-
-  await a.close()
-  await c.close()
+  t.is(b2.view.indexedLength, a.view.indexedLength)
+  t.is(b2.view.length, a.view.length)
 
   async function applyWriter (batch, view, base) {
     for (const node of batch) {
@@ -662,6 +680,12 @@ test('suspend - open new index after reopen', async t => {
     fastForward: false
   })
 
+  t.teardown(async () => {
+    await a.close()
+    await b2.close()
+    await store.close()
+  })
+
   await b2.ready()
 
   for (let i = 0; i < b2.view.first.length; i++) {
@@ -706,9 +730,6 @@ test('suspend - open new index after reopen', async t => {
 
   t.alike(acp1, await a.view.first._source._checkpoint())
   // t.alike(acp2, await a.view.second._source._checkpoint())
-
-  await a.close()
-  await b2.close()
 })
 
 test('suspend - reopen multiple indexes', async t => {
@@ -758,7 +779,7 @@ test('suspend - reopen multiple indexes', async t => {
   await b.close()
 
   const session2 = store.session()
-  const c = new Autobase(session2, a.local.key, {
+  const b2 = new Autobase(session2, a.local.key, {
     valueEncoding: 'json',
     apply: applyMultiple,
     open: openMultiple,
@@ -767,55 +788,57 @@ test('suspend - reopen multiple indexes', async t => {
     fastForward: false
   })
 
-  await c.ready()
-  await c.update()
+  t.teardown(async () => {
+    await a.close()
+    await b2.close()
+    await store.close()
+  })
 
-  for (let i = 0; i < c.view.first.length; i++) {
-    t.alike(await c.view.first.get(i), order[i])
+  await b2.ready()
+  await b2.update()
+
+  for (let i = 0; i < b2.view.first.length; i++) {
+    t.alike(await b2.view.first.get(i), order[i])
   }
 
-  for (let i = 0; i < c.view.second.length; i++) {
-    t.alike(await c.view.second.get(i), order[i + c.view.first.length])
+  for (let i = 0; i < b2.view.second.length; i++) {
+    t.alike(await b2.view.second.get(i), order[i + b2.view.first.length])
   }
 
-  t.is(c.activeWriters.size, 2)
+  t.is(b2.activeWriters.size, 2)
 
-  await c.append({ index: 1, data: 'final' })
+  await b2.append({ index: 1, data: 'final' })
 
-  t.is(c.view.first.length + c.view.second.length, order.length + 1)
+  t.is(b2.view.first.length + b2.view.second.length, order.length + 1)
 
-  await t.execution(replicateAndSync([a, c]))
+  await t.execution(replicateAndSync([a, b2]))
 
   t.is(b.view.first.indexedLength, 1)
-  t.is(c.view.first.indexedLength, 1)
-  t.is(c.view.first.length, b.view.first.length + 2)
+  t.is(b2.view.first.indexedLength, 1)
+  t.is(b2.view.first.length, b.view.first.length + 2)
 
-  await t.execution(confirm([a, c]))
+  await t.execution(confirm([a, b2]))
 
   const an = await a.local.get(a.local.length - 1)
-  const cn = await c.local.get(c.local.length - 1)
+  const b2n = await b2.local.get(b2.local.length - 1)
 
   t.is(an.checkpoint.length, 3)
-  t.is(cn.checkpoint.length, 3)
+  t.is(b2n.checkpoint.length, 3)
 
   const acp1 = await a.localWriter.getCheckpoint(1)
   const acp2 = await a.localWriter.getCheckpoint(2)
 
-  const ccp1 = await c.localWriter.getCheckpoint(1)
-  const ccp2 = await c.localWriter.getCheckpoint(2)
+  const b2cp1 = await b2.localWriter.getCheckpoint(1)
+  const b2cp2 = await b2.localWriter.getCheckpoint(2)
 
   t.alike(acp1.length, 4)
   t.alike(acp2.length, 2)
 
-  t.alike(acp1.length, ccp1.length)
-  t.alike(acp2.length, ccp2.length)
+  t.alike(acp1.length, b2cp1.length)
+  t.alike(acp2.length, b2cp2.length)
 
   t.alike(acp1, await a.view.first._source._checkpoint())
   t.alike(acp2, await a.view.second._source._checkpoint())
-
-  await a.close()
-  await b.close()
-  await c.close()
 })
 
 test('restart non writer', async t => {
@@ -888,7 +911,7 @@ test('suspend - non-indexed writer catches up', async t => {
   const session2 = store.session()
   await session2.ready()
 
-  const c = new Autobase(session2, a.local.key, {
+  const b2 = new Autobase(session2, a.local.key, {
     applyWriter,
     valueEncoding: 'json',
     open,
@@ -897,12 +920,15 @@ test('suspend - non-indexed writer catches up', async t => {
     fastForward: false
   })
 
-  await c.ready()
+  t.teardown(async () => {
+    await a.close()
+    await b2.close()
+    await store.close()
+  })
+
+  await b2.ready()
 
   t.pass('did not fail on open')
-
-  await a.close()
-  await c.close()
 
   async function applyWriter (batch, view, base) {
     for (const node of batch) {
@@ -970,6 +996,12 @@ test.skip('suspend - append but not indexed then reopen', async t => {
     fastForward: false
   })
 
+  t.teardown(async () => {
+    await a.close()
+    await c2.close()
+    await store.close()
+  })
+
   await c2.ready()
 
   // c hasn't seen any appends to first
@@ -1012,10 +1044,6 @@ test.skip('suspend - append but not indexed then reopen', async t => {
 
   t.alike(acp1, await a.view.first._source._checkpoint())
   // t.alike(acp2, await a.view.second._source._checkpoint())
-
-  await a.close()
-  await b.close()
-  await c2.close()
 })
 
 test('suspend - migrations', async t => {
@@ -1070,7 +1098,7 @@ test('suspend - migrations', async t => {
   await b.close()
 
   const session2 = store.session()
-  const c = new Autobase(session2, a.local.key, {
+  const b2 = new Autobase(session2, a.local.key, {
     apply,
     valueEncoding: 'json',
     open: store => store.get('view', {
@@ -1081,32 +1109,34 @@ test('suspend - migrations', async t => {
     fastForward: false
   })
 
-  await c.ready()
+  t.teardown(async () => {
+    await a.close()
+    await b2.close()
+    await store.close()
+  })
 
-  t.is(c.view.indexedLength, 3)
-  t.is(c.view.signedLength, 3)
-  t.is(c.view.getBackingCore().indexedLength, 3)
+  await b2.ready()
 
-  await c.update()
+  t.is(b2.view.indexedLength, 3)
+  t.is(b2.view.signedLength, 3)
+  t.is(b2.view.getBackingCore().indexedLength, 3)
 
-  t.is(c.view.length, order.length)
-  for (let i = 0; i < c.view.length; i++) {
-    t.alike(await c.view.get(i), order[i])
+  await b2.update()
+
+  t.is(b2.view.length, order.length)
+  for (let i = 0; i < b2.view.length; i++) {
+    t.alike(await b2.view.get(i), order[i])
   }
 
-  t.is(c.activeWriters.size, 2)
+  t.is(b2.activeWriters.size, 2)
 
-  await c.append('final')
+  await b2.append('final')
 
-  await t.execution(replicateAndSync([a, c]))
+  await t.execution(replicateAndSync([a, b2]))
 
   t.is(b.view.indexedLength, 3)
-  t.is(c.view.indexedLength, 3)
-  t.is(c.view.length, b.view.length + 1)
-
-  await a.close()
-  await b.close()
-  await c.close()
+  t.is(b2.view.indexedLength, 3)
+  t.is(b2.view.length, b.view.length + 1)
 })
 
 test('suspend - append waits for drain after boot', async t => {
@@ -1144,13 +1174,17 @@ test('suspend - append waits for drain after boot', async t => {
     fastForward: false
   })
 
+  t.teardown(async () => {
+    await a.close()
+    await b2.close()
+    await store.close()
+  })
+
   await b2.append({ last: true })
 
   const { node } = await b2.localWriter.core.get(b2.localWriter.core.length - 1)
   t.is(node.heads.length, 1)
   t.is(node.heads[0].length, 101) // links the last node
-
-  await store.close()
 })
 
 test('suspend - incomplete migrate', async t => {
@@ -1210,6 +1244,12 @@ test('suspend - incomplete migrate', async t => {
     fastForward: false
   })
 
+  t.teardown(async () => {
+    await a.close()
+    await b2.close()
+    await store.close()
+  })
+
   await b2.ready()
 
   t.is(a.view.indexedLength, 2)
@@ -1225,9 +1265,6 @@ test('suspend - incomplete migrate', async t => {
   t.is(b2.activeWriters.size, 2)
 
   await t.execution(replicateAndSync([a, b2]))
-
-  await a.close()
-  await b2.close()
 })
 
 function open (store) {

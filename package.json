@@ -52,7 +52,7 @@
     "random-access-memory": "^6.2.0",
     "same-data": "^1.0.0",
     "standard": "^17.0.0",
-    "test-tmp": "^1.0.0"
+    "test-tmp": "^1.2.0"
   },
   "standard": {
     "ignore": [
