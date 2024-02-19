@@ -83,6 +83,11 @@ test('can track changes', function (t) {
 
   t.is(tip.undo, 0)
   t.is(tip.shared, 5)
+
+  const u = tip.flush()
+  t.is(u.shared, 5)
+  t.is(u.undo, 0)
+  t.is(u.length, 7)
 })
 
 test('can shift', function (t) {
@@ -110,11 +115,14 @@ test('can shift', function (t) {
   tip.add(d0)
   tip.add(c2)
 
+  a0.yielded = true
+
   const u = tip.flush([a0])
 
   t.is(u.undo, 0)
   t.is(u.shared, 5)
   t.is(u.indexed.length, 1)
+  t.is(u.length, 7)
 })
 
 test('can shift out of order', function (t) {
@@ -142,11 +150,15 @@ test('can shift out of order', function (t) {
   tip.add(d0)
   tip.add(c2)
 
+  c0.yielded = true
+
   const u = tip.flush([c0])
 
   t.is(u.undo, 5)
   t.is(u.shared, 0)
   t.is(u.indexed.length, 1)
+  t.is(u.tip.length, 6)
+  t.is(u.length, 7)
 })
 
 test('can multiple shift', function (t) {
@@ -174,11 +186,15 @@ test('can multiple shift', function (t) {
   tip.add(d0)
   tip.add(c2)
 
+  a0.yielded = true
+  b0.yielded = true
+
   const u = tip.flush([a0, b0])
 
   t.is(u.undo, 0)
   t.is(u.shared, 5)
   t.is(u.indexed.length, 2)
+  t.is(u.length, 7)
 })
 
 test('can multiple shift partially out of order', function (t) {
@@ -206,11 +222,15 @@ test('can multiple shift partially out of order', function (t) {
   tip.add(d0)
   tip.add(c2)
 
+  a0.yielded = true
+  c0.yielded = true
+
   const u = tip.flush([a0, c0])
 
   t.is(u.undo, 4)
   t.is(u.shared, 1)
   t.is(u.indexed.length, 2)
+  t.is(u.length, 7)
 })
 
 test('can multiple shift out of order', function (t) {
@@ -252,6 +272,7 @@ test('can multiple shift out of order', function (t) {
   t.is(u.undo, 5)
   t.is(u.shared, 0)
   t.is(u.indexed.length, 2)
+  t.is(u.length, 7)
 })
 
 test('can shift multiple times', function (t) {
@@ -292,6 +313,7 @@ test('can shift multiple times', function (t) {
   t.is(u2.undo, 0)
   t.is(u2.shared, 6)
   t.is(u2.indexed.length, 1)
+  t.is(u.length, 7)
 })
 
 test('shift whole chain', function (t) {
@@ -327,6 +349,7 @@ test('shift whole chain', function (t) {
   t.is(u.undo, 0)
   t.is(u.shared, 5)
   t.is(u.indexed.length, 7)
+  t.is(u.length, 7)
 })
 
 test('shift whole chain out of order', function (t) {
@@ -362,6 +385,7 @@ test('shift whole chain out of order', function (t) {
   t.is(u.undo, 4)
   t.is(u.shared, 1)
   t.is(u.indexed.length, 7)
+  t.is(u.length, 7)
 })
 
 function makeNode (key, length, dependencies, value = null) {
