@@ -16,7 +16,7 @@ const {
   create
 } = require('./helpers')
 
-test.solo('fast-forward - simple', async t => {
+test('fast-forward - simple', async t => {
   t.plan(1)
 
   const store = new Corestore(await tmpDir(t), {
@@ -50,6 +50,8 @@ test.solo('fast-forward - simple', async t => {
   t.teardown(async () => {
     await a.close()
     await b.close()
+    await store.close()
+    await store2.close()
   })
 
   for (let i = 0; i < 1000; i++) {
@@ -77,11 +79,11 @@ test('fast-forward - migrate', async t => {
     storage: () => tmpDir(t)
   })
 
-  t.teardown(() => Promise.all([
-    a.close(),
-    b.close(),
-    c.close()
-  ]))
+  t.teardown(async () => {
+    await a.close()
+    await b.close()
+    await c.close()
+  })
 
   for (let i = 0; i < 2000; i++) {
     await a.append('a' + i)
@@ -114,11 +116,11 @@ test('fast-forward - fast forward after migrate', async t => {
     storage: () => tmpDir(t)
   })
 
-  t.teardown(() => Promise.all([
-    a.close(),
-    b.close(),
-    c.close()
-  ]))
+  t.teardown(async () => {
+    await a.close()
+    await b.close()
+    await c.close()
+  })
 
   for (let i = 0; i < 2000; i++) {
     await a.append('a' + i)
@@ -173,12 +175,12 @@ test('fast-forward - multiple writers added', async t => {
     storage: () => tmpDir(t)
   })
 
-  t.teardown(() => Promise.all([
-    a.close(),
-    b.close(),
-    c.close(),
-    d.close()
-  ]))
+  t.teardown(async () => {
+    await a.close()
+    await b.close()
+    await c.close()
+    await d.close()
+  })
 
   await addWriterAndSync(a, b)
   await addWriterAndSync(a, c)
@@ -232,12 +234,12 @@ test('fast-forward - multiple queues', async t => {
     storage: () => tmpDir(t)
   })
 
-  t.teardown(() => Promise.all([
-    a.close(),
-    b.close(),
-    c.close(),
-    d.close()
-  ]), { order: 1 })
+  t.teardown(async () => {
+    await a.close()
+    await b.close()
+    await c.close()
+    await d.close()
+  }, { order: 1 })
 
   // this value should be long enough that 2 fast-forwards are
   // queued (ie. we don't just replicate the last state), but short
@@ -336,11 +338,6 @@ test('fast-forward - open with no remote io', async t => {
 
   await b.ready()
 
-  t.teardown(() => Promise.all([
-    a.close(),
-    b.close()
-  ]))
-
   for (let i = 0; i < 1000; i++) {
     await a.append('a' + i)
   }
@@ -384,6 +381,13 @@ test('fast-forward - open with no remote io', async t => {
     ackThreshold: 0
   })
 
+  t.teardown(async () => {
+    await a.close()
+    await b2.close()
+    await store.close()
+    await store2.close()
+  })
+
   await b2.ready()
   await t.execution(b2.ready())
 
@@ -417,11 +421,11 @@ test('fast-forward - force reset then ff', async t => {
     storage: () => tmpDir(t)
   })
 
-  t.teardown(() => Promise.all([
-    a.close(),
-    b.close(),
-    c.close()
-  ]))
+  t.teardown(async () => {
+    await a.close()
+    await b.close()
+    await c.close()
+  })
 
   await addWriterAndSync(a, b)
   await addWriterAndSync(a, c)
