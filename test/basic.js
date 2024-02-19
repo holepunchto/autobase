@@ -197,20 +197,20 @@ test('basic - rotating majority', async t => {
 
   await confirm(bases)
 
-  await a.append({ message: 'msg a' })
-  await b.append({ message: 'msg b' })
-  await c.append({ message: 'msg c' })
+  await a.append('a0')
+  await b.append('b0')
+  await c.append('c0')
 
   await confirm(bases)
 
   let indexed = a.view.indexedLength
 
-  await a.append({ message: 'msg a' })
-  await b.append({ message: 'msg b' })
-  await c.append({ message: 'msg c' })
-  await a.append({ message: 'msg a' })
-  await b.append({ message: 'msg b' })
-  await c.append({ message: 'msg c' })
+  await a.append('a1')
+  await b.append('b1')
+  await c.append('c1')
+  await a.append('a2')
+  await b.append('b2')
+  await c.append('c2')
 
   await confirm([a, b])
 
@@ -220,12 +220,12 @@ test('basic - rotating majority', async t => {
 
   indexed = a.view.indexedLength
 
-  await a.append({ message: 'msg a' })
-  await b.append({ message: 'msg b' })
-  await c.append({ message: 'msg c' })
-  await a.append({ message: 'msg a' })
-  await b.append({ message: 'msg b' })
-  await c.append({ message: 'msg c' })
+  await a.append('a3')
+  await b.append('b3')
+  await c.append('c3')
+  await a.append('a4')
+  await b.append('b4')
+  await c.append('c4')
 
   await confirm([b, c])
 
@@ -235,12 +235,12 @@ test('basic - rotating majority', async t => {
 
   indexed = b.view.indexedLength
 
-  await a.append({ message: 'msg a' })
-  await b.append({ message: 'msg b' })
-  await c.append({ message: 'msg c' })
-  await a.append({ message: 'msg a' })
-  await b.append({ message: 'msg b' })
-  await c.append({ message: 'msg c' })
+  await a.append('a5')
+  await b.append('b5') // 8b:15
+  await c.append('c5')
+  await a.append('a6')
+  await b.append('b6') // 8b:16
+  await c.append('c6')
 
   await confirm([a, c])
 
@@ -250,13 +250,14 @@ test('basic - rotating majority', async t => {
 
   indexed = a.view.indexedLength
 
-  await a.append({ message: 'msg a' })
-  await b.append({ message: 'msg b' })
-  await c.append({ message: 'msg c' })
-  await a.append({ message: 'msg a' })
-  await b.append({ message: 'msg b' })
-  await c.append({ message: 'msg c' })
+  await a.append('a7')
+  await b.append('b7')
+  await c.append('c7')
+  await a.append('a8')
+  await b.append('b8')
+  await c.append('c8')
 
+  b.debug = true
   await confirm(bases)
 
   t.not(a.view.indexedLength, indexed)
@@ -271,14 +272,14 @@ test('basic - throws', async t => {
 
   const [a, b] = bases
 
-  await a.append({ message: 'msg1' })
-  await a.append({ message: 'msg2' })
-  await a.append({ message: 'msg3' })
+  await a.append('msg1')
+  await a.append('msg2')
+  await a.append('msg3')
 
   await confirm([a, b])
 
-  await t.exception(b.append({ message: 'not writable' }))
-  await t.exception(a.view.append({ message: 'append outside apply' }))
+  await t.exception(b.append('not writable'))
+  await t.exception(a.view.append('append outside apply'))
   await t.exception(() => a.addWriter(b.local.key))
 })
 
@@ -329,31 +330,31 @@ test('basic - online minorities', async t => {
 
   t.is(a.view.indexedLength, c.view.indexedLength)
 
-  await a.append({ message: 'msg0' })
-  await b.append({ message: 'msg1' })
-  await c.append({ message: 'msg2' })
-  await d.append({ message: 'msg3' })
-  await e.append({ message: 'msg4' })
-  await a.append({ message: 'msg5' })
-  await b.append({ message: 'msg6' })
-  await c.append({ message: 'msg7' })
-  await d.append({ message: 'msg8' })
-  await e.append({ message: 'msg9' })
+  await a.append('msg0')
+  await b.append('msg1')
+  await c.append('msg2')
+  await d.append('msg3')
+  await e.append('msg4')
+  await a.append('msg5')
+  await b.append('msg6')
+  await c.append('msg7')
+  await d.append('msg8')
+  await e.append('msg9')
 
-  await a.append({ message: 'msg10' })
-  await b.append({ message: 'msg11' })
-  await a.append({ message: 'msg12' })
-  await b.append({ message: 'msg13' })
-  await a.append({ message: 'msg14' })
+  await a.append('msg10')
+  await b.append('msg11')
+  await a.append('msg12')
+  await b.append('msg13')
+  await a.append('msg14')
 
-  await d.append({ message: 'msg15' })
-  await c.append({ message: 'msg16' })
-  await d.append({ message: 'msg17' })
-  await c.append({ message: 'msg18' })
-  await d.append({ message: 'msg19' })
-  await c.append({ message: 'msg20' })
-  await d.append({ message: 'msg21' })
-  await c.append({ message: 'msg22' })
+  await d.append('msg15')
+  await c.append('msg16')
+  await d.append('msg17')
+  await c.append('msg18')
+  await d.append('msg19')
+  await c.append('msg20')
+  await d.append('msg21')
+  await c.append('msg22')
 
   await confirm([a, b])
   await confirm([c, d])
