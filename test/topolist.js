@@ -142,8 +142,6 @@ test('can shift out of order', function (t) {
   tip.add(d0)
   tip.add(c2)
 
-  const length = tip.tip.length
-
   const u = tip.flush([c0])
 
   t.is(u.undo, 5)
@@ -246,6 +244,9 @@ test('can multiple shift out of order', function (t) {
   t.is(tip.undo, 0)
   t.is(tip.shared, 5)
 
+  c0.yielded = true
+  b0.yielded = true
+
   const u = tip.flush([c0, b0])
 
   t.is(u.undo, 5)
@@ -284,6 +285,8 @@ test('can shift multiple times', function (t) {
   t.is(u.shared, 5)
   t.is(u.indexed.length, 1)
 
+  b0.yielded = true
+
   const u2 = tip.flush([b0])
 
   t.is(u2.undo, 0)
@@ -316,7 +319,10 @@ test('shift whole chain', function (t) {
   tip.add(d0)
   tip.add(c2)
 
-  const u = tip.flush([a0, b0, c0, c1, b1, c2, d0])
+  const yielded = [a0, b0, c0, c1, b1, c2, d0]
+  for (const n of yielded) n.yielded = true
+
+  const u = tip.flush(yielded)
 
   t.is(u.undo, 0)
   t.is(u.shared, 5)
@@ -348,7 +354,10 @@ test('shift whole chain out of order', function (t) {
   tip.add(d0)
   tip.add(c2)
 
-  const u = tip.flush([a0, c0, b0, c1, b1, c2, d0])
+  const yielded = [a0, c0, b0, c1, b1, c2, d0]
+  for (const n of yielded) n.yielded = true
+
+  const u = tip.flush(yielded)
 
   t.is(u.undo, 4)
   t.is(u.shared, 1)
