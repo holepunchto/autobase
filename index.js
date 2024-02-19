@@ -1334,7 +1334,7 @@ module.exports = class Autobase extends ReadyResource {
   async _applyUpdate (u) {
     await this._viewStore.flush()
 
-    if (u.popped) this._undo(u.popped)
+    if (u.undo) this._undo(u.undo)
 
     // if anything was indexed reset the ticks
     if (u.indexed.length) this._resetAckTick()
