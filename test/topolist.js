@@ -388,6 +388,123 @@ test('shift whole chain out of order', function (t) {
   t.is(u.length, 7)
 })
 
+test('reorder then shift', function (t) {
+  const tip = new Topolist()
+
+  const a0 = makeNode('a', 0, [])
+  const c0 = makeNode('c', 0, [a0])
+  const b0 = makeNode('b', 0, [a0])
+  const c1 = makeNode('c', 1, [])
+  const b1 = makeNode('b', 1, [c1])
+  const d0 = makeNode('d', 0, [c1])
+  const c2 = makeNode('c', 2, [c1])
+
+  tip.add(a0)
+  tip.add(c0)
+  tip.add(c1)
+  tip.add(d0)
+  tip.add(c2)
+
+  tip.mark()
+
+  t.is(tip.undo, 0)
+  t.is(tip.shared, 5)
+
+  tip.add(b0)
+  tip.add(b1)
+
+  t.is(tip.undo, 4)
+  t.is(tip.shared, 1)
+
+  const yielded = [a0, b0, c0, c1, b1, c2, d0]
+  for (const n of yielded) n.yielded = true
+
+  const u = tip.flush(yielded)
+
+  t.is(u.undo, 4)
+  t.is(u.shared, 1)
+  t.is(u.indexed.length, 7)
+  t.is(u.length, 7)
+})
+
+test('add reorder then shift', function (t) {
+  const tip = new Topolist()
+
+  const a0 = makeNode('a', 0, [])
+  const b0 = makeNode('b', 0, [])
+  const c0 = makeNode('c', 0, [b0])
+  const c1 = makeNode('c', 1, [])
+  const b1 = makeNode('b', 1, [c1])
+  const d0 = makeNode('d', 0, [c1])
+  const c2 = makeNode('c', 2, [c1])
+
+  tip.add(b0)
+  tip.add(c0)
+  tip.add(c1)
+  tip.add(b1)
+  tip.add(d0)
+  tip.add(c2)
+
+  tip.mark()
+
+  t.is(tip.undo, 0)
+  t.is(tip.shared, 6)
+
+  tip.add(a0)
+
+  t.is(tip.undo, 6)
+  t.is(tip.shared, 0)
+
+  const yielded = [a0]
+  for (const n of yielded) n.yielded = true
+
+  const u = tip.flush(yielded)
+
+  t.is(u.undo, 6)
+  t.is(u.shared, 0)
+  t.is(u.indexed.length, 1)
+  t.is(u.length, 7)
+})
+
+test('reorder then shift reordered', function (t) {
+  const tip = new Topolist()
+
+  const a0 = makeNode('a', 0, [])
+  const b0 = makeNode('b', 0, [])
+  const c0 = makeNode('c', 0, [b0])
+  const c1 = makeNode('c', 1, [])
+  const b1 = makeNode('b', 1, [c1])
+  const d0 = makeNode('d', 0, [c1])
+  const c2 = makeNode('c', 2, [c1])
+
+  tip.add(b0)
+  tip.add(c0)
+  tip.add(c1)
+  tip.add(b1)
+  tip.add(d0)
+  tip.add(c2)
+
+  tip.mark()
+
+  t.is(tip.undo, 0)
+  t.is(tip.shared, 6)
+
+  tip.add(a0)
+
+  t.is(tip.undo, 6)
+  t.is(tip.shared, 0)
+
+  const yielded = [a0, b0, c0, c1, c2, b1]
+  for (const n of yielded) n.yielded = true
+
+  const u = tip.flush(yielded)
+
+  t.is(u.undo, 6)
+  t.is(u.shared, 0)
+  t.is(u.indexed.length, 6)
+  t.is(u.length, 7)
+})
+
 function makeNode (key, length, dependencies, value = null) {
   return {
     writer: { core: { key: b4a.from(key) } },
