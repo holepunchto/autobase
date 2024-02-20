@@ -9,6 +9,7 @@ const encryptionKey = process.env && process.env.ENCRYPT_ALL ? b4a.alloc(32).fil
 
 module.exports = {
   createStores,
+  createBase,
   create,
   addWriter,
   addWriterAndSync,
@@ -20,27 +21,59 @@ module.exports = {
   ...helpers
 }
 
-async function createStores (n, opts = {}) {
+async function createStores (n, t, opts = {}) {
   const storage = opts.storage || (() => ram.reusable())
+  const offset = opts.offset || 0
+
   const stores = []
-  for (let i = 0; i < n; i++) {
-    stores.push(new Corestore(await storage(), { primaryKey: Buffer.alloc(32).fill(i), encryptionKey }))
+  for (let i = offset; i < n + offset; i++) {
+    const primaryKey = Buffer.alloc(32, i)
+    stores.push(new Corestore(await storage(), { primaryKey, encryptionKey }))
   }
+
+  t.teardown(() => Promise.all(stores.map(s => s.close())), { order: 2 })
+
   return stores
 }
 
-async function create (n, apply, open, close, opts = {}) {
-  const storage = opts.storage || (() => ram.reusable())
-  const moreOpts = { apply, open, close, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false, ...opts }
-  const bases = [new Autobase(new Corestore(await storage(), { primaryKey: Buffer.alloc(32).fill(0), encryptionKey }), null, moreOpts)]
-  await bases[0].ready()
-  if (n === 1) return bases
+async function create (n, t, opts = {}) {
+  const stores = await createStores(n, t, opts)
+  const bases = [await createBase(stores[0], null, t, opts)]
+
+  if (n === 1) return { stores, bases }
+
   for (let i = 1; i < n; i++) {
-    const base = new Autobase(new Corestore(await storage(), { primaryKey: Buffer.alloc(32).fill(i), encryptionKey }), bases[0].local.key, moreOpts)
-    await base.ready()
-    bases.push(base)
+    bases.push(await createBase(stores[i], bases[0].local.key, t, opts))
   }
-  return bases
+
+  return {
+    stores,
+    bases
+  }
+}
+
+async function createBase (store, key, t, opts = {}) {
+  const moreOpts = {
+    apply,
+    open,
+    close: undefined,
+    valueEncoding: 'json',
+    ackInterval: 0,
+    ackThreshold: 0,
+    fastForward: false,
+    ...opts
+  }
+
+  const base = new Autobase(store.session(), key, moreOpts)
+  await base.ready()
+
+  t.teardown(() => base.close(), { order: 1 })
+
+  return base
+}
+
+function open (store) {
+  return store.get('view', { valueEncoding: 'json' })
 }
 
 async function addWriter (base, add, indexer = true) {

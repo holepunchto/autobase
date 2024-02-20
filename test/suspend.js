@@ -1,13 +1,13 @@
 const test = require('brittle')
-const ram = require('random-access-memory')
 const tmpDir = require('test-tmp')
-const Corestore = require('corestore')
 const b4a = require('b4a')
 
 const Autobase = require('..')
 
 const {
   create,
+  createBase,
+  createStores,
   replicate,
   replicateAndSync,
   apply,
@@ -18,15 +18,9 @@ const {
 } = require('./helpers')
 
 test('suspend - pass exisiting store', async t => {
-  const [base1] = await create(1, apply)
+  const { stores, bases } = await create(2, t)
 
-  const store = new Corestore(ram.reusable(), {
-    primaryKey: Buffer.alloc(32).fill(1)
-  })
-
-  const session2 = store.session()
-  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0 })
-  await base2.ready()
+  const [base1, base2] = bases
 
   await base1.append({
     add: base2.local.key.toString('hex'),
@@ -49,8 +43,7 @@ test('suspend - pass exisiting store', async t => {
 
   await base2.close()
 
-  const session3 = store.session()
-  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false })
+  const base3 = await createBase(stores[1], base1.local.key, t)
   await base3.ready()
 
   t.is(base3.activeWriters.size, 2)
@@ -61,15 +54,15 @@ test('suspend - pass exisiting store', async t => {
 })
 
 test('suspend - pass exisiting fs store', async t => {
-  const [base1] = await create(1, apply)
+  const { bases } = await create(1, t, { open: null })
+  const [base1] = bases
 
-  const store = new Corestore(await tmpDir(t), {
-    primaryKey: Buffer.alloc(32).fill(1)
+  const [store] = await createStores(1, t, {
+    offset: 1,
+    storage: () => tmpDir(t)
   })
 
-  const session2 = store.session()
-  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false })
-  await base2.ready()
+  const base2 = await createBase(store, base1.local.key, t, { open: null })
 
   await base1.append({
     add: base2.local.key.toString('hex'),
@@ -96,12 +89,6 @@ test('suspend - pass exisiting fs store', async t => {
   const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false })
   await base3.ready()
 
-  t.teardown(async () => {
-    await base1.close()
-    await base3.close()
-    await store.close()
-  })
-
   t.is(base3.activeWriters.size, 2)
 
   await base3.append('final')
@@ -110,20 +97,9 @@ test('suspend - pass exisiting fs store', async t => {
 })
 
 test('suspend - 2 exisiting fs stores', async t => {
-  const store = new Corestore(await tmpDir(t), {
-    primaryKey: Buffer.alloc(32).fill(0)
-  })
+  const { bases, stores } = await create(2, t, { storage: () => tmpDir(t) })
 
-  const base1 = new Autobase(store, null, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false })
-  await base1.ready()
-
-  const store2 = new Corestore(await tmpDir(t), {
-    primaryKey: Buffer.alloc(32).fill(1)
-  })
-
-  const session2 = store2.session()
-  const base2 = new Autobase(session2, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false })
-  await base2.ready()
+  const [base1, base2] = bases
 
   await base1.append({
     add: base2.local.key.toString('hex'),
@@ -146,16 +122,7 @@ test('suspend - 2 exisiting fs stores', async t => {
 
   await base2.close()
 
-  const session3 = store2.session()
-  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false })
-  await base3.ready()
-
-  t.teardown(async () => {
-    await base1.close()
-    await base3.close()
-    await store.close()
-    await store2.close()
-  })
+  const base3 = await createBase(stores[1], base1.local.key, t)
 
   t.is(base3.activeWriters.size, 2)
 
@@ -165,25 +132,9 @@ test('suspend - 2 exisiting fs stores', async t => {
 })
 
 test('suspend - reopen after index', async t => {
-  const [a] = await create(1, apply, open)
+  const { bases, stores } = await create(2, t, { storage: () => tmpDir(t) })
 
-  const store = new Corestore(await tmpDir(t), {
-    primaryKey: Buffer.alloc(32).fill(1)
-  })
-
-  const session1 = store.session()
-  const b = new Autobase(session1, a.local.key, {
-    apply,
-    valueEncoding: 'json',
-    open: store => store.get('view', {
-      valueEncoding: 'json'
-    }),
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
-  })
-
-  await b.ready()
+  const [a, b] = bases
 
   await addWriter(a, b)
 
@@ -206,25 +157,8 @@ test('suspend - reopen after index', async t => {
 
   await b.close()
 
-  const session2 = store.session()
-  const b2 = new Autobase(session2, a.local.key, {
-    apply,
-    valueEncoding: 'json',
-    open: store => store.get('view', {
-      valueEncoding: 'json'
-    }),
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
-  })
+  const b2 = await createBase(stores[1], a.local.key, t)
 
-  t.teardown(async () => {
-    await a.close()
-    await b2.close()
-    await store.close()
-  })
-
-  await b2.ready()
   await b2.update()
 
   t.is(b2.view.length, order.length)
@@ -245,23 +179,9 @@ test('suspend - reopen after index', async t => {
 })
 
 test('suspend - reopen with sync in middle', async t => {
-  const [a] = await create(1, apply, open)
+  const { bases, stores } = await create(2, t, { storage: () => tmpDir(t) })
 
-  const store = new Corestore(await tmpDir(t), {
-    primaryKey: Buffer.alloc(32).fill(1)
-  })
-
-  const session1 = store.session()
-  const b = new Autobase(session1, a.local.key, {
-    apply,
-    valueEncoding: 'json',
-    open,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
-  })
-
-  await b.ready()
+  const [a, b] = bases
 
   await addWriter(a, b)
 
@@ -279,7 +199,8 @@ test('suspend - reopen with sync in middle', async t => {
 
   await b.close()
 
-  const unreplicate = replicate([a.store, store])
+  const bstore = stores[1]
+  const unreplicate = replicate([a.store, bstore])
 
   await a.update()
 
@@ -287,7 +208,7 @@ test('suspend - reopen with sync in middle', async t => {
   for (const { key } of [b.system.core, b.view]) {
     if (!key) continue
 
-    const core = store.get({ key, compat: false })
+    const core = bstore.get({ key, compat: false })
     const remote = a.store.get({ key, compat: false })
 
     await core.ready()
@@ -298,39 +219,22 @@ test('suspend - reopen with sync in middle', async t => {
   // sync next views
   for (const ac of [a.system.core, a.view]) {
     const remote = ac.getBackingCore().session
-    const local = store.get({ key: remote.key, compat: false })
+    const local = bstore.get({ key: remote.key, compat: false })
     await local.ready()
     await local.download({ start: 0, end: remote.length }).done()
   }
 
   // sync writers
   for (const core of [a.local]) {
-    const remote = store.get({ key: core.key, compat: false })
+    const remote = bstore.get({ key: core.key, compat: false })
     await remote.ready()
     await remote.download({ start: 0, end: core.length }).done()
   }
 
   await unreplicate()
 
-  const session2 = store.session()
-  await session2.ready()
+  const b2 = await createBase(bstore, a.local.key, t)
 
-  const b2 = new Autobase(session2, a.local.key, {
-    apply,
-    valueEncoding: 'json',
-    open,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
-  })
-
-  t.teardown(async () => {
-    await a.close()
-    await b2.close()
-    await store.close()
-  })
-
-  await b2.ready()
   await b2.update()
 
   t.is(b2.activeWriters.size, 2)
@@ -346,23 +250,9 @@ test('suspend - reopen with sync in middle', async t => {
 })
 
 test('suspend - reopen with indexing in middle', async t => {
-  const [a, b] = await create(2, apply, open)
+  const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
 
-  const store = new Corestore(await tmpDir(t), {
-    primaryKey: Buffer.alloc(32).fill(2)
-  })
-
-  const session1 = store.session()
-  const c = new Autobase(session1, a.local.key, {
-    apply,
-    valueEncoding: 'json',
-    open,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
-  })
-
-  await c.ready()
+  const [a, b, c] = bases
 
   await addWriterAndSync(a, b)
   await addWriterAndSync(a, c)
@@ -391,25 +281,8 @@ test('suspend - reopen with indexing in middle', async t => {
 
   await confirm([a, b])
 
-  const session2 = store.session()
-  await session2.ready()
+  const c2 = await createBase(stores[2], a.local.key, t)
 
-  const c2 = new Autobase(session2, a.local.key, {
-    apply,
-    valueEncoding: 'json',
-    open,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
-  })
-
-  t.teardown(async () => {
-    await a.close()
-    await c2.close()
-    await store.close()
-  })
-
-  await c2.ready()
   await c2.update()
 
   t.is(c2.view.length, order.length)
@@ -431,23 +304,9 @@ test('suspend - reopen with indexing in middle', async t => {
 })
 
 test.skip('suspend - reopen with indexing + sync in middle', async t => {
-  const [a, b] = await create(2, apply, open)
+  const { bases, stores } = await create(2, t, { storage: () => tmpDir(t) })
 
-  const store = new Corestore(await tmpDir(t), {
-    primaryKey: Buffer.alloc(32).fill(2)
-  })
-
-  const session1 = store.session()
-  const c = new Autobase(session1, a.local.key, {
-    apply,
-    valueEncoding: 'json',
-    open,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
-  })
-
-  await c.ready()
+  const [a, b, c] = bases
 
   await addWriterAndSync(a, b)
   await addWriterAndSync(a, c)
@@ -465,6 +324,7 @@ test.skip('suspend - reopen with indexing + sync in middle', async t => {
   }
 
   await c.close()
+  const cstore = stores[2]
 
   // majority continues
 
@@ -476,7 +336,7 @@ test.skip('suspend - reopen with indexing + sync in middle', async t => {
 
   await confirm([a, b])
 
-  const unreplicate = replicate([a.store, store])
+  const unreplicate = replicate([a.store, cstore])
 
   await a.update()
 
@@ -484,7 +344,7 @@ test.skip('suspend - reopen with indexing + sync in middle', async t => {
   for (const { key } of [c.system.core, c.view]) {
     if (!key) continue
 
-    const core = store.get({ key, compat: false })
+    const core = cstore.get({ key, compat: false })
     const remote = a.store.get({ key, compat: false })
 
     await core.ready()
@@ -495,7 +355,7 @@ test.skip('suspend - reopen with indexing + sync in middle', async t => {
   // sync next views
   for (const ac of [a.system.core, a.view]) {
     const remote = ac.getBackingCore().session
-    const local = store.get({ key: remote.key, compat: false })
+    const local = cstore.get({ key: remote.key, compat: false })
     await local.ready()
     await local.download({ start: 0, end: remote.length }).done()
   }
@@ -503,32 +363,14 @@ test.skip('suspend - reopen with indexing + sync in middle', async t => {
   // sync writers
   for (const core of [a.local, a.store.get({ key: b.local.key, compat: false })]) {
     await core.ready()
-    const remote = store.get({ key: core.key, compat: false })
+    const remote = cstore.get({ key: core.key, compat: false })
     await remote.ready()
     await remote.download({ start: 0, end: core.length }).done()
   }
 
   await unreplicate()
 
-  const session2 = store.session()
-  await session2.ready()
-
-  const c2 = new Autobase(session2, a.local.key, {
-    apply,
-    valueEncoding: 'json',
-    open,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
-  })
-
-  t.teardown(async () => {
-    await a.close()
-    await c2.close()
-    await store.close()
-  })
-
-  await c2.ready()
+  const c2 = await createBase(cstore, a.local.key, t)
 
   t.is(c2.view.length, order.length)
 
@@ -550,23 +392,13 @@ test.skip('suspend - reopen with indexing + sync in middle', async t => {
 })
 
 test('suspend - non-indexed writer', async t => {
-  const [a] = await create(1, applyWriter, open)
-
-  const store = new Corestore(await tmpDir(t), {
-    primaryKey: b4a.alloc(32).fill(1)
-  })
-
-  const session1 = store.session()
-  const b = new Autobase(session1, a.local.key, {
+  const { bases, stores } = await create(2, t, {
     apply: applyWriter,
-    valueEncoding: 'json',
-    open,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
+    storage: () => tmpDir(t)
   })
 
-  await b.ready()
+  const [a, b] = bases
+
   await b.view.ready()
 
   await a.append({ add: b.local.key.toString('hex'), indexer: false })
@@ -582,7 +414,7 @@ test('suspend - non-indexed writer', async t => {
 
   await confirm([a, b])
 
-  const unreplicate = replicate([a.store, store])
+  const unreplicate = replicate([a.store, stores[1]])
 
   await eventFlush()
   await a.update()
@@ -592,25 +424,7 @@ test('suspend - non-indexed writer', async t => {
 
   await b.close()
 
-  const session2 = store.session()
-  await session2.ready()
-
-  const b2 = new Autobase(session2, a.local.key, {
-    apply: applyWriter,
-    valueEncoding: 'json',
-    open,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
-  })
-
-  t.teardown(async () => {
-    await a.close()
-    await b2.close()
-    await store.close()
-  })
-
-  await b2.ready()
+  const b2 = await createBase(stores[1], a.local.key, t)
 
   t.is(b2.view.indexedLength, a.view.indexedLength)
   t.is(b2.view.length, a.view.length)
@@ -628,23 +442,13 @@ test('suspend - non-indexed writer', async t => {
 })
 
 test('suspend - open new index after reopen', async t => {
-  const [a] = await create(1, applyMultiple, openMultiple)
-
-  const store = new Corestore(await tmpDir(t), {
-    primaryKey: Buffer.alloc(32).fill(1)
-  })
-
-  const session1 = store.session()
-  const b = new Autobase(session1, a.local.key, {
-    valueEncoding: 'json',
+  const { bases, stores } = await create(2, t, {
     apply: applyMultiple,
     open: openMultiple,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
+    storage: () => tmpDir(t)
   })
 
-  await b.ready()
+  const [a, b] = bases
 
   await addWriterAndSync(a, b)
 
@@ -670,20 +474,9 @@ test('suspend - open new index after reopen', async t => {
 
   await b.close()
 
-  const session2 = store.session()
-  const b2 = new Autobase(session2, a.local.key, {
-    valueEncoding: 'json',
+  const b2 = await createBase(stores[1], a.local.key, t, {
     apply: applyMultiple,
-    open: openMultiple,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
-  })
-
-  t.teardown(async () => {
-    await a.close()
-    await b2.close()
-    await store.close()
+    open: openMultiple
   })
 
   await b2.ready()
@@ -733,23 +526,13 @@ test('suspend - open new index after reopen', async t => {
 })
 
 test('suspend - reopen multiple indexes', async t => {
-  const [a] = await create(1, applyMultiple, openMultiple)
-
-  const store = new Corestore(await tmpDir(t), {
-    primaryKey: Buffer.alloc(32).fill(1)
-  })
-
-  const session1 = store.session()
-  const b = new Autobase(session1, a.local.key, {
-    valueEncoding: 'json',
+  const { bases, stores } = await create(2, t, {
     apply: applyMultiple,
     open: openMultiple,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
+    storage: () => tmpDir(t)
   })
 
-  await b.ready()
+  const [a, b] = bases
 
   await addWriterAndSync(a, b)
 
@@ -778,23 +561,11 @@ test('suspend - reopen multiple indexes', async t => {
 
   await b.close()
 
-  const session2 = store.session()
-  const b2 = new Autobase(session2, a.local.key, {
-    valueEncoding: 'json',
+  const b2 = await createBase(stores[1], a.local.key, t, {
     apply: applyMultiple,
-    open: openMultiple,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
+    open: openMultiple
   })
 
-  t.teardown(async () => {
-    await a.close()
-    await b2.close()
-    await store.close()
-  })
-
-  await b2.ready()
   await b2.update()
 
   for (let i = 0; i < b2.view.first.length; i++) {
@@ -842,8 +613,7 @@ test('suspend - reopen multiple indexes', async t => {
 })
 
 test('restart non writer', async t => {
-  const storeA = new Corestore(ram.reusable())
-  const storeB = new Corestore(ram.reusable())
+  const [storeA, storeB] = await createStores(2, t)
 
   const base = new Autobase(storeA, { apply, valueEncoding: 'json', fastForward: false })
   await base.append({ hello: 'world' })
@@ -863,23 +633,13 @@ test('restart non writer', async t => {
 })
 
 test('suspend - non-indexed writer catches up', async t => {
-  const [a] = await create(1, applyWriter, open)
-
-  const store = new Corestore(await tmpDir(t), {
-    primaryKey: b4a.alloc(32).fill(1)
-  })
-
-  const session1 = store.session()
-  const b = new Autobase(session1, a.local.key, {
+  const { bases, stores } = await create(2, t, {
     apply: applyWriter,
-    valueEncoding: 'json',
-    open,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
+    storage: () => tmpDir(t)
   })
 
-  await b.ready()
+  const [a, b] = bases
+
   await b.view.ready()
 
   await a.append({ add: b.local.key.toString('hex'), indexer: false })
@@ -895,7 +655,7 @@ test('suspend - non-indexed writer catches up', async t => {
 
   await confirm([a, b])
 
-  const unreplicate = replicate([a.store, store])
+  const unreplicate = replicate([a.store, stores[1]])
 
   await eventFlush()
   await a.update()
@@ -908,25 +668,7 @@ test('suspend - non-indexed writer catches up', async t => {
 
   await b.close()
 
-  const session2 = store.session()
-  await session2.ready()
-
-  const b2 = new Autobase(session2, a.local.key, {
-    applyWriter,
-    valueEncoding: 'json',
-    open,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
-  })
-
-  t.teardown(async () => {
-    await a.close()
-    await b2.close()
-    await store.close()
-  })
-
-  await b2.ready()
+  await t.execution(createBase(stores[1], a.local.key, t))
 
   t.pass('did not fail on open')
 
@@ -943,24 +685,13 @@ test('suspend - non-indexed writer catches up', async t => {
 })
 
 test.skip('suspend - append but not indexed then reopen', async t => {
-  const [a, b] = await create(2, applyMultiple, openMultiple)
-
-  const store = new Corestore(await tmpDir(t), {
-    primaryKey: Buffer.alloc(32).fill(2)
-  })
-
-  const session1 = store.session()
-  const c = new Autobase(session1, a.local.key, {
-    valueEncoding: 'json',
+  const { bases, stores } = await create(3, t, {
     apply: applyMultiple,
     open: openMultiple,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
+    storage: () => tmpDir(t)
   })
 
-  await b.ready()
-  await c.ready()
+  const [a, b, c] = bases
 
   await addWriterAndSync(a, b)
   await addWriterAndSync(a, c)
@@ -986,20 +717,9 @@ test.skip('suspend - append but not indexed then reopen', async t => {
 
   await c.close()
 
-  const session2 = store.session()
-  const c2 = new Autobase(session2, a.local.key, {
-    valueEncoding: 'json',
+  const c2 = await createBase(stores[2], a.local.key, t, {
     apply: applyMultiple,
-    open: openMultiple,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
-  })
-
-  t.teardown(async () => {
-    await a.close()
-    await c2.close()
-    await store.close()
+    open: openMultiple
   })
 
   await c2.ready()
@@ -1047,29 +767,15 @@ test.skip('suspend - append but not indexed then reopen', async t => {
 })
 
 test('suspend - migrations', async t => {
-  const [a] = await create(1, apply, open)
+  const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
 
-  const store = new Corestore(await tmpDir(t), {
-    primaryKey: Buffer.alloc(32).fill(1)
-  })
+  const [a, b] = bases
 
   await a.append('a0')
   await a.append('a1')
 
   t.is(a.view.indexedLength, 2)
   t.is(a.view.signedLength, 2)
-
-  const session1 = store.session()
-  const b = new Autobase(session1, a.local.key, {
-    apply,
-    valueEncoding: 'json',
-    open: store => store.get('view', {
-      valueEncoding: 'json'
-    }),
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
-  })
 
   await b.ready()
 
@@ -1097,25 +803,7 @@ test('suspend - migrations', async t => {
 
   await b.close()
 
-  const session2 = store.session()
-  const b2 = new Autobase(session2, a.local.key, {
-    apply,
-    valueEncoding: 'json',
-    open: store => store.get('view', {
-      valueEncoding: 'json'
-    }),
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
-  })
-
-  t.teardown(async () => {
-    await a.close()
-    await b2.close()
-    await store.close()
-  })
-
-  await b2.ready()
+  const b2 = await createBase(stores[1], a.local.key, t)
 
   t.is(b2.view.indexedLength, 3)
   t.is(b2.view.signedLength, 3)
@@ -1140,22 +828,13 @@ test('suspend - migrations', async t => {
 })
 
 test('suspend - append waits for drain after boot', async t => {
-  const [a] = await create(1, applyMultiple, openMultiple)
-
-  const store = new Corestore(await tmpDir(t), {
-    primaryKey: Buffer.alloc(32).fill(1)
-  })
-
-  const b = new Autobase(store.session(), a.local.key, {
-    valueEncoding: 'json',
+  const { bases, stores } = await create(3, t, {
     apply: applyMultiple,
     open: openMultiple,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
+    storage: () => tmpDir(t)
   })
 
-  await b.ready()
+  const [a, b] = bases
 
   await addWriterAndSync(a, b)
 
@@ -1165,19 +844,9 @@ test('suspend - append waits for drain after boot', async t => {
 
   await b.close()
 
-  const b2 = new Autobase(store.session(), a.local.key, {
-    valueEncoding: 'json',
+  const b2 = await createBase(stores[1], a.local.key, t, {
     apply: applyMultiple,
-    open: openMultiple,
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
-  })
-
-  t.teardown(async () => {
-    await a.close()
-    await b2.close()
-    await store.close()
+    open: openMultiple
   })
 
   await b2.append({ last: true })
@@ -1188,31 +857,15 @@ test('suspend - append waits for drain after boot', async t => {
 })
 
 test('suspend - incomplete migrate', async t => {
-  const [a] = await create(1, apply, open)
+  const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
 
-  const store = new Corestore(await tmpDir(t), {
-    primaryKey: Buffer.alloc(32).fill(1)
-  })
+  const [a, b] = bases
 
   await a.append('a0')
   await a.append('a1')
 
   t.is(a.view.indexedLength, 2)
   t.is(a.view.signedLength, 2)
-
-  const session1 = store.session()
-  const b = new Autobase(session1, a.local.key, {
-    apply,
-    valueEncoding: 'json',
-    open: store => store.get('view', {
-      valueEncoding: 'json'
-    }),
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
-  })
-
-  await b.ready()
 
   await addWriter(a, b)
 
@@ -1232,23 +885,7 @@ test('suspend - incomplete migrate', async t => {
 
   await b.close()
 
-  const session2 = store.session()
-  const b2 = new Autobase(session2, a.local.key, {
-    apply,
-    valueEncoding: 'json',
-    open: store => store.get('view', {
-      valueEncoding: 'json'
-    }),
-    ackInterval: 0,
-    ackThreshold: 0,
-    fastForward: false
-  })
-
-  t.teardown(async () => {
-    await a.close()
-    await b2.close()
-    await store.close()
-  })
+  const b2 = await createBase(stores[1], a.local.key, t)
 
   await b2.ready()
 
@@ -1266,10 +903,6 @@ test('suspend - incomplete migrate', async t => {
 
   await t.execution(replicateAndSync([a, b2]))
 })
-
-function open (store) {
-  return store.get('view', { valueEncoding: 'json' })
-}
 
 function openMultiple (store) {
   return {

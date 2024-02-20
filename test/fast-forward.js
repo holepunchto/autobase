@@ -1,9 +1,7 @@
 const test = require('brittle')
-const Corestore = require('corestore')
 const tmpDir = require('test-tmp')
 const cenc = require('compact-encoding')
 
-const Autobase = require('..')
 const { SystemPointer } = require('../lib/messages')
 
 const {
@@ -12,47 +10,19 @@ const {
   replicate,
   eventFlush,
   confirm,
-  apply,
-  create
+  create,
+  createBase
 } = require('./helpers')
 
 test('fast-forward - simple', async t => {
   t.plan(1)
 
-  const store = new Corestore(await tmpDir(t), {
-    primaryKey: Buffer.alloc(32).fill(0)
+  const { bases } = await create(2, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
   })
 
-  const store2 = new Corestore(await tmpDir(t), {
-    primaryKey: Buffer.alloc(32).fill(1)
-  })
-
-  const a = new Autobase(store.session(), null, {
-    apply,
-    open: store => store.get('view', { valueEncoding: 'json' }),
-    valueEncoding: 'json',
-    ackInterval: 0,
-    ackThreshold: 0
-  })
-
-  await a.ready()
-
-  const b = new Autobase(store2.session(), a.local.key, {
-    apply,
-    open: store => store.get('view', { valueEncoding: 'json' }),
-    valueEncoding: 'json',
-    ackInterval: 0,
-    ackThreshold: 0
-  })
-
-  await b.ready()
-
-  t.teardown(async () => {
-    await a.close()
-    await b.close()
-    await store.close()
-    await store2.close()
-  })
+  const [a, b] = bases
 
   for (let i = 0; i < 1000; i++) {
     await a.append('a' + i)
@@ -70,20 +40,12 @@ test('fast-forward - simple', async t => {
 test('fast-forward - migrate', async t => {
   t.plan(3)
 
-  const open = store => store.get('view', { valueEncoding: 'json' })
-  const [a, b, c] = await create(3, apply, open, null, {
-    valueEncoding: 'json',
-    ackInterval: 0,
-    ackThreshold: 0,
+  const { bases } = await create(3, t, {
     fastForward: true,
     storage: () => tmpDir(t)
   })
 
-  t.teardown(async () => {
-    await a.close()
-    await b.close()
-    await c.close()
-  })
+  const [a, b, c] = bases
 
   for (let i = 0; i < 2000; i++) {
     await a.append('a' + i)
@@ -107,20 +69,12 @@ test('fast-forward - migrate', async t => {
 test('fast-forward - fast forward after migrate', async t => {
   t.plan(3)
 
-  const open = store => store.get('view', { valueEncoding: 'json' })
-  const [a, b, c] = await create(3, apply, open, null, {
-    valueEncoding: 'json',
-    ackInterval: 0,
-    ackThreshold: 0,
+  const { bases } = await create(3, t, {
     fastForward: true,
     storage: () => tmpDir(t)
   })
 
-  t.teardown(async () => {
-    await a.close()
-    await b.close()
-    await c.close()
-  })
+  const [a, b, c] = bases
 
   for (let i = 0; i < 2000; i++) {
     await a.append('a' + i)
@@ -166,21 +120,12 @@ test('fast-forward - multiple writers added', async t => {
 
   const MESSAGES_PER_ROUND = 200
 
-  const open = store => store.get('view', { valueEncoding: 'json' })
-  const [a, b, c, d] = await create(4, apply, open, null, {
-    valueEncoding: 'json',
-    ackInterval: 0,
-    ackThreshold: 0,
+  const { bases } = await create(4, t, {
     fastForward: true,
     storage: () => tmpDir(t)
   })
 
-  t.teardown(async () => {
-    await a.close()
-    await b.close()
-    await c.close()
-    await d.close()
-  })
+  const [a, b, c, d] = bases
 
   await addWriterAndSync(a, b)
   await addWriterAndSync(a, c)
@@ -225,21 +170,12 @@ test('fast-forward - multiple writers added', async t => {
 })
 
 test('fast-forward - multiple queues', async t => {
-  const open = store => store.get('view', { valueEncoding: 'json' })
-  const [a, b, c, d] = await create(4, apply, open, null, {
-    valueEncoding: 'json',
-    ackInterval: 0,
-    ackThreshold: 0,
+  const { bases } = await create(4, t, {
     fastForward: true,
     storage: () => tmpDir(t)
   })
 
-  t.teardown(async () => {
-    await a.close()
-    await b.close()
-    await c.close()
-    await d.close()
-  }, { order: 1 })
+  const [a, b, c, d] = bases
 
   // this value should be long enough that 2 fast-forwards are
   // queued (ie. we don't just replicate the last state), but short
@@ -310,31 +246,13 @@ test('fast-forward - multiple queues', async t => {
 })
 
 test('fast-forward - open with no remote io', async t => {
-  const store = new Corestore(await tmpDir(t), {
-    primaryKey: Buffer.alloc(32).fill(0)
-  })
-
-  const store2 = new Corestore(await tmpDir(t), {
-    primaryKey: Buffer.alloc(32).fill(1)
-  })
-
-  const a = new Autobase(store.session(), null, {
+  const { bases, stores } = await create(2, t, {
     apply: applyOldState,
-    open: store => store.get('view', { valueEncoding: 'json' }),
-    valueEncoding: 'json',
-    ackInterval: 0,
-    ackThreshold: 0
+    fastForward: true,
+    storage: () => tmpDir(t)
   })
 
-  await a.ready()
-
-  const b = new Autobase(store2.session(), a.local.key, {
-    apply: applyOldState,
-    open: store => store.get('view', { valueEncoding: 'json' }),
-    valueEncoding: 'json',
-    ackInterval: 0,
-    ackThreshold: 0
-  })
+  const [a, b] = bases
 
   await b.ready()
 
@@ -362,7 +280,7 @@ test('fast-forward - open with no remote io', async t => {
   await b.close()
 
   const local = a.local
-  const remote = store2.get({ key: local.key })
+  const remote = stores[1].get({ key: local.key })
 
   const s1 = local.replicate(true)
   const s2 = remote.replicate(false)
@@ -370,22 +288,12 @@ test('fast-forward - open with no remote io', async t => {
   s1.pipe(s2).pipe(s1)
 
   await remote.download({ end: local.length }).downloaded()
+
   s1.destroy()
   await new Promise(resolve => s2.on('close', resolve))
 
-  const b2 = new Autobase(store2.session(), a.local.key, {
-    apply: applyOldState,
-    open: store => store.get('view', { valueEncoding: 'json' }),
-    valueEncoding: 'json',
-    ackInterval: 0,
-    ackThreshold: 0
-  })
-
-  t.teardown(async () => {
-    await a.close()
-    await b2.close()
-    await store.close()
-    await store2.close()
+  const b2 = await createBase(stores[1].session(), a.local.key, t, {
+    apply: applyOldState
   })
 
   await b2.ready()
@@ -412,20 +320,12 @@ test('fast-forward - open with no remote io', async t => {
 test('fast-forward - force reset then ff', async t => {
   t.plan(9)
 
-  const open = store => store.get('view', { valueEncoding: 'json' })
-  const [a, b, c] = await create(3, apply, open, null, {
-    valueEncoding: 'json',
-    ackInterval: 0,
-    ackThreshold: 0,
+  const { bases } = await create(3, t, {
     fastForward: true,
     storage: () => tmpDir(t)
   })
 
-  t.teardown(async () => {
-    await a.close()
-    await b.close()
-    await c.close()
-  })
+  const [a, b, c] = bases
 
   await addWriterAndSync(a, b)
   await addWriterAndSync(a, c)
