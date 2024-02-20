@@ -980,7 +980,7 @@ test('basic - oplog digest', async t => {
 })
 
 // todo: this is broken if a store session is passed to the base
-test.skip('basic - close during apply', async t => {
+test.solo('basic - close during apply', async t => {
   t.plan(1)
 
   const { bases } = await create(1, t, {
