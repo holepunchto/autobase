@@ -509,7 +509,7 @@ function makeNode (key, length, dependencies, value = null) {
   return {
     writer: { core: { key: b4a.from(key) } },
     length,
-    dependencies,
+    dependencies: new Set(dependencies),
     value
   }
 }
