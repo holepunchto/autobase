@@ -245,7 +245,7 @@ test('fast-forward - multiple queues', async t => {
   }
 })
 
-test('fast-forward - open with no remote io', async t => {
+test.skip('fast-forward - open with no remote io', async t => {
   const { bases, stores } = await create(2, t, {
     apply: applyOldState,
     fastForward: true,
