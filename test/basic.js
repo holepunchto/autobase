@@ -8,8 +8,8 @@ const Autobase = require('..')
 
 const {
   create,
+  createStores,
   replicateAndSync,
-  apply,
   addWriter,
   addWriterAndSync,
   confirm,
@@ -19,7 +19,8 @@ const {
 } = require('./helpers')
 
 test('basic - two writers', async t => {
-  const [base1, base2, base3] = await create(3, apply)
+  const { bases } = await create(3, t, { open: null })
+  const [base1, base2, base3] = bases
 
   await addWriter(base1, base2)
 
@@ -42,7 +43,8 @@ test('basic - two writers', async t => {
 
 test('basic - writable event fires', async t => {
   t.plan(1)
-  const [base1, base2] = await create(2, apply)
+  const { bases } = await create(2, t, { open: null })
+  const [base1, base2] = bases
 
   base2.on('writable', () => {
     t.ok(base2.writable, 'Writable event fired when autobase writable')
@@ -55,7 +57,8 @@ test('basic - writable event fires', async t => {
 
 test('basic - local key pair', async t => {
   const keyPair = crypto.keyPair()
-  const [base] = await create(1, apply, store => store.get('test', { valueEncoding: 'json' }), null, { keyPair })
+  const { bases } = await create(1, t, { keyPair })
+  const [base] = bases
 
   const block = { message: 'hello, world!' }
   await base.append(block)
@@ -66,7 +69,8 @@ test('basic - local key pair', async t => {
 })
 
 test('basic - view', async t => {
-  const [base] = await create(1, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(1, t)
+  const [base] = bases
 
   const block = { message: 'hello, world!' }
   await base.append(block)
@@ -77,7 +81,8 @@ test('basic - view', async t => {
 })
 
 test('basic - view with close', async t => {
-  const [base] = await create(1, apply, open, close)
+  const { bases } = await create(1, t, { open, close })
+  const [base] = bases
 
   const block = { message: 'hello, world!' }
   await base.append(block)
@@ -106,7 +111,7 @@ test('basic - view with close', async t => {
 })
 
 test('basic - view/writer userdata is set', async t => {
-  const bases = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(2, t)
   const [base1, base2] = bases
 
   await addWriter(base1, base2)
@@ -130,7 +135,7 @@ test('basic - view/writer userdata is set', async t => {
 })
 
 test('basic - compare views', async t => {
-  const bases = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(2, t)
 
   const [a, b] = bases
   await addWriter(a, b)
@@ -148,7 +153,7 @@ test('basic - compare views', async t => {
 })
 
 test('basic - online majority', async t => {
-  const bases = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(3, t)
 
   const [a, b, c] = bases
 
@@ -188,7 +193,7 @@ test('basic - online majority', async t => {
 })
 
 test('basic - rotating majority', async t => {
-  const bases = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(3, t)
 
   const [a, b, c] = bases
 
@@ -268,7 +273,7 @@ test('basic - rotating majority', async t => {
 })
 
 test('basic - throws', async t => {
-  const bases = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(2, t)
 
   const [a, b] = bases
 
@@ -284,7 +289,7 @@ test('basic - throws', async t => {
 })
 
 test('basic - add 5 writers', async t => {
-  const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(5, t)
 
   const [a, b, c, d, e] = bases
 
@@ -317,7 +322,7 @@ test('basic - add 5 writers', async t => {
 })
 
 test('basic - online minorities', async t => {
-  const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(5, t)
 
   const [a, b, c, d, e] = bases
 
@@ -412,7 +417,7 @@ test('basic - restarting sets bootstrap correctly', async t => {
 })
 
 test('batch append', async t => {
-  const bases = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(2, t)
 
   const [a, b] = bases
   a.on('error', (e) => console.error(e))
@@ -427,7 +432,7 @@ test('batch append', async t => {
 })
 
 test('undoing a batch', async t => {
-  const bases = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(2, t)
 
   const [a, b] = bases
   a.on('error', (e) => console.error(e))
@@ -449,7 +454,7 @@ test('undoing a batch', async t => {
 })
 
 test('append during reindex', async t => {
-  const bases = await create(4, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(4, t)
 
   const [a, b, c, d] = bases
 
@@ -484,7 +489,8 @@ test('append during reindex', async t => {
 })
 
 test('closing an autobase', async t => {
-  const [base] = await create(1, apply, store => store.get('test'))
+  const { bases } = await create(1, t)
+  const [base] = bases
 
   // Sanity check
   t.is(base.local.closed, false)
@@ -494,7 +500,7 @@ test('closing an autobase', async t => {
 })
 
 test('flush after reindex', async t => {
-  const bases = await create(9, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(9, t)
 
   const root = bases[0]
   const adds = []
@@ -524,7 +530,7 @@ test('flush after reindex', async t => {
 })
 
 test('reindex', async t => {
-  const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(5, t)
 
   const [a, b, c, d, e] = bases
 
@@ -584,7 +590,7 @@ test('reindex', async t => {
 })
 
 test('sequential restarts', async t => {
-  const bases = await create(9, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(9, t)
 
   const root = bases[0]
   const adds = []
@@ -649,7 +655,8 @@ test('sequential restarts', async t => {
 })
 
 test('two writers write many messages, third writer joins', async t => {
-  const [base1, base2, base3] = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(3, t)
+  const [base1, base2, base3] = bases
 
   await addWriter(base1, base2)
 
@@ -668,7 +675,8 @@ test('two writers write many messages, third writer joins', async t => {
 })
 
 test('basic - gc indexed nodes', async t => {
-  const [base] = await create(1, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(1, t)
+  const [base] = bases
 
   await base.append({ message: '0' })
   await base.append({ message: '1' })
@@ -688,7 +696,8 @@ test('basic - gc indexed nodes', async t => {
 })
 
 test('basic - isAutobase', async t => {
-  const [base1, base2, base3] = await create(3, apply)
+  const { bases } = await create(3, t, { open: null })
+  const [base1, base2, base3] = bases
 
   await addWriter(base1, base2)
 
@@ -711,7 +720,9 @@ test('basic - isAutobase', async t => {
 test('basic - catch apply throws', async t => {
   t.plan(1)
 
-  const [a] = await create(1, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(1, t)
+  const [a] = bases
+
   const b = new Autobase(new Corestore(ram, { primaryKey: Buffer.alloc(32).fill(1) }), a.local.key, {
     apply: applyThrow,
     valueEncoding: 'json',
@@ -754,7 +765,8 @@ test('basic - catch apply throws', async t => {
 })
 
 test('basic - non-indexed writer', async t => {
-  const [a, b] = await create(2, applyWriter, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(2, t, { apply: applyWriter })
+  const [a, b] = bases
 
   await a.append({ add: b.local.key.toString('hex'), indexer: false })
 
@@ -825,7 +837,8 @@ test('basic - non-indexed writer', async t => {
 })
 
 test('basic - non-indexed writers 3-of-5', async t => {
-  const [a, b, c, d, e] = await create(5, applyWriter, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(5, t, { apply: applyWriter })
+  const [a, b, c, d, e] = bases
 
   await a.append({ add: b.local.key.toString('hex'), indexer: true })
   await a.append({ add: c.local.key.toString('hex'), indexer: true })
@@ -947,7 +960,8 @@ test('autobase should not detach the original store', async t => {
 })
 
 test('basic - oplog digest', async t => {
-  const [base1, base2] = await create(2, apply)
+  const { bases } = await create(2, t, { open: null })
+  const [base1, base2] = bases
 
   await base1.append({
     add: base2.local.key.toString('hex'),
@@ -967,10 +981,13 @@ test('basic - oplog digest', async t => {
   t.is(last.digest.indexers?.length, 2)
 })
 
+// todo: use normal helper once we have hypercore session manager
 test('basic - close during apply', async t => {
-  const [a] = await create(
-    1,
-    async function apply (nodes, view, base) {
+  t.plan(1)
+
+  const [store] = await createStores(1, t)
+  const a = new Autobase(store, null, {
+    async apply (nodes, view, base) {
       for (const node of nodes) {
         if (node.value.add) {
           await base.addWriter(b4a.from(node.value.add, 'hex'))
@@ -981,8 +998,8 @@ test('basic - close during apply', async t => {
         await core.get(core.length) // can never resolve
       }
     },
-    store => store.get('test', { valueEncoding: 'json' })
-  )
+    valueEncoding: 'json'
+  })
 
   const promise = a.append('hello')
   setImmediate(() => a.close())
@@ -991,7 +1008,7 @@ test('basic - close during apply', async t => {
 })
 
 test('basic - constructor throws', async t => {
-  await t.exception(create(1, undefined, open), /Synthetic./)
+  await t.exception(create(1, t, { apply: undefined, open }), /Synthetic./)
 
   function open () {
     throw new Error('Synthetic.')
@@ -999,7 +1016,7 @@ test('basic - constructor throws', async t => {
 })
 
 test('basic - never sign past pending migration', async t => {
-  const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(5, t)
 
   const [a, b, c, d, e] = bases
 
@@ -1026,7 +1043,8 @@ test('basic - never sign past pending migration', async t => {
 })
 
 test('basic - remove writer', async t => {
-  const [a, b, c] = await create(3, applyWithRemove)
+  const { bases } = await create(3, t, { apply: applyWithRemove, open: null })
+  const [a, b, c] = bases
 
   await addWriter(a, b, false)
 
@@ -1048,7 +1066,8 @@ test('basic - remove writer', async t => {
 })
 
 test('basic - remove indexer', async t => {
-  const [a, b, c] = await create(3, applyWithRemove)
+  const { bases } = await create(3, t, { apply: applyWithRemove, open: null })
+  const [a, b, c] = bases
 
   await addWriterAndSync(a, b)
   await b.append(null)
@@ -1078,7 +1097,8 @@ test('basic - remove indexer', async t => {
 })
 
 test('basic - remove indexer and continue indexing', async t => {
-  const [a, b, c] = await create(3, applyWithRemove, store => store.get('test'))
+  const { bases } = await create(3, t, { apply: applyWithRemove })
+  const [a, b, c] = bases
 
   await addWriterAndSync(a, b)
   await addWriterAndSync(b, c)
@@ -1107,7 +1127,8 @@ test('basic - remove indexer and continue indexing', async t => {
 })
 
 test('basic - remove indexer back to previously used indexer set', async t => {
-  const [a, b, c] = await create(3, applyWithRemove, store => store.get('test'))
+  const { bases } = await create(3, t, { apply: applyWithRemove })
+  const [a, b, c] = bases
 
   await addWriterAndSync(a, b)
 
@@ -1151,7 +1172,8 @@ test('basic - remove indexer back to previously used indexer set', async t => {
 })
 
 test('basic - remove an indexer when 2-of-2', async t => {
-  const [a, b] = await create(2, applyWithRemove, store => store.get('test'))
+  const { bases } = await create(2, t, { apply: applyWithRemove })
+  const [a, b] = bases
 
   await addWriterAndSync(a, b)
 
@@ -1190,7 +1212,8 @@ test('basic - remove an indexer when 2-of-2', async t => {
 })
 
 test('basic - remove multiple indexers concurrently', async t => {
-  const [a, b, c] = await create(3, apply, store => store.get('test'))
+  const { bases } = await create(3, t, { apply })
+  const [a, b, c] = bases
 
   await addWriterAndSync(a, b)
   await addWriterAndSync(b, c)

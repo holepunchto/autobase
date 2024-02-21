@@ -13,7 +13,7 @@ const {
 } = require('./helpers')
 
 test('upgrade - do not proceed', async t => {
-  const [s1, s2] = await createStores(2)
+  const [s1, s2] = await createStores(2, t)
 
   const a0 = new Autobase(s1.session(), null, {
     apply: applyv0,
@@ -65,7 +65,7 @@ test('upgrade - do not proceed', async t => {
 })
 
 test('upgrade - proceed', async t => {
-  const [s1, s2] = await createStores(2)
+  const [s1, s2] = await createStores(2, t)
 
   const a0 = new Autobase(s1.session(), null, {
     apply: applyv0,
@@ -130,7 +130,7 @@ test('upgrade - proceed', async t => {
 })
 
 test('upgrade - consensus', async t => {
-  const [s1, s2] = await createStores(2)
+  const [s1, s2] = await createStores(2, t)
 
   const a0 = new Autobase(s1.session(), null, {
     apply: applyv0,
@@ -205,7 +205,7 @@ test('upgrade - consensus', async t => {
 })
 
 test('upgrade - consensus 3 writers', async t => {
-  const [s1, s2, s3] = await createStores(3)
+  const [s1, s2, s3] = await createStores(3, t)
 
   const a0 = new Autobase(s1.session(), null, {
     apply: applyv0,
@@ -318,7 +318,7 @@ test('upgrade - consensus 3 writers', async t => {
 })
 
 test('upgrade - writer cannot append while behind', async t => {
-  const [s1, s2, s3] = await createStores(3)
+  const [s1, s2, s3] = await createStores(3, t)
 
   const a0 = new Autobase(s1.session(), null, {
     apply: applyv0,
@@ -405,7 +405,7 @@ test('upgrade - writer cannot append while behind', async t => {
 })
 
 test('upgrade - onindex hook', async t => {
-  const [s1, s2] = await createStores(2)
+  const [s1, s2] = await createStores(2, t)
 
   let aversion = 0
   let bversion = 0
@@ -491,7 +491,7 @@ test('upgrade - onindex hook', async t => {
 })
 
 test('autobase upgrade - do not proceed', async t => {
-  const [s1, s2] = await createStores(2)
+  const [s1, s2] = await createStores(2, t)
 
   const a0 = new Autobase(s1.session(), null, {
     apply,
@@ -546,7 +546,7 @@ test('autobase upgrade - do not proceed', async t => {
 })
 
 test('autobase upgrade - proceed', async t => {
-  const [s1, s2] = await createStores(2)
+  const [s1, s2] = await createStores(2, t)
 
   const a0 = new Autobase(s1.session(), null, {
     apply,
@@ -617,7 +617,7 @@ test('autobase upgrade - proceed', async t => {
 })
 
 test('autobase upgrade - consensus', async t => {
-  const [s1, s2] = await createStores(2)
+  const [s1, s2] = await createStores(2, t)
 
   const a0 = new Autobase(s1.session(), null, {
     apply,
@@ -695,7 +695,7 @@ test('autobase upgrade - consensus', async t => {
 })
 
 test('autobase upgrade - consensus 3 writers', async t => {
-  const [s1, s2, s3] = await createStores(3)
+  const [s1, s2, s3] = await createStores(3, t)
 
   const a0 = new Autobase(s1.session(), null, {
     apply,

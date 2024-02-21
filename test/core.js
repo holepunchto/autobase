@@ -4,7 +4,6 @@ const Hypercore = require('hypercore')
 
 const {
   create,
-  apply,
   addWriter,
   addWriterAndSync,
   confirm,
@@ -12,7 +11,9 @@ const {
 } = require('./helpers')
 
 test('core -  no new session if closed (hypercore compat)', async t => {
-  const [base] = await create(1, apply, store => store.get('test'))
+  const { bases } = await create(1, t)
+  const [base] = bases
+
   const normalCore = new Hypercore(ram)
   const linearizedSessionCore = base.view
   const snapshotSession = linearizedSessionCore.snapshot()
@@ -37,7 +38,8 @@ test('core -  no new session if closed (hypercore compat)', async t => {
 })
 
 test('core - seek', async t => {
-  const [base] = await create(1, apply, store => store.get('test'))
+  const { bases } = await create(1, t)
+  const [base] = bases
 
   const b1 = base.view.byteLength
   await base.append('hello')
@@ -63,7 +65,12 @@ test('core - seek', async t => {
 })
 
 test('core - seek multi writer', async t => {
-  const [a, b] = await create(2, scopedApply, store => store.get('test'))
+  const { bases } = await create(2, t, {
+    apply: scopedApply,
+    open: store => store.get('test')
+  })
+
+  const [a, b] = bases
 
   await addWriter(a, b)
   await confirm([a, b])
@@ -112,7 +119,8 @@ test('core - seek multi writer', async t => {
 })
 
 test('core - userData', async t => {
-  const [base] = await create(1, apply, store => store.get('test'))
+  const { bases } = await create(1, t)
+  const [base] = bases
 
   await base.view.setUserData('first', Buffer.from('hello'))
   await base.view.setUserData('second', Buffer.from('goodbye'))
@@ -131,7 +139,8 @@ test('core - userData', async t => {
 })
 
 test('core - properties', async t => {
-  const [base] = await create(1, apply, store => store.get('test'))
+  const { bases } = await create(1, t)
+  const [base] = bases
 
   await base.append('hello, world!')
 
@@ -142,7 +151,8 @@ test('core - properties', async t => {
 })
 
 test('core - indexed view', async t => {
-  const [a, b] = await create(2, apply, store => store.get('test'))
+  const { bases } = await create(2, t)
+  const [a, b] = bases
 
   const normal = a.view.session({ snapshot: false })
   const indexed = a.view.session({ snapshot: false, indexed: true })

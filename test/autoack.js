@@ -2,7 +2,6 @@ const test = require('brittle')
 
 const {
   create,
-  apply,
   addWriter,
   addWriterAndSync,
   confirm,
@@ -15,7 +14,12 @@ const {
 test('autoack - simple', async t => {
   t.plan(6)
 
-  const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 10, ackThreshold: 0 })
+  const { bases } = await create(2, t, {
+    ackInterval: 10,
+    ackThreshold: 0
+  })
+
+  const [a, b] = bases
 
   const unreplicate = replicate([a, b])
   t.teardown(unreplicate)
@@ -40,15 +44,14 @@ test('autoack - simple', async t => {
 test('autoack - 5 writers', async t => {
   t.plan(26)
 
-  const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 10, ackThreshold: 0 })
+  const { bases } = await create(5, t, {
+    ackInterval: 10,
+    ackThreshold: 0
+  })
+
   const [a, b, c, d, e] = bases
 
-  const unreplicate = replicate(bases)
-
-  t.teardown(async () => {
-    await unreplicate()
-    await Promise.all(bases.map(b => b.close()))
-  })
+  t.teardown(replicate(bases))
 
   await addWriterAndSync(a, b)
   await addWriterAndSync(a, c)
@@ -117,15 +120,14 @@ test('autoack - 5 writers', async t => {
 test('autoack - concurrent', async t => {
   t.plan(10)
 
-  const bases = await create(5, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 20, ackThreshold: 0 })
+  const { bases } = await create(5, t, {
+    ackInterval: 20,
+    ackThreshold: 0
+  })
+
   const [a, b, c, d, e] = bases
 
-  const unreplicate = replicate(bases)
-
-  t.teardown(async () => {
-    await unreplicate()
-    await Promise.all(bases.map(b => b.close()))
-  })
+  t.teardown(replicate(bases))
 
   await addWriterAndSync(a, b)
   await addWriterAndSync(a, c)
@@ -169,15 +171,14 @@ test('autoack - concurrent', async t => {
 test('autoack - threshold', async t => {
   t.plan(2)
 
-  const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 0, ackThreshold: 1 })
-
-  const unreplicate = replicate([a, b])
-
-  t.teardown(async () => {
-    await unreplicate()
-    await a.close()
-    await b.close()
+  const { bases } = await create(2, t, {
+    ackInterval: 0,
+    ackThreshold: 1
   })
+
+  const [a, b] = bases
+
+  t.teardown(await replicate([a, b]))
 
   await addWriterAndSync(a, b)
 
@@ -198,15 +199,14 @@ test('autoack - threshold with interval', async t => {
   t.plan(3)
 
   const ackInterval = 800
-  const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval, ackThreshold: 1 })
-
-  const unreplicate = replicate([a, b])
-
-  t.teardown(async () => {
-    await unreplicate()
-    await a.close()
-    await b.close()
+  const { bases } = await create(2, t, {
+    ackInterval,
+    ackThreshold: 1
   })
+
+  const [a, b] = bases
+
+  t.teardown(await replicate([a, b]))
 
   await addWriterAndSync(a, b)
 
@@ -234,10 +234,14 @@ test('autoack - threshold with interval', async t => {
 test('autoack - no null acks', async t => {
   t.plan(2)
 
-  const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 10, ackThreshold: 0 })
+  const { bases } = await create(2, t, {
+    ackInterval: 10,
+    ackThreshold: 0
+  })
 
-  const unreplicate = replicate([a, b])
-  t.teardown(unreplicate)
+  const [a, b] = bases
+
+  t.teardown(await replicate([a, b]))
 
   await addWriterAndSync(a, b)
   await confirm([a, b])
@@ -256,10 +260,14 @@ test('autoack - no null acks', async t => {
 test('autoack - value beneath null values', async t => {
   t.plan(4)
 
-  const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 10, ackThreshold: 0 })
+  const { bases } = await create(2, t, {
+    ackInterval: 10,
+    ackThreshold: 0
+  })
 
-  const unreplicate = replicate([a, b])
-  t.teardown(unreplicate)
+  const [a, b] = bases
+
+  t.teardown(await replicate([a, b]))
 
   await addWriterAndSync(a, b)
   await confirm([a, b])
@@ -283,7 +291,12 @@ test('autoack - value beneath null values', async t => {
 test('autoack - merge', async t => {
   t.plan(2)
 
-  const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 0, ackThreshold: 0 })
+  const { bases } = await create(2, t, {
+    ackInterval: 0,
+    ackThreshold: 0
+  })
+
+  const [a, b] = bases
 
   await addWriterAndSync(a, b)
   await replicateAndSync([a, b])
@@ -303,7 +316,12 @@ test('autoack - merge', async t => {
 test('autoack - merge when not head', async t => {
   t.plan(12)
 
-  const [a, b, c] = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 0, ackThreshold: 0 })
+  const { bases } = await create(3, t, {
+    ackInterval: 0,
+    ackThreshold: 0
+  })
+
+  const [a, b, c] = bases
 
   await addWriterAndSync(a, b)
   await addWriterAndSync(a, c)
@@ -341,7 +359,12 @@ test('autoack - merge when not head', async t => {
 test('autoack - more merges', async t => {
   t.plan(8)
 
-  const [a, b, c] = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 0, ackThreshold: 0 })
+  const { bases } = await create(3, t, {
+    ackInterval: 0,
+    ackThreshold: 0
+  })
+
+  const [a, b, c] = bases
 
   await addWriterAndSync(a, b)
   await confirm([a, b, c])
@@ -376,7 +399,12 @@ test('autoack - more merges', async t => {
 test('autoack - pending writers', async t => {
   t.plan(5)
 
-  const [a, b, c] = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 0, ackThreshold: 0 })
+  const { bases } = await create(3, t, {
+    ackInterval: 0,
+    ackThreshold: 0
+  })
+
+  const [a, b, c] = bases
 
   t.teardown(await replicate([a, b, c]))
 
@@ -396,7 +424,12 @@ test('autoack - pending writers', async t => {
 test.skip('autoack - pending migrates', async t => {
   t.plan(3)
 
-  const [a, b] = await create(2, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 0, ackThreshold: 0 })
+  const { bases } = await create(2, t, {
+    ackInterval: 0,
+    ackThreshold: 0
+  })
+
+  const [a, b] = bases
 
   t.teardown(await replicate([a, b]))
 
@@ -419,7 +452,12 @@ test.skip('autoack - pending migrates', async t => {
 })
 
 test('autoack - minority indexers who are both tails', async t => {
-  const [a, b, c, d] = await create(4, apply, store => store.get('test', { valueEncoding: 'json' }), null, { ackInterval: 10, ackThreshold: 0 })
+  const { bases } = await create(4, t, {
+    ackInterval: 10,
+    ackThreshold: 0
+  })
+
+  const [a, b, c, d] = bases
 
   await addWriterAndSync(a, b)
   await addWriterAndSync(a, c)

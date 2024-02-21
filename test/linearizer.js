@@ -5,8 +5,7 @@ const {
   create,
   confirm,
   replicateAndSync,
-  addWriterAndSync,
-  apply
+  addWriterAndSync
 } = require('./helpers')
 
 /*
@@ -16,7 +15,7 @@ c - b - a - c - b - a
 */
 
 test('linearizer - simple', async t => {
-  const bases = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(3, t)
 
   const [a, b, c] = bases
 
@@ -113,7 +112,7 @@ test('linearizer - simple', async t => {
 })
 
 test('linearizer - compete', async t => {
-  const bases = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(3, t)
 
   const [a, b, c] = bases
 
@@ -208,7 +207,7 @@ test('linearizer - compete', async t => {
 })
 
 test('linearizer - count ordering', async t => {
-  const bases = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(3, t)
 
   const [a, b, c] = bases
 
@@ -336,7 +335,7 @@ test('linearizer - count ordering', async t => {
 })
 
 test('linearizer - reordering', async t => {
-  const bases = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(3, t)
 
   const [a, b, c] = bases
 
@@ -382,7 +381,7 @@ test('linearizer - reordering', async t => {
 })
 
 test('linearizer - reordering after restart', async t => {
-  const bases = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(3, t)
 
   const [a, b, c] = bases
 
@@ -414,7 +413,7 @@ test('linearizer - reordering after restart', async t => {
 })
 
 test('linearizer - shouldAck', async t => {
-  const bases = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(3, t)
 
   const [a, b, c] = bases
 
@@ -447,7 +446,7 @@ test('linearizer - shouldAck', async t => {
 
 // review: test passes, but not sure what this test is for?
 test.skip('linearizer - no loop', async t => {
-  const bases = await create(4, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(4, t)
 
   const [a, b, c, d] = bases
 

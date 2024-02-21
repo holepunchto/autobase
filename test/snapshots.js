@@ -4,7 +4,6 @@ const Hyperbee = require('hyperbee')
 const {
   create,
   confirm,
-  apply,
   addWriter,
   replicateAndSync
 } = require('./helpers')
@@ -12,7 +11,7 @@ const {
 const beeOpts = { extension: false, keyEncoding: 'binary', valueEncoding: 'binary' }
 
 test('check snapshot of snapshot after rebase', async t => {
-  const bases = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(3, t)
   const [base1, base2, base3] = bases
 
   await addWriter(base1, base2)
@@ -49,7 +48,7 @@ test('check snapshot of snapshot after rebase', async t => {
 })
 
 test('no inconsistent snapshot entries when truncated', async t => {
-  const bases = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(3, t)
   const [base1, base2, base3] = bases
 
   await base1.append({ add: base2.local.key.toString('hex') })
@@ -78,7 +77,7 @@ test('no inconsistent snapshot entries when truncated', async t => {
 })
 
 test('no inconsistent snapshot-of-snapshot entries when truncated', async t => {
-  const bases = await create(3, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(3, t)
   const [base1, base2, base3] = bases
 
   await base1.append({ add: base2.local.key.toString('hex') })
@@ -113,7 +112,11 @@ test('no inconsistent snapshot-of-snapshot entries when truncated', async t => {
 
 test('no inconsistent entries when using snapshot core in bee (bee snapshot)', async t => {
   // Setup
-  const bases = await create(3, (...args) => applyForBee(t, ...args), openForBee)
+  const { bases } = await create(3, t, {
+    apply (...args) { return applyForBee(t, ...args) },
+    open: openForBee
+  })
+
   const [base1, base2, base3] = bases
 
   await base1.append({ add: base2.local.key.toString('hex') })
@@ -161,7 +164,7 @@ test('no inconsistent entries when using snapshot core in bee (bee snapshot)', a
 })
 
 test('check cloning detached snapshot', async t => {
-  const bases = await create(4, apply, store => store.get('test', { valueEncoding: 'json' }))
+  const { bases } = await create(4, t)
   const [base1, base2, base3, base4] = bases
 
   await addWriter(base1, base2)
