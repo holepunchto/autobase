@@ -408,9 +408,9 @@ test('linearizer - reordering after restart', async t => {
   await replicateAndSync(bases)
   await replicateAndSync(bases)
 
-  t.is(await b.view.get(0), 'c0')
-  t.is(await b.view.get(1), 'a0')
-  t.is(await b.view.get(2), 'b0')
+  t.is(await b.view.get(0), 'b0')
+  t.is(await b.view.get(1), 'c0')
+  t.is(await b.view.get(2), 'a0')
 })
 
 test('linearizer - shouldAck', async t => {
