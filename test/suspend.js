@@ -85,8 +85,7 @@ test('suspend - pass exisiting fs store', async t => {
 
   await base2.close()
 
-  const session3 = store.session()
-  const base3 = new Autobase(session3, base1.local.key, { apply, valueEncoding: 'json', ackInterval: 0, ackThreshold: 0, fastForward: false })
+  const base3 = await createBase(store, base1.local.key, t, { open: null })
   await base3.ready()
 
   t.is(base3.activeWriters.size, 2)
