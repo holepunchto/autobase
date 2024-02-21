@@ -8,6 +8,7 @@ const Autobase = require('..')
 
 const {
   create,
+  createStores,
   replicateAndSync,
   addWriter,
   addWriterAndSync,
@@ -980,10 +981,11 @@ test('basic - oplog digest', async t => {
 })
 
 // todo: this is broken if a store session is passed to the base
-test.solo('basic - close during apply', async t => {
+test('basic - close during apply', async t => {
   t.plan(1)
 
-  const { bases } = await create(1, t, {
+  const [store] = await createStores(1, t)
+  const a = new Autobase(store, null, {
     async apply (nodes, view, base) {
       for (const node of nodes) {
         if (node.value.add) {
@@ -994,10 +996,9 @@ test.solo('basic - close during apply', async t => {
         const core = view._source.core.session
         await core.get(core.length) // can never resolve
       }
-    }
+    },
+    valueEncoding: 'json'
   })
-
-  const [a] = bases
 
   const promise = a.append('hello')
   setImmediate(() => a.close())
