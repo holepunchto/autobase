@@ -980,7 +980,7 @@ test('basic - oplog digest', async t => {
   t.is(last.digest.indexers?.length, 2)
 })
 
-// todo: this is broken if a store session is passed to the base
+// todo: use normal helper once we have hypercore session manager
 test('basic - close during apply', async t => {
   t.plan(1)
 
