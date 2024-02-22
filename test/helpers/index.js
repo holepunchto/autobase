@@ -31,14 +31,7 @@ async function createStores (n, t, opts = {}) {
     stores.push(new Corestore(await storage(), { primaryKey, encryptionKey }))
   }
 
-  t.teardown(async () => {
-    let i = 0
-    for (const store of stores) {
-      console.log('closing store...', i)
-      await store.close()
-      console.log('store closed', i++)
-    }
-  }, { order: 2 })
+  t.teardown(() => Promise.all(stores.map(s => s.close())), { order: 2 })
 
   return stores
 }
@@ -74,11 +67,7 @@ async function createBase (store, key, t, opts = {}) {
   const base = new Autobase(store.session(), key, moreOpts)
   await base.ready()
 
-  t.teardown(async () => {
-    console.log('closing base...', base.local.key.toString('hex'))
-    await base.close()
-    console.log('base closed!')
-  }, { order: 1 })
+  t.teardown(() => base.close(), { order: 1 })
 
   return base
 }
