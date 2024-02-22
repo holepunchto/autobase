@@ -14,98 +14,98 @@ const {
   createBase
 } = require('./helpers')
 
-  test('fast-forward - simple', async t => {
-    t.plan(1)
+test('fast-forward - simple', async t => {
+  t.plan(1)
 
-    const { bases } = await create(2, t, {
-      fastForward: true,
-      storage: () => tmpDir(t)
-    })
-
-    const [a, b] = bases
-
-    for (let i = 0; i < 1000; i++) {
-      await a.append('a' + i)
-    }
-
-    await replicateAndSync([a, b])
-
-    const core = b.view.getBackingCore()
-    const sparse = await isSparse(core)
-
-    t.ok(sparse > 0)
-    t.comment('sparse blocks: ' + sparse)
+  const { bases } = await create(2, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
   })
 
-  test('fast-forward - migrate', async t => {
-    t.plan(3)
+  const [a, b] = bases
 
-    const { bases } = await create(3, t, {
-      fastForward: true,
-      storage: () => tmpDir(t)
-    })
+  for (let i = 0; i < 1000; i++) {
+    await a.append('a' + i)
+  }
 
-    const [a, b, c] = bases
+  await replicateAndSync([a, b])
 
-    for (let i = 0; i < 2000; i++) {
-      await a.append('a' + i)
-    }
+  const core = b.view.getBackingCore()
+  const sparse = await isSparse(core)
 
-    await addWriterAndSync(a, b)
+  t.ok(sparse > 0)
+  t.comment('sparse blocks: ' + sparse)
+})
 
-    t.is(a.linearizer.indexers.length, 2)
+test('fast-forward - migrate', async t => {
+  t.plan(3)
 
-    await replicateAndSync([a, c])
-
-    const core = c.view.getBackingCore()
-    const sparse = await isSparse(core)
-
-    t.is(c.linearizer.indexers.length, 2)
-
-    t.ok(sparse > 0)
-    t.comment('sparse blocks: ' + sparse)
+  const { bases } = await create(3, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
   })
 
-  test('fast-forward - fast forward after migrate', async t => {
-    t.plan(3)
+  const [a, b, c] = bases
 
-    const { bases } = await create(3, t, {
-      fastForward: true,
-      storage: () => tmpDir(t)
-    })
+  for (let i = 0; i < 2000; i++) {
+    await a.append('a' + i)
+  }
 
-    const [a, b, c] = bases
+  await addWriterAndSync(a, b)
 
-    for (let i = 0; i < 2000; i++) {
-      await a.append('a' + i)
+  t.is(a.linearizer.indexers.length, 2)
+
+  await replicateAndSync([a, c])
+
+  const core = c.view.getBackingCore()
+  const sparse = await isSparse(core)
+
+  t.is(c.linearizer.indexers.length, 2)
+
+  t.ok(sparse > 0)
+  t.comment('sparse blocks: ' + sparse)
+})
+
+test('fast-forward - fast forward after migrate', async t => {
+  t.plan(3)
+
+  const { bases } = await create(3, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b, c] = bases
+
+  for (let i = 0; i < 2000; i++) {
+    await a.append('a' + i)
+  }
+
+  await addWriterAndSync(a, b)
+
+  t.is(a.linearizer.indexers.length, 2)
+
+  await a.append('lets index some nodes')
+  await confirm([a, b])
+
+  for (let i = 0; i < 5; i++) {
+    const unreplicate = replicate([a, b])
+    await eventFlush()
+
+    for (let i = 0; i < 300; i++) {
+      b.append('b' + i)
+      a.append('a' + i)
+
+      if (i % 2 === 0) await eventFlush()
     }
 
-    await addWriterAndSync(a, b)
-
-    t.is(a.linearizer.indexers.length, 2)
-
-    await a.append('lets index some nodes')
+    await unreplicate()
     await confirm([a, b])
+  }
 
-    for (let i = 0; i < 5; i++) {
-      const unreplicate = replicate([a, b])
-      await eventFlush()
+  await replicateAndSync([a, b, c])
 
-      for (let i = 0; i < 300; i++) {
-        b.append('b' + i)
-        a.append('a' + i)
-
-        if (i % 2 === 0) await eventFlush()
-      }
-
-      await unreplicate()
-      await confirm([a, b])
-    }
-
-    await replicateAndSync([a, b, c])
-
-    const core = c.view.getBackingCore()
-    const sparse = await isSparse(core)
+  const core = c.view.getBackingCore()
+  const sparse = await isSparse(core)
 
   t.is(c.linearizer.indexers.length, 2)
 
