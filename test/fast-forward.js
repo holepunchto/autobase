@@ -1,3 +1,4 @@
+const os = require('os')
 const test = require('brittle')
 const tmpDir = require('test-tmp')
 const cenc = require('compact-encoding')
