@@ -286,6 +286,7 @@ module.exports = class Autobase extends ReadyResource {
     } catch (err) {
       safetyCatch(err)
       await this.local.setUserData('autobase/system', null)
+      this.store.close()
       throw err
     }
 
