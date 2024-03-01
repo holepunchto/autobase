@@ -15,9 +15,9 @@ const Writer = require('./lib/writer')
 const ActiveWriters = require('./lib/active-writers')
 const AutoWakeup = require('./lib/wakeup')
 
-const { AUTOBASE_VERSION } = require('./lib/constants')
-
 const inspect = Symbol.for('nodejs.util.inspect.custom')
+
+const AUTOBASE_VERSION = 0
 
 // default is to automatically ack
 const DEFAULT_ACK_INTERVAL = 10 * 1000
@@ -1417,7 +1417,8 @@ module.exports = class Autobase extends ReadyResource {
       if (node.batch > 1) continue
 
       if (versionUpgrade) {
-        this.system.version = await this._checkVersion()
+        const version = await this._checkVersion()
+        this.system.version = version === -1 ? node.version : version
       }
 
       const update = {
@@ -1508,6 +1509,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _checkVersion () {
+    if (!this.system.indexers.length) return -1
+
     const maj = (this.system.indexers.length >> 1) + 1
 
     const fetch = []
