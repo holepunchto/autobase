@@ -42,7 +42,7 @@ test('upgrade - do not proceed', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -94,7 +94,7 @@ test('upgrade - proceed', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -117,7 +117,7 @@ test('upgrade - proceed', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.local.key, {
+  const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -163,7 +163,7 @@ test('upgrade - consensus', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -191,7 +191,7 @@ test('upgrade - consensus', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.local.key, {
+  const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -247,7 +247,7 @@ test('upgrade - consensus 3 writers', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -299,7 +299,7 @@ test('upgrade - consensus 3 writers', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.local.key, {
+  const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -360,7 +360,7 @@ test('upgrade - writer cannot append while behind', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -370,7 +370,7 @@ test('upgrade - writer cannot append while behind', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.local.key, {
+  const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -442,7 +442,7 @@ test('upgrade - onindex hook', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     onindex: async () => {
@@ -473,7 +473,7 @@ test('upgrade - onindex hook', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.local.key, {
+  const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     onindex: async () => {
@@ -520,7 +520,7 @@ test('autobase upgrade - do not proceed', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
     valueEncoding: 'json'
@@ -575,7 +575,7 @@ test('autobase upgrade - proceed', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
     valueEncoding: 'json'
@@ -601,7 +601,7 @@ test('autobase upgrade - proceed', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.local.key, {
+  const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
     valueEncoding: 'json'
@@ -627,6 +627,8 @@ test('autobase upgrade - consensus', async t => {
 
   await a0.ready()
 
+  const version = a0.maxSupportedVersion
+
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
@@ -650,7 +652,7 @@ test('autobase upgrade - consensus', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     valueEncoding: 'json'
@@ -670,14 +672,14 @@ test('autobase upgrade - consensus', async t => {
   t.is(a1.view.indexedLength, 4)
   t.is(b0.view.indexedLength, 4)
 
-  t.is(a1.system.version, 0)
-  t.is(b0.system.version, 0)
+  t.is(a1.system.version, version)
+  t.is(b0.system.version, version)
 
   t.is(b0.view.indexedLength, 4) // should not advance
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.local.key, {
+  const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     valueEncoding: 'json'
@@ -690,8 +692,8 @@ test('autobase upgrade - consensus', async t => {
 
   await confirm([a1, b1])
 
-  t.is(a1.system.version, 1)
-  t.is(b1.system.version, 1)
+  t.is(a1.system.version, version + 1)
+  t.is(b1.system.version, version + 1)
 })
 
 test('autobase upgrade - consensus 3 writers', async t => {
@@ -704,6 +706,8 @@ test('autobase upgrade - consensus 3 writers', async t => {
   })
 
   await a0.ready()
+
+  const version = a0.maxSupportedVersion
 
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
@@ -766,14 +770,14 @@ test('autobase upgrade - consensus 3 writers', async t => {
 
   await t.exception(berror, /Autobase upgrade required/)
 
-  t.is((await b0.system.getIndexedInfo()).version, 0)
+  t.is((await b0.system.getIndexedInfo()).version, version)
   t.ok(b0.closed)
 
   t.is(b0.view.indexedLength, 3) // should not advance
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.local.key, {
+  const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     valueEncoding: 'json'
@@ -791,7 +795,7 @@ test('autobase upgrade - consensus 3 writers', async t => {
   await confirm([a1, b1])
 
   t.is(b1.view.signedLength, 5) // majority can continue
-  t.is((await b1.system.getIndexedInfo()).version, b1.version)
+  t.is((await b1.system.getIndexedInfo()).version, version + 1)
 })
 
 test('autobase upgrade - downgrade', async t => {
@@ -802,6 +806,8 @@ test('autobase upgrade - downgrade', async t => {
     open: store => store.get('test', { valueEncoding: 'json' }),
     valueEncoding: 'json'
   })
+
+  const version = a0.maxSupportedVersion
 
   await a0.ready()
 
@@ -827,7 +833,8 @@ test('autobase upgrade - downgrade', async t => {
 
   t.is(a1.view.indexedLength, 2)
 
-  t.is((await a1.system.getIndexedInfo()).version, a1.version)
+  t.is(a1.version, version + 1)
+  t.is((await a1.system.getIndexedInfo()).version, version + 1)
 
   await a1.close()
 
