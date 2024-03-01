@@ -21,14 +21,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/holepunchto/autobase-next.git"
+    "url": "git+https://github.com/holepunchto/autobase.git"
   },
   "author": "Holepunch",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/holepunchto/autobase-next/issues"
+    "url": "https://github.com/holepunchto/autobase/issues"
   },
-  "homepage": "https://github.com/holepunchto/autobase-next#readme",
+  "homepage": "https://github.com/holepunchto/autobase#readme",
   "dependencies": {
     "b4a": "^1.6.1",
     "debounceify": "^1.0.0",
