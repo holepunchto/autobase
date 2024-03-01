@@ -261,6 +261,10 @@ module.exports = class Autobase extends ReadyResource {
 
     await system.ready()
 
+    if (system.version > this.maxSupportedVersion) {
+      throw new Error('Autobase upgrade required')
+    }
+
     this._initialViews = [{ name: '_system', key, length }]
 
     for (let i = 0; i < system.views.length; i++) {
