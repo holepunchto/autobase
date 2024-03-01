@@ -764,6 +764,25 @@ test('basic - catch apply throws', async t => {
   }
 })
 
+test('basic - uncaught apply exception', async t => {
+  t.plan(1)
+
+  const error = new Promise((resolve, reject) => {
+    process.on('uncaughtException', reject)
+  })
+
+  const { bases } = await create(1, t, {
+    async apply (nodes, view, base) {
+      throw new Error('Synthetic')
+    }
+  })
+
+  bases[0].append('trigger')
+
+  // should throw uncaught exception
+  await t.exception(error, /Synthetic/)
+})
+
 test('basic - non-indexed writer', async t => {
   const { bases } = await create(2, t, { apply: applyWriter })
   const [a, b] = bases
@@ -1005,6 +1024,7 @@ test('basic - close during apply', async t => {
   const promise = a.append('trigger')
   setImmediate(() => a.close())
 
+  // should not throw when closing
   await t.execution(promise)
 })
 
