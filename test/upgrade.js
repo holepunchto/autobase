@@ -970,6 +970,218 @@ test('autobase upgrade - upgrade before writer joins', async t => {
   await t.exception(fail, /Autobase upgrade required/)
 })
 
+test('autobase upgrade - fix borked version', async t => {
+  const [s1, s2] = await createStores(2, t)
+
+  const opts = {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  }
+
+  const a0 = new Autobase(s1.session(), null, opts)
+  await a0.ready()
+
+  const b0 = new Autobase(s2.session(), a0.bootstrap, opts)
+  await b0.ready()
+
+  const version = a0.maxSupportedVersion
+
+  await addWriterAndSync(a0, b0)
+
+  await confirm([a0, b0])
+
+  await a0.append('zero')
+
+  await confirm([a0, b0])
+
+  t.is(a0.view.indexedLength, 1)
+  t.is(b0.view.indexedLength, 1)
+
+  await a0.close()
+
+  // borked version
+  opts.apply = applyHalts
+
+  const a1 = new Autobase(s1.session(), a0.bootstrap, opts)
+
+  // simulate version upgrade
+  a1.maxSupportedVersion++
+
+  await a1.ready()
+
+  await confirm([a1, b0])
+
+  t.is(a1.system.version, version)
+  t.is(b0.system.version, version)
+
+  await b0.close()
+
+  const b1 = new Autobase(s2.session(), a0.bootstrap, opts)
+
+  // simulate version upgrade
+  b1.maxSupportedVersion++
+
+  await b1.ready()
+
+  await confirm([a1, b1])
+
+  t.is(a1.system.version, version + 1)
+  t.is(b1.system.version, version + 1)
+
+  await a1.append('one')
+  await b1.append('two')
+
+  await replicateAndSync([a1, b1])
+
+  t.is(a1.view.length, 3)
+  t.is(b1.view.length, 3)
+
+  const aerr = new Promise((resolve, reject) => a1.once('error', reject))
+  const berr = new Promise((resolve, reject) => b1.once('error', reject))
+
+  a1.append('three', /Block/)
+  b1.append('three', /Block/)
+
+  await t.exception(aerr)
+  await t.exception(berr)
+
+  await a1.close()
+  await b1.close()
+
+  // unbork apply
+  opts.apply = apply
+
+  const a2 = new Autobase(s1.session(), a0.bootstrap, opts)
+  const b2 = new Autobase(s2.session(), a0.bootstrap, opts)
+
+  // can go forward
+  a2.maxSupportedVersion += 2
+  b2.maxSupportedVersion += 2
+
+  await t.execution(a2.ready())
+  await t.execution(b2.ready())
+
+  await t.execution(a2.append('three'))
+  await t.execution(b2.append('four'))
+
+  async function applyHalts (nodes, view) {
+    for (const node of nodes) {
+      if (view.length >= 3) throw new Error('Block')
+      await view.append(node.value)
+    }
+  }
+})
+
+test('autobase upgrade - downgrade then fix bork', async t => {
+  const [s1, s2] = await createStores(2, t)
+
+  const opts = {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  }
+
+  const a0 = new Autobase(s1.session(), null, opts)
+  await a0.ready()
+
+  const b0 = new Autobase(s2.session(), a0.bootstrap, opts)
+  await b0.ready()
+
+  const version = a0.maxSupportedVersion
+
+  await addWriterAndSync(a0, b0)
+
+  await confirm([a0, b0])
+
+  await a0.append('zero')
+
+  await confirm([a0, b0])
+
+  t.is(a0.view.indexedLength, 1)
+  t.is(b0.view.indexedLength, 1)
+
+  await a0.close()
+
+  // borked version
+  opts.apply = applyHalts
+
+  const a1 = new Autobase(s1.session(), a0.bootstrap, opts)
+
+  // simulate version upgrade
+  a1.maxSupportedVersion++
+
+  await a1.ready()
+
+  await confirm([a1, b0])
+
+  t.is(a1.system.version, version)
+  t.is(b0.system.version, version)
+
+  await b0.close()
+
+  const b1 = new Autobase(s2.session(), a0.bootstrap, opts)
+
+  // simulate version upgrade
+  b1.maxSupportedVersion++
+
+  await b1.ready()
+
+  await confirm([a1, b1])
+
+  t.is(a1.system.version, version + 1)
+  t.is(b1.system.version, version + 1)
+
+  await a1.append('one')
+  await b1.append('two')
+
+  await replicateAndSync([a1, b1])
+
+  t.is(a1.view.length, 3)
+  t.is(b1.view.length, 3)
+
+  const aerr = new Promise((resolve, reject) => a1.once('error', reject))
+  const berr = new Promise((resolve, reject) => b1.once('error', reject))
+
+  a1.append('three', /Block/)
+  b1.append('three', /Block/)
+
+  await t.exception(aerr)
+  await t.exception(berr)
+
+  await a1.close()
+  await b1.close()
+
+  // unbork apply
+  opts.apply = apply
+
+  // downgrade to version 0
+  const fail = new Autobase(s1.session(), a0.bootstrap, opts)
+
+  await t.exception(fail.ready())
+  t.is(await fail.local.getUserData('autobase/system'), null)
+
+  const a2 = new Autobase(s1.session(), a0.bootstrap, opts)
+  const b2 = new Autobase(s2.session(), a0.bootstrap, opts)
+
+  // can go forward
+  a2.maxSupportedVersion += 2
+  b2.maxSupportedVersion += 2
+
+  await t.execution(a2.ready())
+  await t.execution(b2.ready())
+
+  await t.execution(a2.append('three'))
+  await t.execution(b2.append('four'))
+
+  async function applyHalts (nodes, view) {
+    for (const node of nodes) {
+      if (view.length >= 3) throw new Error('Block')
+      await view.append(node.value)
+    }
+  }
+})
+
 function open (store) {
   return {
     data: store.get('data', { valueEncoding: 'json' }),
