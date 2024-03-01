@@ -942,6 +942,34 @@ test('autobase upgrade - downgrade then restart', async t => {
   await t.execution(update)
 })
 
+test('autobase upgrade - upgrade before writer joins', async t => {
+  const [s1, s2] = await createStores(2, t)
+
+  const opts = {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  }
+
+  const a = new Autobase(s1.session(), null, opts)
+  a.maxSupportedVersion++
+
+  await a.ready()
+  await a.append('zero')
+
+  t.is(a.version, a.maxSupportedVersion)
+
+  const b = new Autobase(s2.session(), a.bootstrap, opts)
+  await b.ready()
+
+  const fail = new Promise((resolve, reject) => {
+    b.on('error', reject)
+    replicateAndSync([a, b]).then(resolve, reject)
+  })
+
+  await t.exception(fail, /Autobase upgrade required/)
+})
+
 function open (store) {
   return {
     data: store.get('data', { valueEncoding: 'json' }),
