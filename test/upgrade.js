@@ -501,6 +501,8 @@ test('autobase upgrade - do not proceed', async t => {
 
   await a0.ready()
 
+  const version = a0.maxSupportedVersion
+
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
@@ -527,7 +529,7 @@ test('autobase upgrade - do not proceed', async t => {
   })
 
   // simulate version upgrade
-  a1.maxSupportedVersion++
+  a1.maxSupportedVersion = version + 1
 
   await a1.ready()
 
@@ -556,6 +558,8 @@ test('autobase upgrade - proceed', async t => {
 
   await a0.ready()
 
+  const version = a0.maxSupportedVersion
+
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
@@ -582,7 +586,7 @@ test('autobase upgrade - proceed', async t => {
   })
 
   // simulate version upgrade
-  a1.maxSupportedVersion++
+  a1.maxSupportedVersion = version + 1
 
   await a1.ready()
 
@@ -608,7 +612,7 @@ test('autobase upgrade - proceed', async t => {
   })
 
   // simulate version upgrade
-  b1.maxSupportedVersion++
+  b1.maxSupportedVersion = version + 1
 
   await b1.ready()
   await b1.update()
@@ -659,7 +663,7 @@ test('autobase upgrade - consensus', async t => {
   })
 
   // simulate version upgrade
-  a1.maxSupportedVersion++
+  a1.maxSupportedVersion = version + 1
 
   await a1.ready()
 
@@ -686,7 +690,7 @@ test('autobase upgrade - consensus', async t => {
   })
 
   // simulate version upgrade
-  b1.maxSupportedVersion++
+  b1.maxSupportedVersion = version + 1
 
   await b1.ready()
 
@@ -754,8 +758,8 @@ test('autobase upgrade - consensus 3 writers', async t => {
     valueEncoding: 'json'
   })
 
-  a1.maxSupportedVersion++
-  c1.maxSupportedVersion++
+  a1.maxSupportedVersion = version + 1
+  c1.maxSupportedVersion = version + 1
 
   await a1.ready()
 
@@ -784,7 +788,7 @@ test('autobase upgrade - consensus 3 writers', async t => {
   })
 
   // simulate version upgrade
-  b1.maxSupportedVersion++
+  b1.maxSupportedVersion = version + 1
 
   await b1.ready()
   await b1.update()
@@ -823,7 +827,7 @@ test('autobase upgrade - downgrade', async t => {
     valueEncoding: 'json'
   })
 
-  a1.maxSupportedVersion++
+  a1.maxSupportedVersion = version + 1
 
   await a1.ready()
 
@@ -877,7 +881,7 @@ test('autobase upgrade - downgrade then restart', async t => {
     valueEncoding: 'json'
   })
 
-  a1.maxSupportedVersion++
+  a1.maxSupportedVersion = version + 1
 
   await a1.ready()
 
@@ -929,7 +933,7 @@ test('autobase upgrade - downgrade then restart', async t => {
     valueEncoding: 'json'
   })
 
-  succeed.maxSupportedVersion++
+  succeed.maxSupportedVersion = version + 1
 
   await t.execution(succeed.ready())
 
@@ -1008,7 +1012,7 @@ test('autobase upgrade - fix borked version', async t => {
   const a1 = new Autobase(s1.session(), a0.bootstrap, opts)
 
   // simulate version upgrade
-  a1.maxSupportedVersion++
+  a1.maxSupportedVersion = version + 1
 
   await a1.ready()
 
@@ -1022,7 +1026,7 @@ test('autobase upgrade - fix borked version', async t => {
   const b1 = new Autobase(s2.session(), a0.bootstrap, opts)
 
   // simulate version upgrade
-  b1.maxSupportedVersion++
+  b1.maxSupportedVersion = version + 1
 
   await b1.ready()
 
@@ -1058,8 +1062,8 @@ test('autobase upgrade - fix borked version', async t => {
   const b2 = new Autobase(s2.session(), a0.bootstrap, opts)
 
   // can go forward
-  a2.maxSupportedVersion += 2
-  b2.maxSupportedVersion += 2
+  a2.maxSupportedVersion = version + 2
+  b2.maxSupportedVersion = version + 2
 
   await t.execution(a2.ready())
   await t.execution(b2.ready())
@@ -1111,7 +1115,7 @@ test('autobase upgrade - downgrade then fix bork', async t => {
   const a1 = new Autobase(s1.session(), a0.bootstrap, opts)
 
   // simulate version upgrade
-  a1.maxSupportedVersion++
+  a1.maxSupportedVersion = version + 1
 
   await a1.ready()
 
@@ -1125,7 +1129,7 @@ test('autobase upgrade - downgrade then fix bork', async t => {
   const b1 = new Autobase(s2.session(), a0.bootstrap, opts)
 
   // simulate version upgrade
-  b1.maxSupportedVersion++
+  b1.maxSupportedVersion = version + 1
 
   await b1.ready()
 
@@ -1167,8 +1171,8 @@ test('autobase upgrade - downgrade then fix bork', async t => {
   const b2 = new Autobase(s2.session(), a0.bootstrap, opts)
 
   // can go forward
-  a2.maxSupportedVersion += 2
-  b2.maxSupportedVersion += 2
+  a2.maxSupportedVersion = version + 2
+  b2.maxSupportedVersion = version + 2
 
   await t.execution(a2.ready())
   await t.execution(b2.ready())
@@ -1337,7 +1341,7 @@ test('autobase upgrade - non monotonic version', async t => {
   })
 
   // simulate version upgrade
-  a1.maxSupportedVersion++
+  a1.maxSupportedVersion = version + 1
 
   await a1.ready()
 
