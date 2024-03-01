@@ -1184,6 +1184,124 @@ test('autobase upgrade - downgrade then fix bork', async t => {
   }
 })
 
+test('autobase upgrade - 3 writers always increasing', async t => {
+  const [s1, s2, s3] = await createStores(3, t)
+
+  const opts = {
+    apply,
+    ackInterval: 0,
+    ackThreshold: 0,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  }
+
+  const a0 = new Autobase(s1.session(), null, opts)
+  await a0.ready()
+
+  const version = a0.maxSupportedVersion
+
+  const b0 = new Autobase(s2.session(), a0.bootstrap, opts)
+  const c0 = new Autobase(s3.session(), a0.bootstrap, opts)
+
+  await b0.ready()
+  await c0.ready()
+
+  await addWriterAndSync(a0, b0)
+  await addWriterAndSync(a0, c0)
+
+  await confirm([a0, b0, c0])
+
+  await a0.append('v0')
+
+  await confirm([a0, b0, c0])
+
+  t.is(a0.view.indexedLength, 1)
+  t.is(b0.view.indexedLength, 1)
+
+  await a0.close()
+  await c0.close()
+
+  const a1 = new Autobase(s1.session(), a0.bootstrap, opts)
+  const c1 = new Autobase(s3.session(), a0.bootstrap, opts)
+
+  a1.maxSupportedVersion = version + 1
+  c1.maxSupportedVersion = version + 2
+
+  await a1.ready()
+  await c1.ready()
+
+  t.is(a1.view.indexedLength, 1)
+
+  await a1.append('v1')
+  await replicateAndSync([a1, c1])
+
+  await c1.append('v2')
+  await replicateAndSync([a1, c1])
+
+  await a1.close()
+  await c1.close()
+
+  const a2 = new Autobase(s1.session(), a0.bootstrap, opts)
+  const c2 = new Autobase(s3.session(), a0.bootstrap, opts)
+
+  a2.maxSupportedVersion = version + 3
+  c2.maxSupportedVersion = version + 4
+
+  await a2.ready()
+  await c2.ready()
+  await replicateAndSync([a2, c2])
+
+  await a2.append('v3')
+  await replicateAndSync([a2, c2])
+
+  await c2.append('v4')
+  await replicateAndSync([a2, c2])
+
+  t.is(c2.version, 1)
+
+  await a2.append('flush')
+  await replicateAndSync([a2, c2])
+
+  t.is(c2.version, 2)
+
+  await t.exception(new Promise((resolve, reject) => {
+    b0.on('error', reject)
+    replicateAndSync([a2, c2, b0]).then(resolve, reject)
+  }))
+
+  t.is((await b0.system.getIndexedInfo()).version, 0)
+  t.ok(b0.closing)
+
+  await b0.close()
+
+  const b1 = new Autobase(s2.session(), a0.bootstrap, opts)
+  b1.maxSupportedVersion = version + 1
+
+  await b1.ready()
+
+  await t.exception(new Promise((resolve, reject) => {
+    b1.on('error', reject)
+    replicateAndSync([a2, b1]).then(resolve, reject)
+  }))
+
+  t.is((await b1.system.getIndexedInfo()).version, 1)
+  t.ok(b1.closing)
+
+  const b2 = new Autobase(s2.session(), a0.bootstrap, opts)
+  b2.maxSupportedVersion = a2.maxSupportedVersion
+
+  await b2.ready()
+  await t.execution(replicateAndSync([a2, b2]))
+
+  t.not(b2.view.signedLength, 6)
+
+  await confirm([a2, b2])
+  t.is(a2.version, b2.version)
+
+  t.is(b2.view.signedLength, 6) // majority can continue
+  t.is((await b2.system.getIndexedInfo()).version, b2.version)
+})
+
 function open (store) {
   return {
     data: store.get('data', { valueEncoding: 'json' }),
