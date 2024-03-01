@@ -1302,6 +1302,66 @@ test('autobase upgrade - 3 writers always increasing', async t => {
   t.is((await b2.system.getIndexedInfo()).version, b2.version)
 })
 
+test('autobase upgrade - non monotonic version', async t => {
+  const [s1, s2] = await createStores(2, t)
+
+  const a = new Autobase(s1.session(), null, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  await a.ready()
+
+  const version = a.maxSupportedVersion
+
+  const b = new Autobase(s2.session(), a.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  await b.ready()
+
+  await addWriterAndSync(a, b)
+  await confirm([a, b])
+
+  await a.append('0')
+  await confirm([a, b])
+
+  await a.close()
+  const a1 = new Autobase(s1.session(), a.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  // simulate version upgrade
+  a1.maxSupportedVersion++
+
+  await a1.ready()
+
+  await a1.append('2')
+  await confirm([a1, b])
+
+  t.is(a1.view.indexedLength, 2)
+  t.is(b.view.indexedLength, 2)
+
+  t.is(a1.system.version, version)
+  t.is(b.system.version, version)
+
+  await a1.close()
+
+  const a2 = new Autobase(s1.session(), a.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  await t.exception(a2.ready())
+  await t.exception(a2.append('3'))
+})
+
 function open (store) {
   return {
     data: store.get('data', { valueEncoding: 'json' }),
