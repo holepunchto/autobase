@@ -838,6 +838,8 @@ test('autobase upgrade - downgrade', async t => {
 
   await a1.close()
 
+  t.not(await a1.local.getUserData('autobase/system'), null)
+
   // go back to previous version
   const fail = new Autobase(s1.session(), a0.bootstrap, {
     apply,
@@ -846,6 +848,98 @@ test('autobase upgrade - downgrade', async t => {
   })
 
   await t.exception(fail.ready())
+
+  t.is(await fail.local.getUserData('autobase/system'), null)
+})
+
+test('autobase upgrade - downgrade then restart', async t => {
+  const [s1] = await createStores(1, t)
+
+  const a0 = new Autobase(s1.session(), null, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  const version = a0.maxSupportedVersion
+
+  await a0.ready()
+
+  await a0.append({ data: 'version 0' })
+
+  t.is(a0.view.indexedLength, 1)
+
+  await a0.close()
+
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  a1.maxSupportedVersion++
+
+  await a1.ready()
+
+  t.is(a1.view.indexedLength, 1)
+
+  await a1.append({ data: 'version 1' })
+
+  t.is(a1.view.indexedLength, 2)
+
+  t.is((await a1.system.getIndexedInfo()).version, version + 1)
+
+  await a1.close()
+
+  t.not(await a1.local.getUserData('autobase/system'), null)
+
+  // go back to previous version
+  const fail = new Autobase(s1.session(), a0.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  await t.exception(fail.ready())
+
+  t.is(await fail.local.getUserData('autobase/system'), null)
+
+  // go back to previous version
+  const failAgain = new Autobase(s1.session(), a0.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  // ready passes since we unset pointer
+  await t.execution(failAgain.ready())
+
+  const updateFail = new Promise((resolve, reject) => {
+    failAgain.on('error', reject)
+    failAgain.update().then(resolve, reject)
+  })
+
+  // update should fail as we get to version upgrade
+  await t.exception(updateFail)
+
+  // go back to previous version
+  const succeed = new Autobase(s1.session(), a0.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  succeed.maxSupportedVersion++
+
+  await t.execution(succeed.ready())
+
+  const update = new Promise((resolve, reject) => {
+    succeed.on('error', reject)
+    succeed.update().then(resolve, reject)
+  })
+
+  // update should succeed now
+  await t.execution(update)
 })
 
 function open (store) {
