@@ -998,10 +998,11 @@ test('basic - close during apply', async t => {
         await core.get(core.length) // can never resolve
       }
     },
+    open: store => store.get('test'),
     valueEncoding: 'json'
   })
 
-  const promise = a.append('hello')
+  const promise = a.append('trigger')
   setImmediate(() => a.close())
 
   await t.execution(promise)
