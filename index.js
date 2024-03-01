@@ -301,10 +301,20 @@ module.exports = class Autobase extends ReadyResource {
 
     // load previous digest if available
     if (this.localWriter && !this.system.bootstrapping) {
-      await this._updateDigest()
+      await this._restoreLocalState()
     }
 
     if (this.localWriter && this._ackInterval) this._startAckTimer()
+  }
+
+  async _restoreLocalState () {
+    const version = await this.localWriter.getVersion()
+    if (version > this.maxSupportedVersion) {
+      this.store.close()
+      throw new Error('Autobase version cannot be downgraded')
+    }
+
+    await this._updateDigest()
   }
 
   async _open () {
