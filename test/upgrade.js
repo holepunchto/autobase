@@ -1364,6 +1364,22 @@ test('autobase upgrade - non monotonic version', async t => {
 
   await t.exception(a2.ready())
   await t.exception(a2.append('3'))
+
+  // can recover
+  const a3 = new Autobase(s1.session(), a.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  a3.maxSupportedVersion = version + 1
+
+  await a3.ready()
+  await a3.append('3')
+
+  await confirm([a3, b])
+
+  t.is(a3.view.indexedLength, 3)
 })
 
 function open (store) {
