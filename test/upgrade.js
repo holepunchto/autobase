@@ -967,6 +967,8 @@ test('autobase upgrade - upgrade before writer joins', async t => {
     replicateAndSync([a, b]).then(resolve, reject)
   })
 
+  t.is((await b.system.getIndexedInfo()).version, -1)
+
   await t.exception(fail, /Autobase upgrade required/)
 })
 
