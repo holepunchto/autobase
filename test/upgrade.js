@@ -794,6 +794,53 @@ test('autobase upgrade - consensus 3 writers', async t => {
   t.is((await b1.system.getIndexedInfo()).version, b1.version)
 })
 
+test('autobase upgrade - downgrade', async t => {
+  const [s1] = await createStores(1, t)
+
+  const a0 = new Autobase(s1.session(), null, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  await a0.ready()
+
+  await a0.append({ data: 'version 0' })
+
+  t.is(a0.view.indexedLength, 1)
+
+  await a0.close()
+
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  a1.maxSupportedVersion++
+
+  await a1.ready()
+
+  t.is(a1.view.indexedLength, 1)
+
+  await a1.append({ data: 'version 1' })
+
+  t.is(a1.view.indexedLength, 2)
+
+  t.is((await a1.system.getIndexedInfo()).version, a1.version)
+
+  await a1.close()
+
+  // go back to previous version
+  const fail = new Autobase(s1.session(), a0.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  await t.exception(fail.ready())
+})
+
 function open (store) {
   return {
     data: store.get('data', { valueEncoding: 'json' }),
