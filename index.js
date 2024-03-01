@@ -338,6 +338,14 @@ module.exports = class Autobase extends ReadyResource {
   _onError (err) {
     if (this.closing) return
     this.close().catch(safetyCatch)
+
+    // if no one is listening we should crash! we cannot rely on the EE here
+    // as this is wrapped in a promise so instead of nextTick throw it
+    if (ReadyResource.listenerCount(this, 'error') === 0) {
+      crashSoon(err)
+      return
+    }
+
     this.emit('error', err)
   }
 
@@ -1703,3 +1711,8 @@ function random2over1 (n) {
 }
 
 function noop () {}
+
+function crashSoon (err) {
+  queueMicrotask(() => { throw err })
+  throw err
+}
