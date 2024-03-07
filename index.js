@@ -67,7 +67,6 @@ module.exports = class Autobase extends ReadyResource {
     this._applying = null
     this._updatingCores = false
     this._localDigest = null
-    this._maybeUpdateDigest = true
     this._needsWakeup = true
     this._needsWakeupHeads = true
     this._addCheckpoints = false
@@ -667,7 +666,6 @@ module.exports = class Autobase extends ReadyResource {
   _updateLinearizer (indexers, heads) {
     this.linearizer = new Linearizer(indexers, { heads, writers: this.activeWriters })
     this._addCheckpoints = !!(this.localWriter && (this.localWriter.isIndexer || this._isPending()))
-    this._maybeUpdateDigest = true
     this._updateAckThreshold()
   }
 
@@ -681,12 +679,9 @@ module.exports = class Autobase extends ReadyResource {
     await bootstrap.ready()
 
     this._updateLinearizer([bootstrap], [])
-    this._updateDigest([bootstrap])
   }
 
   async _makeLinearizer (sys) {
-    this._maybeUpdateDigest = true
-
     if (sys === null) {
       return this._bootstrapLinearizer()
     }
@@ -711,8 +706,6 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _reindex (nodes) {
-    this._maybeUpdateDigest = true
-
     if (nodes && nodes.length) {
       this._undoAll()
       await this.system.update()
@@ -1286,7 +1279,6 @@ module.exports = class Autobase extends ReadyResource {
 
     // If we are getting added as indexer, already start adding checkpoints while we get confirmed...
     if (writer === this.localWriter && isIndexer) this._addCheckpoints = true
-    if (isIndexer) this._maybeUpdateDigest = true
 
     // fetch any nodes needed for dependents
     this._queueBump()
@@ -1295,14 +1287,12 @@ module.exports = class Autobase extends ReadyResource {
   // triggered from apply
   async removeWriter (key) { // just compat for old version
     assert(this._applying !== null, 'System changes are only allowed in apply')
-    const wasIndexer = await this.system.remove(key)
+    await this.system.remove(key)
 
     if (b4a.equals(key, this.local.key)) {
       if (this._addCheckpoints) this._pendingRemoval = true
       else this.localWriter = null // immediately remove
     }
-
-    if (wasIndexer) this._maybeUpdateDigest = true
 
     this._queueBump()
   }
@@ -1397,6 +1387,7 @@ module.exports = class Autobase extends ReadyResource {
       if (!update.indexers && !upgraded) continue
 
       this._queueIndexFlush(i)
+      await this._updateDigest()
 
       return u.indexed.slice(i).concat(u.tip)
     }
@@ -1419,7 +1410,7 @@ module.exports = class Autobase extends ReadyResource {
 
       batch++
 
-      if (this.system.addHead(node)) this._maybeUpdateDigest = true
+      this.system.addHead(node)
 
       if (node.value !== null) {
         applyBatch.push({
@@ -1489,11 +1480,14 @@ module.exports = class Autobase extends ReadyResource {
 
       // indexer set has updated
       this._queueIndexFlush(i + 1)
+      await this._updateDigest()
+
       return u.indexed.slice(i + 1).concat(u.tip)
     }
 
     if (u.indexed.length) {
       this._queueIndexFlush(u.indexed.length)
+      await this._updateDigest()
     }
 
     return null
@@ -1601,7 +1595,6 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _updateDigest () {
-    this._maybeUpdateDigest = false
     if (!this._addCheckpoints) return
 
     if (this._localDigest === null) {
@@ -1610,49 +1603,35 @@ module.exports = class Autobase extends ReadyResource {
       if (this._localDigest === null) {
         this._localDigest = {
           pointer: 0,
-          indexers: []
+          key: this.system.core.key
         }
       }
       return
     }
 
-    const indexers = []
-
     const pending = this.system.core._source.pendingIndexedLength
     const info = await this.system.getIndexedInfo(pending)
 
+    const p = []
     for (const { key } of info.indexers) {
-      const w = await this._getWriterByKey(key)
-      indexers.push({
-        signature: 0,
-        namespace: w.core.manifest.signers[0].namespace,
-        publicKey: w.core.manifest.signers[0].publicKey
-      })
+      p.push(await this._getWriterByKey(key))
     }
 
-    let same = indexers.length === this._localDigest.indexers.length
+    const indexers = await p
 
-    for (let i = 0; i < indexers.length; i++) {
-      if (!same) break
+    const sys = this._viewStore.getSystemCore()
+    const key = await sys.deriveKey(indexers, pending)
 
-      const a = indexers[i]
-      const b = this._localDigest.indexers[i]
-
-      if (a.signature !== b.signature || !b4a.equals(a.namespace, b.namespace) || !b4a.equals(a.publicKey, b.publicKey)) {
-        same = false
-      }
-    }
-
-    if (same) return
+    if (this._localDigest.key && b4a.equals(key, this._localDigest.key)) return
 
     this._localDigest.pointer = 0
-    this._localDigest.indexers = indexers
+    this._localDigest.key = key
   }
 
   _generateDigest () {
     return {
       pointer: this._localDigest.pointer,
-      indexers: this._localDigest.indexers
+      key: this._localDigest.key
     }
   }
 
@@ -1669,7 +1648,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _flushLocal (localNodes) {
-    if (this._maybeUpdateDigest) await this._updateDigest()
+    if (!this._localDigest) await this._updateDigest()
 
     const cores = this._addCheckpoints ? this._viewStore.getIndexedCores() : []
     const blocks = new Array(localNodes.length)
