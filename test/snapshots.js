@@ -110,7 +110,7 @@ test('no inconsistent snapshot-of-snapshot entries when truncated', async t => {
   t.alike(origValues2, newValues2)
 })
 
-test.solo('no inconsistent entries when using snapshot core in bee (bee snapshot)', async t => {
+test('no inconsistent entries when using snapshot core in bee (bee snapshot)', async t => {
   // Setup
   const { bases } = await create(3, t, {
     apply (...args) { return applyForBee(t, ...args) },
@@ -161,7 +161,7 @@ test.solo('no inconsistent entries when using snapshot core in bee (bee snapshot
   t.alike(keys2PreMerge, keys2PostMerge)
 
   t.is(hasTruncated, true) // Sanity check
-  t.is(bee1.core.indexedLength, 2, 'bee1 snapshot indexed length did not change')
+  t.is(bee1.core.indexedLength, 3, 'Snapshot indexedLength increased, because it is now confirmed')
   t.is(bee1.version, 3, 'bee1 snapshot version did not change')
 
   t.is(bee2.core.indexedLength, 2, 'bee2 snapshot indexed length did not change')
