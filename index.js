@@ -15,9 +15,9 @@ const Writer = require('./lib/writer')
 const ActiveWriters = require('./lib/active-writers')
 const AutoWakeup = require('./lib/wakeup')
 
-const { AUTOBASE_VERSION } = require('./lib/constants')
-
 const inspect = Symbol.for('nodejs.util.inspect.custom')
+
+const AUTOBASE_VERSION = 0
 
 // default is to automatically ack
 const DEFAULT_ACK_INTERVAL = 10 * 1000
@@ -261,6 +261,10 @@ module.exports = class Autobase extends ReadyResource {
 
     await system.ready()
 
+    if (system.version > this.maxSupportedVersion) {
+      throw new Error('Autobase upgrade required')
+    }
+
     this._initialViews = [{ name: '_system', key, length }]
 
     for (let i = 0; i < system.views.length; i++) {
@@ -282,6 +286,7 @@ module.exports = class Autobase extends ReadyResource {
     } catch (err) {
       safetyCatch(err)
       await this.local.setUserData('autobase/system', null)
+      this.store.close()
       throw err
     }
 
@@ -296,10 +301,20 @@ module.exports = class Autobase extends ReadyResource {
 
     // load previous digest if available
     if (this.localWriter && !this.system.bootstrapping) {
-      await this._updateDigest()
+      await this._restoreLocalState()
     }
 
     if (this.localWriter && this._ackInterval) this._startAckTimer()
+  }
+
+  async _restoreLocalState () {
+    const version = await this.localWriter.getVersion()
+    if (version > this.maxSupportedVersion) {
+      this.store.close()
+      throw new Error('Autobase version cannot be downgraded')
+    }
+
+    await this._updateDigest()
   }
 
   async _open () {
@@ -1412,7 +1427,8 @@ module.exports = class Autobase extends ReadyResource {
       if (node.batch > 1) continue
 
       if (versionUpgrade) {
-        this.system.version = await this._checkVersion()
+        const version = await this._checkVersion()
+        this.system.version = version === -1 ? node.version : version
       }
 
       const update = {
@@ -1503,6 +1519,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _checkVersion () {
+    if (!this.system.indexers.length) return -1
+
     const maj = (this.system.indexers.length >> 1) + 1
 
     const fetch = []
