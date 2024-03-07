@@ -1678,19 +1678,16 @@ module.exports = class Autobase extends ReadyResource {
       const { value, heads, batch } = localNodes[i]
 
       blocks[i] = {
-        version: 0,
-        digest: this._addCheckpoints ? this._generateDigest() : null,
+        version: 1,
+        versionSignal: this.maxSupportedVersion,
         checkpoint: this._addCheckpoints ? await generateCheckpoint(cores) : null,
+        digest: this._addCheckpoints ? this._generateDigest() : null,
         node: {
           heads,
           batch,
           value: value === null ? null : c.encode(this.valueEncoding, value)
         },
-        additional: {
-          pointer: 0,
-          data: {}
-        },
-        versionSignal: this.maxSupportedVersion
+        trace: []
       }
 
       if (this._addCheckpoints) this._localDigest.pointer++
