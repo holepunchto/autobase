@@ -75,6 +75,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._updates = []
     this._handlers = handlers || {}
+    this._warn = emitWarning.bind(this)
 
     this._advancing = null
     this._advanced = null
@@ -602,7 +603,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _updateAll () {
     const p = []
-    for (const w of this.activeWriters) p.push(w.update())
+    for (const w of this.activeWriters) p.push(w.update().catch(this._warn))
     return Promise.all(p)
   }
 
@@ -1485,4 +1486,9 @@ function TMP_KNOWN_FALLBACK (key, store) {
     : b4a.equals(key, b4a.from('ff894ffc4f44ec3e62fff9f38c43669105b18487c63ba4f46fb33883854f75f1', 'hex'))
       ? store.getByKey(b4a.from('4e7774b5f94e58b62bf0250af64f5369f387eec6c85672733898cfb082dc7a76', 'hex'))
       : null
+}
+
+function emitWarning (err) {
+  safetyCatch(err)
+  this.emit('warning', err)
 }
