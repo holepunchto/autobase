@@ -1261,19 +1261,19 @@ test('autobase upgrade - 3 writers always increasing', async t => {
   await c2.append('v4')
   await replicateAndSync([a2, c2])
 
-  t.is(c2.version, 1)
+  t.is(c2.version, version + 1)
 
   await a2.append('flush')
   await replicateAndSync([a2, c2])
 
-  t.is(c2.version, 2)
+  t.is(c2.version, version + 2)
 
   await t.exception(new Promise((resolve, reject) => {
     b0.on('error', reject)
     replicateAndSync([a2, c2, b0]).then(resolve, reject)
   }))
 
-  t.is((await b0.system.getIndexedInfo()).version, 0)
+  t.is((await b0.system.getIndexedInfo()).version, version)
   t.ok(b0.closing)
 
   await b0.close()
@@ -1288,7 +1288,7 @@ test('autobase upgrade - 3 writers always increasing', async t => {
     replicateAndSync([a2, b1]).then(resolve, reject)
   }))
 
-  t.is((await b1.system.getIndexedInfo()).version, 1)
+  t.is((await b1.system.getIndexedInfo()).version, version + 1)
   t.ok(b1.closing)
 
   const b2 = new Autobase(s2.session(), a0.bootstrap, opts)
