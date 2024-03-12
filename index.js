@@ -17,7 +17,7 @@ const AutoWakeup = require('./lib/wakeup')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 
-const AUTOBASE_VERSION = 0
+const AUTOBASE_VERSION = 1
 
 // default is to automatically ack
 const DEFAULT_ACK_INTERVAL = 10 * 1000
