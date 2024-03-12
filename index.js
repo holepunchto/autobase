@@ -1225,6 +1225,9 @@ module.exports = class Autobase extends ReadyResource {
     await this._makeLinearizer(this.system)
     await this._advanceBootRecord(length)
 
+    // manually set the digest
+    if (migrate) this._setDigest(migrate.key)
+
     const to = length
 
     if (b4a.equals(this.fastForwardTo.key, key) && this.fastForwardTo.length === length) {
@@ -1603,12 +1606,11 @@ module.exports = class Autobase extends ReadyResource {
     if (this._localDigest === null) {
       this._localDigest = await this.localWriter.getDigest()
 
+      // no previous digest available
       if (this._localDigest === null) {
-        this._localDigest = {
-          pointer: 0,
-          key: this.system.core.key
-        }
+        this._setDigest(this.system.core.key)
       }
+
       return
     }
 
@@ -1628,8 +1630,13 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this._localDigest.key && b4a.equals(key, this._localDigest.key)) return
 
-    this._localDigest.pointer = 0
+    this._setDigest(key)
+  }
+
+  _setDigest (key) {
+    if (this._localDigest === null) this._localDigest = {}
     this._localDigest.key = key
+    this._localDigest.pointer = 0
   }
 
   _generateDigest () {
