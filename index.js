@@ -1387,6 +1387,9 @@ module.exports = class Autobase extends ReadyResource {
       if (!update.indexers && !upgraded) continue
 
       this._queueIndexFlush(i)
+
+      // we have to set the digest here so it is
+      // flushed to local appends in same iteration
       await this._updateDigest()
 
       return u.indexed.slice(i).concat(u.tip)
@@ -1480,14 +1483,14 @@ module.exports = class Autobase extends ReadyResource {
 
       // indexer set has updated
       this._queueIndexFlush(i + 1)
-      await this._updateDigest()
+      await this._updateDigest() // see above
 
       return u.indexed.slice(i + 1).concat(u.tip)
     }
 
     if (u.indexed.length) {
       this._queueIndexFlush(u.indexed.length)
-      await this._updateDigest()
+      await this._updateDigest() // see above
     }
 
     return null
@@ -1609,6 +1612,7 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
+    // we predict what the system key will be after flushing
     const pending = this.system.core._source.pendingIndexedLength
     const info = await this.system.getIndexedInfo(pending)
 
