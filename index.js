@@ -1509,8 +1509,11 @@ module.exports = class Autobase extends ReadyResource {
         ? this.system.views[view.systemIndex].length
         : 0
 
-      const needsKey = !length || indexerUpdate
-      const key = needsKey ? await view.deriveKey(indexers, length + view.appending) : null
+      const key = indexers.length > 1 && indexerUpdate
+        ? await view.deriveKey(indexers, length + view.appending)
+        : view.systemIndex === -1
+          ? view.key
+          : null
 
       views.push({ view, key })
     }
