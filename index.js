@@ -230,7 +230,7 @@ module.exports = class Autobase extends ReadyResource {
     this.version = system
       ? system.version
       : this.bootstrap && !b4a.equals(this.bootstrap, this.local.key)
-        ? 0
+        ? -1
         : this.maxSupportedVersion
 
     this.bootstrap = bootstrap
@@ -716,13 +716,17 @@ module.exports = class Autobase extends ReadyResource {
   async _reindex (nodes) {
     this._maybeUpdateDigest = true
 
-    if (nodes) {
+    if (nodes && nodes.length) {
       this._undoAll()
       await this.system.update()
     }
 
+    const sameIndexers = this.system.sameIndexers(this.linearizer.indexers)
+
     await this._makeLinearizer(this.system)
-    await this._viewStore.migrate()
+    if (!sameIndexers) await this._viewStore.migrate()
+
+    this.version = this.system.version
 
     this.queueFastForward()
 
@@ -751,8 +755,6 @@ module.exports = class Autobase extends ReadyResource {
       this._onError(new Error('Autobase upgrade required'))
       return false
     }
-
-    this.version = version
     return true
   }
 
@@ -1068,7 +1070,7 @@ module.exports = class Autobase extends ReadyResource {
         return
       }
 
-      const migrated = system.sameIndexers(this.linearizer.indexers)
+      const migrated = !system.sameIndexers(this.linearizer.indexers)
 
       const indexers = []
       const pendingViews = []
