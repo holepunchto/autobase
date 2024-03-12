@@ -240,11 +240,14 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _loadSystemInfo () {
-    const pointer = await this.local.getUserData('autobase/system')
+    const pointer = await this.local.getUserData('autobase/boot')
     const bootstrap = this.bootstrap || (await this.local.getUserData('referrer')) || this.local.key
     if (!pointer) return { bootstrap, system: null }
 
-    const { indexed, views } = c.decode(messages.SystemPointer, pointer)
+    const version = c.decode(c.uint, pointer)
+    assert(version <= AUTOBASE_VERSION, 'Unrecognised boot version')
+
+    const { indexed, views } = c.decode(messages.BootRecord, pointer)
     const { key, length } = indexed
 
     this._systemPointer = length
@@ -285,8 +288,8 @@ module.exports = class Autobase extends ReadyResource {
       await this._viewStore.flush()
     } catch (err) {
       safetyCatch(err)
-      await this.local.setUserData('autobase/system', null)
-      this.store.close()
+      await this.local.setUserData('autobase/boot', null)
+      this.store.close().catch(safetyCatch)
       throw err
     }
 
@@ -310,7 +313,7 @@ module.exports = class Autobase extends ReadyResource {
   async _restoreLocalState () {
     const version = await this.localWriter.getVersion()
     if (version > this.maxSupportedVersion) {
-      this.store.close()
+      this.store.close().catch(safetyCatch)
       throw new Error('Autobase version cannot be downgraded')
     }
 
@@ -800,7 +803,7 @@ module.exports = class Autobase extends ReadyResource {
     return added
   }
 
-  async _advanceSystemPointer (length) {
+  async _advanceBootRecord (length) {
     if (length) { // TODO: remove when we are 100% we never hit the return in this if
       const { views } = await this.system.getIndexedInfo(length)
       for (const { key, length } of views) {
@@ -821,12 +824,18 @@ module.exports = class Autobase extends ReadyResource {
       views[core.systemIndex] = core.name
     }
 
-    await this._setSystemPointer(this.system.core.key, length, this.system.heads, views)
+    await this._setBootRecord(this.system.core.key, length, this.system.heads, views)
   }
 
-  async _setSystemPointer (key, length, heads, views) {
-    const pointer = c.encode(messages.SystemPointer, { indexed: { key, length }, heads, views })
-    await this.local.setUserData('autobase/system', pointer)
+  async _setBootRecord (key, length, heads, views) {
+    const pointer = c.encode(messages.BootRecord, {
+      version: AUTOBASE_VERSION,
+      indexed: { key, length },
+      heads,
+      views
+    })
+
+    await this.local.setUserData('autobase/boot', pointer)
   }
 
   async _drain () {
@@ -858,7 +867,7 @@ module.exports = class Autobase extends ReadyResource {
       if (this.closing) return
 
       const flushed = (await this._flushIndexes()) ? this.system.core.getBackingCore().flushedLength : this._systemPointer
-      if (this.updating || flushed > this._systemPointer) await this._advanceSystemPointer(flushed)
+      if (this.updating || flushed > this._systemPointer) await this._advanceBootRecord(flushed)
 
       if (indexed) await this.onindex(this)
 
@@ -886,9 +895,9 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _getLocallyStoredHeads () {
-    const buffer = await this.local.getUserData('autobase/system')
+    const buffer = await this.local.getUserData('autobase/boot')
     if (!buffer) return []
-    return c.decode(messages.SystemPointer, buffer).heads
+    return c.decode(messages.BootRecord, buffer).heads
   }
 
   async _drainWakeup () { // TODO: parallel load the writers here later
@@ -1001,10 +1010,10 @@ module.exports = class Autobase extends ReadyResource {
     this._undoAll()
     this._systemPointer = length
 
-    const pointer = await this.local.getUserData('autobase/system')
-    const { views } = c.decode(messages.SystemPointer, pointer)
+    const pointer = await this.local.getUserData('autobase/boot')
+    const { views } = c.decode(messages.BootRecord, pointer)
 
-    await this._setSystemPointer(this.system.core.key, length, info.heads, views)
+    await this._setBootRecord(this.system.core.key, length, info.heads, views)
 
     for (const { key, length } of info.views) {
       const core = this._viewStore.getByKey(key)
@@ -1223,7 +1232,7 @@ module.exports = class Autobase extends ReadyResource {
     await this.system.update()
 
     await this._makeLinearizer(this.system)
-    await this._advanceSystemPointer(length)
+    await this._advanceBootRecord(length)
 
     const to = length
 

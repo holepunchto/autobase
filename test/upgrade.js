@@ -842,7 +842,7 @@ test('autobase upgrade - downgrade', async t => {
 
   await a1.close()
 
-  t.not(await a1.local.getUserData('autobase/system'), null)
+  t.not(await a1.local.getUserData('autobase/boot'), null)
 
   // go back to previous version
   const fail = new Autobase(s1.session(), a0.bootstrap, {
@@ -853,7 +853,7 @@ test('autobase upgrade - downgrade', async t => {
 
   await t.exception(fail.ready())
 
-  t.is(await fail.local.getUserData('autobase/system'), null)
+  t.is(await fail.local.getUserData('autobase/boot'), null)
 })
 
 test('autobase upgrade - downgrade then restart', async t => {
@@ -895,7 +895,7 @@ test('autobase upgrade - downgrade then restart', async t => {
 
   await a1.close()
 
-  t.not(await a1.local.getUserData('autobase/system'), null)
+  t.not(await a1.local.getUserData('autobase/boot'), null)
 
   // go back to previous version
   const fail = new Autobase(s1.session(), a0.bootstrap, {
@@ -906,7 +906,7 @@ test('autobase upgrade - downgrade then restart', async t => {
 
   await t.exception(fail.ready())
 
-  t.is(await fail.local.getUserData('autobase/system'), null)
+  t.is(await fail.local.getUserData('autobase/boot'), null)
 
   // go back to previous version
   const failAgain = new Autobase(s1.session(), a0.bootstrap, {
@@ -1165,7 +1165,7 @@ test('autobase upgrade - downgrade then fix bork', async t => {
   const fail = new Autobase(s1.session(), a0.bootstrap, opts)
 
   await t.exception(fail.ready())
-  t.is(await fail.local.getUserData('autobase/system'), null)
+  t.is(await fail.local.getUserData('autobase/boot'), null)
 
   const a2 = new Autobase(s1.session(), a0.bootstrap, opts)
   const b2 = new Autobase(s2.session(), a0.bootstrap, opts)
