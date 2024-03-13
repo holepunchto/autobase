@@ -1008,7 +1008,8 @@ test('basic - oplog digest', async t => {
   const last = await base1.local.get(1)
 
   t.is(last.digest.pointer, 0)
-  t.is(last.digest.indexers?.length, 2)
+  t.is(base2.system.core.getBackingCore().manifest.signers.length, 2)
+  t.alike(last.digest.key, base2.system.core.key)
 })
 
 // todo: use normal helper once we have hypercore session manager
