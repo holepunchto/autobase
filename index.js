@@ -244,9 +244,6 @@ module.exports = class Autobase extends ReadyResource {
     const bootstrap = this.bootstrap || (await this.local.getUserData('referrer')) || this.local.key
     if (!pointer) return { bootstrap, system: null }
 
-    const version = c.decode(c.uint, pointer)
-    assert(version <= AUTOBASE_VERSION, 'Unrecognised boot version')
-
     const { indexed, views } = c.decode(messages.BootRecord, pointer)
     const { key, length } = indexed
 
@@ -831,7 +828,6 @@ module.exports = class Autobase extends ReadyResource {
 
   async _setBootRecord (key, length, heads, views) {
     const pointer = c.encode(messages.BootRecord, {
-      version: AUTOBASE_VERSION,
       indexed: { key, length },
       heads,
       views
