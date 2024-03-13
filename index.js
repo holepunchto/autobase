@@ -1555,7 +1555,7 @@ module.exports = class Autobase extends ReadyResource {
       tally.set(this.maxSupportedVersion, local)
     }
 
-    for (const { versionSignal: version } of heads) {
+    for (const { maxSupportedVersion: version } of heads) {
       let v = tally.get(version)
 
       if (!v) {
@@ -1669,7 +1669,7 @@ module.exports = class Autobase extends ReadyResource {
 
       blocks[i] = {
         version: 1,
-        versionSignal: this.maxSupportedVersion,
+        maxSupportedVersion: this.maxSupportedVersion,
         checkpoint: this._addCheckpoints ? await generateCheckpoint(cores) : null,
         digest: this._addCheckpoints ? this._generateDigest() : null,
         node: {
