@@ -3,7 +3,7 @@ const test = require('brittle')
 const tmpDir = require('test-tmp')
 const cenc = require('compact-encoding')
 
-const { SystemPointer } = require('../lib/messages')
+const { BootRecord } = require('../lib/messages')
 
 const {
   addWriterAndSync,
@@ -224,8 +224,8 @@ test('fast-forward - multiple queues', async t => {
   let done = false
 
   {
-    const pointer = await d.local.getUserData('autobase/system')
-    const { indexed } = cenc.decode(SystemPointer, pointer)
+    const pointer = await d.local.getUserData('autobase/boot')
+    const { indexed } = cenc.decode(BootRecord, pointer)
     t.is(indexed.length, to)
 
     done = to > midLength
@@ -242,8 +242,8 @@ test('fast-forward - multiple queues', async t => {
   const final = await next
 
   {
-    const pointer = await d.local.getUserData('autobase/system')
-    const { indexed } = cenc.decode(SystemPointer, pointer)
+    const pointer = await d.local.getUserData('autobase/boot')
+    const { indexed } = cenc.decode(BootRecord, pointer)
     t.is(indexed.length, final)
   }
 })

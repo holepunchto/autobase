@@ -42,7 +42,7 @@ test('upgrade - do not proceed', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -94,7 +94,7 @@ test('upgrade - proceed', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -117,7 +117,7 @@ test('upgrade - proceed', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.local.key, {
+  const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -163,7 +163,7 @@ test('upgrade - consensus', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -191,7 +191,7 @@ test('upgrade - consensus', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.local.key, {
+  const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -247,7 +247,7 @@ test('upgrade - consensus 3 writers', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -299,7 +299,7 @@ test('upgrade - consensus 3 writers', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.local.key, {
+  const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -360,7 +360,7 @@ test('upgrade - writer cannot append while behind', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -370,7 +370,7 @@ test('upgrade - writer cannot append while behind', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.local.key, {
+  const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     valueEncoding: 'json'
@@ -442,7 +442,7 @@ test('upgrade - onindex hook', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     onindex: async () => {
@@ -473,7 +473,7 @@ test('upgrade - onindex hook', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.local.key, {
+  const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv1,
     open,
     onindex: async () => {
@@ -501,6 +501,8 @@ test('autobase upgrade - do not proceed', async t => {
 
   await a0.ready()
 
+  const version = a0.maxSupportedVersion
+
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
@@ -520,14 +522,14 @@ test('autobase upgrade - do not proceed', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
     valueEncoding: 'json'
   })
 
   // simulate version upgrade
-  a1.maxSupportedVersion++
+  a1.maxSupportedVersion = version + 1
 
   await a1.ready()
 
@@ -556,6 +558,8 @@ test('autobase upgrade - proceed', async t => {
 
   await a0.ready()
 
+  const version = a0.maxSupportedVersion
+
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
@@ -575,14 +579,14 @@ test('autobase upgrade - proceed', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
     valueEncoding: 'json'
   })
 
   // simulate version upgrade
-  a1.maxSupportedVersion++
+  a1.maxSupportedVersion = version + 1
 
   await a1.ready()
 
@@ -601,14 +605,14 @@ test('autobase upgrade - proceed', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.local.key, {
+  const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
     valueEncoding: 'json'
   })
 
   // simulate version upgrade
-  b1.maxSupportedVersion++
+  b1.maxSupportedVersion = version + 1
 
   await b1.ready()
   await b1.update()
@@ -626,6 +630,8 @@ test('autobase upgrade - consensus', async t => {
   })
 
   await a0.ready()
+
+  const version = a0.maxSupportedVersion
 
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
@@ -650,14 +656,14 @@ test('autobase upgrade - consensus', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.local.key, {
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     valueEncoding: 'json'
   })
 
   // simulate version upgrade
-  a1.maxSupportedVersion++
+  a1.maxSupportedVersion = version + 1
 
   await a1.ready()
 
@@ -670,28 +676,28 @@ test('autobase upgrade - consensus', async t => {
   t.is(a1.view.indexedLength, 4)
   t.is(b0.view.indexedLength, 4)
 
-  t.is(a1.system.version, 0)
-  t.is(b0.system.version, 0)
+  t.is(a1.system.version, version)
+  t.is(b0.system.version, version)
 
   t.is(b0.view.indexedLength, 4) // should not advance
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.local.key, {
+  const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     valueEncoding: 'json'
   })
 
   // simulate version upgrade
-  b1.maxSupportedVersion++
+  b1.maxSupportedVersion = version + 1
 
   await b1.ready()
 
   await confirm([a1, b1])
 
-  t.is(a1.system.version, 1)
-  t.is(b1.system.version, 1)
+  t.is(a1.system.version, version + 1)
+  t.is(b1.system.version, version + 1)
 })
 
 test('autobase upgrade - consensus 3 writers', async t => {
@@ -704,6 +710,8 @@ test('autobase upgrade - consensus 3 writers', async t => {
   })
 
   await a0.ready()
+
+  const version = a0.maxSupportedVersion
 
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
@@ -750,8 +758,8 @@ test('autobase upgrade - consensus 3 writers', async t => {
     valueEncoding: 'json'
   })
 
-  a1.maxSupportedVersion++
-  c1.maxSupportedVersion++
+  a1.maxSupportedVersion = version + 1
+  c1.maxSupportedVersion = version + 1
 
   await a1.ready()
 
@@ -766,21 +774,21 @@ test('autobase upgrade - consensus 3 writers', async t => {
 
   await t.exception(berror, /Autobase upgrade required/)
 
-  t.is((await b0.system.getIndexedInfo()).version, 0)
+  t.is((await b0.system.getIndexedInfo()).version, version)
   t.ok(b0.closed)
 
   t.is(b0.view.indexedLength, 3) // should not advance
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.local.key, {
+  const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     valueEncoding: 'json'
   })
 
   // simulate version upgrade
-  b1.maxSupportedVersion++
+  b1.maxSupportedVersion = version + 1
 
   await b1.ready()
   await b1.update()
@@ -791,7 +799,587 @@ test('autobase upgrade - consensus 3 writers', async t => {
   await confirm([a1, b1])
 
   t.is(b1.view.signedLength, 5) // majority can continue
-  t.is((await b1.system.getIndexedInfo()).version, b1.version)
+  t.is((await b1.system.getIndexedInfo()).version, version + 1)
+})
+
+test('autobase upgrade - downgrade', async t => {
+  const [s1] = await createStores(1, t)
+
+  const a0 = new Autobase(s1.session(), null, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  const version = a0.maxSupportedVersion
+
+  await a0.ready()
+
+  await a0.append({ data: 'version 0' })
+
+  t.is(a0.view.indexedLength, 1)
+
+  await a0.close()
+
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  a1.maxSupportedVersion = version + 1
+
+  await a1.ready()
+
+  t.is(a1.view.indexedLength, 1)
+
+  await a1.append({ data: 'version 1' })
+
+  t.is(a1.view.indexedLength, 2)
+
+  t.is(a1.version, version + 1)
+  t.is((await a1.system.getIndexedInfo()).version, version + 1)
+
+  await a1.close()
+
+  t.not(await a1.local.getUserData('autobase/boot'), null)
+
+  // go back to previous version
+  const fail = new Autobase(s1.session(), a0.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  await t.exception(fail.ready())
+
+  t.is(await fail.local.getUserData('autobase/boot'), null)
+})
+
+test('autobase upgrade - downgrade then restart', async t => {
+  const [s1] = await createStores(1, t)
+
+  const a0 = new Autobase(s1.session(), null, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  const version = a0.maxSupportedVersion
+
+  await a0.ready()
+
+  await a0.append({ data: 'version 0' })
+
+  t.is(a0.view.indexedLength, 1)
+
+  await a0.close()
+
+  const a1 = new Autobase(s1.session(), a0.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  a1.maxSupportedVersion = version + 1
+
+  await a1.ready()
+
+  t.is(a1.view.indexedLength, 1)
+
+  await a1.append({ data: 'version 1' })
+
+  t.is(a1.view.indexedLength, 2)
+
+  t.is((await a1.system.getIndexedInfo()).version, version + 1)
+
+  await a1.close()
+
+  t.not(await a1.local.getUserData('autobase/boot'), null)
+
+  // go back to previous version
+  const fail = new Autobase(s1.session(), a0.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  await t.exception(fail.ready())
+
+  t.is(await fail.local.getUserData('autobase/boot'), null)
+
+  // go back to previous version
+  const failAgain = new Autobase(s1.session(), a0.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  // ready passes since we unset pointer
+  await t.execution(failAgain.ready())
+
+  const updateFail = new Promise((resolve, reject) => {
+    failAgain.on('error', reject)
+    failAgain.update().then(resolve, reject)
+  })
+
+  // update should fail as we get to version upgrade
+  await t.exception(updateFail)
+
+  // go back to previous version
+  const succeed = new Autobase(s1.session(), a0.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  succeed.maxSupportedVersion = version + 1
+
+  await t.execution(succeed.ready())
+
+  const update = new Promise((resolve, reject) => {
+    succeed.on('error', reject)
+    succeed.update().then(resolve, reject)
+  })
+
+  // update should succeed now
+  await t.execution(update)
+})
+
+test('autobase upgrade - upgrade before writer joins', async t => {
+  const [s1, s2] = await createStores(2, t)
+
+  const opts = {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  }
+
+  const a = new Autobase(s1.session(), null, opts)
+  a.maxSupportedVersion++
+
+  await a.ready()
+  await a.append('zero')
+
+  t.is(a.version, a.maxSupportedVersion)
+
+  const b = new Autobase(s2.session(), a.bootstrap, opts)
+  await b.ready()
+
+  const fail = new Promise((resolve, reject) => {
+    b.on('error', reject)
+    replicateAndSync([a, b]).then(resolve, reject)
+  })
+
+  t.is((await b.system.getIndexedInfo()).version, -1)
+
+  await t.exception(fail, /Autobase upgrade required/)
+})
+
+test('autobase upgrade - fix borked version', async t => {
+  const [s1, s2] = await createStores(2, t)
+
+  const opts = {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  }
+
+  const a0 = new Autobase(s1.session(), null, opts)
+  await a0.ready()
+
+  const b0 = new Autobase(s2.session(), a0.bootstrap, opts)
+  await b0.ready()
+
+  const version = a0.maxSupportedVersion
+
+  await addWriterAndSync(a0, b0)
+
+  await confirm([a0, b0])
+
+  await a0.append('zero')
+
+  await confirm([a0, b0])
+
+  t.is(a0.view.indexedLength, 1)
+  t.is(b0.view.indexedLength, 1)
+
+  await a0.close()
+
+  // borked version
+  opts.apply = applyHalts
+
+  const a1 = new Autobase(s1.session(), a0.bootstrap, opts)
+
+  // simulate version upgrade
+  a1.maxSupportedVersion = version + 1
+
+  await a1.ready()
+
+  await confirm([a1, b0])
+
+  t.is(a1.system.version, version)
+  t.is(b0.system.version, version)
+
+  await b0.close()
+
+  const b1 = new Autobase(s2.session(), a0.bootstrap, opts)
+
+  // simulate version upgrade
+  b1.maxSupportedVersion = version + 1
+
+  await b1.ready()
+
+  await confirm([a1, b1])
+
+  t.is(a1.system.version, version + 1)
+  t.is(b1.system.version, version + 1)
+
+  await a1.append('one')
+  await b1.append('two')
+
+  await replicateAndSync([a1, b1])
+
+  t.is(a1.view.length, 3)
+  t.is(b1.view.length, 3)
+
+  const aerr = new Promise((resolve, reject) => a1.once('error', reject))
+  const berr = new Promise((resolve, reject) => b1.once('error', reject))
+
+  a1.append('three', /Block/)
+  b1.append('three', /Block/)
+
+  await t.exception(aerr)
+  await t.exception(berr)
+
+  await a1.close()
+  await b1.close()
+
+  // unbork apply
+  opts.apply = apply
+
+  const a2 = new Autobase(s1.session(), a0.bootstrap, opts)
+  const b2 = new Autobase(s2.session(), a0.bootstrap, opts)
+
+  // can go forward
+  a2.maxSupportedVersion = version + 2
+  b2.maxSupportedVersion = version + 2
+
+  await t.execution(a2.ready())
+  await t.execution(b2.ready())
+
+  await t.execution(a2.append('three'))
+  await t.execution(b2.append('four'))
+
+  async function applyHalts (nodes, view) {
+    for (const node of nodes) {
+      if (view.length >= 3) throw new Error('Block')
+      await view.append(node.value)
+    }
+  }
+})
+
+test('autobase upgrade - downgrade then fix bork', async t => {
+  const [s1, s2] = await createStores(2, t)
+
+  const opts = {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  }
+
+  const a0 = new Autobase(s1.session(), null, opts)
+  await a0.ready()
+
+  const b0 = new Autobase(s2.session(), a0.bootstrap, opts)
+  await b0.ready()
+
+  const version = a0.maxSupportedVersion
+
+  await addWriterAndSync(a0, b0)
+
+  await confirm([a0, b0])
+
+  await a0.append('zero')
+
+  await confirm([a0, b0])
+
+  t.is(a0.view.indexedLength, 1)
+  t.is(b0.view.indexedLength, 1)
+
+  await a0.close()
+
+  // borked version
+  opts.apply = applyHalts
+
+  const a1 = new Autobase(s1.session(), a0.bootstrap, opts)
+
+  // simulate version upgrade
+  a1.maxSupportedVersion = version + 1
+
+  await a1.ready()
+
+  await confirm([a1, b0])
+
+  t.is(a1.system.version, version)
+  t.is(b0.system.version, version)
+
+  await b0.close()
+
+  const b1 = new Autobase(s2.session(), a0.bootstrap, opts)
+
+  // simulate version upgrade
+  b1.maxSupportedVersion = version + 1
+
+  await b1.ready()
+
+  await confirm([a1, b1])
+
+  t.is(a1.system.version, version + 1)
+  t.is(b1.system.version, version + 1)
+
+  await a1.append('one')
+  await b1.append('two')
+
+  await replicateAndSync([a1, b1])
+
+  t.is(a1.view.length, 3)
+  t.is(b1.view.length, 3)
+
+  const aerr = new Promise((resolve, reject) => a1.once('error', reject))
+  const berr = new Promise((resolve, reject) => b1.once('error', reject))
+
+  a1.append('three', /Block/)
+  b1.append('three', /Block/)
+
+  await t.exception(aerr)
+  await t.exception(berr)
+
+  await a1.close()
+  await b1.close()
+
+  // unbork apply
+  opts.apply = apply
+
+  // downgrade to version 0
+  const fail = new Autobase(s1.session(), a0.bootstrap, opts)
+
+  await t.exception(fail.ready())
+  t.is(await fail.local.getUserData('autobase/boot'), null)
+
+  const a2 = new Autobase(s1.session(), a0.bootstrap, opts)
+  const b2 = new Autobase(s2.session(), a0.bootstrap, opts)
+
+  // can go forward
+  a2.maxSupportedVersion = version + 2
+  b2.maxSupportedVersion = version + 2
+
+  await t.execution(a2.ready())
+  await t.execution(b2.ready())
+
+  await t.execution(a2.append('three'))
+  await t.execution(b2.append('four'))
+
+  async function applyHalts (nodes, view) {
+    for (const node of nodes) {
+      if (view.length >= 3) throw new Error('Block')
+      await view.append(node.value)
+    }
+  }
+})
+
+test('autobase upgrade - 3 writers always increasing', async t => {
+  const [s1, s2, s3] = await createStores(3, t)
+
+  const opts = {
+    apply,
+    ackInterval: 0,
+    ackThreshold: 0,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  }
+
+  const a0 = new Autobase(s1.session(), null, opts)
+  await a0.ready()
+
+  const version = a0.maxSupportedVersion
+
+  const b0 = new Autobase(s2.session(), a0.bootstrap, opts)
+  const c0 = new Autobase(s3.session(), a0.bootstrap, opts)
+
+  await b0.ready()
+  await c0.ready()
+
+  await addWriterAndSync(a0, b0)
+  await addWriterAndSync(a0, c0)
+
+  await confirm([a0, b0, c0])
+
+  await a0.append('v0')
+
+  await confirm([a0, b0, c0])
+
+  t.is(a0.view.indexedLength, 1)
+  t.is(b0.view.indexedLength, 1)
+
+  await a0.close()
+  await c0.close()
+
+  const a1 = new Autobase(s1.session(), a0.bootstrap, opts)
+  const c1 = new Autobase(s3.session(), a0.bootstrap, opts)
+
+  a1.maxSupportedVersion = version + 1
+  c1.maxSupportedVersion = version + 2
+
+  await a1.ready()
+  await c1.ready()
+
+  t.is(a1.view.indexedLength, 1)
+
+  await a1.append('v1')
+  await replicateAndSync([a1, c1])
+
+  await c1.append('v2')
+  await replicateAndSync([a1, c1])
+
+  await a1.close()
+  await c1.close()
+
+  const a2 = new Autobase(s1.session(), a0.bootstrap, opts)
+  const c2 = new Autobase(s3.session(), a0.bootstrap, opts)
+
+  a2.maxSupportedVersion = version + 3
+  c2.maxSupportedVersion = version + 4
+
+  await a2.ready()
+  await c2.ready()
+  await replicateAndSync([a2, c2])
+
+  await a2.append('v3')
+  await replicateAndSync([a2, c2])
+
+  await c2.append('v4')
+  await replicateAndSync([a2, c2])
+
+  t.is(c2.version, version + 1)
+
+  await a2.append('flush')
+  await replicateAndSync([a2, c2])
+
+  t.is(c2.version, version + 2)
+
+  await t.exception(new Promise((resolve, reject) => {
+    b0.on('error', reject)
+    replicateAndSync([a2, c2, b0]).then(resolve, reject)
+  }))
+
+  t.is((await b0.system.getIndexedInfo()).version, version)
+  t.ok(b0.closing)
+
+  await b0.close()
+
+  const b1 = new Autobase(s2.session(), a0.bootstrap, opts)
+  b1.maxSupportedVersion = version + 1
+
+  await b1.ready()
+
+  await t.exception(new Promise((resolve, reject) => {
+    b1.on('error', reject)
+    replicateAndSync([a2, b1]).then(resolve, reject)
+  }))
+
+  t.is((await b1.system.getIndexedInfo()).version, version + 1)
+  t.ok(b1.closing)
+
+  const b2 = new Autobase(s2.session(), a0.bootstrap, opts)
+  b2.maxSupportedVersion = a2.maxSupportedVersion
+
+  await b2.ready()
+  await t.execution(replicateAndSync([a2, b2]))
+
+  t.not(b2.view.signedLength, 6)
+
+  await confirm([a2, b2])
+  t.is(a2.version, b2.version)
+
+  t.is(b2.view.signedLength, 6) // majority can continue
+  t.is((await b2.system.getIndexedInfo()).version, b2.version)
+})
+
+test('autobase upgrade - non monotonic version', async t => {
+  const [s1, s2] = await createStores(2, t)
+
+  const a = new Autobase(s1.session(), null, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  await a.ready()
+
+  const version = a.maxSupportedVersion
+
+  const b = new Autobase(s2.session(), a.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  await b.ready()
+
+  await addWriterAndSync(a, b)
+  await confirm([a, b])
+
+  await a.append('0')
+  await confirm([a, b])
+
+  await a.close()
+  const a1 = new Autobase(s1.session(), a.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  // simulate version upgrade
+  a1.maxSupportedVersion = version + 1
+
+  await a1.ready()
+
+  await a1.append('2')
+  await confirm([a1, b])
+
+  t.is(a1.view.indexedLength, 2)
+  t.is(b.view.indexedLength, 2)
+
+  t.is(a1.system.version, version)
+  t.is(b.system.version, version)
+
+  await a1.close()
+
+  const a2 = new Autobase(s1.session(), a.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  await t.exception(a2.ready())
+  await t.exception(a2.append('3'))
+
+  // can recover
+  const a3 = new Autobase(s1.session(), a.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  a3.maxSupportedVersion = version + 1
+
+  await a3.ready()
+  await a3.append('3')
+
+  await confirm([a3, b])
+
+  t.is(a3.view.indexedLength, 3)
 })
 
 function open (store) {

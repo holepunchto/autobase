@@ -765,22 +765,33 @@ test('basic - catch apply throws', async t => {
 })
 
 test('basic - uncaught apply exception', async t => {
-  t.plan(1)
+  t.plan(2)
+
+  const [store] = await createStores(1, t)
 
   const error = new Promise((resolve, reject) => {
     process.on('uncaughtException', reject)
   })
 
-  const { bases } = await create(1, t, {
+  const a = new Autobase(store.session(), null, {
     async apply (nodes, view, base) {
       throw new Error('Synthetic')
-    }
+    },
+    valueEncoding: 'json'
   })
 
-  bases[0].append('trigger')
+  a.append('trigger')
 
   // should throw uncaught exception
   await t.exception(error, /Synthetic/)
+
+  const a2 = new Autobase(store.session(), a.bootstrap, {
+    apply: () => {},
+    valueEncoding: 'json'
+  })
+
+  // can reopen
+  await t.execution(a2.ready())
 })
 
 test('basic - non-indexed writer', async t => {

@@ -2,7 +2,7 @@ const test = require('brittle')
 const b4a = require('b4a')
 const Topolist = require('../lib/topolist')
 
-test('stable ordering', function (t) {
+test('topolist - stable ordering', function (t) {
   const a0 = makeNode('a', 0, [])
   const b0 = makeNode('b', 0, [a0])
   const c0 = makeNode('c', 0, [a0])
@@ -42,7 +42,7 @@ test('stable ordering', function (t) {
   }
 })
 
-test('can track changes', function (t) {
+test('topolist - can track changes', function (t) {
   const tip = new Topolist()
 
   const a0 = makeNode('a', 0, [])
@@ -90,7 +90,7 @@ test('can track changes', function (t) {
   t.is(u.length, 7)
 })
 
-test('can shift', function (t) {
+test('topolist - can shift', function (t) {
   const tip = new Topolist()
 
   const a0 = makeNode('a', 0, [])
@@ -125,7 +125,7 @@ test('can shift', function (t) {
   t.is(u.length, 7)
 })
 
-test('can shift out of order', function (t) {
+test('topolist - can shift out of order', function (t) {
   const tip = new Topolist()
 
   const a0 = makeNode('a', 0, [])
@@ -161,7 +161,7 @@ test('can shift out of order', function (t) {
   t.is(u.length, 7)
 })
 
-test('can multiple shift', function (t) {
+test('topolist - can multiple shift', function (t) {
   const tip = new Topolist()
 
   const a0 = makeNode('a', 0, [])
@@ -197,7 +197,7 @@ test('can multiple shift', function (t) {
   t.is(u.length, 7)
 })
 
-test('can multiple shift partially out of order', function (t) {
+test('topolist - can multiple shift partially out of order', function (t) {
   const tip = new Topolist()
 
   const a0 = makeNode('a', 0, [])
@@ -233,7 +233,7 @@ test('can multiple shift partially out of order', function (t) {
   t.is(u.length, 7)
 })
 
-test('can multiple shift out of order', function (t) {
+test('topolist - can multiple shift out of order', function (t) {
   const tip = new Topolist()
 
   const a0 = makeNode('a', 0, [])
@@ -275,7 +275,7 @@ test('can multiple shift out of order', function (t) {
   t.is(u.length, 7)
 })
 
-test('can shift multiple times', function (t) {
+test('topolist - can shift multiple times', function (t) {
   const tip = new Topolist()
 
   const a0 = makeNode('a', 0, [])
@@ -316,7 +316,7 @@ test('can shift multiple times', function (t) {
   t.is(u.length, 7)
 })
 
-test('shift whole chain', function (t) {
+test('topolist - shift whole chain', function (t) {
   const tip = new Topolist()
 
   const a0 = makeNode('a', 0, [])
@@ -352,7 +352,7 @@ test('shift whole chain', function (t) {
   t.is(u.length, 7)
 })
 
-test('shift whole chain out of order', function (t) {
+test('topolist - shift whole chain out of order', function (t) {
   const tip = new Topolist()
 
   const a0 = makeNode('a', 0, [])
@@ -388,7 +388,7 @@ test('shift whole chain out of order', function (t) {
   t.is(u.length, 7)
 })
 
-test('reorder then shift', function (t) {
+test('topolist - reorder then shift', function (t) {
   const tip = new Topolist()
 
   const a0 = makeNode('a', 0, [])
@@ -427,7 +427,7 @@ test('reorder then shift', function (t) {
   t.is(u.length, 7)
 })
 
-test('add reorder then shift', function (t) {
+test('topolist - add reorder then shift', function (t) {
   const tip = new Topolist()
 
   const a0 = makeNode('a', 0, [])
@@ -466,7 +466,7 @@ test('add reorder then shift', function (t) {
   t.is(u.length, 7)
 })
 
-test('reorder then shift reordered', function (t) {
+test('topolist - reorder then shift reordered', function (t) {
   const tip = new Topolist()
 
   const a0 = makeNode('a', 0, [])
@@ -506,10 +506,14 @@ test('reorder then shift reordered', function (t) {
 })
 
 function makeNode (key, length, dependencies, value = null) {
-  return {
+  const node = {
     writer: { core: { key: b4a.from(key) } },
     length,
-    dependencies: new Set(dependencies),
+    dependents: new Set(),
     value
   }
+
+  for (const dep of dependencies) dep.dependents.add(node)
+
+  return node
 }
