@@ -20,12 +20,14 @@ const inspect = Symbol.for('nodejs.util.inspect.custom')
 const AUTOBASE_VERSION = 1
 
 // default is to automatically ack
-const DEFAULT_ACK_INTERVAL = 10 * 1000
+const DEFAULT_ACK_INTERVAL = 10_000
 const DEFAULT_ACK_THRESHOLD = 4
 
 const FF_THRESHOLD = 16
 
 const REMOTE_ADD_BATCH = 64
+
+const DEFAULT_PROLOGUE_TIMEOUT = 60_000
 
 module.exports = class Autobase extends ReadyResource {
   constructor (store, bootstrap, handlers = {}) {
@@ -307,8 +309,8 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     if (this.prologue !== null) {
-      const { key, length } = this.prologue
-      this.initialFastForward(key, length)
+      const { key, length, timeout } = this.prologue
+      this.initialFastForward(key, length, timeout || DEFAULT_PROLOGUE_TIMEOUT)
     }
 
     if (this.localWriter && this._ackInterval) this._startAckTimer()
@@ -1028,12 +1030,15 @@ module.exports = class Autobase extends ReadyResource {
     await this._makeLinearizer(this.system)
   }
 
-  async initialFastForward (key, length) {
+  async initialFastForward (key, length, timeout) {
     const core = this.store.get(key)
-    const target = await this._preFastForward(core, length, { key }, 60_000)
+    const target = await this._preFastForward(core, length, { key }, timeout)
 
     // initial fast-forward failed
-    if (target === null) return
+    if (target === null) {
+      this.prologue = null
+      return
+    }
 
     for (const w of this.activeWriters) w.pause()
 

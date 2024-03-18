@@ -497,6 +497,53 @@ test('fast-forward - multiple migrate', async t => {
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
+test('fast-forward - ignore bogus prologue', async t => {
+  t.plan(3)
+
+  const { bases } = await create(5, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b, c, d, e] = bases
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append('a' + i)
+  }
+
+  await addWriterAndSync(a, b)
+  await confirm(bases)
+
+  for (let i = 0; i < 1000; i++) {
+    await b.append('b' + i)
+  }
+
+  const sys = a.system.core.getBackingCore()
+  t.is(sys.manifest.signers.length, 2)
+
+  const key = Buffer.from(sys.key)
+  key[0] ^= 0xff
+
+  const prologue = {
+    key,
+    length: sys.indexedLength,
+    timeout: 1500
+  }
+
+  const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
+  const latecomer = await createBase(store.session(), a.bootstrap, t, { prologue })
+
+  await replicateAndSync([...bases, latecomer])
+  const core = latecomer.system.core.getBackingCore()
+  const sparse = await isSparse(core)
+
+  t.is(latecomer.linearizer.indexers.length, 2)
+
+  t.absent(latecomer.prologue) // prologue was cleared
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+})
+
 async function isSparse (core) {
   let n = 0
   for (let i = 0; i < core.length; i++) {
