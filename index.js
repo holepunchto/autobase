@@ -55,7 +55,7 @@ module.exports = class Autobase extends ReadyResource {
     this.linearizer = null
     this.updating = false
 
-    this.fastForwardingTo = handlers.fastForward !== false ? 0 : -1
+    this.fastForwarding = handlers.fastForward === false // set as true to disable
     this.fastForwardTo = null
 
     this._checkWriters = []
@@ -436,7 +436,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _isFastForwarding () {
     if (this.fastForwardTo !== null) return true
-    return this.fastForwardingTo > 0 && this.fastForwardingTo > this.system.core.getBackingCore().length
+    return this.fastForwarding
   }
 
   _backgroundAck () {
@@ -1020,46 +1020,62 @@ module.exports = class Autobase extends ReadyResource {
     await this._makeLinearizer(this.system)
   }
 
-  // NOTE: runs in parallel with everything, can never fail
   async queueFastForward () {
     // if already FFing, let the finish. TODO: auto kill the attempt after a while and move to latest?
-    if (this.fastForwardingTo !== 0) return
+    if (this.fastForwarding) return
 
     const core = this.system.core.getBackingCore()
 
     if (core.session.length <= core.length + FF_THRESHOLD) return
     if (this.fastForwardTo !== null && core.session.length <= this.fastForwardTo.length + FF_THRESHOLD) return
 
-    this.fastForwardingTo = core.session.length
-    this._bumpAckTimer()
+    const target = await this._preFastForward(core.session, core.session.length, null, null)
 
-    const fastForwardTo = {
-      key: core.session.key,
-      length: this.fastForwardingTo,
-      migrate: null
+    // fast-forward failed
+    if (target === null) return
+
+    // if it migrated underneath us, ignore for now
+    if (core !== this.system.core.getBackingCore()) return
+
+    for (const w of this.activeWriters) w.pause()
+
+    this.fastForwardTo = target
+
+    this._bumpAckTimer()
+    this._queueBump()
+  }
+
+  // NOTE: runs in parallel with everything, can never fail
+  async _preFastForward (core, length, migrate, timeout) {
+    this.fastForwarding = true
+
+    const info = {
+      key: core.key,
+      length,
+      migrate
     }
 
     try {
       // sys runs open with wait false, so get head block first for low complexity
-      if (!(await core.session.has(this.fastForwardingTo - 1))) {
-        await core.session.get(this.fastForwardingTo - 1)
+      if (!(await core.has(length - 1))) {
+        await core.get(length - 1, { timeout })
       }
 
-      const system = new SystemView(core.session.session(), this.fastForwardingTo)
+      const system = new SystemView(core.session(), length)
       await system.ready()
 
       if (system.version > this.maxSupportedVersion) {
         const upgrade = {
           version: system.version,
-          length: this.fastForwardingTo
+          length
         }
 
-        this.fastForwardingTo = 0
+        this.fastForwarding = false
         this.emit('upgrade-available', upgrade)
-        return
+        return null
       }
 
-      const migrated = !system.sameIndexers(this.linearizer.indexers)
+      const migrated = migrate === null && !system.sameIndexers(this.linearizer.indexers)
 
       const indexers = []
       const pendingViews = []
@@ -1084,14 +1100,13 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const promises = []
-
       for (const { core, length } of indexers) {
-        if (core.length === 0 && length > 0) promises.push(core.get(length - 1))
+        if (core.length === 0 && length > 0) promises.push(core.get(length - 1, { timeout }))
       }
 
       for (const { core, length } of pendingViews) {
         // we could just get the hash here, but likely user wants the block so yolo
-        promises.push(core.get(length - 1))
+        promises.push(core.get(length - 1, { timeout }))
       }
 
       await Promise.all(promises)
@@ -1102,14 +1117,14 @@ module.exports = class Autobase extends ReadyResource {
       if (migrated) {
         const hash = system.core.core.tree.hash()
         const name = this.system.core._source.name
-        const prologue = { hash, length: this.fastForwardingTo }
+        const prologue = { hash, length }
 
         const key = this.deriveKey(name, indexers, prologue)
 
-        fastForwardTo.migrate = { key }
+        info.migrate = { key }
 
         const core = this.store.get(key)
-        await core.get(this.fastForwardingTo - 1)
+        await core.get(length - 1)
 
         closing.push(core.close())
       }
@@ -1122,24 +1137,13 @@ module.exports = class Autobase extends ReadyResource {
 
       await Promise.allSettled(closing)
     } catch (err) {
-      this.fastForwardingTo = 0
       safetyCatch(err)
-      return
+      return null
+    } finally {
+      this.fastForwarding = false
     }
 
-    // if it migrated underneath us, ignore for now
-    if (core !== this.system.core.getBackingCore()) {
-      this.fastForwardingTo = 0
-      return
-    }
-
-    for (const w of this.activeWriters) w.pause()
-
-    this.fastForwardingTo = 0
-    this.fastForwardTo = fastForwardTo
-
-    this._bumpAckTimer()
-    this._queueBump()
+    return info
   }
 
   _clearFastForward () {
