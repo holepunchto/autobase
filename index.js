@@ -59,6 +59,8 @@ module.exports = class Autobase extends ReadyResource {
     this.fastForwarding = 0
     this.fastForwardTo = null
 
+    this.prologue = handlers.prologue || null
+
     this._checkWriters = []
     this._appending = null
     this._wakeup = new AutoWakeup(this)
@@ -302,6 +304,11 @@ module.exports = class Autobase extends ReadyResource {
     // load previous digest if available
     if (this.localWriter && !this.system.bootstrapping) {
       await this._restoreLocalState()
+    }
+
+    if (this.prologue !== null) {
+      const { key, length } = this.prologue
+      this.initialFastForward(key, length)
     }
 
     if (this.localWriter && this._ackInterval) this._startAckTimer()
@@ -1019,6 +1026,22 @@ module.exports = class Autobase extends ReadyResource {
 
     await this.system.update()
     await this._makeLinearizer(this.system)
+  }
+
+  async initialFastForward (key, length) {
+    const core = this.store.get(key)
+    const target = await this._preFastForward(core, length, { key }, 60_000)
+
+    // initial fast-forward failed
+    if (target === null) return
+
+    for (const w of this.activeWriters) w.pause()
+
+    this.fastForwarding = false
+    this.fastForwardTo = target
+
+    this._bumpAckTimer()
+    this._queueBump()
   }
 
   async queueFastForward () {
