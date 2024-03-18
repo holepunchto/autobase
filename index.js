@@ -1071,26 +1071,6 @@ module.exports = class Autobase extends ReadyResource {
         indexers.push({ core, length })
       }
 
-      let sysCore = system.core
-
-      // handle system migration
-      if (migrated) {
-        const idx = []
-        for (const { key } of system.indexers) idx.push(await this._getWriterByKey(key))
-
-        const hash = sysCore.core.tree.hash()
-        const name = this.system.core._source.name
-        const prologue = { hash, length: this.fastForwardingTo }
-        const key = this.deriveKey(name, idx, prologue)
-
-        await sysCore.close() // close unused session
-
-        fastForwardTo.migrate = { key }
-        sysCore = this.store.get(key)
-      }
-
-      pendingViews.push({ core: sysCore, length: this.fastForwardingTo })
-
       // handle rest of views
       for (const v of system.views) {
         const core = this.store.get(v.key)
@@ -1116,11 +1096,31 @@ module.exports = class Autobase extends ReadyResource {
 
       await Promise.all(promises)
 
-      for (const { core } of pendingViews) {
-        await core.close()
+      const closing = []
+
+      // handle system migration
+      if (migrated) {
+        const hash = system.core.core.tree.hash()
+        const name = this.system.core._source.name
+        const prologue = { hash, length: this.fastForwardingTo }
+
+        const key = this.deriveKey(name, indexers, prologue)
+
+        fastForwardTo.migrate = { key }
+
+        const core = this.store.get(key)
+        await core.get(this.fastForwardingTo - 1)
+
+        closing.push(core.close())
       }
 
-      await system.close()
+      for (const { core } of pendingViews) {
+        closing.push(core.close())
+      }
+
+      closing.push(system.close())
+
+      await Promise.allSettled(closing)
     } catch (err) {
       this.fastForwardingTo = 0
       safetyCatch(err)
