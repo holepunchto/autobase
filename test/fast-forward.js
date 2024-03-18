@@ -12,6 +12,7 @@ const {
   eventFlush,
   confirm,
   create,
+  createStores,
   createBase
 } = require('./helpers')
 
@@ -380,6 +381,120 @@ test('fast-forward - force reset then ff', async t => {
 
   t.ok(sparse > 0)
   t.comment('sparse blocks: ' + sparse)
+})
+
+test('fast-forward - genesis fast forward', async t => {
+  t.plan(3)
+
+  const { bases } = await create(2, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b] = bases
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append('a' + i)
+  }
+
+  await addWriterAndSync(a, b)
+
+  t.is(a.linearizer.indexers.length, 2)
+
+  await a.append('lets index some nodes')
+  await confirm([a, b])
+
+  for (let i = 0; i < 1000; i++) {
+    await b.append('b' + i)
+  }
+
+  await confirm([a, b])
+
+  const prologue = {
+    key: a.system.core.key,
+    length: a.system.core.signedLength
+  }
+
+  const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
+  const c = await createBase(store.session(), a.bootstrap, t, { prologue })
+
+  await replicateAndSync([a, b, c])
+  const core = c.system.core.getBackingCore()
+  const sparse = await isSparse(core)
+
+  t.is(c.linearizer.indexers.length, 2)
+
+  t.ok(prologue.length - sparse < 10)
+
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+})
+
+test('fast-forward - multiple migrate', async t => {
+  t.plan(3)
+
+  const { bases } = await create(5, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b, c, d, e] = bases
+
+  for (let i = 0; i < 300; i++) {
+    await a.append('a' + i)
+  }
+
+  await addWriterAndSync(a, b)
+  await confirm(bases)
+
+  for (let i = 0; i < 300; i++) {
+    await b.append('b' + i)
+  }
+
+  await addWriterAndSync(b, c)
+  await confirm(bases)
+
+  for (let i = 0; i < 300; i++) {
+    await c.append('c' + i)
+  }
+
+  await addWriterAndSync(c, d)
+  await confirm(bases)
+
+  for (let i = 0; i < 300; i++) {
+    await d.append('d' + i)
+  }
+
+  await addWriterAndSync(d, e)
+  await confirm(bases)
+
+  for (let i = 0; i < 300; i++) {
+    await e.append('e' + i)
+  }
+
+  await confirm(bases)
+
+  const sys = a.system.core.getBackingCore()
+  t.is(sys.manifest.signers.length, 5)
+
+  const prologue = {
+    key: sys.key,
+    length: sys.indexedLength
+  }
+
+  const [store] = await createStores(1, t, { offset: 5, storage: () => tmpDir(t) })
+  const latecomer = await createBase(store.session(), a.bootstrap, t, { prologue })
+
+  await replicateAndSync([...bases, latecomer])
+  const core = latecomer.system.core.getBackingCore()
+  const sparse = await isSparse(core)
+
+  t.is(latecomer.linearizer.indexers.length, 5)
+
+  t.ok(prologue.length - sparse < 10)
+
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
 async function isSparse (core) {
