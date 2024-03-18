@@ -55,7 +55,8 @@ module.exports = class Autobase extends ReadyResource {
     this.linearizer = null
     this.updating = false
 
-    this.fastForwarding = handlers.fastForward === false // set as true to disable
+    this.fastForwardEnabled = handlers.fastForward !== false
+    this.fastForwarding = 0
     this.fastForwardTo = null
 
     this._checkWriters = []
@@ -436,7 +437,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _isFastForwarding () {
     if (this.fastForwardTo !== null) return true
-    return this.fastForwarding
+    return this.fastForwardEnabled && this.fastForwarding
   }
 
   _backgroundAck () {
@@ -1022,7 +1023,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async queueFastForward () {
     // if already FFing, let the finish. TODO: auto kill the attempt after a while and move to latest?
-    if (this.fastForwarding) return
+    if (!this.fastForwardEnabled || this.fastForwarding) return
 
     const core = this.system.core.getBackingCore()
 
