@@ -1050,11 +1050,7 @@ module.exports = class Autobase extends ReadyResource {
   async _preFastForward (core, length, migrate, timeout) {
     this.fastForwarding = true
 
-    const info = {
-      key: core.key,
-      length,
-      migrate
-    }
+    const info = { key: core.key, length }
 
     try {
       // sys runs open with wait false, so get head block first for low complexity
@@ -1120,11 +1116,9 @@ module.exports = class Autobase extends ReadyResource {
         const name = this.system.core._source.name
         const prologue = { hash, length }
 
-        const key = this.deriveKey(name, indexers, prologue)
+        info.key = this.deriveKey(name, indexers, prologue)
 
-        info.migrate = { key }
-
-        const core = this.store.get(key)
+        const core = this.store.get(info.key)
         await core.get(length - 1)
 
         closing.push(core.close())
@@ -1154,34 +1148,51 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _applyFastForward () {
-    const core = this.system.core.getBackingCore()
-    const from = core.length
-
     // remember these in case another fast forward gets queued
-    const { key, length, migrate } = this.fastForwardTo
+    const { key, length } = this.fastForwardTo
+
+    const migrated = !b4a.equals(key, this.system.core.key)
+
+    const core = this.store.get(key)
+    await core.ready()
+
+    const from = this.system.core.getBackingCore().length
 
     // just extra sanity check
     // TODO: if we simply load the core from the corestore the key check isn't needed
     // getting rid of that is essential for dbl ff, but for now its ok with some safety from migrations
-    if (!b4a.equals(core.key, key) || length <= from) {
+    if (length <= from) {
       this._clearFastForward()
       return
     }
 
-    const system = new SystemView(core.session.session(), length)
+    const system = new SystemView(core.session(), length)
     await system.ready()
 
     const indexers = [] // only used in migrate branch
-    if (migrate) {
+    const prologues = [] // only used in migrate branch
+
+    // preload async state
+    if (migrated) {
       for (const { key } of system.indexers) {
-        indexers.push(await this._getWriterByKey(key))
+        const core = this.store.get(key)
+        await core.ready()
+        indexers.push({ core })
+        await core.close()
+      }
+
+      for (const { key } of system.views) {
+        const core = this.store.get(key)
+        await core.ready()
+        prologues.push(core.manifest.prologue)
+        await core.close()
       }
     }
 
     const views = new Map()
 
     const sysView = this.system.core._source
-    const sysInfo = { key: migrate ? migrate.key : key, length }
+    const sysInfo = { key, length }
 
     views.set(sysView, sysInfo)
 
@@ -1192,17 +1203,15 @@ module.exports = class Autobase extends ReadyResource {
       let view = this._viewStore.getByKey(v.key)
 
       // search for corresponding view
-      if (!view && migrate) {
+      if (!view) {
         for (view of this._viewStore.opened.values()) {
-          const hash = view.core.session.core.tree.hash()
-          const key = this.deriveKey(view.name, indexers, { hash, length: v.length })
-
+          const key = this.deriveKey(view.name, indexers, prologues[i])
           if (b4a.equals(key, v.key)) break
           view = null
         }
       }
 
-      if (!view || view.core.session.length < v.length) {
+      if (!view) {
         this._clearFastForward() // something wrong somewhere, likely a bug, just safety
         return
       }
@@ -1231,7 +1240,7 @@ module.exports = class Autobase extends ReadyResource {
     await this._advanceBootRecord(length)
 
     // manually set the digest
-    if (migrate) this._setDigest(migrate.key)
+    if (migrated) this._setDigest(key)
 
     const to = length
 
