@@ -500,12 +500,12 @@ test('fast-forward - multiple migrate', async t => {
 test('fast-forward - ignore bogus prologue', async t => {
   t.plan(3)
 
-  const { bases } = await create(5, t, {
+  const { bases } = await create(2, t, {
     fastForward: true,
     storage: () => tmpDir(t)
   })
 
-  const [a, b, c, d, e] = bases
+  const [a, b] = bases
 
   for (let i = 0; i < 1000; i++) {
     await a.append('a' + i)
