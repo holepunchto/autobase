@@ -1032,7 +1032,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async initialFastForward (key, length, timeout) {
     const core = this.store.get(key)
-    const target = await this._preFastForward(core, length, { key }, timeout)
+    const target = await this._preFastForward(core, length, timeout)
 
     // initial fast-forward failed
     if (target === null) {
@@ -1058,7 +1058,7 @@ module.exports = class Autobase extends ReadyResource {
     if (core.session.length <= core.length + FF_THRESHOLD) return
     if (this.fastForwardTo !== null && core.session.length <= this.fastForwardTo.length + FF_THRESHOLD) return
 
-    const target = await this._preFastForward(core.session, core.session.length, null, null)
+    const target = await this._preFastForward(core.session, core.session.length, null)
 
     // fast-forward failed
     if (target === null) return
@@ -1075,7 +1075,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // NOTE: runs in parallel with everything, can never fail
-  async _preFastForward (core, length, migrate, timeout) {
+  async _preFastForward (core, length, timeout) {
     this.fastForwarding = true
 
     const info = { key: core.key, length }
@@ -1100,7 +1100,8 @@ module.exports = class Autobase extends ReadyResource {
         return null
       }
 
-      const migrated = migrate === null && !system.sameIndexers(this.linearizer.indexers)
+      const systemShouldMigrate = b4a.equals(core.key, this.system.core.key) &&
+        !system.sameIndexers(this.linearizer.indexers)
 
       const indexers = []
       const pendingViews = []
@@ -1139,7 +1140,7 @@ module.exports = class Autobase extends ReadyResource {
       const closing = []
 
       // handle system migration
-      if (migrated) {
+      if (systemShouldMigrate) {
         const hash = system.core.core.tree.hash()
         const name = this.system.core._source.name
         const prologue = { hash, length }
