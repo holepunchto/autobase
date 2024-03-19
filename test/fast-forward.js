@@ -383,7 +383,7 @@ test('fast-forward - force reset then ff', async t => {
   t.comment('sparse blocks: ' + sparse)
 })
 
-test('fast-forward - genesis fast forward', async t => {
+test('fast-forward - initial fast forward', async t => {
   t.plan(3)
 
   const { bases } = await create(2, t, {
@@ -410,13 +410,13 @@ test('fast-forward - genesis fast forward', async t => {
 
   await confirm([a, b])
 
-  const prologue = {
+  const fastForward = {
     key: a.system.core.key,
     length: a.system.core.signedLength
   }
 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
-  const c = await createBase(store.session(), a.bootstrap, t, { prologue })
+  const c = await createBase(store.session(), a.bootstrap, t, { fastForward })
 
   await replicateAndSync([a, b, c])
   const core = c.system.core.getBackingCore()
@@ -424,13 +424,13 @@ test('fast-forward - genesis fast forward', async t => {
 
   t.is(c.linearizer.indexers.length, 2)
 
-  t.ok(prologue.length - sparse < 10)
+  t.ok(fastForward.length - sparse < 10)
 
   t.comment('sparse blocks: ' + sparse)
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
-test('fast-forward - multiple migrate', async t => {
+test('fast-forward - initial ff after multiple migrate', async t => {
   t.plan(3)
 
   const { bases } = await create(5, t, {
@@ -477,13 +477,13 @@ test('fast-forward - multiple migrate', async t => {
   const sys = a.system.core.getBackingCore()
   t.is(sys.manifest.signers.length, 5)
 
-  const prologue = {
+  const fastForward = {
     key: sys.key,
     length: sys.indexedLength
   }
 
   const [store] = await createStores(1, t, { offset: 5, storage: () => tmpDir(t) })
-  const latecomer = await createBase(store.session(), a.bootstrap, t, { prologue })
+  const latecomer = await createBase(store.session(), a.bootstrap, t, { fastForward })
 
   await replicateAndSync([...bases, latecomer])
   const core = latecomer.system.core.getBackingCore()
@@ -491,13 +491,13 @@ test('fast-forward - multiple migrate', async t => {
 
   t.is(latecomer.linearizer.indexers.length, 5)
 
-  t.ok(prologue.length - sparse < 10)
+  t.ok(fastForward.length - sparse < 10)
 
   t.comment('sparse blocks: ' + sparse)
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
-test('fast-forward - ignore bogus prologue', async t => {
+test('fast-forward - ignore bogus initial ff', async t => {
   t.plan(3)
 
   const { bases } = await create(2, t, {
@@ -524,14 +524,14 @@ test('fast-forward - ignore bogus prologue', async t => {
   const key = Buffer.from(sys.key)
   key[0] ^= 0xff
 
-  const prologue = {
+  const fastForward = {
     key,
     length: sys.indexedLength,
     timeout: 1500
   }
 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
-  const latecomer = await createBase(store.session(), a.bootstrap, t, { prologue })
+  const latecomer = await createBase(store.session(), a.bootstrap, t, { fastForward })
 
   await replicateAndSync([...bases, latecomer])
   const core = latecomer.system.core.getBackingCore()
@@ -539,7 +539,7 @@ test('fast-forward - ignore bogus prologue', async t => {
 
   t.is(latecomer.linearizer.indexers.length, 2)
 
-  t.absent(latecomer.prologue) // prologue was cleared
+  t.absent(latecomer.fastForwardTo) // fastForward was cleared
   t.comment('sparse blocks: ' + sparse)
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })

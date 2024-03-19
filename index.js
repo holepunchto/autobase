@@ -61,6 +61,10 @@ module.exports = class Autobase extends ReadyResource {
     this.fastForwarding = false
     this.fastForwardTo = null
 
+    if (this.fastForwardEnabled && isObject(handlers.fastForward)) {
+      this.fastForwardTo = handlers.fastForward
+    }
+
     this.prologue = handlers.prologue || null
 
     this._checkWriters = []
@@ -308,8 +312,10 @@ module.exports = class Autobase extends ReadyResource {
       await this._restoreLocalState()
     }
 
-    if (this.prologue !== null) {
-      const { key, length, timeout } = this.prologue
+    if (this.fastForwardTo !== null) {
+      const { key, length, timeout } = this.fastForwardTo
+      this.fastForwardTo = null // will get reset once ready
+
       this.initialFastForward(key, length, timeout || DEFAULT_PROLOGUE_TIMEOUT)
     }
 
@@ -1774,4 +1780,8 @@ function noop () {}
 function crashSoon (err) {
   queueMicrotask(() => { throw err })
   throw err
+}
+
+function isObject (obj) {
+  return typeof obj === 'object' && obj !== null
 }
