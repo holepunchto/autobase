@@ -24,10 +24,9 @@ const DEFAULT_ACK_INTERVAL = 10_000
 const DEFAULT_ACK_THRESHOLD = 4
 
 const FF_THRESHOLD = 16
+const DEFAULT_FF_TIMEOUT = 60_000
 
 const REMOTE_ADD_BATCH = 64
-
-const DEFAULT_PROLOGUE_TIMEOUT = 60_000
 
 module.exports = class Autobase extends ReadyResource {
   constructor (store, bootstrap, handlers = {}) {
@@ -64,8 +63,6 @@ module.exports = class Autobase extends ReadyResource {
     if (this.fastForwardEnabled && isObject(handlers.fastForward)) {
       this.fastForwardTo = handlers.fastForward
     }
-
-    this.prologue = handlers.prologue || null
 
     this._checkWriters = []
     this._appending = null
@@ -316,7 +313,7 @@ module.exports = class Autobase extends ReadyResource {
       const { key, length, timeout } = this.fastForwardTo
       this.fastForwardTo = null // will get reset once ready
 
-      this.initialFastForward(key, length, timeout || DEFAULT_PROLOGUE_TIMEOUT)
+      this.initialFastForward(key, length, timeout || DEFAULT_FF_TIMEOUT)
     }
 
     if (this.localWriter && this._ackInterval) this._startAckTimer()
@@ -1042,10 +1039,7 @@ module.exports = class Autobase extends ReadyResource {
     await core.close()
 
     // initial fast-forward failed
-    if (target === null) {
-      this.prologue = null
-      return
-    }
+    if (target === null) return
 
     for (const w of this.activeWriters) w.pause()
 
