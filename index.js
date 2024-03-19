@@ -58,7 +58,7 @@ module.exports = class Autobase extends ReadyResource {
     this.updating = false
 
     this.fastForwardEnabled = handlers.fastForward !== false
-    this.fastForwarding = 0
+    this.fastForwarding = false
     this.fastForwardTo = null
 
     this.prologue = handlers.prologue || null
@@ -1033,6 +1033,7 @@ module.exports = class Autobase extends ReadyResource {
   async initialFastForward (key, length, timeout) {
     const core = this.store.get(key)
     const target = await this._preFastForward(core, length, timeout)
+    await core.close()
 
     // initial fast-forward failed
     if (target === null) {
