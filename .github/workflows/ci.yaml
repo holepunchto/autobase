@@ -27,10 +27,10 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - run: npm install
-      - run: npm test
+      # - run: npm test
       - name: test with encrypted
         run: |
-          if [[ $RUNNER_OS == "Windows" ]]; then
+          if [ $RUNNER_OS == "Windows" ]; then
             set ENCRYPT_ALL=1 && npm test
           else
             export ENCRYPT_ALL=1 && npm test
