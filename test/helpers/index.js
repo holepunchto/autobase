@@ -22,6 +22,8 @@ module.exports = {
   ...helpers
 }
 
+console.log(encryptionKey)
+
 async function createStores (n, t, opts = {}) {
   const storage = opts.storage || (() => ram.reusable())
   const offset = opts.offset || 0
