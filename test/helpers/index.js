@@ -18,6 +18,7 @@ module.exports = {
   printTip,
   compare,
   compareViews,
+  encryptionKey,
   ...helpers
 }
 
@@ -60,6 +61,7 @@ async function createBase (store, key, t, opts = {}) {
     valueEncoding: 'json',
     ackInterval: 0,
     ackThreshold: 0,
+    encryptionKey,
     fastForward: false,
     ...opts
   }

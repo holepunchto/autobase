@@ -9,6 +9,7 @@ const {
   createStores,
   replicateAndSync,
   addWriterAndSync,
+  encryptionKey,
   confirm
 } = require('./helpers')
 
@@ -18,6 +19,7 @@ test('upgrade - do not proceed', async t => {
   const a0 = new Autobase(s1.session(), null, {
     apply: applyv0,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -26,6 +28,7 @@ test('upgrade - do not proceed', async t => {
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv0,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -45,6 +48,7 @@ test('upgrade - do not proceed', async t => {
   const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -70,6 +74,7 @@ test('upgrade - proceed', async t => {
   const a0 = new Autobase(s1.session(), null, {
     apply: applyv0,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -78,6 +83,7 @@ test('upgrade - proceed', async t => {
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv0,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -97,6 +103,7 @@ test('upgrade - proceed', async t => {
   const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -120,6 +127,7 @@ test('upgrade - proceed', async t => {
   const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv1,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -135,6 +143,7 @@ test('upgrade - consensus', async t => {
   const a0 = new Autobase(s1.session(), null, {
     apply: applyv0,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -143,6 +152,7 @@ test('upgrade - consensus', async t => {
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv0,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -166,6 +176,7 @@ test('upgrade - consensus', async t => {
   const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -194,6 +205,7 @@ test('upgrade - consensus', async t => {
   const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv1,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -210,6 +222,7 @@ test('upgrade - consensus 3 writers', async t => {
   const a0 = new Autobase(s1.session(), null, {
     apply: applyv0,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -218,6 +231,7 @@ test('upgrade - consensus 3 writers', async t => {
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv0,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -226,6 +240,7 @@ test('upgrade - consensus 3 writers', async t => {
   const c0 = new Autobase(s3.session(), a0.bootstrap, {
     apply: applyv0,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -250,6 +265,7 @@ test('upgrade - consensus 3 writers', async t => {
   const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -302,6 +318,7 @@ test('upgrade - consensus 3 writers', async t => {
   const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv1,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -323,6 +340,7 @@ test('upgrade - writer cannot append while behind', async t => {
   const a0 = new Autobase(s1.session(), null, {
     apply: applyv0,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -331,6 +349,7 @@ test('upgrade - writer cannot append while behind', async t => {
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv0,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -339,6 +358,7 @@ test('upgrade - writer cannot append while behind', async t => {
   const c0 = new Autobase(s3.session(), a0.bootstrap, {
     apply: applyv0,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -363,6 +383,7 @@ test('upgrade - writer cannot append while behind', async t => {
   const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -373,6 +394,7 @@ test('upgrade - writer cannot append while behind', async t => {
   const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv1,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -413,6 +435,7 @@ test('upgrade - onindex hook', async t => {
   const a0 = new Autobase(s1.session(), null, {
     apply: applyv0,
     open,
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -421,6 +444,7 @@ test('upgrade - onindex hook', async t => {
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv0,
     open,
+    encryptionKey,
     onindex: async () => {
       const view = b0.view.version
       if (!view.indexedLength) return
@@ -445,6 +469,7 @@ test('upgrade - onindex hook', async t => {
   const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply: applyv1,
     open,
+    encryptionKey,
     onindex: async () => {
       const view = a1.view.version
       if (!view.indexedLength) return
@@ -476,6 +501,7 @@ test('upgrade - onindex hook', async t => {
   const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply: applyv1,
     open,
+    encryptionKey,
     onindex: async () => {
       const view = b1.view.version
       if (!view.indexedLength) return
@@ -496,6 +522,7 @@ test('autobase upgrade - do not proceed', async t => {
   const a0 = new Autobase(s1.session(), null, {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -506,6 +533,7 @@ test('autobase upgrade - do not proceed', async t => {
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -525,6 +553,7 @@ test('autobase upgrade - do not proceed', async t => {
   const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -553,6 +582,7 @@ test('autobase upgrade - proceed', async t => {
   const a0 = new Autobase(s1.session(), null, {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -563,6 +593,7 @@ test('autobase upgrade - proceed', async t => {
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -582,6 +613,7 @@ test('autobase upgrade - proceed', async t => {
   const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -608,6 +640,7 @@ test('autobase upgrade - proceed', async t => {
   const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -626,6 +659,7 @@ test('autobase upgrade - consensus', async t => {
   const a0 = new Autobase(s1.session(), null, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -636,6 +670,7 @@ test('autobase upgrade - consensus', async t => {
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -659,6 +694,7 @@ test('autobase upgrade - consensus', async t => {
   const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -686,6 +722,7 @@ test('autobase upgrade - consensus', async t => {
   const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -706,6 +743,7 @@ test('autobase upgrade - consensus 3 writers', async t => {
   const a0 = new Autobase(s1.session(), null, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -716,6 +754,7 @@ test('autobase upgrade - consensus 3 writers', async t => {
   const b0 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -724,6 +763,7 @@ test('autobase upgrade - consensus 3 writers', async t => {
   const c0 = new Autobase(s3.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -749,12 +789,14 @@ test('autobase upgrade - consensus 3 writers', async t => {
   const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
   const c1 = new Autobase(s3.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -784,6 +826,7 @@ test('autobase upgrade - consensus 3 writers', async t => {
   const b1 = new Autobase(s2.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -808,6 +851,7 @@ test('autobase upgrade - downgrade', async t => {
   const a0 = new Autobase(s1.session(), null, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -824,6 +868,7 @@ test('autobase upgrade - downgrade', async t => {
   const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -848,6 +893,7 @@ test('autobase upgrade - downgrade', async t => {
   const fail = new Autobase(s1.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -862,6 +908,7 @@ test('autobase upgrade - downgrade then restart', async t => {
   const a0 = new Autobase(s1.session(), null, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -878,6 +925,7 @@ test('autobase upgrade - downgrade then restart', async t => {
   const a1 = new Autobase(s1.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -901,6 +949,7 @@ test('autobase upgrade - downgrade then restart', async t => {
   const fail = new Autobase(s1.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -912,6 +961,7 @@ test('autobase upgrade - downgrade then restart', async t => {
   const failAgain = new Autobase(s1.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -930,6 +980,7 @@ test('autobase upgrade - downgrade then restart', async t => {
   const succeed = new Autobase(s1.session(), a0.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -952,6 +1003,7 @@ test('autobase upgrade - upgrade before writer joins', async t => {
   const opts = {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   }
 
@@ -982,6 +1034,7 @@ test('autobase upgrade - fix borked version', async t => {
   const opts = {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   }
 
@@ -1085,6 +1138,7 @@ test('autobase upgrade - downgrade then fix bork', async t => {
   const opts = {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   }
 
@@ -1196,6 +1250,7 @@ test('autobase upgrade - 3 writers always increasing', async t => {
     ackInterval: 0,
     ackThreshold: 0,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   }
 
@@ -1312,6 +1367,7 @@ test('autobase upgrade - non monotonic version', async t => {
   const a = new Autobase(s1.session(), null, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -1322,6 +1378,7 @@ test('autobase upgrade - non monotonic version', async t => {
   const b = new Autobase(s2.session(), a.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -1337,6 +1394,7 @@ test('autobase upgrade - non monotonic version', async t => {
   const a1 = new Autobase(s1.session(), a.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -1359,6 +1417,7 @@ test('autobase upgrade - non monotonic version', async t => {
   const a2 = new Autobase(s1.session(), a.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
@@ -1369,6 +1428,7 @@ test('autobase upgrade - non monotonic version', async t => {
   const a3 = new Autobase(s1.session(), a.bootstrap, {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
+    encryptionKey,
     valueEncoding: 'json'
   })
 
