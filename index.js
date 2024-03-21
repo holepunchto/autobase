@@ -754,10 +754,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _onUpgrade (version) {
-    if (version > this.maxSupportedVersion) {
-      this._onError(new Error('Autobase upgrade required'))
-      return false
-    }
+    if (version > this.maxSupportedVersion) throw new Error('Autobase upgrade required')
     return true
   }
 
@@ -1430,8 +1427,7 @@ module.exports = class Autobase extends ReadyResource {
 
       // autobase version was bumped
       let upgraded = false
-      if (update.version > this.version) {
-        if (!this._onUpgrade(update.version)) return // failed
+      if (update.version > this.version && this._onUpgrade(update.version)) {
         upgraded = true
       }
 
@@ -1496,12 +1492,7 @@ module.exports = class Autobase extends ReadyResource {
       if (this.system.bootstrapping) await this._bootstrap()
 
       if (applyBatch.length && this._hasApply === true) {
-        try {
-          await this._handlers.apply(applyBatch, this.view, this)
-        } catch (err) {
-          this._onError(err)
-          return null
-        }
+        await this._handlers.apply(applyBatch, this.view, this)
       }
 
       update.indexers = !!this.system.indexerUpdate
@@ -1525,8 +1516,7 @@ module.exports = class Autobase extends ReadyResource {
 
       // autobase version was bumped
       let upgraded = false
-      if (update.version > this.version) {
-        if (!this._onUpgrade(update.version)) return // failed
+      if (update.version > this.version && this._onUpgrade(update.version)) {
         upgraded = true
       }
 
