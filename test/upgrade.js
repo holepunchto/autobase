@@ -20,6 +20,7 @@ test('upgrade - do not proceed', async t => {
     apply: applyv0,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -29,6 +30,7 @@ test('upgrade - do not proceed', async t => {
     apply: applyv0,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -49,6 +51,7 @@ test('upgrade - do not proceed', async t => {
     apply: applyv1,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -75,6 +78,7 @@ test('upgrade - proceed', async t => {
     apply: applyv0,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -84,6 +88,7 @@ test('upgrade - proceed', async t => {
     apply: applyv0,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -104,6 +109,7 @@ test('upgrade - proceed', async t => {
     apply: applyv1,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -128,6 +134,7 @@ test('upgrade - proceed', async t => {
     apply: applyv1,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -144,6 +151,7 @@ test('upgrade - consensus', async t => {
     apply: applyv0,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -153,6 +161,7 @@ test('upgrade - consensus', async t => {
     apply: applyv0,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -206,6 +215,7 @@ test('upgrade - consensus', async t => {
     apply: applyv1,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -223,6 +233,7 @@ test('upgrade - consensus 3 writers', async t => {
     apply: applyv0,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -232,6 +243,7 @@ test('upgrade - consensus 3 writers', async t => {
     apply: applyv0,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -241,6 +253,7 @@ test('upgrade - consensus 3 writers', async t => {
     apply: applyv0,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -266,6 +279,7 @@ test('upgrade - consensus 3 writers', async t => {
     apply: applyv1,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -322,6 +336,7 @@ test('upgrade - consensus 3 writers', async t => {
     apply: applyv1,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -344,6 +359,7 @@ test('upgrade - writer cannot append while behind', async t => {
     apply: applyv0,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -353,6 +369,7 @@ test('upgrade - writer cannot append while behind', async t => {
     apply: applyv0,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -362,6 +379,7 @@ test('upgrade - writer cannot append while behind', async t => {
     apply: applyv0,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -387,6 +405,7 @@ test('upgrade - writer cannot append while behind', async t => {
     apply: applyv1,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -398,6 +417,7 @@ test('upgrade - writer cannot append while behind', async t => {
     apply: applyv1,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -439,6 +459,7 @@ test('upgrade - onindex hook', async t => {
     apply: applyv0,
     open,
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -448,6 +469,7 @@ test('upgrade - onindex hook', async t => {
     apply: applyv0,
     open,
     encryptionKey,
+    ackInterval: 0,
     onindex: async () => {
       const view = b0.view.version
       if (!view.indexedLength) return
@@ -473,6 +495,7 @@ test('upgrade - onindex hook', async t => {
     apply: applyv1,
     open,
     encryptionKey,
+    ackInterval: 0,
     onindex: async () => {
       const view = a1.view.version
       if (!view.indexedLength) return
@@ -505,6 +528,7 @@ test('upgrade - onindex hook', async t => {
     apply: applyv1,
     open,
     encryptionKey,
+    ackInterval: 0,
     onindex: async () => {
       const view = b1.view.version
       if (!view.indexedLength) return
@@ -526,6 +550,7 @@ test('autobase upgrade - do not proceed', async t => {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -537,6 +562,7 @@ test('autobase upgrade - do not proceed', async t => {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -557,6 +583,7 @@ test('autobase upgrade - do not proceed', async t => {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -586,6 +613,7 @@ test('autobase upgrade - proceed', async t => {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -597,6 +625,7 @@ test('autobase upgrade - proceed', async t => {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -617,6 +646,7 @@ test('autobase upgrade - proceed', async t => {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -644,6 +674,7 @@ test('autobase upgrade - proceed', async t => {
     apply,
     open: store => store.get('view', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -663,6 +694,7 @@ test('autobase upgrade - consensus', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -674,6 +706,7 @@ test('autobase upgrade - consensus', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -698,6 +731,7 @@ test('autobase upgrade - consensus', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -726,6 +760,7 @@ test('autobase upgrade - consensus', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -747,6 +782,7 @@ test('autobase upgrade - consensus 3 writers', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -758,6 +794,7 @@ test('autobase upgrade - consensus 3 writers', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -767,6 +804,7 @@ test('autobase upgrade - consensus 3 writers', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -793,6 +831,7 @@ test('autobase upgrade - consensus 3 writers', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -800,6 +839,7 @@ test('autobase upgrade - consensus 3 writers', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -830,6 +870,7 @@ test('autobase upgrade - consensus 3 writers', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -855,6 +896,7 @@ test('autobase upgrade - downgrade', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -872,6 +914,7 @@ test('autobase upgrade - downgrade', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -897,6 +940,7 @@ test('autobase upgrade - downgrade', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -912,6 +956,7 @@ test('autobase upgrade - downgrade then restart', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -929,6 +974,7 @@ test('autobase upgrade - downgrade then restart', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -953,6 +999,7 @@ test('autobase upgrade - downgrade then restart', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -965,6 +1012,7 @@ test('autobase upgrade - downgrade then restart', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -984,6 +1032,7 @@ test('autobase upgrade - downgrade then restart', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -1007,6 +1056,7 @@ test('autobase upgrade - upgrade before writer joins', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   }
 
@@ -1038,6 +1088,7 @@ test('autobase upgrade - fix borked version', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   }
 
@@ -1142,6 +1193,7 @@ test('autobase upgrade - downgrade then fix bork', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   }
 
@@ -1371,6 +1423,7 @@ test('autobase upgrade - non monotonic version', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -1382,6 +1435,7 @@ test('autobase upgrade - non monotonic version', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -1398,6 +1452,7 @@ test('autobase upgrade - non monotonic version', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -1421,6 +1476,7 @@ test('autobase upgrade - non monotonic version', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
@@ -1432,6 +1488,7 @@ test('autobase upgrade - non monotonic version', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     encryptionKey,
+    ackInterval: 0,
     valueEncoding: 'json'
   })
 
