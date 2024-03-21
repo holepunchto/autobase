@@ -278,44 +278,25 @@ test('upgrade - consensus 3 writers', async t => {
   await b0.append({ version: 0, data: '4' })
   await replicateAndSync([a1, b0])
 
-  const berror = new Promise((resolve, reject) => b0.once('error', reject))
-  const cerror = new Promise((resolve, reject) => c0.once('error', reject))
-
-  berror.catch(() => {}) // catch error
-  cerror.catch(() => {}) // catch error
-
   await a1.append({ version: 1, data: '5' })
-  await replicateAndSync([a1, b0, c0])
+
+  // error should throw on apply
+  await t.exception(replicateAndSync([a1, b0]), /Upgrade required/)
+  await t.exception(replicateAndSync([a1, c0]), /Upgrade required/)
 
   t.is(a1.view.data.indexedLength, 3)
   t.is(b0.view.data.indexedLength, 3)
   t.is(c0.view.data.indexedLength, 3)
 
-  await b0.append(null)
-  await replicateAndSync([b0, c0])
-  await c0.append(null)
-  await replicateAndSync([b0, c0])
-  await b0.append(null)
-  await replicateAndSync([a1, b0, c0])
+  await t.exception(b0.append(null))
+  await t.exception(c0.append(null))
 
   t.is(a1.view.data.indexedLength, 3)
   t.is(b0.view.data.indexedLength, 3)
   t.is(c0.view.data.indexedLength, 3)
-
-  await c0.append(null)
-  await replicateAndSync([a1, b0, c0])
-  await b0.append(null)
-  await replicateAndSync([a1, b0, c0])
 
   t.is(await b0.view.version.get(b0.view.version.indexedLength - 1), 0)
 
-  await a1.append(null)
-  replicateAndSync([a1, b0, c0])
-
-  await t.exception(berror, /Upgrade required/)
-  await t.exception(cerror, /Upgrade required/)
-
-  t.is(b0.view.data.indexedLength, 3) // should not advance
   t.is(b0.view.data.length, 4)
 
   await b0.close()
