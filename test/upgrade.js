@@ -436,7 +436,7 @@ test('upgrade - writer cannot append while behind', async t => {
   await t.exception(error, /Upgrade required/)
 
   const len = c0.local.length
-  await c0.append({ version: 0, data: '5' })
+  await t.exception(c0.append({ version: 0, data: '5' }))
 
   t.is(c0.local.length, len) // did not append
   t.is(c0.view.data.indexedLength, 3)
@@ -1153,11 +1153,11 @@ test('autobase upgrade - fix borked version', async t => {
   const aerr = new Promise((resolve, reject) => a1.once('error', reject))
   const berr = new Promise((resolve, reject) => b1.once('error', reject))
 
-  a1.append('three', /Block/)
-  b1.append('three', /Block/)
+  a1.append('three')
+  b1.append('three')
 
-  await t.exception(aerr)
-  await t.exception(berr)
+  await t.exception(aerr, /Block/)
+  await t.exception(berr, /Block/)
 
   await a1.close()
   await b1.close()
