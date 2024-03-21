@@ -1034,7 +1034,9 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async initialFastForward (key, length, timeout) {
-    const core = this.store.get(key)
+    const encryptionKey = this._viewStore.getBlockKey(this._viewStore.getSystemCore().name)
+
+    const core = this.store.get({ key, encryptionKey, isBlockKey: true })
     const target = await this._preFastForward(core, length, timeout)
     await core.close()
 
@@ -1183,7 +1185,9 @@ module.exports = class Autobase extends ReadyResource {
 
     const migrated = !b4a.equals(key, this.system.core.key)
 
-    const core = this.store.get(key)
+    const encryptionKey = this._viewStore.getBlockKey(this._viewStore.getSystemCore().name)
+
+    const core = this.store.get({ key, encryptionKey, isBlockKey: true })
     await core.ready()
 
     const from = this.system.core.getBackingCore().length
