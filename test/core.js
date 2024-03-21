@@ -86,8 +86,8 @@ test('core - seek multi writer', async t => {
 
   t.is(a.view.length, 3)
   t.is(a.view.byteLength, 15)
-  t.is(a.view.indexedLength, 1)
-  t.is(a.view.indexedByteLength, 5)
+  t.is(a.view.indexedLength, 2)
+  t.is(a.view.indexedByteLength, 8)
 
   t.alike(a.view.length, b.view.length)
   t.alike(a.view.byteLength, b.view.byteLength)

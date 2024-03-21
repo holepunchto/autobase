@@ -273,7 +273,7 @@ test('autoack - value beneath null values', async t => {
   await confirm([a, b])
 
   await b.append('b0')
-  await b.append(null)
+  await b.append(null) // place null value above tail
 
   await sync([a, b])
 
@@ -281,8 +281,8 @@ test('autoack - value beneath null values', async t => {
   const blen = b.local.length
 
   setTimeout(() => {
-    t.not(a.local.length, alen)
-    t.not(b.local.length, blen)
+    t.not(a.local.length, alen) // a should ack
+    t.is(b.local.length, blen) // b0 is indexed by a's ack (all indexes acked)
     t.is(b.view.length, b.view.indexedLength)
     t.is(a.view.length, a.view.indexedLength)
   }, 100)
