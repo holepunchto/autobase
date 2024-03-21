@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "standard && brittle test/*.js",
-    "test:encrypted": "standard && ENCRYPT_ALL=1 brittle test/*.js",
+    "test:encrypted": "standard && brittle test/*.js --encrypt-all",
     "fuzz:generated": "brittle test/reference/fuzz/generated/*.js",
     "fuzz:main": "node test/fuzz/index.js",
     "fuzz": "node test/reference/fuzz/fuzz.js"

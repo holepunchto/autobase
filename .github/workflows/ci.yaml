@@ -27,14 +27,8 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - run: npm install
-      # - run: npm test
-      - name: test with encrypted
-        run: |
-          if [ $RUNNER_OS == "Windows" ]; then
-            set ENCRYPT_ALL=1 && npm test
-          else
-            export ENCRYPT_ALL=1 && npm test
-          fi
+      - run: npm test
+      - run: npm test:encrypted
   trigger_canary:
     if: startsWith(github.ref, 'refs/tags/') # Only run when a new package is published (detects when a new tag is pushed)
     runs-on: ubuntu-latest
