@@ -279,6 +279,9 @@ test('upgrade - consensus 3 writers', async t => {
   const berror = new Promise((resolve, reject) => b0.once('error', reject))
   const cerror = new Promise((resolve, reject) => c0.once('error', reject))
 
+  berror.catch(() => {}) // catch error
+  cerror.catch(() => {}) // catch error
+
   await a1.append({ version: 1, data: '5' })
   await replicateAndSync([a1, b0, c0])
 
