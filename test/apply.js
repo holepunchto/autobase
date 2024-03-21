@@ -384,15 +384,15 @@ test('apply - simultaneous appends with large batch', async t => {
   await confirm([a, b])
 
   const adds = []
-  for (let i = 2; i < 10; i++) adds.push(addWriter(a, bases[i]))
+  for (let i = 2; i < 9; i++) adds.push(addWriter(a, bases[i]))
   await Promise.all(adds)
 
-  t.is(a.system.members, 10)
+  t.is(a.system.members, 9)
   t.is(b.system.members, 2)
 
   await replicateAndSync([a, b])
 
-  t.is(b.system.members, 10)
+  t.is(b.system.members, 9)
 
   await confirm(bases.slice(0, 9))
 
