@@ -817,7 +817,7 @@ test('autobase upgrade - consensus 3 writers', async t => {
   await t.exception(berror, /Autobase upgrade required/)
 
   t.is((await b0.system.getIndexedInfo()).version, version)
-  t.ok(b0.closed)
+  t.ok(b0.closing)
 
   t.is(b0.view.indexedLength, 3) // should not advance
 
