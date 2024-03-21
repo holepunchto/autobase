@@ -14,6 +14,7 @@ const {
   addWriter,
   addWriterAndSync,
   confirm,
+  encryptionKey,
   eventFlush
 } = require('./helpers')
 
@@ -614,10 +615,10 @@ test('suspend - reopen multiple indexes', async t => {
 test('restart non writer', async t => {
   const [storeA, storeB] = await createStores(2, t)
 
-  const base = new Autobase(storeA, { apply, valueEncoding: 'json', fastForward: false })
+  const base = new Autobase(storeA, { apply, valueEncoding: 'json', fastForward: false, encryptionKey })
   await base.append({ hello: 'world' })
 
-  const other = new Autobase(storeB.session(), base.key, { apply, valueEncoding: 'json' })
+  const other = new Autobase(storeB.session(), base.key, { apply, valueEncoding: 'json', encryptionKey })
 
   await other.ready()
 
@@ -626,7 +627,7 @@ test('restart non writer', async t => {
   await other.close()
   await base.close()
 
-  const other2 = new Autobase(storeB.session(), base.key, { apply, valueEncoding: 'json' })
+  const other2 = new Autobase(storeB.session(), base.key, { apply, valueEncoding: 'json', encryptionKey })
   await t.execution(other2.ready(), 'should be able to start')
   await other2.close()
 })
