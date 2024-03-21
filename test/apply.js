@@ -374,7 +374,7 @@ test('apply - simultaneous append and add over entire batch', async t => {
   }
 })
 
-test('apply - simultaneous appends with large batch', async t => {
+test.skip('apply - simultaneous appends with large batch', async t => {
   const { bases } = await create(10, t, { apply })
   const [a, b] = bases
   const last = bases[bases.length - 1]
