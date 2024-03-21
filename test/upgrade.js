@@ -61,11 +61,7 @@ test('upgrade - do not proceed', async t => {
 
   await a1.append({ version: 1, data: '3' })
 
-  const error = new Promise((resolve, reject) => b0.on('error', reject))
-
-  replicateAndSync([a1, b0])
-
-  await t.exception(error, /Upgrade required/)
+  await t.exception(replicateAndSync([a1, b0]), /Upgrade required/)
 
   t.is(a1.view.data.indexedLength, 4)
   t.is(b0.view.data.indexedLength, 3)
@@ -119,11 +115,7 @@ test('upgrade - proceed', async t => {
 
   await a1.append({ version: 1, data: '3' })
 
-  const error = new Promise((resolve, reject) => b0.on('error', reject))
-
-  replicateAndSync([a1, b0])
-
-  await t.exception(error, /Upgrade required/)
+  await t.exception(replicateAndSync([a1, b0]), /Upgrade required/)
 
   t.is(a1.view.data.indexedLength, 4)
   t.is(b0.view.data.indexedLength, 3)
@@ -195,17 +187,13 @@ test('upgrade - consensus', async t => {
 
   await a1.append({ version: 1, data: '3' })
 
-  const error = new Promise((resolve, reject) => b0.on('error', reject))
-
-  replicateAndSync([a1, b0])
-
   t.is(a1.view.data.indexedLength, 3)
   t.is(b0.view.data.indexedLength, 3)
 
   t.is(a1.view.data.length, 4)
   t.is(b0.view.data.length, 3)
 
-  await t.exception(error, /Upgrade required/)
+  await t.exception(replicateAndSync([a1, b0]), /Upgrade required/)
 
   t.is(b0.view.data.indexedLength, 3) // should not advance
 
@@ -429,11 +417,7 @@ test('upgrade - writer cannot append while behind', async t => {
   t.is(a1.view.data.indexedLength, 4)
   t.is(b1.view.data.indexedLength, 4)
 
-  const error = new Promise((resolve, reject) => c0.on('error', reject))
-
-  replicateAndSync([a1, c0])
-
-  await t.exception(error, /Upgrade required/)
+  await t.exception(replicateAndSync([a1, c0]), /Upgrade required/)
 
   const len = c0.local.length
   await t.exception(c0.append({ version: 0, data: '5' }))
@@ -510,11 +494,7 @@ test('upgrade - onindex hook', async t => {
 
   await a1.append({ version: 1, data: '3' })
 
-  const error = new Promise((resolve, reject) => b0.on('error', reject))
-
-  replicateAndSync([a1, b0])
-
-  await t.exception(error, /Upgrade required/)
+  await t.exception(replicateAndSync([a1, b0]), /Upgrade required/)
 
   t.is(a1.view.data.indexedLength, 4)
   t.is(b0.view.data.indexedLength, 3)
@@ -596,11 +576,7 @@ test('autobase upgrade - do not proceed', async t => {
 
   await a1.append({ data: '3' })
 
-  const error = new Promise((resolve, reject) => b0.on('error', reject))
-
-  replicateAndSync([a1, b0])
-
-  await t.exception(error, /Autobase upgrade required/)
+  await t.exception(replicateAndSync([a1, b0]), /Autobase upgrade required/)
 
   t.is(a1.view.indexedLength, 4)
   t.is(b0.view.indexedLength, 3)
@@ -659,11 +635,7 @@ test('autobase upgrade - proceed', async t => {
 
   await a1.append({ data: '3' })
 
-  const error = new Promise((resolve, reject) => b0.on('error', reject))
-
-  replicateAndSync([a1, b0])
-
-  await t.exception(error, /Autobase upgrade required/)
+  await t.exception(replicateAndSync([a1, b0]), /Autobase upgrade required/)
 
   t.is(a1.view.indexedLength, 4)
   t.is(b0.view.indexedLength, 3)
@@ -853,11 +825,7 @@ test('autobase upgrade - consensus 3 writers', async t => {
   await a1.append({ data: '5' })
   await c1.append({ data: '6' })
 
-  const berror = new Promise((resolve, reject) => b0.once('error', reject))
-
-  confirm([a1, b0, c1])
-
-  await t.exception(berror, /Autobase upgrade required/)
+  await t.exception(confirm([a1, b0, c1]), /Autobase upgrade required/)
 
   t.is((await b0.system.getIndexedInfo()).version, version)
   t.ok(b0.closing)
