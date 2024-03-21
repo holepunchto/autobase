@@ -15,7 +15,8 @@ const {
   confirm,
   replicate,
   compare,
-  compareViews
+  compareViews,
+  encryptionKey
 } = require('./helpers')
 
 test('basic - two writers', async t => {
@@ -727,7 +728,8 @@ test('basic - catch apply throws', async t => {
     apply: applyThrow,
     valueEncoding: 'json',
     ackInterval: 0,
-    ackThreshold: 0
+    ackThreshold: 0,
+    encryptionKey
   })
 
   b.on('error', err => {
