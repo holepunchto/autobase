@@ -511,6 +511,7 @@ test('apply - uncaught exception', async t => {
     async apply (nodes, view, base) {
       throw new Error('Synthetic')
     },
+    encryptionKey,
     valueEncoding: 'json'
   })
 
