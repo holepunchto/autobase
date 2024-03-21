@@ -84,6 +84,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._updates = []
     this._handlers = handlers || {}
+    this._warn = emitWarning.bind(this)
 
     this._advancing = null
     this._advanced = null
@@ -645,7 +646,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _updateAll () {
     const p = []
-    for (const w of this.activeWriters) p.push(w.update())
+    for (const w of this.activeWriters) p.push(w.update().catch(this._warn))
     return Promise.all(p)
   }
 
@@ -1782,4 +1783,9 @@ function crashSoon (err) {
 
 function isObject (obj) {
   return typeof obj === 'object' && obj !== null
+}
+
+function emitWarning (err) {
+  safetyCatch(err)
+  this.emit('warning', err)
 }

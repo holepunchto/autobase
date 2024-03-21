@@ -9,6 +9,7 @@ const {
   replicate,
   replicateAndSync,
   addWriter,
+  encryptionKey,
   confirm
 } = require('./helpers')
 
@@ -460,6 +461,7 @@ test('apply - catch exception', async t => {
     apply: applyThrow,
     valueEncoding: 'json',
     ackInterval: 0,
+    encryptionKey,
     ackThreshold: 0
   })
 
@@ -510,6 +512,7 @@ test('apply - uncaught exception', async t => {
     async apply (nodes, view, base) {
       throw new Error('Synthetic')
     },
+    encryptionKey,
     valueEncoding: 'json'
   })
 
