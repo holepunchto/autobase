@@ -15,6 +15,8 @@ test('framework - base', async t => {
   for (let i = 0; i < view.length; i++) {
     t.is(b4a.toString(await view.get(i)), 'msg')
   }
+
+  await base.close()
 })
 
 test('framework - base - sync', async t => {
@@ -34,6 +36,9 @@ test('framework - base - sync', async t => {
   for (let i = 0; i < view.length; i++) {
     t.is(b4a.toString(await view.get(i)), 'msg')
   }
+
+  await root.close()
+  await base.close()
 })
 
 test('framework - base - unreplicate', async t => {
@@ -57,6 +62,9 @@ test('framework - base - unreplicate', async t => {
 
   t.is(r.view.length, 2)
   t.is(b.view.length, 1)
+
+  await root.close()
+  await base.close()
 })
 
 test('framework - base - add writer', async t => {
@@ -75,6 +83,9 @@ test('framework - base - add writer', async t => {
 
   t.is(root.base.view.length, 1)
   t.is(base.base.view.length, 1)
+
+  await root.close()
+  await base.close()
 })
 
 test('framework - base - 3 indexers', async t => {
@@ -126,11 +137,17 @@ test('framework - base - 3 indexers', async t => {
 
   t.is(root.base.view.length, 0)
   t.is(root.base.view.indexedLength, 0)
+
+  await root.close()
+  await a.close()
+  await b.close()
 })
 
 test('framework - room', async t => {
   const room = new Room(() => RAM.reusable(), { size: 2 })
   await room.ready()
+
+  t.teardown(() => room.close())
 
   t.alike(room.key, room.root.base.bootstrap)
 
@@ -150,7 +167,9 @@ test('framework - room - add writers', async t => {
   const room = new Room(() => RAM.reusable())
   await room.ready()
 
-  room.replicate()
+  t.teardown(() => room.close())
+
+  const net = room.replicate()
 
   const members = await room.createMembers(2)
   await room.addWriters(members, { indexer: true })
@@ -176,6 +195,8 @@ test('framework - room - add writers', async t => {
 test('framework - room - spam', async t => {
   const room = new Room(() => RAM.reusable())
   await room.ready()
+
+  t.teardown(() => room.close())
 
   room.replicate()
 
@@ -207,6 +228,8 @@ test('framework - room - netsplit', async t => {
   await room.addWriters(members, { indexer: true })
 
   const replicated = room.replicate()
+
+  t.teardown(() => room.close())
 
   t.is(room.indexers.length, room.root.base.linearizer.indexers.length)
   t.is(room.indexers.length, 5)
