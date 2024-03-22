@@ -105,6 +105,12 @@ class Base {
       await this.append(this._message(this.messageCount++))
     }
   }
+
+  async close () {
+    await this.replicator.destroy()
+    await this.base.close()
+    await this.store.close()
+  }
 }
 
 // entire autobase system
@@ -256,6 +262,14 @@ class Room {
     }
 
     return Promise.all(complete)
+  }
+
+  async close () {
+    const closing = []
+    for (const member of this.members.values()) {
+      closing.push(member.close())
+    }
+    await Promise.all(closing)
   }
 }
 
