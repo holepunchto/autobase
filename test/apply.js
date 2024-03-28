@@ -500,7 +500,7 @@ test('apply - catch exception', async t => {
 })
 
 test('apply - uncaught exception', async t => {
-  t.plan(2)
+  t.plan(3)
 
   const [store] = await createStores(1, t)
 
@@ -516,7 +516,7 @@ test('apply - uncaught exception', async t => {
     valueEncoding: 'json'
   })
 
-  a.append('trigger')
+  await t.exception(a.append('trigger'))
 
   // should throw uncaught exception
   await t.exception(error, /Synthetic/)
