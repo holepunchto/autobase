@@ -643,7 +643,7 @@ test('fast-forward - upgrade available', async t => {
     })
   })
 
-  replicateAndSync([a1, b1, c0])
+  replicateAndSync([a1, b1, c0]).catch(() => {}) // throws
 
   await t.execution(upgradeEvent)
   await t.execution(upgradeError)
@@ -752,7 +752,7 @@ test('fast-forward - initial ff upgrade available', async t => {
     })
   })
 
-  replicateAndSync([a1, b1, c0])
+  replicateAndSync([a1, b1, c0]).catch(() => {}) // throws
 
   await t.execution(upgradeEvent)
   await t.execution(upgradeError)
