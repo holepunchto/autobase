@@ -1430,7 +1430,7 @@ module.exports = class Autobase extends ReadyResource {
       // autobase version was bumped
       let upgraded = false
       if (update.version > this.version) {
-        this._onUpgrade(update.version)
+        this._onUpgrade(update.version) // throws if not supported
         upgraded = true
       }
 
@@ -1520,7 +1520,7 @@ module.exports = class Autobase extends ReadyResource {
       // autobase version was bumped
       let upgraded = false
       if (update.version > this.version) {
-        this._onUpgrade(update.version)
+        this._onUpgrade(update.version) // throws if not supported
         upgraded = true
       }
 
