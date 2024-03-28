@@ -40,12 +40,11 @@ module.exports = class Autobase extends ReadyResource {
     super()
 
     this.bootstrap = bootstrap ? toKey(bootstrap) : null
+    this.keyPair = handlers.keyPair || null
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
     this.encryptionKey = handlers.encryptionKey || null
     this._primaryBootstrap = null
-
-    this.opts = { valueEncoding: handlers.valueEncoding }
 
     if (this.bootstrap) {
       this._primaryBootstrap = this.store.get({ key: this.bootstrap, compat: false, encryptionKey: this.encryptionKey })
@@ -211,9 +210,13 @@ module.exports = class Autobase extends ReadyResource {
       ? await this._primaryBootstrap.getUserData('autobase/local')
       : null
 
-    if (key) this.opts.key = key
+    const opts = {
+      valueEncoding: this.valueEncoding,
+      keyPair: this.keyPair,
+      key
+    }
 
-    this.local = Autobase.getLocalCore(this.store, this.opts, this.encryptionKey)
+    this.local = Autobase.getLocalCore(this.store, opts, this.encryptionKey)
 
     await this.local.ready()
 
