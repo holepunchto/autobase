@@ -206,14 +206,10 @@ module.exports = class Autobase extends ReadyResource {
   async _openPreSystem () {
     await this.store.ready()
 
-    const key = this._primaryBootstrap
-      ? await this._primaryBootstrap.getUserData('autobase/local')
-      : null
-
     const opts = {
       valueEncoding: this.valueEncoding,
       keyPair: this.keyPair,
-      key
+      key: this._primaryBootstrap ? await this._primaryBootstrap.getUserData('autobase/local') : null
     }
 
     this.local = Autobase.getLocalCore(this.store, opts, this.encryptionKey)
