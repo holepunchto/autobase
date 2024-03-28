@@ -40,6 +40,7 @@ module.exports = class Autobase extends ReadyResource {
     super()
 
     this.bootstrap = bootstrap ? toKey(bootstrap) : null
+    this.keyPair = handlers.keyPair || null
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
     this.encryptionKey = handlers.encryptionKey || null
@@ -50,8 +51,9 @@ module.exports = class Autobase extends ReadyResource {
       this.store = this.store.namespace(this._primaryBootstrap, { detach: false })
     }
 
-    this.local = Autobase.getLocalCore(this.store, handlers, this.encryptionKey)
+    this.local = null
     this.localWriter = null
+
     this.activeWriters = new ActiveWriters()
     this.linearizer = null
     this.updating = false
@@ -204,6 +206,14 @@ module.exports = class Autobase extends ReadyResource {
   async _openPreSystem () {
     await this.store.ready()
 
+    const opts = {
+      valueEncoding: this.valueEncoding,
+      keyPair: this.keyPair,
+      key: this._primaryBootstrap ? await this._primaryBootstrap.getUserData('autobase/local') : null
+    }
+
+    this.local = Autobase.getLocalCore(this.store, opts, this.encryptionKey)
+
     await this.local.ready()
 
     if (this.encryptionKey) {
@@ -228,7 +238,10 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this._primaryBootstrap) {
       await this._primaryBootstrap.ready()
+      this._primaryBootstrap.setUserData('autobase/local', this.local.key)
       if (this.encryptionKey) await this._primaryBootstrap.setUserData('autobase/encryption', this.encryptionKey)
+    } else {
+      this.local.setUserData('autobase/local', this.local.key)
     }
 
     const { bootstrap, system } = await this._loadSystemInfo()

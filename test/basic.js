@@ -8,6 +8,7 @@ const Autobase = require('..')
 
 const {
   create,
+  createBase,
   createStores,
   replicateAndSync,
   addWriter,
@@ -57,8 +58,10 @@ test('basic - writable event fires', async t => {
 
 test('basic - local key pair', async t => {
   const keyPair = crypto.keyPair()
-  const { bases } = await create(1, t, { keyPair })
-  const [base] = bases
+  const [store] = await createStores(1, t)
+
+  const base = await createBase(store, null, t, { keyPair })
+  const key = base.bootstrap
 
   const block = { message: 'hello, world!' }
   await base.append(block)
@@ -66,6 +69,13 @@ test('basic - local key pair', async t => {
   t.is(base.view.indexedLength, 1)
   t.alike(await base.view.get(0), block)
   t.is(base.local.manifest.signers[0].publicKey, keyPair.publicKey)
+
+  await base.close()
+
+  const base2 = await createBase(store, key, t)
+  t.alike(base2.local.key, base.local.key)
+  t.alike(await base2.view.get(0), block)
+  t.is(base2.local.manifest.signers[0].publicKey, keyPair.publicKey)
 })
 
 test('basic - view', async t => {
