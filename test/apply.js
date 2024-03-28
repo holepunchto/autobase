@@ -505,7 +505,7 @@ test('apply - uncaught exception', async t => {
   const [store] = await createStores(1, t)
 
   const error = new Promise((resolve, reject) => {
-    process.on('uncaughtException', reject)
+    process.once('uncaughtException', reject)
   })
 
   const a = new Autobase(store.session(), null, {
