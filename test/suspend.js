@@ -818,12 +818,12 @@ test('suspend - migrations', async t => {
 
   t.is(b2.activeWriters.size, 2)
 
-  await b2.append('final')
+  await b2.append('final') // this indexes a1 (all indexer ack)
 
   await t.execution(replicateAndSync([a, b2]))
 
   t.is(b.view.indexedLength, 3)
-  t.is(b2.view.indexedLength, 3)
+  t.is(b2.view.indexedLength, 4)
   t.is(b2.view.length, b.view.length + 1)
 })
 
@@ -875,12 +875,12 @@ test('suspend - incomplete migrate', async t => {
 
   await replicateAndSync([a, b])
 
-  await a.append('a1')
+  await a.append('a1') // this indexes b0
   await replicateAndSync([a, b])
 
-  await b.append('b1')
+  await b.append('b1') // this indexes a1
 
-  t.is(b.view.indexedLength, 3)
+  t.is(b.view.indexedLength, 4)
   t.is(b.view.signedLength, 2)
 
   await b.close()
@@ -889,11 +889,11 @@ test('suspend - incomplete migrate', async t => {
 
   await b2.ready()
 
-  t.is(a.view.indexedLength, 2)
+  t.is(a.view.indexedLength, 3)
   t.is(a.view.signedLength, 2)
   t.is(a.view.getBackingCore().indexedLength, 2)
 
-  t.is(b2.view.indexedLength, 3)
+  t.is(b2.view.indexedLength, 4)
   t.is(b2.view.signedLength, 2)
   t.is(b2.view.getBackingCore().indexedLength, 2)
 

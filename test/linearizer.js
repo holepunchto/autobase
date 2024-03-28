@@ -480,3 +480,31 @@ test.skip('linearizer - no loop', async t => {
 
   t.not(i, 20)
 })
+
+test('linearizer - all voted', async t => {
+  const { bases } = await create(3, t)
+
+  const [a, b, c] = bases
+
+  let ai = 0
+  let bi = 0
+  let ci = 0
+
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c)
+
+  await confirm(bases)
+
+  await a.append('a' + ai++)
+  await replicateAndSync(bases)
+
+  await b.append('b' + bi++)
+  await replicateAndSync(bases)
+
+  await c.append('c' + ci++)
+  await replicateAndSync(bases)
+
+  t.alike(a.view.indexedLength, 1)
+  t.alike(b.view.indexedLength, 1)
+  t.alike(c.view.indexedLength, 1)
+})
