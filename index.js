@@ -500,6 +500,9 @@ module.exports = class Autobase extends ReadyResource {
 
   async append (value) {
     if (!this.opened) await this.ready()
+
+    if (this.closing) throw new Error('Autobase is closing')
+
     await this._advanced // ensure all local state has been applied, only needed until persistent batches
 
     // if a reset is scheduled await those
@@ -759,11 +762,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _onUpgrade (version) {
-    if (version > this.maxSupportedVersion) {
-      this._onError(new Error('Autobase upgrade required'))
-      return false
-    }
-    return true
+    if (version > this.maxSupportedVersion) throw new Error('Autobase upgrade required')
   }
 
   _addLocalHeads () {
@@ -1436,7 +1435,7 @@ module.exports = class Autobase extends ReadyResource {
       // autobase version was bumped
       let upgraded = false
       if (update.version > this.version) {
-        if (!this._onUpgrade(update.version)) return // failed
+        this._onUpgrade(update.version) // throws if not supported
         upgraded = true
       }
 
@@ -1501,12 +1500,7 @@ module.exports = class Autobase extends ReadyResource {
       if (this.system.bootstrapping) await this._bootstrap()
 
       if (applyBatch.length && this._hasApply === true) {
-        try {
-          await this._handlers.apply(applyBatch, this.view, this)
-        } catch (err) {
-          this._onError(err)
-          return null
-        }
+        await this._handlers.apply(applyBatch, this.view, this)
       }
 
       update.indexers = !!this.system.indexerUpdate
@@ -1531,7 +1525,7 @@ module.exports = class Autobase extends ReadyResource {
       // autobase version was bumped
       let upgraded = false
       if (update.version > this.version) {
-        if (!this._onUpgrade(update.version)) return // failed
+        this._onUpgrade(update.version) // throws if not supported
         upgraded = true
       }
 
