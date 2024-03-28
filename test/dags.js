@@ -413,8 +413,8 @@ test('majority alone - non-convergence', async t => {
 
   await b.append('b' + bi++)
 
-  t.is(b.system.indexedLength, c.system.indexedLength)
-  t.is(b.system.indexedLength, d.system.indexedLength)
+  t.is(b.system.core.indexedLength, c.system.core.indexedLength)
+  t.is(b.system.core.indexedLength, d.system.core.indexedLength)
 
   compareViews([b, c, d], t)
 
