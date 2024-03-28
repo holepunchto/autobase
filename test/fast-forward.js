@@ -635,18 +635,18 @@ test('fast-forward - upgrade available', async t => {
 
   // this should fire when we apply the upgrade
   const upgradeError = new Promise((resolve, reject) => {
-    const timeout = setTimeout(reject, 1000, new Error('did not error'))
+    const timeout = setTimeout(resolve, 1000)
 
-    c0.once('error', () => {
+    c0.once('error', err => {
       clearTimeout(timeout)
-      resolve()
+      reject(err)
     })
   })
 
-  replicateAndSync([a1, b1, c0])
+  replicateAndSync([a1, b1, c0]).catch(() => {}) // throws
 
   await t.execution(upgradeEvent)
-  await t.execution(upgradeError)
+  await t.exception(upgradeError)
 })
 
 test('fast-forward - initial ff upgrade available', async t => {
@@ -744,18 +744,18 @@ test('fast-forward - initial ff upgrade available', async t => {
 
   // this should fire when we apply the upgrade
   const upgradeError = new Promise((resolve, reject) => {
-    const timeout = setTimeout(reject, 1000, new Error('did not error'))
+    const timeout = setTimeout(resolve, 1000)
 
-    c0.once('error', () => {
+    c0.once('error', err => {
       clearTimeout(timeout)
-      resolve()
+      reject(err)
     })
   })
 
-  replicateAndSync([a1, b1, c0])
+  replicateAndSync([a1, b1, c0]).catch(() => {}) // throws
 
   await t.execution(upgradeEvent)
-  await t.execution(upgradeError)
+  await t.exception(upgradeError)
 })
 
 async function isSparse (core) {
