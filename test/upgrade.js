@@ -806,7 +806,12 @@ test('autobase upgrade - consensus 3 writers', async t => {
   await a1.append({ data: '5' })
   await c1.append({ data: '6' })
 
-  await t.exception(confirm([a1, b0, c1]), /Autobase upgrade required/)
+  const error = new Promise((resolve, reject) => {
+    b0.on('error', reject)
+  })
+
+  confirm([a1, b0, c1])
+  await t.exception(error, /Autobase upgrade required/)
 
   t.is((await b0.system.getIndexedInfo()).version, version)
   t.ok(b0.closing)
