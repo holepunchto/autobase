@@ -897,7 +897,8 @@ module.exports = class Autobase extends ReadyResource {
       // force reset state in worst case
       if (this._queueViewReset && this._appending === null) {
         this._queueViewReset = false
-        await this._forceResetViews()
+        const sysCore = this.system.core.getBackingCore()
+        await this._forceResetViews(sysCore.indexedLength)
         continue
       }
 
@@ -1024,8 +1025,7 @@ module.exports = class Autobase extends ReadyResource {
     await this._advanced
   }
 
-  async _forceResetViews () {
-    const length = this.system.core.getBackingCore().indexedLength
+  async _forceResetViews (length) {
     const info = await this.system.getIndexedInfo(length)
 
     this._undoAll()
