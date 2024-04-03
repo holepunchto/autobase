@@ -505,11 +505,62 @@ test('topolist - reorder then shift reordered', function (t) {
   t.is(u.length, 7)
 })
 
-function makeNode (key, length, dependencies, value = null) {
+test('topolist - with versions', function (t) {
+  const tip = new Topolist()
+  const tip2 = new Topolist()
+
+  const a0 = makeNode('a', 0, [])
+  const b0 = makeNode('b', 0, [])
+  const c0 = makeNode('c', 0, [b0])
+  const c1 = makeNode('c', 1, [], { version: 1 })
+  const b1 = makeNode('b', 1, [c0])
+  const d0 = makeNode('d', 0, [c0], { version: 0 })
+  const c2 = makeNode('c', 2, [b1], { version: 1 })
+
+  tip.add(b0)
+  tip.add(c0)
+  tip.add(c1)
+  tip.add(b1)
+  tip.add(d0)
+  tip.add(c2)
+
+  tip.mark()
+
+  t.is(tip.undo, 0)
+  t.is(tip.shared, 6)
+
+  tip.add(a0)
+
+  t.is(tip.undo, 6)
+  t.is(tip.shared, 0)
+
+  tip2.add(b0)
+  tip2.add(d0)
+  tip2.add(c1)
+  tip2.add(b1)
+  tip2.add(c0)
+  tip2.add(a0)
+  tip2.add(c2)
+
+  console.log('tip', tip.print())
+  console.log('tip2', tip2.print())
+  const yielded = [a0, b0, c0, c1, c2, b1]
+  for (const n of yielded) n.yielded = true
+
+  const u = tip.flush(yielded)
+
+  t.is(u.undo, 6)
+  t.is(u.shared, 0)
+  t.is(u.indexed.length, 6)
+  t.is(u.length, 7)
+})
+
+function makeNode (key, length, dependencies, { version = 0, value = null } = {}) {
   const node = {
     writer: { core: { key: b4a.from(key) } },
     length,
     dependents: new Set(),
+    version,
     value
   }
 
