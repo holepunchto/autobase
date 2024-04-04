@@ -14,6 +14,7 @@ const {
   addWriter,
   addWriterAndSync,
   confirm,
+  encryptionKey,
   eventFlush
 } = require('./helpers')
 
@@ -614,10 +615,10 @@ test('suspend - reopen multiple indexes', async t => {
 test('restart non writer', async t => {
   const [storeA, storeB] = await createStores(2, t)
 
-  const base = new Autobase(storeA, { apply, valueEncoding: 'json', fastForward: false })
+  const base = new Autobase(storeA, { apply, valueEncoding: 'json', fastForward: false, encryptionKey })
   await base.append({ hello: 'world' })
 
-  const other = new Autobase(storeB.session(), base.key, { apply, valueEncoding: 'json' })
+  const other = new Autobase(storeB.session(), base.key, { apply, valueEncoding: 'json', encryptionKey })
 
   await other.ready()
 
@@ -626,7 +627,7 @@ test('restart non writer', async t => {
   await other.close()
   await base.close()
 
-  const other2 = new Autobase(storeB.session(), base.key, { apply, valueEncoding: 'json' })
+  const other2 = new Autobase(storeB.session(), base.key, { apply, valueEncoding: 'json', encryptionKey })
   await t.execution(other2.ready(), 'should be able to start')
   await other2.close()
 })
@@ -817,12 +818,12 @@ test('suspend - migrations', async t => {
 
   t.is(b2.activeWriters.size, 2)
 
-  await b2.append('final')
+  await b2.append('final') // this indexes a1 (all indexer ack)
 
   await t.execution(replicateAndSync([a, b2]))
 
   t.is(b.view.indexedLength, 3)
-  t.is(b2.view.indexedLength, 3)
+  t.is(b2.view.indexedLength, 4)
   t.is(b2.view.length, b.view.length + 1)
 })
 
@@ -874,12 +875,12 @@ test('suspend - incomplete migrate', async t => {
 
   await replicateAndSync([a, b])
 
-  await a.append('a1')
+  await a.append('a1') // this indexes b0
   await replicateAndSync([a, b])
 
-  await b.append('b1')
+  await b.append('b1') // this indexes a1
 
-  t.is(b.view.indexedLength, 3)
+  t.is(b.view.indexedLength, 4)
   t.is(b.view.signedLength, 2)
 
   await b.close()
@@ -888,11 +889,11 @@ test('suspend - incomplete migrate', async t => {
 
   await b2.ready()
 
-  t.is(a.view.indexedLength, 2)
+  t.is(a.view.indexedLength, 3)
   t.is(a.view.signedLength, 2)
   t.is(a.view.getBackingCore().indexedLength, 2)
 
-  t.is(b2.view.indexedLength, 3)
+  t.is(b2.view.indexedLength, 4)
   t.is(b2.view.signedLength, 2)
   t.is(b2.view.getBackingCore().indexedLength, 2)
 

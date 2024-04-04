@@ -161,6 +161,11 @@ test('no inconsistent entries when using snapshot core in bee (bee snapshot)', a
   t.alike(keys2PreMerge, keys2PostMerge)
 
   t.is(hasTruncated, true) // Sanity check
+  t.is(bee1.core.indexedLength, 3, 'indexedLength increased')
+  t.is(bee1.version, 3, 'version did not change')
+
+  t.is(bee2.core.indexedLength, 2, 'indexedLength did not change')
+  t.is(bee2.version, 4, 'version did not change')
 })
 
 test('check cloning detached snapshot', async t => {

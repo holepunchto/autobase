@@ -8,6 +8,7 @@ const Autobase = require('..')
 
 const {
   create,
+  createBase,
   createStores,
   replicateAndSync,
   addWriter,
@@ -57,8 +58,10 @@ test('basic - writable event fires', async t => {
 
 test('basic - local key pair', async t => {
   const keyPair = crypto.keyPair()
-  const { bases } = await create(1, t, { keyPair })
-  const [base] = bases
+  const [store] = await createStores(1, t)
+
+  const base = await createBase(store, null, t, { keyPair })
+  const key = base.bootstrap
 
   const block = { message: 'hello, world!' }
   await base.append(block)
@@ -66,6 +69,13 @@ test('basic - local key pair', async t => {
   t.is(base.view.indexedLength, 1)
   t.alike(await base.view.get(0), block)
   t.is(base.local.manifest.signers[0].publicKey, keyPair.publicKey)
+
+  await base.close()
+
+  const base2 = await createBase(store, key, t)
+  t.alike(base2.local.key, base.local.key)
+  t.alike(await base2.view.get(0), block)
+  t.is(base2.local.manifest.signers[0].publicKey, keyPair.publicKey)
 })
 
 test('basic - view', async t => {
@@ -717,53 +727,6 @@ test('basic - isAutobase', async t => {
   t.is(await Autobase.isAutobase(base3.local), true)
 })
 
-test('basic - catch apply throws', async t => {
-  t.plan(1)
-
-  const { bases } = await create(1, t)
-  const [a] = bases
-
-  const b = new Autobase(new Corestore(ram, { primaryKey: Buffer.alloc(32).fill(1) }), a.local.key, {
-    apply: applyThrow,
-    valueEncoding: 'json',
-    ackInterval: 0,
-    ackThreshold: 0
-  })
-
-  b.on('error', err => {
-    t.pass(!!err)
-  })
-
-  await b.ready()
-
-  const timeout = setTimeout(() => t.fail(), 1000)
-
-  t.teardown(async () => {
-    clearTimeout(timeout)
-    await a.close()
-    await b.close()
-  })
-
-  replicate([a, b])
-
-  await addWriter(a, b)
-  await a.update()
-
-  await a.append('trigger')
-
-  async function applyThrow (batch, view, base) {
-    for (const node of batch) {
-      if (node.value.add) {
-        await base.addWriter(b4a.from(node.value.add, 'hex'))
-      }
-
-      if (node.value === 'trigger') {
-        throw new Error('Syntehtic.')
-      }
-    }
-  }
-})
-
 test('basic - non-indexed writer', async t => {
   const { bases } = await create(2, t, { apply: applyWriter })
   const [a, b] = bases
@@ -978,7 +941,8 @@ test('basic - oplog digest', async t => {
   const last = await base1.local.get(1)
 
   t.is(last.digest.pointer, 0)
-  t.is(last.digest.indexers?.length, 2)
+  t.is(base2.system.core.getBackingCore().manifest.signers.length, 2)
+  t.alike(last.digest.key, base2.system.core.key)
 })
 
 // todo: use normal helper once we have hypercore session manager
@@ -998,12 +962,14 @@ test('basic - close during apply', async t => {
         await core.get(core.length) // can never resolve
       }
     },
+    open: store => store.get('test'),
     valueEncoding: 'json'
   })
 
-  const promise = a.append('hello')
+  const promise = a.append('trigger')
   setImmediate(() => a.close())
 
+  // should not throw when closing
   await t.execution(promise)
 })
 

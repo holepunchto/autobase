@@ -2,7 +2,8 @@ const test = require('brittle')
 const tmpDir = require('test-tmp')
 const cenc = require('compact-encoding')
 
-const { SystemPointer } = require('../lib/messages')
+const Autobase = require('..')
+const { BootRecord } = require('../lib/messages')
 
 const {
   addWriterAndSync,
@@ -11,8 +12,12 @@ const {
   eventFlush,
   confirm,
   create,
+  apply,
+  createStores,
   createBase
 } = require('./helpers')
+
+const IS_MAC_OSX = os.platform() === 'darwin'
 
 test('fast-forward - simple', async t => {
   t.plan(1)
@@ -221,8 +226,8 @@ test('fast-forward - multiple queues', async t => {
   let done = false
 
   {
-    const pointer = await d.local.getUserData('autobase/system')
-    const { indexed } = cenc.decode(SystemPointer, pointer)
+    const pointer = await d.local.getUserData('autobase/boot')
+    const { indexed } = cenc.decode(BootRecord, pointer)
     t.is(indexed.length, to)
 
     done = to > midLength
@@ -239,8 +244,8 @@ test('fast-forward - multiple queues', async t => {
   const final = await next
 
   {
-    const pointer = await d.local.getUserData('autobase/system')
-    const { indexed } = cenc.decode(SystemPointer, pointer)
+    const pointer = await d.local.getUserData('autobase/boot')
+    const { indexed } = cenc.decode(BootRecord, pointer)
     t.is(indexed.length, final)
   }
 })
@@ -375,6 +380,379 @@ test('fast-forward - force reset then ff', async t => {
 
   t.ok(sparse > 0)
   t.comment('sparse blocks: ' + sparse)
+})
+
+test('fast-forward - initial fast forward', async t => {
+  t.plan(3)
+
+  const { bases } = await create(2, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b] = bases
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append('a' + i)
+  }
+
+  await addWriterAndSync(a, b)
+
+  t.is(a.linearizer.indexers.length, 2)
+
+  await a.append('lets index some nodes')
+  await confirm([a, b])
+
+  for (let i = 0; i < 1000; i++) {
+    await b.append('b' + i)
+  }
+
+  await confirm([a, b])
+
+  const fastForward = {
+    key: a.system.core.key,
+    length: a.system.core.signedLength
+  }
+
+  const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
+  const c = await createBase(store.session(), a.bootstrap, t, { fastForward })
+
+  await replicateAndSync([a, b, c])
+  const core = c.system.core.getBackingCore()
+  const sparse = await isSparse(core)
+
+  t.is(c.linearizer.indexers.length, 2)
+
+  t.ok(fastForward.length - sparse < 10)
+
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+})
+
+test('fast-forward - initial ff after multiple migrate', async t => {
+  t.plan(3)
+
+  const { bases } = await create(5, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b, c, d, e] = bases
+
+  for (let i = 0; i < 300; i++) {
+    await a.append('a' + i)
+  }
+
+  await addWriterAndSync(a, b)
+  await confirm(bases)
+
+  for (let i = 0; i < 300; i++) {
+    await b.append('b' + i)
+  }
+
+  await addWriterAndSync(b, c)
+  await confirm(bases)
+
+  for (let i = 0; i < 300; i++) {
+    await c.append('c' + i)
+  }
+
+  await addWriterAndSync(c, d)
+  await confirm(bases)
+
+  for (let i = 0; i < 300; i++) {
+    await d.append('d' + i)
+  }
+
+  await addWriterAndSync(d, e)
+  await confirm(bases)
+
+  for (let i = 0; i < 300; i++) {
+    await e.append('e' + i)
+  }
+
+  await confirm(bases)
+
+  const sys = a.system.core.getBackingCore()
+  t.is(sys.manifest.signers.length, 5)
+
+  const fastForward = {
+    key: sys.key,
+    length: sys.indexedLength
+  }
+
+  const [store] = await createStores(1, t, { offset: 5, storage: () => tmpDir(t) })
+  const latecomer = await createBase(store.session(), a.bootstrap, t, { fastForward })
+
+  await replicateAndSync([...bases, latecomer])
+  const core = latecomer.system.core.getBackingCore()
+  const sparse = await isSparse(core)
+
+  t.is(latecomer.linearizer.indexers.length, 5)
+
+  t.ok(fastForward.length - sparse < 10)
+
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+})
+
+test('fast-forward - ignore bogus initial ff', async t => {
+  t.plan(3)
+
+  const { bases } = await create(2, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b] = bases
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append('a' + i)
+  }
+
+  await addWriterAndSync(a, b)
+  await confirm(bases)
+
+  for (let i = 0; i < 1000; i++) {
+    await b.append('b' + i)
+  }
+
+  const sys = a.system.core.getBackingCore()
+  t.is(sys.manifest.signers.length, 2)
+
+  const key = Buffer.from(sys.key)
+  key[0] ^= 0xff
+
+  const fastForward = {
+    key,
+    length: sys.indexedLength,
+    timeout: 1500
+  }
+
+  const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
+  const latecomer = await createBase(store.session(), a.bootstrap, t, { fastForward })
+
+  await replicateAndSync([...bases, latecomer])
+  const core = latecomer.system.core.getBackingCore()
+  const sparse = await isSparse(core)
+
+  t.is(latecomer.linearizer.indexers.length, 2)
+
+  t.absent(latecomer.fastForwardTo) // fastForward was cleared
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+})
+
+test('fast-forward - upgrade available', async t => {
+  const [s1, s2, s3] = await createStores(3, t)
+
+  const a = new Autobase(s1.session(), null, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  await a.ready()
+
+  const version = a.maxSupportedVersion
+
+  const b = new Autobase(s2.session(), a.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  await b.ready()
+
+  await addWriterAndSync(a, b)
+  await confirm([a, b])
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append('a' + i)
+  }
+
+  await confirm([a, b])
+
+  await a.close()
+  await b.close()
+
+  const a1 = new Autobase(s1.session(), a.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+  // simulate version upgrade
+  a1.maxSupportedVersion = version + 1
+
+  const b1 = new Autobase(s2.session(), a.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  // simulate version upgrade
+  b1.maxSupportedVersion = version + 1
+
+  await a1.ready()
+
+  await a1.append('2')
+  await confirm([a1, b1])
+
+  t.is(a1.view.indexedLength, 1001)
+  t.is(b1.view.indexedLength, 1001)
+
+  t.is(a1.system.version, version + 1)
+  t.is(b1.system.version, version + 1)
+
+  for (let i = 0; i < 1000; i++) {
+    await b1.append('b' + i)
+  }
+
+  await confirm([a1, b1])
+
+  const c0 = new Autobase(s3.session(), a.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json',
+    fastForward: true
+  })
+
+  await c0.ready()
+
+  // this should fire when we try to fast forward
+  const upgradeEvent = new Promise((resolve, reject) => {
+    const timeout = setTimeout(reject, 1000, new Error('event did not fire'))
+
+    c0.once('upgrade-available', upgrade => {
+      clearTimeout(timeout)
+      t.is(upgrade.version, version + 1)
+      resolve()
+    })
+  })
+
+  // this should fire when we apply the upgrade
+  const upgradeError = new Promise((resolve, reject) => {
+    const timeout = setTimeout(resolve, 1000)
+
+    c0.once('error', err => {
+      clearTimeout(timeout)
+      reject(err)
+    })
+  })
+
+  replicateAndSync([a1, b1, c0]).catch(() => {}) // throws
+
+  await t.execution(upgradeEvent)
+  await t.exception(upgradeError)
+})
+
+test('fast-forward - initial ff upgrade available', async t => {
+  const [s1, s2, s3] = await createStores(3, t)
+
+  const a = new Autobase(s1.session(), null, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  await a.ready()
+
+  const version = a.maxSupportedVersion
+
+  const b = new Autobase(s2.session(), a.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  await b.ready()
+
+  await addWriterAndSync(a, b)
+  await confirm([a, b])
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append('a' + i)
+  }
+
+  await confirm([a, b])
+
+  await a.close()
+  await b.close()
+
+  const a1 = new Autobase(s1.session(), a.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+  // simulate version upgrade
+  a1.maxSupportedVersion = version + 1
+
+  const b1 = new Autobase(s2.session(), a.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json'
+  })
+
+  // simulate version upgrade
+  b1.maxSupportedVersion = version + 1
+
+  await a1.ready()
+
+  await a1.append('2')
+  await confirm([a1, b1])
+
+  t.is(a1.view.indexedLength, 1001)
+  t.is(b1.view.indexedLength, 1001)
+
+  t.is(a1.system.version, version + 1)
+  t.is(b1.system.version, version + 1)
+
+  for (let i = 0; i < 1000; i++) {
+    await b1.append('b' + i)
+  }
+
+  await confirm([a1, b1])
+
+  const fastForward = {
+    key: a1.system.core.key,
+    length: a1.system.core.getBackingCore().indexedLength
+  }
+
+  const c0 = new Autobase(s3.session(), a.bootstrap, {
+    apply,
+    open: store => store.get('test', { valueEncoding: 'json' }),
+    valueEncoding: 'json',
+    fastForward
+  })
+
+  await c0.ready()
+
+  // this should fire when we try to fast forward
+  const upgradeEvent = new Promise((resolve, reject) => {
+    const timeout = setTimeout(reject, 1000, new Error('event did not fire'))
+
+    c0.once('upgrade-available', upgrade => {
+      clearTimeout(timeout)
+      t.is(upgrade.version, version + 1)
+      t.is(upgrade.length, fastForward.length)
+      resolve()
+    })
+  })
+
+  // this should fire when we apply the upgrade
+  const upgradeError = new Promise((resolve, reject) => {
+    const timeout = setTimeout(resolve, 1000)
+
+    c0.once('error', err => {
+      clearTimeout(timeout)
+      reject(err)
+    })
+  })
+
+  replicateAndSync([a1, b1, c0]).catch(() => {}) // throws
+
+  await t.execution(upgradeEvent)
+  await t.exception(upgradeError)
 })
 
 async function isSparse (core) {

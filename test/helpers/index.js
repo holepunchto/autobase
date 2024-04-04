@@ -5,7 +5,8 @@ const same = require('same-data')
 const b4a = require('b4a')
 
 const Autobase = require('../..')
-const encryptionKey = process.env && process.env.ENCRYPT_ALL ? b4a.alloc(32).fill('autobase-encryption-test') : undefined
+const argv = typeof global.Bare !== 'undefined' ? global.Bare.argv : process.argv
+const encryptionKey = argv.includes('--encrypt-all') ? b4a.alloc(32).fill('autobase-encryption-test') : undefined
 
 module.exports = {
   createStores,
@@ -18,6 +19,7 @@ module.exports = {
   printTip,
   compare,
   compareViews,
+  encryptionKey,
   ...helpers
 }
 
@@ -60,6 +62,7 @@ async function createBase (store, key, t, opts = {}) {
     valueEncoding: 'json',
     ackInterval: 0,
     ackThreshold: 0,
+    encryptionKey,
     fastForward: false,
     ...opts
   }

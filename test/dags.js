@@ -27,14 +27,19 @@ test('simple 2', async t => {
   await b.append('b' + bi++)
   await replicateAndSync(bases)
 
+  // all indexers voted over a0
+  t.alike(a.view.indexedLength, 1)
+  t.alike(b.view.indexedLength, 1)
+
   await a.append('a' + ai++)
   await replicateAndSync(bases)
 
   // await b.append('b' + bi++)
   await replicateAndSync(bases)
 
-  t.alike(a.view.indexedLength, 1)
-  t.alike(b.view.indexedLength, 1)
+  // all indexers voted over b0
+  t.alike(a.view.indexedLength, 2)
+  t.alike(b.view.indexedLength, 2)
 
   compareViews([a, b], t)
 
@@ -413,8 +418,8 @@ test('majority alone - non-convergence', async t => {
 
   await b.append('b' + bi++)
 
-  t.is(b.system.indexedLength, c.system.indexedLength)
-  t.is(b.system.indexedLength, d.system.indexedLength)
+  t.is(b.system.core.indexedLength, c.system.core.indexedLength)
+  t.is(b.system.core.indexedLength, d.system.core.indexedLength)
 
   compareViews([b, c, d], t)
 

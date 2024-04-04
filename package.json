@@ -1,10 +1,11 @@
 {
   "name": "autobase",
-  "version": "6.0.0-rc2",
+  "version": "6.0.0-rc9",
   "description": "",
   "main": "index.js",
   "scripts": {
     "test": "standard && brittle test/flake.js",
+    "test:encrypted": "standard && brittle test/*.js --encrypt-all",
     "fuzz:generated": "brittle test/reference/fuzz/generated/*.js",
     "fuzz:main": "node test/fuzz/index.js",
     "fuzz": "node test/reference/fuzz/fuzz.js"
@@ -21,16 +22,17 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/holepunchto/autobase-next.git"
+    "url": "git+https://github.com/holepunchto/autobase.git"
   },
   "author": "Holepunch",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/holepunchto/autobase-next/issues"
+    "url": "https://github.com/holepunchto/autobase/issues"
   },
-  "homepage": "https://github.com/holepunchto/autobase-next#readme",
+  "homepage": "https://github.com/holepunchto/autobase#readme",
   "dependencies": {
     "b4a": "^1.6.1",
+    "bare-events": "^2.2.0",
     "debounceify": "^1.0.0",
     "hyperbee": "^2.15.0",
     "hypercore": "^10.33.0",
@@ -41,9 +43,6 @@
     "safety-catch": "^1.0.2",
     "sub-encoder": "^2.1.1",
     "tiny-buffer-map": "^1.1.1"
-  },
-  "optionalDependencies": {
-    "bare-events": "^2.2.0"
   },
   "devDependencies": {
     "autobase-test-helpers": "^2.0.1",

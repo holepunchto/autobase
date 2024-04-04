@@ -15,15 +15,16 @@ const Writer = require('./lib/writer')
 const ActiveWriters = require('./lib/active-writers')
 const AutoWakeup = require('./lib/wakeup')
 
-const { AUTOBASE_VERSION } = require('./lib/constants')
-
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 
+const AUTOBASE_VERSION = 1
+
 // default is to automatically ack
-const DEFAULT_ACK_INTERVAL = 10 * 1000
+const DEFAULT_ACK_INTERVAL = 10_000
 const DEFAULT_ACK_THRESHOLD = 4
 
 const FF_THRESHOLD = 16
+const DEFAULT_FF_TIMEOUT = 60_000
 
 const REMOTE_ADD_BATCH = 64
 
@@ -39,6 +40,7 @@ module.exports = class Autobase extends ReadyResource {
     super()
 
     this.bootstrap = bootstrap ? toKey(bootstrap) : null
+    this.keyPair = handlers.keyPair || null
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
     this.encryptionKey = handlers.encryptionKey || null
@@ -49,14 +51,20 @@ module.exports = class Autobase extends ReadyResource {
       this.store = this.store.namespace(this._primaryBootstrap, { detach: false })
     }
 
-    this.local = Autobase.getLocalCore(this.store, handlers, this.encryptionKey)
+    this.local = null
     this.localWriter = null
+
     this.activeWriters = new ActiveWriters()
     this.linearizer = null
     this.updating = false
 
-    this.fastForwardingTo = handlers.fastForward !== false ? 0 : -1
+    this.fastForwardEnabled = handlers.fastForward !== false
+    this.fastForwarding = false
     this.fastForwardTo = null
+
+    if (this.fastForwardEnabled && isObject(handlers.fastForward)) {
+      this.fastForwardTo = handlers.fastForward
+    }
 
     this._checkWriters = []
     this._appending = null
@@ -67,7 +75,6 @@ module.exports = class Autobase extends ReadyResource {
     this._applying = null
     this._updatingCores = false
     this._localDigest = null
-    this._maybeUpdateDigest = true
     this._needsWakeup = true
     this._needsWakeupHeads = true
     this._addCheckpoints = false
@@ -79,6 +86,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._updates = []
     this._handlers = handlers || {}
+    this._warn = emitWarning.bind(this)
 
     this._advancing = null
     this._advanced = null
@@ -198,6 +206,14 @@ module.exports = class Autobase extends ReadyResource {
   async _openPreSystem () {
     await this.store.ready()
 
+    const opts = {
+      valueEncoding: this.valueEncoding,
+      keyPair: this.keyPair,
+      key: this._primaryBootstrap ? await this._primaryBootstrap.getUserData('autobase/local') : null
+    }
+
+    this.local = Autobase.getLocalCore(this.store, opts, this.encryptionKey)
+
     await this.local.ready()
 
     if (this.encryptionKey) {
@@ -222,7 +238,10 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this._primaryBootstrap) {
       await this._primaryBootstrap.ready()
+      this._primaryBootstrap.setUserData('autobase/local', this.local.key)
       if (this.encryptionKey) await this._primaryBootstrap.setUserData('autobase/encryption', this.encryptionKey)
+    } else {
+      this.local.setUserData('autobase/local', this.local.key)
     }
 
     const { bootstrap, system } = await this._loadSystemInfo()
@@ -230,7 +249,7 @@ module.exports = class Autobase extends ReadyResource {
     this.version = system
       ? system.version
       : this.bootstrap && !b4a.equals(this.bootstrap, this.local.key)
-        ? 0
+        ? -1
         : this.maxSupportedVersion
 
     this.bootstrap = bootstrap
@@ -240,11 +259,11 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _loadSystemInfo () {
-    const pointer = await this.local.getUserData('autobase/system')
+    const pointer = await this.local.getUserData('autobase/boot')
     const bootstrap = this.bootstrap || (await this.local.getUserData('referrer')) || this.local.key
     if (!pointer) return { bootstrap, system: null }
 
-    const { indexed, views } = c.decode(messages.SystemPointer, pointer)
+    const { indexed, views } = c.decode(messages.BootRecord, pointer)
     const { key, length } = indexed
 
     this._systemPointer = length
@@ -260,6 +279,10 @@ module.exports = class Autobase extends ReadyResource {
     const system = new SystemView(core, length)
 
     await system.ready()
+
+    if (system.version > this.maxSupportedVersion) {
+      throw new Error('Autobase upgrade required')
+    }
 
     this._initialViews = [{ name: '_system', key, length }]
 
@@ -281,7 +304,8 @@ module.exports = class Autobase extends ReadyResource {
       await this._viewStore.flush()
     } catch (err) {
       safetyCatch(err)
-      await this.local.setUserData('autobase/system', null)
+      await this.local.setUserData('autobase/boot', null)
+      this.store.close().catch(safetyCatch)
       throw err
     }
 
@@ -296,10 +320,27 @@ module.exports = class Autobase extends ReadyResource {
 
     // load previous digest if available
     if (this.localWriter && !this.system.bootstrapping) {
-      await this._updateDigest()
+      await this._restoreLocalState()
+    }
+
+    if (this.fastForwardTo !== null) {
+      const { key, length, timeout } = this.fastForwardTo
+      this.fastForwardTo = null // will get reset once ready
+
+      this.initialFastForward(key, length, timeout || DEFAULT_FF_TIMEOUT)
     }
 
     if (this.localWriter && this._ackInterval) this._startAckTimer()
+  }
+
+  async _restoreLocalState () {
+    const version = await this.localWriter.getVersion()
+    if (version > this.maxSupportedVersion) {
+      this.store.close().catch(safetyCatch)
+      throw new Error('Autobase version cannot be downgraded')
+    }
+
+    await this._updateDigest()
   }
 
   async _open () {
@@ -338,6 +379,14 @@ module.exports = class Autobase extends ReadyResource {
   _onError (err) {
     if (this.closing) return
     this.close().catch(safetyCatch)
+
+    // if no one is listening we should crash! we cannot rely on the EE here
+    // as this is wrapped in a promise so instead of nextTick throw it
+    if (ReadyResource.listenerCount(this, 'error') === 0) {
+      crashSoon(err)
+      return
+    }
+
     this.emit('error', err)
   }
 
@@ -414,7 +463,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _isFastForwarding () {
     if (this.fastForwardTo !== null) return true
-    return this.fastForwardingTo > 0 && this.fastForwardingTo > this.system.core.getBackingCore().length
+    return this.fastForwardEnabled && this.fastForwarding
   }
 
   _backgroundAck () {
@@ -464,6 +513,9 @@ module.exports = class Autobase extends ReadyResource {
 
   async append (value) {
     if (!this.opened) await this.ready()
+
+    if (this.closing) throw new Error('Autobase is closing')
+
     await this._advanced // ensure all local state has been applied, only needed until persistent batches
 
     // if a reset is scheduled await those
@@ -548,12 +600,16 @@ module.exports = class Autobase extends ReadyResource {
   // no guarantees where the user data is stored, just that its associated with the base
   async setUserData (key, val) {
     await this._presystem
-    await this._primaryBootstrap.setUserData(key, val)
+    const core = this._primaryBootstrap === null ? this.local : this._primaryBootstrap
+
+    await core.setUserData(key, val)
   }
 
   async getUserData (key) {
     await this._presystem
-    return await this._primaryBootstrap.getUserData(key)
+    const core = this._primaryBootstrap === null ? this.local : this._primaryBootstrap
+
+    return await core.getUserData(key)
   }
 
   getNamespace (key, core) {
@@ -610,7 +666,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _updateAll () {
     const p = []
-    for (const w of this.activeWriters) p.push(w.update())
+    for (const w of this.activeWriters) p.push(w.update().catch(this._warn))
     return Promise.all(p)
   }
 
@@ -644,7 +700,6 @@ module.exports = class Autobase extends ReadyResource {
   _updateLinearizer (indexers, heads) {
     this.linearizer = new Linearizer(indexers, { heads, writers: this.activeWriters })
     this._addCheckpoints = !!(this.localWriter && (this.localWriter.isIndexer || this._isPending()))
-    this._maybeUpdateDigest = true
     this._updateAckThreshold()
   }
 
@@ -658,12 +713,9 @@ module.exports = class Autobase extends ReadyResource {
     await bootstrap.ready()
 
     this._updateLinearizer([bootstrap], [])
-    this._updateDigest([bootstrap])
   }
 
   async _makeLinearizer (sys) {
-    this._maybeUpdateDigest = true
-
     if (sys === null) {
       return this._bootstrapLinearizer()
     }
@@ -688,15 +740,17 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _reindex (nodes) {
-    this._maybeUpdateDigest = true
-
-    if (nodes) {
+    if (nodes && nodes.length) {
       this._undoAll()
       await this.system.update()
     }
 
+    const sameIndexers = this.system.sameIndexers(this.linearizer.indexers)
+
     await this._makeLinearizer(this.system)
-    await this._viewStore.migrate()
+    if (!sameIndexers) await this._viewStore.migrate()
+
+    this.version = this.system.version
 
     this.queueFastForward()
 
@@ -721,13 +775,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _onUpgrade (version) {
-    if (version > this.maxSupportedVersion) {
-      this._onError(new Error('Autobase upgrade required'))
-      return false
-    }
-
-    this.version = version
-    return true
+    if (version > this.maxSupportedVersion) throw new Error('Autobase upgrade required')
   }
 
   _addLocalHeads () {
@@ -777,7 +825,7 @@ module.exports = class Autobase extends ReadyResource {
     return added
   }
 
-  async _advanceSystemPointer (length) {
+  async _advanceBootRecord (length) {
     if (length) { // TODO: remove when we are 100% we never hit the return in this if
       const { views } = await this.system.getIndexedInfo(length)
       for (const { key, length } of views) {
@@ -798,12 +846,17 @@ module.exports = class Autobase extends ReadyResource {
       views[core.systemIndex] = core.name
     }
 
-    await this._setSystemPointer(this.system.core.key, length, this.system.heads, views)
+    await this._setBootRecord(this.system.core.key, length, this.system.heads, views)
   }
 
-  async _setSystemPointer (key, length, heads, views) {
-    const pointer = c.encode(messages.SystemPointer, { indexed: { key, length }, heads, views })
-    await this.local.setUserData('autobase/system', pointer)
+  async _setBootRecord (key, length, heads, views) {
+    const pointer = c.encode(messages.BootRecord, {
+      indexed: { key, length },
+      heads,
+      views
+    })
+
+    await this.local.setUserData('autobase/boot', pointer)
   }
 
   async _drain () {
@@ -835,7 +888,7 @@ module.exports = class Autobase extends ReadyResource {
       if (this.closing) return
 
       const flushed = (await this._flushIndexes()) ? this.system.core.getBackingCore().flushedLength : this._systemPointer
-      if (this.updating || flushed > this._systemPointer) await this._advanceSystemPointer(flushed)
+      if (this.updating || flushed > this._systemPointer) await this._advanceBootRecord(flushed)
 
       if (indexed) await this.onindex(this)
 
@@ -844,7 +897,8 @@ module.exports = class Autobase extends ReadyResource {
       // force reset state in worst case
       if (this._queueViewReset && this._appending === null) {
         this._queueViewReset = false
-        await this._forceResetViews()
+        const sysCore = this.system.core.getBackingCore()
+        await this._forceResetViews(sysCore.indexedLength)
         continue
       }
 
@@ -863,9 +917,9 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _getLocallyStoredHeads () {
-    const buffer = await this.local.getUserData('autobase/system')
+    const buffer = await this.local.getUserData('autobase/boot')
     if (!buffer) return []
-    return c.decode(messages.SystemPointer, buffer).heads
+    return c.decode(messages.BootRecord, buffer).heads
   }
 
   async _drainWakeup () { // TODO: parallel load the writers here later
@@ -971,17 +1025,16 @@ module.exports = class Autobase extends ReadyResource {
     await this._advanced
   }
 
-  async _forceResetViews () {
-    const length = this.system.core.getBackingCore().indexedLength
+  async _forceResetViews (length) {
     const info = await this.system.getIndexedInfo(length)
 
     this._undoAll()
     this._systemPointer = length
 
-    const pointer = await this.local.getUserData('autobase/system')
-    const { views } = c.decode(messages.SystemPointer, pointer)
+    const pointer = await this.local.getUserData('autobase/boot')
+    const { views } = c.decode(messages.BootRecord, pointer)
 
-    await this._setSystemPointer(this.system.core.key, length, info.heads, views)
+    await this._setBootRecord(this.system.core.key, length, info.heads, views)
 
     for (const { key, length } of info.views) {
       const core = this._viewStore.getByKey(key)
@@ -997,46 +1050,78 @@ module.exports = class Autobase extends ReadyResource {
     await this._makeLinearizer(this.system)
   }
 
-  // NOTE: runs in parallel with everything, can never fail
+  async initialFastForward (key, length, timeout) {
+    const encryptionKey = this._viewStore.getBlockKey(this._viewStore.getSystemCore().name)
+
+    const core = this.store.get({ key, encryptionKey, isBlockKey: true })
+    const target = await this._preFastForward(core, length, timeout)
+    await core.close()
+
+    // initial fast-forward failed
+    if (target === null) return
+
+    for (const w of this.activeWriters) w.pause()
+
+    this.fastForwarding = false
+    this.fastForwardTo = target
+
+    this._bumpAckTimer()
+    this._queueBump()
+  }
+
   async queueFastForward () {
     // if already FFing, let the finish. TODO: auto kill the attempt after a while and move to latest?
-    if (this.fastForwardingTo !== 0) return
+    if (!this.fastForwardEnabled || this.fastForwarding) return
 
     const core = this.system.core.getBackingCore()
 
     if (core.session.length <= core.length + FF_THRESHOLD) return
     if (this.fastForwardTo !== null && core.session.length <= this.fastForwardTo.length + FF_THRESHOLD) return
 
-    this.fastForwardingTo = core.session.length
-    this._bumpAckTimer()
+    const target = await this._preFastForward(core.session, core.session.length, null)
 
-    const fastForwardTo = {
-      key: core.session.key,
-      length: this.fastForwardingTo,
-      migrate: null
-    }
+    // fast-forward failed
+    if (target === null) return
+
+    // if it migrated underneath us, ignore for now
+    if (core !== this.system.core.getBackingCore()) return
+
+    for (const w of this.activeWriters) w.pause()
+
+    this.fastForwardTo = target
+
+    this._bumpAckTimer()
+    this._queueBump()
+  }
+
+  // NOTE: runs in parallel with everything, can never fail
+  async _preFastForward (core, length, timeout) {
+    this.fastForwarding = true
+
+    const info = { key: core.key, length }
 
     try {
       // sys runs open with wait false, so get head block first for low complexity
-      if (!(await core.session.has(this.fastForwardingTo - 1))) {
-        await core.session.get(this.fastForwardingTo - 1)
+      if (!(await core.has(length - 1))) {
+        await core.get(length - 1, { timeout })
       }
 
-      const system = new SystemView(core.session.session(), this.fastForwardingTo)
+      const system = new SystemView(core.session(), length)
       await system.ready()
 
       if (system.version > this.maxSupportedVersion) {
         const upgrade = {
           version: system.version,
-          length: this.fastForwardingTo
+          length
         }
 
-        this.fastForwardingTo = 0
+        this.fastForwarding = false
         this.emit('upgrade-available', upgrade)
-        return
+        return null
       }
 
-      const migrated = system.sameIndexers(this.linearizer.indexers)
+      const systemShouldMigrate = b4a.equals(core.key, this.system.core.key) &&
+        !system.sameIndexers(this.linearizer.indexers)
 
       const indexers = []
       const pendingViews = []
@@ -1047,26 +1132,6 @@ module.exports = class Autobase extends ReadyResource {
         await core.ready()
         indexers.push({ core, length })
       }
-
-      let sysCore = system.core
-
-      // handle system migration
-      if (migrated) {
-        const idx = []
-        for (const { key } of system.indexers) idx.push(await this._getWriterByKey(key))
-
-        const hash = sysCore.core.tree.hash()
-        const name = this.system.core._source.name
-        const prologue = { hash, length: this.fastForwardingTo }
-        const key = this.deriveKey(name, idx, prologue)
-
-        await sysCore.close() // close unused session
-
-        fastForwardTo.migrate = { key }
-        sysCore = this.store.get(key)
-      }
-
-      pendingViews.push({ core: sysCore, length: this.fastForwardingTo })
 
       // handle rest of views
       for (const v of system.views) {
@@ -1081,42 +1146,48 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const promises = []
-
       for (const { core, length } of indexers) {
-        if (core.length === 0 && length > 0) promises.push(core.get(length - 1))
+        if (core.length === 0 && length > 0) promises.push(core.get(length - 1, { timeout }))
       }
 
       for (const { core, length } of pendingViews) {
         // we could just get the hash here, but likely user wants the block so yolo
-        promises.push(core.get(length - 1))
+        promises.push(core.get(length - 1, { timeout }))
       }
 
       await Promise.all(promises)
 
-      for (const { core } of pendingViews) {
-        await core.close()
+      const closing = []
+
+      // handle system migration
+      if (systemShouldMigrate) {
+        const hash = system.core.core.tree.hash()
+        const name = this.system.core._source.name
+        const prologue = { hash, length }
+
+        info.key = this.deriveKey(name, indexers, prologue)
+
+        const core = this.store.get(info.key)
+        await core.get(length - 1)
+
+        closing.push(core.close())
       }
 
-      await system.close()
+      for (const { core } of pendingViews) {
+        closing.push(core.close())
+      }
+
+      closing.push(system.close())
+
+      await Promise.allSettled(closing)
     } catch (err) {
-      this.fastForwardingTo = 0
       safetyCatch(err)
-      return
+      return null
+    } finally {
+      this.fastForwarding = false
     }
 
-    // if it migrated underneath us, ignore for now
-    if (core !== this.system.core.getBackingCore()) {
-      this.fastForwardingTo = 0
-      return
-    }
-
-    for (const w of this.activeWriters) w.pause()
-
-    this.fastForwardingTo = 0
-    this.fastForwardTo = fastForwardTo
-
-    this._bumpAckTimer()
-    this._queueBump()
+    return info
   }
 
   _clearFastForward () {
@@ -1126,34 +1197,53 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _applyFastForward () {
-    const core = this.system.core.getBackingCore()
-    const from = core.length
-
     // remember these in case another fast forward gets queued
-    const { key, length, migrate } = this.fastForwardTo
+    const { key, length } = this.fastForwardTo
+
+    const migrated = !b4a.equals(key, this.system.core.key)
+
+    const encryptionKey = this._viewStore.getBlockKey(this._viewStore.getSystemCore().name)
+
+    const core = this.store.get({ key, encryptionKey, isBlockKey: true })
+    await core.ready()
+
+    const from = this.system.core.getBackingCore().length
 
     // just extra sanity check
     // TODO: if we simply load the core from the corestore the key check isn't needed
     // getting rid of that is essential for dbl ff, but for now its ok with some safety from migrations
-    if (!b4a.equals(core.key, key) || length <= from) {
+    if (length <= from) {
       this._clearFastForward()
       return
     }
 
-    const system = new SystemView(core.session.session(), length)
+    const system = new SystemView(core.session(), length)
     await system.ready()
 
     const indexers = [] // only used in migrate branch
-    if (migrate) {
+    const prologues = [] // only used in migrate branch
+
+    // preload async state
+    if (migrated) {
       for (const { key } of system.indexers) {
-        indexers.push(await this._getWriterByKey(key))
+        const core = this.store.get(key)
+        await core.ready()
+        indexers.push({ core })
+        await core.close()
+      }
+
+      for (const { key } of system.views) {
+        const core = this.store.get(key)
+        await core.ready()
+        prologues.push(core.manifest.prologue)
+        await core.close()
       }
     }
 
     const views = new Map()
 
     const sysView = this.system.core._source
-    const sysInfo = { key: migrate ? migrate.key : key, length }
+    const sysInfo = { key, length }
 
     views.set(sysView, sysInfo)
 
@@ -1164,17 +1254,15 @@ module.exports = class Autobase extends ReadyResource {
       let view = this._viewStore.getByKey(v.key)
 
       // search for corresponding view
-      if (!view && migrate) {
+      if (!view) {
         for (view of this._viewStore.opened.values()) {
-          const hash = view.core.session.core.tree.hash()
-          const key = this.deriveKey(view.name, indexers, { hash, length: v.length })
-
+          const key = this.deriveKey(view.name, indexers, prologues[i])
           if (b4a.equals(key, v.key)) break
           view = null
         }
       }
 
-      if (!view || view.core.session.length < v.length) {
+      if (!view) {
         this._clearFastForward() // something wrong somewhere, likely a bug, just safety
         return
       }
@@ -1200,7 +1288,10 @@ module.exports = class Autobase extends ReadyResource {
     await this.system.update()
 
     await this._makeLinearizer(this.system)
-    await this._advanceSystemPointer(length)
+    await this._advanceBootRecord(length)
+
+    // manually set the digest
+    if (migrated) this._setDigest(key)
 
     const to = length
 
@@ -1256,7 +1347,6 @@ module.exports = class Autobase extends ReadyResource {
 
     // If we are getting added as indexer, already start adding checkpoints while we get confirmed...
     if (writer === this.localWriter && isIndexer) this._addCheckpoints = true
-    if (isIndexer) this._maybeUpdateDigest = true
 
     // fetch any nodes needed for dependents
     this._queueBump()
@@ -1265,14 +1355,12 @@ module.exports = class Autobase extends ReadyResource {
   // triggered from apply
   async removeWriter (key) { // just compat for old version
     assert(this._applying !== null, 'System changes are only allowed in apply')
-    const wasIndexer = await this.system.remove(key)
+    await this.system.remove(key)
 
     if (b4a.equals(key, this.local.key)) {
       if (this._addCheckpoints) this._pendingRemoval = true
       else this.localWriter = null // immediately remove
     }
-
-    if (wasIndexer) this._maybeUpdateDigest = true
 
     this._queueBump()
   }
@@ -1360,13 +1448,17 @@ module.exports = class Autobase extends ReadyResource {
       // autobase version was bumped
       let upgraded = false
       if (update.version > this.version) {
-        if (!this._onUpgrade(update.version)) return // failed
+        this._onUpgrade(update.version) // throws if not supported
         upgraded = true
       }
 
       if (!update.indexers && !upgraded) continue
 
       this._queueIndexFlush(i)
+
+      // we have to set the digest here so it is
+      // flushed to local appends in same iteration
+      await this._updateDigest()
 
       return u.indexed.slice(i).concat(u.tip)
     }
@@ -1389,7 +1481,7 @@ module.exports = class Autobase extends ReadyResource {
 
       batch++
 
-      if (this.system.addHead(node)) this._maybeUpdateDigest = true
+      this.system.addHead(node)
 
       if (node.value !== null) {
         applyBatch.push({
@@ -1404,7 +1496,8 @@ module.exports = class Autobase extends ReadyResource {
       if (node.batch > 1) continue
 
       if (versionUpgrade) {
-        this.system.version = await this._checkVersion()
+        const version = await this._checkVersion()
+        this.system.version = version === -1 ? node.version : version
       }
 
       const update = {
@@ -1420,12 +1513,7 @@ module.exports = class Autobase extends ReadyResource {
       if (this.system.bootstrapping) await this._bootstrap()
 
       if (applyBatch.length && this._hasApply === true) {
-        try {
-          await this._handlers.apply(applyBatch, this.view, this)
-        } catch (err) {
-          this._onError(err)
-          return null
-        }
+        await this._handlers.apply(applyBatch, this.view, this)
       }
 
       update.indexers = !!this.system.indexerUpdate
@@ -1450,7 +1538,7 @@ module.exports = class Autobase extends ReadyResource {
       // autobase version was bumped
       let upgraded = false
       if (update.version > this.version) {
-        if (!this._onUpgrade(update.version)) return // failed
+        this._onUpgrade(update.version) // throws if not supported
         upgraded = true
       }
 
@@ -1458,11 +1546,14 @@ module.exports = class Autobase extends ReadyResource {
 
       // indexer set has updated
       this._queueIndexFlush(i + 1)
+      await this._updateDigest() // see above
+
       return u.indexed.slice(i + 1).concat(u.tip)
     }
 
     if (u.indexed.length) {
       this._queueIndexFlush(u.indexed.length)
+      await this._updateDigest() // see above
     }
 
     return null
@@ -1485,8 +1576,11 @@ module.exports = class Autobase extends ReadyResource {
         ? this.system.views[view.systemIndex].length
         : 0
 
-      const needsKey = !length || indexerUpdate
-      const key = needsKey ? await view.deriveKey(indexers, length) : null
+      const key = indexers.length > 1 && indexerUpdate
+        ? await view.deriveKey(indexers, length + view.appending)
+        : view.systemIndex === -1
+          ? view.key
+          : null
 
       views.push({ view, key })
     }
@@ -1495,6 +1589,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _checkVersion () {
+    if (!this.system.indexers.length) return -1
+
     const maj = (this.system.indexers.length >> 1) + 1
 
     const fetch = []
@@ -1519,7 +1615,7 @@ module.exports = class Autobase extends ReadyResource {
       tally.set(this.maxSupportedVersion, local)
     }
 
-    for (const { versionSignal: version } of heads) {
+    for (const { maxSupportedVersion: version } of heads) {
       let v = tally.get(version)
 
       if (!v) {
@@ -1565,58 +1661,48 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _updateDigest () {
-    this._maybeUpdateDigest = false
     if (!this._addCheckpoints) return
 
     if (this._localDigest === null) {
       this._localDigest = await this.localWriter.getDigest()
 
+      // no previous digest available
       if (this._localDigest === null) {
-        this._localDigest = {
-          pointer: 0,
-          indexers: []
-        }
+        this._setDigest(this.system.core.key)
       }
+
       return
     }
 
-    const indexers = []
-
+    // we predict what the system key will be after flushing
     const pending = this.system.core._source.pendingIndexedLength
     const info = await this.system.getIndexedInfo(pending)
 
+    const p = []
     for (const { key } of info.indexers) {
-      const w = await this._getWriterByKey(key)
-      indexers.push({
-        signature: 0,
-        namespace: w.core.manifest.signers[0].namespace,
-        publicKey: w.core.manifest.signers[0].publicKey
-      })
+      p.push(await this._getWriterByKey(key))
     }
 
-    let same = indexers.length === this._localDigest.indexers.length
+    const indexers = await p
 
-    for (let i = 0; i < indexers.length; i++) {
-      if (!same) break
+    const sys = this._viewStore.getSystemCore()
+    const key = await sys.deriveKey(indexers, pending)
 
-      const a = indexers[i]
-      const b = this._localDigest.indexers[i]
+    if (this._localDigest.key && b4a.equals(key, this._localDigest.key)) return
 
-      if (a.signature !== b.signature || !b4a.equals(a.namespace, b.namespace) || !b4a.equals(a.publicKey, b.publicKey)) {
-        same = false
-      }
-    }
+    this._setDigest(key)
+  }
 
-    if (same) return
-
+  _setDigest (key) {
+    if (this._localDigest === null) this._localDigest = {}
+    this._localDigest.key = key
     this._localDigest.pointer = 0
-    this._localDigest.indexers = indexers
   }
 
   _generateDigest () {
     return {
       pointer: this._localDigest.pointer,
-      indexers: this._localDigest.indexers
+      key: this._localDigest.key
     }
   }
 
@@ -1633,7 +1719,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _flushLocal (localNodes) {
-    if (this._maybeUpdateDigest) await this._updateDigest()
+    if (!this._localDigest) await this._updateDigest()
 
     const cores = this._addCheckpoints ? this._viewStore.getIndexedCores() : []
     const blocks = new Array(localNodes.length)
@@ -1642,19 +1728,16 @@ module.exports = class Autobase extends ReadyResource {
       const { value, heads, batch } = localNodes[i]
 
       blocks[i] = {
-        version: 0,
-        digest: this._addCheckpoints ? this._generateDigest() : null,
+        version: 1,
+        maxSupportedVersion: this.maxSupportedVersion,
         checkpoint: this._addCheckpoints ? await generateCheckpoint(cores) : null,
+        digest: this._addCheckpoints ? this._generateDigest() : null,
         node: {
           heads,
           batch,
           value: value === null ? null : c.encode(this.valueEncoding, value)
         },
-        additional: {
-          pointer: 0,
-          data: {}
-        },
-        versionSignal: this.maxSupportedVersion
+        trace: []
       }
 
       if (this._addCheckpoints) this._localDigest.pointer++
@@ -1703,3 +1786,17 @@ function random2over1 (n) {
 }
 
 function noop () {}
+
+function crashSoon (err) {
+  queueMicrotask(() => { throw err })
+  throw err
+}
+
+function isObject (obj) {
+  return typeof obj === 'object' && obj !== null
+}
+
+function emitWarning (err) {
+  safetyCatch(err)
+  this.emit('warning', err)
+}
