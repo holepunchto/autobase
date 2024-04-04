@@ -918,16 +918,16 @@ module.exports = class Autobase extends ReadyResource {
 
   progress () {
     let processed = 0
-    let available = 0
+    let total = 0
 
     for (const w of this.activeWriters) {
-      available += w.core.length
       processed += w.length
+      total += w.core.length
     }
 
     return {
-      available,
-      processed
+      processed,
+      total
     }
   }
 
