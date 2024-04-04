@@ -90,6 +90,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._advancing = null
     this._advanced = null
+    this.reindexing = false
 
     this._bump = debounceify(() => {
       this._advancing = this._advance()
@@ -316,6 +317,10 @@ module.exports = class Autobase extends ReadyResource {
       await this._initialSystem.close()
       this._initialSystem = null
       this._initialViews = null
+    } else {
+      // check if this is a v0 base
+      const record = await this.getUserData('autobase/system')
+      if (record !== null) this.emit('reindexing')
     }
 
     // load previous digest if available
@@ -351,9 +356,12 @@ module.exports = class Autobase extends ReadyResource {
 
     this.system.requestWakeup()
 
+    // set reindexing for initial bump
+    this.reindexing = true
+
     // queue a full bump that handles wakeup etc (not legal to wait for that here)
     this._queueBump()
-    this._advanced = this._advancing
+    this._advanced = this._advancing.then(() => { this.reindexing = false }, safetyCatch)
 
     this.queueFastForward()
   }
