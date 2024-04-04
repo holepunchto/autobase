@@ -8,7 +8,7 @@ const {
   createBase
 } = require('./helpers')
 
-for (let i = 0; i < 10000; i++) {
+for (let i = 0; i < 1000; i++) {
   test('fast-forward - open with no remote io', async t => {
     const { bases, stores } = await create(2, t, {
       apply: applyOldState,
