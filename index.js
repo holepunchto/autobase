@@ -165,7 +165,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   get reindexing () {
-    return this._indexing
+    return this._reindexing === true
   }
 
   replicate (init, opts) {
