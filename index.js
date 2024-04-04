@@ -324,10 +324,7 @@ module.exports = class Autobase extends ReadyResource {
     } else {
       // check if this is a v0 base
       const record = await this.getUserData('autobase/system')
-      if (record !== null) {
-        this.emit('reindex')
-        this._reindexing = true
-      }
+      if (record !== null) this.emit('reindexing')
     }
 
     // load previous digest if available
@@ -362,6 +359,9 @@ module.exports = class Autobase extends ReadyResource {
     await this._wakeup.ready()
 
     this.system.requestWakeup()
+
+    // set reindexing for initial bump
+    this._reindexing = true
 
     // queue a full bump that handles wakeup etc (not legal to wait for that here)
     this._queueBump()
