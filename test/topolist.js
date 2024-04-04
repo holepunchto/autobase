@@ -555,6 +555,32 @@ test('topolist - with versions', function (t) {
   t.is(u.length, 7)
 })
 
+
+test.solo('topolist - with versions', function (t) {
+  const tip = new Topolist()
+
+  const a = []
+  const b = []
+
+  for (let i = 0; i < 10; i++) {
+    const deps = []
+    if (i > 0) deps.push(a[i - 1])
+    a.push(makeNode('a', i, deps))
+  }
+
+  for (let i = 0; i < 10; i++) {
+    const deps = []
+    if (i > 0) deps.push(a[i - 1])
+    if (i > 0) deps.push(b[i - 1])
+    b.push(makeNode('b', i, deps, { version: 1 }))
+  }
+
+  for (const node of b) tip.add(node)
+  for (const node of a) tip.add(node)
+
+  console.log('tip', tip.print())
+})
+
 function makeNode (key, length, dependencies, { version = 0, value = null } = {}) {
   const node = {
     writer: { core: { key: b4a.from(key) } },
