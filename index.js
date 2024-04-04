@@ -5,6 +5,7 @@ const c = require('compact-encoding')
 const safetyCatch = require('safety-catch')
 const hypercoreId = require('hypercore-id-encoding')
 const assert = require('nanoassert')
+const SignalPromise = require('signal-promise')
 
 const Linearizer = require('./lib/linearizer')
 const AutoStore = require('./lib/store')
@@ -131,7 +132,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._initialSystem = null
     this._initialViews = null
-    this._waits = []
+    this._waiting = new SignalPromise()
 
     this.system = new SystemView(this._viewStore.get({ name: '_system', exclusive: true, cache: true }))
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
@@ -371,7 +372,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async _close () {
     await Promise.resolve() // defer one tick
-    this._triggerWaits()
+    this._waiting.notify(null)
 
     const closing = this._advancing.catch(safetyCatch)
 
@@ -437,25 +438,11 @@ module.exports = class Autobase extends ReadyResource {
     this._ackTimer.bump()
   }
 
-  _triggerWaits () {
-    while (this._waits.length) this._waits[this._waits.length - 1]()
-  }
-
   async _waitForIdle () {
     let p = this.progress()
     while (!this.closing) {
       if (p.processed === p.total && !(this.linearizer.indexers.length === 1 && this.linearizer.indexers[0].core.length === 0)) return
-      const wait = new Promise((resolve) => {
-        const done = () => {
-          clearTimeout(timeout)
-          this._waits[i] = null
-          while (this._waits[this._waits.length - 1] === null) this._waits.pop()
-          resolve()
-        }
-        const timeout = setTimeout(done, 2000)
-        const i = this._waits.push(done) - 1
-      })
-      await wait
+      await this._waiting.wait(2000)
       await this._bump()
       const next = this.progress()
       if (next.processed === p.processed && next.total === p.total) return
@@ -1022,7 +1009,7 @@ module.exports = class Autobase extends ReadyResource {
     if (this.updating === true) {
       this.updating = false
       this.emit('update')
-      this._triggerWaits()
+      this._waiting.notify(null)
     }
 
     await this._gcWriters()
