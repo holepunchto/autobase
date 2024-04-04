@@ -916,13 +916,19 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  pendingBlocks () {
-    let pending = 0
+  progress () {
+    let processed = 0
+    let available = 0
+
     for (const w of this.activeWriters) {
-      pending += w.core.length - w.length
+      available += w.core.length
+      processed += w.length
     }
 
-    return pending
+    return {
+      pendingBlocks: available - processed,
+      percentage: available / processed
+    }
   }
 
   async _getLocallyStoredHeads () {
