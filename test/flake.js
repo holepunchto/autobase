@@ -60,7 +60,9 @@ for (let i = 0; i < 1000; i++) {
       apply: applyOldState
     })
 
+    b2.debug = true
     await b2.ready()
+    console.log('READY')
     await t.execution(b2.ready())
 
     async function applyOldState (batch, view, base) {

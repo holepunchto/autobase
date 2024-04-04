@@ -359,20 +359,27 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _close () {
+    if (this.debug) console.log('awaiting promise...')
     await Promise.resolve() // defer one tick
 
     const closing = this._advancing.catch(safetyCatch)
 
+    if (this.debug) console.log('awaiting ack timer closing...')
     if (this._ackTimer) {
       this._ackTimer.stop()
       await this._ackTimer.flush()
     }
 
+    if (this.debug) console.log('awaiting wakeup closing...')
     await this._wakeup.close()
 
+    if (this.debug) console.log('awaiting handlers closing...')
     if (this._hasClose) await this._handlers.close(this.view)
+    if (this.debug) console.log('awaiting primary closing...')
     if (this._primaryBootstrap) await this._primaryBootstrap.close()
+    if (this.debug) console.log('awaiting store closing...')
     await this.store.close()
+    if (this.debug) console.log('awaiting closing...')
     await closing
   }
 
