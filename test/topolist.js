@@ -507,15 +507,15 @@ test('topolist - reorder then shift reordered', function (t) {
 
 test('topolist - with versions', function (t) {
   const tip = new Topolist()
-  const tip2 = new Topolist()
 
   const a0 = makeNode('a', 0, [])
   const b0 = makeNode('b', 0, [])
   const c0 = makeNode('c', 0, [b0])
   const c1 = makeNode('c', 1, [], { version: 1 })
   const b1 = makeNode('b', 1, [c0])
-  const d0 = makeNode('d', 0, [c0], { version: 0 })
-  const c2 = makeNode('c', 2, [b1], { version: 1 })
+  const d0 = makeNode('d', 0, [c0])
+  const c2 = makeNode('c', 2, [d0], { version: 1 })
+  const d1 = makeNode('d', 1, [])
 
   tip.add(b0)
   tip.add(c0)
@@ -523,38 +523,16 @@ test('topolist - with versions', function (t) {
   tip.add(b1)
   tip.add(d0)
   tip.add(c2)
+  tip.add(a0)
+
+  t.is(tip.tip[tip.tip.length - 1], c2)
 
   tip.mark()
 
+  tip.add(d1)
+
   t.is(tip.undo, 0)
-  t.is(tip.shared, 6)
-
-  tip.add(a0)
-
-  t.is(tip.undo, 6)
-  t.is(tip.shared, 0)
-
-  tip2.add(b0)
-  tip2.add(d0)
-  tip2.add(c1)
-  tip2.add(b1)
-  tip2.add(c0)
-  tip2.add(a0)
-  tip2.add(c2)
-
-  console.log('tip', tip.print())
-  console.log('tip2', tip2.print())
-  const yielded = [a0, b0, c0, c1, c2, b1]
-  for (const n of yielded) n.yielded = true
-
-  const u = tip.flush(yielded)
-
-  t.is(u.undo, 6)
-  t.is(u.shared, 0)
-  t.is(u.indexed.length, 6)
-  t.is(u.length, 7)
 })
-
 
 test('topolist - version sort fuzz', function (t) {
   const nodes = []
@@ -569,7 +547,7 @@ test('topolist - version sort fuzz', function (t) {
   writers.push(writer('b', 1))
   writers.push(writer('c', 1))
 
-  writers[1].setVersion(1)
+  writers[1].version = 1 // bump version
 
   let lastVersionNode
 
@@ -578,14 +556,14 @@ test('topolist - version sort fuzz', function (t) {
     const writer = getRandom(writers)
     const deps = []
     for (const w of writers) {
-      if (w === writer || w.getVersion() > writer.getVersion() || Math.random() < 0.5) continue
+      if (w === writer || w.version > writer.version || Math.random() < 0.5) continue
       if (w.head()) deps.push(w.head())
     }
 
     nodes.push(writer.add(deps))
     if (nodes.length === NODES / 2) {
       lastVersionNode = writer.head()
-      writers[2].setVersion(1)
+      writers[2].version = 1 // bump version
     }
   }
 
@@ -594,7 +572,6 @@ test('topolist - version sort fuzz', function (t) {
 
   // store previous tip
   let prev
-  const tail = []
 
   // loop many times adding nodes randomly
   for (let i = 0; i < nodes.length * 2; i++) {
@@ -646,25 +623,21 @@ function makeNode (key, length, dependencies, { version = 0, value = key + lengt
   return node
 }
 
-function writer (key) {
-  let count = 0
-  let version = 0
-  let nodes = []
+function writer (key, version = 0) {
   return {
     add (dependencies) {
       const head = this.head()
       if (head) dependencies.push(head)
-      const node = makeNode(key, count++, [...dependencies], { version })
-      nodes.push(node)
+      const node = makeNode(key, this.nodes.length, [...dependencies], { version: this.version })
+      this.nodes.push(node)
       return node
     },
-    getVersion () { return version },
-    setVersion (v) { version = v },
+    version,
     head () {
-      if (nodes.length === 0) return null
-      return nodes[nodes.length - 1]
+      if (this.nodes.length === 0) return null
+      return this.nodes[this.nodes.length - 1]
     },
-    nodes
+    nodes: []
   }
 }
 
