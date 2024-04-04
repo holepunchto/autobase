@@ -916,6 +916,21 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  progress () {
+    let processed = 0
+    let total = 0
+
+    for (const w of this.activeWriters) {
+      processed += w.length
+      total += w.core.length
+    }
+
+    return {
+      processed,
+      total
+    }
+  }
+
   async _getLocallyStoredHeads () {
     const buffer = await this.local.getUserData('autobase/boot')
     if (!buffer) return []
