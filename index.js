@@ -938,8 +938,8 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return {
-      pendingBlocks: available - processed,
-      percentage: available / processed
+      available,
+      processed
     }
   }
 
