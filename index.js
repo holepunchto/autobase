@@ -928,6 +928,15 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  pendingBlocks () {
+    let pending = 0
+    for (const w of this.activeWriters) {
+      pending += w.core.length - w.length
+    }
+
+    return pending
+  }
+
   async _getLocallyStoredHeads () {
     const buffer = await this.local.getUserData('autobase/boot')
     if (!buffer) return []
