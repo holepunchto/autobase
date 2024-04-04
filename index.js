@@ -435,12 +435,25 @@ module.exports = class Autobase extends ReadyResource {
     this._ackTimer.bump()
   }
 
+  async _waitForIdle () {
+    let p = this.progress()
+    while (true) {
+      if (p.processed === p.total) return
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      await this._bump()
+      const next = this.progress()
+      if (next.processed === p.processed && next.total === p.total) return
+      p = next
+    }
+  }
+
   async update () {
     if (this.opened === false) await this.ready()
 
     try {
       await this._bump()
       if (this._acking) await this._bump() // if acking just rebump incase it was triggered from above...
+      await this._waitForIdle()
     } catch (err) {
       if (this.closing) return
       throw err
