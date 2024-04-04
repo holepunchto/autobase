@@ -90,7 +90,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._advancing = null
     this._advanced = null
-    this._reindexing = false
+    this.reindexing = false
 
     this._bump = debounceify(() => {
       this._advancing = this._advance()
@@ -162,10 +162,6 @@ module.exports = class Autobase extends ReadyResource {
 
   get discoveryKey () {
     return this._primaryBootstrap === null ? this.local.discoveryKey : this._primaryBootstrap.discoveryKey
-  }
-
-  get reindexing () {
-    return this._reindexing === true
   }
 
   replicate (init, opts) {
@@ -361,11 +357,11 @@ module.exports = class Autobase extends ReadyResource {
     this.system.requestWakeup()
 
     // set reindexing for initial bump
-    this._reindexing = true
+    this.reindexing = true
 
     // queue a full bump that handles wakeup etc (not legal to wait for that here)
     this._queueBump()
-    this._advanced = this._advancing.then(() => { this._reindexing = false }, safetyCatch)
+    this._advanced = this._advancing.then(() => { this.reindexing = false }, safetyCatch)
 
     this.queueFastForward()
   }
