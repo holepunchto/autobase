@@ -379,8 +379,10 @@ module.exports = class Autobase extends ReadyResource {
     if (this._primaryBootstrap) await this._primaryBootstrap.close()
     if (this.debug) console.log('awaiting store closing...')
     await this.store.close()
-    if (this.debug) console.log('awaiting closing...')
+    if (this.debug) console.log('awaiting closing...', this.currentDrainState)
+    if (this.debug) setTimeout(() => console.log('...', this.currentDrainState), 100)
     await closing
+    if (this.debug) console.log('closed')
   }
 
   _onError (err) {
@@ -873,10 +875,12 @@ module.exports = class Autobase extends ReadyResource {
         this.system.requestWakeup()
       }
 
+      this.currentDrainState = 1
       const remoteAdded = await this._addRemoteHeads()
       const localNodes = this._appending === null ? null : this._addLocalHeads()
 
       if (this.closing) return
+      this.currentDrainState = 2
 
       if (remoteAdded > 0 || localNodes !== null) {
         this.updating = true
@@ -887,12 +891,14 @@ module.exports = class Autobase extends ReadyResource {
       const indexed = !!this._updatingCores
 
       if (this.closing) return
+      this.currentDrainState = 3
 
       if (this.localWriter !== null && localNodes !== null) {
         await this._flushLocal(localNodes)
       }
 
       if (this.closing) return
+      this.currentDrainState = 4
 
       const flushed = (await this._flushIndexes()) ? this.system.core.getBackingCore().flushedLength : this._systemPointer
       if (this.updating || flushed > this._systemPointer) await this._advanceBootRecord(flushed)
@@ -900,6 +906,7 @@ module.exports = class Autobase extends ReadyResource {
       if (indexed) await this.onindex(this)
 
       if (this.closing) return
+      this.currentDrainState = 5
 
       // force reset state in worst case
       if (this._queueViewReset && this._appending === null) {
