@@ -71,9 +71,9 @@ async function createBase (store, key, t, opts = {}) {
   await base.ready()
 
   t.teardown(async () => {
-    console.log('closing...', base.key)
+    console.log('closing...', base.local.key)
     await base.close()
-    console.log('closed', base.key)
+    console.log('closed', base.local.key)
   }, { order: 1 })
 
   return base
