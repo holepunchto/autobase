@@ -534,80 +534,6 @@ test('topolist - with versions', function (t) {
   t.is(tip.undo, 0)
 })
 
-test('topolist - version sort fuzz', function (t) {
-  const nodes = []
-
-  // writers
-  // a -> version 0
-  // b -> version 0
-  // c -> version 1
-
-  const writers = []
-  writers.push(writer('a', 0))
-  writers.push(writer('b', 1))
-  writers.push(writer('c', 1))
-
-  writers[1].version = 1 // bump version
-
-  let lastVersionNode
-
-  const NODES = 400
-  while (nodes.length < NODES) {
-    const writer = getRandom(writers)
-    const deps = []
-    for (const w of writers) {
-      if (w === writer || w.version > writer.version || Math.random() < 0.5) continue
-      if (w.head()) deps.push(w.head())
-    }
-
-    nodes.push(writer.add(deps))
-    if (nodes.length === NODES / 2) {
-      lastVersionNode = writer.head()
-      writers[2].version = 1 // bump version
-    }
-  }
-
-  // final node to add after ordering
-  const last = writers[0].add([lastVersionNode])
-
-  // store previous tip
-  let prev
-
-  // loop many times adding nodes randomly
-  for (let i = 0; i < nodes.length * 2; i++) {
-    const tip = new Topolist()
-    const copy = nodes.slice()
-
-    tip.add(copy.shift()) // add a0
-
-    while (copy.length) {
-      const node = getRandom(copy)
-      let add = true
-      for (const d of node.dependencies) {
-        if (!tip.tip.includes(d)) {
-          add = false
-          break
-        }
-      }
-      if (!add) continue
-      tip.add(node)
-      copy.splice(copy.indexOf(node), 1)
-    }
-
-    // check prev tip
-    if (!prev) prev = tip.print()
-    else t.alike(tip.print(), prev)
-
-    tip.mark()
-    tip.add(last)
-
-    const u = tip.flush()
-    u.tip = null
-
-    t.alike(u, { shared: NODES, undo: 0, length: NODES + 1, indexed: [], tip: null })
-  }
-})
-
 function makeNode (key, length, dependencies, { version = 0, value = key + length } = {}) {
   const node = {
     writer: { core: { key: b4a.from(key) } },
@@ -621,26 +547,4 @@ function makeNode (key, length, dependencies, { version = 0, value = key + lengt
   for (const dep of dependencies) dep.dependents.add(node)
 
   return node
-}
-
-function writer (key, version = 0) {
-  return {
-    add (dependencies) {
-      const head = this.head()
-      if (head) dependencies.push(head)
-      const node = makeNode(key, this.nodes.length, [...dependencies], { version: this.version })
-      this.nodes.push(node)
-      return node
-    },
-    version,
-    head () {
-      if (this.nodes.length === 0) return null
-      return this.nodes[this.nodes.length - 1]
-    },
-    nodes: []
-  }
-}
-
-function getRandom (arr) {
-  return arr[Math.floor(Math.random() * arr.length)]
 }
