@@ -17,8 +17,6 @@ const {
   createBase
 } = require('./helpers')
 
-const IS_MAC_OSX = os.platform() === 'darwin'
-
 test('fast-forward - simple', async t => {
   t.plan(1)
 
