@@ -135,7 +135,9 @@ module.exports = class Autobase extends ReadyResource {
     this.system = new SystemView(this._viewStore.get({ name: '_system', exclusive: true, cache: true }))
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
 
-    this.ready().catch(safetyCatch)
+    if (handlers.eagerReady !== false) {
+      this.ready().catch(safetyCatch)
+    }
   }
 
   [inspect] (depth, opts) {
