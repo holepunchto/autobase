@@ -505,11 +505,42 @@ test('topolist - reorder then shift reordered', function (t) {
   t.is(u.length, 7)
 })
 
-function makeNode (key, length, dependencies, value = null) {
+test('topolist - with versions', function (t) {
+  const tip = new Topolist()
+
+  const a0 = makeNode('a', 0, [])
+  const b0 = makeNode('b', 0, [])
+  const c0 = makeNode('c', 0, [b0])
+  const c1 = makeNode('c', 1, [], { version: 1 })
+  const b1 = makeNode('b', 1, [c0])
+  const d0 = makeNode('d', 0, [c0])
+  const c2 = makeNode('c', 2, [d0], { version: 1 })
+  const d1 = makeNode('d', 1, [])
+
+  tip.add(b0)
+  tip.add(c0)
+  tip.add(c1)
+  tip.add(b1)
+  tip.add(d0)
+  tip.add(c2)
+  tip.add(a0)
+
+  t.is(tip.tip[tip.tip.length - 1], c2)
+
+  tip.mark()
+
+  tip.add(d1)
+
+  t.is(tip.undo, 0)
+})
+
+function makeNode (key, length, dependencies, { version = 0, value = key + length } = {}) {
   const node = {
     writer: { core: { key: b4a.from(key) } },
     length,
     dependents: new Set(),
+    dependencies,
+    version,
     value
   }
 
