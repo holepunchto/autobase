@@ -214,9 +214,9 @@ function rollBack (n, idx, steps, batch = 3, result = []) {
 
     const current = steps.slice(0, i + 1)
     while (true) {
-      const batch = graph._shift()
-      if (!batch.length) break
-      for (const node of batch) {
+      const update = graph.update()
+      if (!update) break
+      for (const node of update.indexed) {
         node.writer.offset++
         node.steps = current
         nodes.delete(node._ref)
