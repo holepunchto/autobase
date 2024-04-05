@@ -299,6 +299,13 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  getSystemPointer () {
+    return {
+      key: this.system.core.key,
+      length: this.system.core.getBackingCore().indexedLength
+    }
+  }
+
   async _openPreBump () {
     this._presystem = this._openPreSystem()
 
