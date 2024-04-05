@@ -78,7 +78,9 @@ for (let i = 0; i < 1000; i++) {
 
         // get well distributed unique index
         const index = (view.length * 67 + view.length * 89) % core.length
+        if (base.debug) console.log(index, 'awaiting get...')
         if (core.length) await core.get(index)
+        if (base.debug) console.log('got')
       }
     }
   })
