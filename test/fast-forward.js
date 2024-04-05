@@ -385,7 +385,7 @@ test('fast-forward - force reset then ff', async t => {
   t.comment('sparse blocks: ' + sparse)
 })
 
-test('fast-forward - initial fast forward', async t => {
+test('fast-forward - start from', async t => {
   t.plan(3)
 
   const { bases } = await create(2, t, {
@@ -412,13 +412,13 @@ test('fast-forward - initial fast forward', async t => {
 
   await confirm([a, b])
 
-  const fastForward = {
+  const startFrom = {
     key: a.system.core.key,
     length: a.system.core.signedLength
   }
 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
-  const c = await createBase(store.session(), a.bootstrap, t, { fastForward })
+  const c = await createBase(store.session(), a.bootstrap, t, { startFrom })
 
   await replicateAndSync([a, b, c])
   const core = c.system.core.getBackingCore()
@@ -426,17 +426,17 @@ test('fast-forward - initial fast forward', async t => {
 
   t.is(c.linearizer.indexers.length, 2)
 
-  t.ok(fastForward.length - sparse < 10)
+  t.ok(startFrom.length - sparse < 10)
 
   t.comment('sparse blocks: ' + sparse)
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
-test('fast-forward - initial ff after multiple migrate', async t => {
+test('fast-forward - startFrom after multiple migrate', async t => {
   t.plan(3)
 
   const { bases } = await create(5, t, {
-    fastForward: true,
+    startFrom: true,
     storage: () => tmpDir(t)
   })
 
@@ -479,13 +479,13 @@ test('fast-forward - initial ff after multiple migrate', async t => {
   const sys = a.system.core.getBackingCore()
   t.is(sys.manifest.signers.length, 5)
 
-  const fastForward = {
+  const startFrom = {
     key: sys.key,
     length: sys.indexedLength
   }
 
   const [store] = await createStores(1, t, { offset: 5, storage: () => tmpDir(t) })
-  const latecomer = await createBase(store.session(), a.bootstrap, t, { fastForward })
+  const latecomer = await createBase(store.session(), a.bootstrap, t, { startFrom })
 
   await replicateAndSync([...bases, latecomer])
   const core = latecomer.system.core.getBackingCore()
@@ -493,13 +493,13 @@ test('fast-forward - initial ff after multiple migrate', async t => {
 
   t.is(latecomer.linearizer.indexers.length, 5)
 
-  t.ok(fastForward.length - sparse < 10)
+  t.ok(startFrom.length - sparse < 10)
 
   t.comment('sparse blocks: ' + sparse)
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
-test('fast-forward - ignore bogus initial ff', async t => {
+test('fast-forward - ignore bogus startFrom', async t => {
   t.plan(3)
 
   const { bases } = await create(2, t, {
@@ -526,14 +526,14 @@ test('fast-forward - ignore bogus initial ff', async t => {
   const key = Buffer.from(sys.key)
   key[0] ^= 0xff
 
-  const fastForward = {
+  const startFrom = {
     key,
     length: sys.indexedLength,
     timeout: 1500
   }
 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
-  const latecomer = await createBase(store.session(), a.bootstrap, t, { fastForward })
+  const latecomer = await createBase(store.session(), a.bootstrap, t, { startFrom })
 
   await replicateAndSync([...bases, latecomer])
   const core = latecomer.system.core.getBackingCore()
@@ -649,7 +649,7 @@ test('fast-forward - upgrade available', async t => {
   await t.exception(upgradeError)
 })
 
-test('fast-forward - initial ff upgrade available', async t => {
+test('fast-forward - startFrom upgrade available', async t => {
   const [s1, s2, s3] = await createStores(3, t)
 
   const a = new Autobase(s1.session(), null, {
@@ -716,7 +716,7 @@ test('fast-forward - initial ff upgrade available', async t => {
 
   await confirm([a1, b1])
 
-  const fastForward = {
+  const startFrom = {
     key: a1.system.core.key,
     length: a1.system.core.getBackingCore().indexedLength
   }
@@ -725,7 +725,7 @@ test('fast-forward - initial ff upgrade available', async t => {
     apply,
     open: store => store.get('test', { valueEncoding: 'json' }),
     valueEncoding: 'json',
-    fastForward
+    startFrom
   })
 
   await c0.ready()
@@ -737,7 +737,7 @@ test('fast-forward - initial ff upgrade available', async t => {
     c0.once('upgrade-available', upgrade => {
       clearTimeout(timeout)
       t.is(upgrade.version, version + 1)
-      t.is(upgrade.length, fastForward.length)
+      t.is(upgrade.length, startFrom.length)
       resolve()
     })
   })

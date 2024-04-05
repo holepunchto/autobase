@@ -58,12 +58,12 @@ module.exports = class Autobase extends ReadyResource {
     this.linearizer = null
     this.updating = false
 
-    this.fastForwardEnabled = handlers.fastForward !== false
+    this.fastForwardEnabled = !!handlers.fastForward
     this.fastForwarding = false
     this.fastForwardTo = null
 
-    if (this.fastForwardEnabled && isObject(handlers.fastForward)) {
-      this.fastForwardTo = handlers.fastForward
+    if (isObject(handlers.startFrom)) {
+      this.fastForwardTo = handlers.startFrom
     }
 
     this._checkWriters = []
@@ -473,7 +473,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _isFastForwarding () {
     if (this.fastForwardTo !== null) return true
-    return this.fastForwardEnabled && this.fastForwarding
+    return this.fastForwarding
   }
 
   _backgroundAck () {
