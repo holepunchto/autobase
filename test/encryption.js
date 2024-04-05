@@ -66,6 +66,19 @@ test('encryption - restart', async t => {
   t.absent(found)
 })
 
+test('encryption - expect encryption key', async t => {
+  const storage = ram.reusable()
+  const store = new Corestore(storage)
+  const base = new Autobase(store, { apply, open, ackInterval: 0, ackThreshold: 0, encrypted: true })
+
+  try {
+    await base.ready()
+    t.fail()
+  } catch (err) {
+    t.is(err.message, 'Encryption key is expected')
+  }
+})
+
 function open (store) {
   return store.get('view', { valueEncoding: 'json' })
 }
