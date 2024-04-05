@@ -887,7 +887,9 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const u = this.linearizer.update()
+      if (this.debug) console.log('before update')
       const changed = u ? await this._applyUpdate(u) : null
+      if (this.debug) console.log('after update')
       const indexed = !!this._updatingCores
 
       if (this.closing) return
