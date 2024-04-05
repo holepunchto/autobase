@@ -758,6 +758,71 @@ test('fast-forward - startFrom upgrade available', async t => {
   await t.exception(upgradeError)
 })
 
+test('fast-forward - startFrom with fast forward disabled', async t => {
+  t.plan(4)
+
+  const { bases } = await create(3, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b, c] = bases
+
+  for (let i = 0; i < 500; i++) {
+    await a.append('a' + i)
+  }
+
+  await addWriterAndSync(a, b)
+
+  t.is(a.linearizer.indexers.length, 2)
+
+  await a.append('lets index some nodes')
+  await confirm([a, b])
+
+  for (let i = 0; i < 500; i++) {
+    await b.append('b' + i)
+  }
+
+  await confirm([a, b])
+
+  const startFrom = {
+    key: a.system.core.key,
+    length: a.system.core.signedLength
+  }
+
+  for (let i = 0; i < 500; i++) {
+    await b.append('b' + i)
+  }
+
+  await confirm([a, b])
+
+  await addWriterAndSync(a, c)
+
+  await confirm([a, b, c])
+
+  for (let i = 0; i < 500; i++) {
+    await c.append('c' + i)
+  }
+
+  await confirm([a, b, c])
+
+  const [store] = await createStores(1, t, { offset: 3, storage: () => tmpDir(t) })
+  const d = await createBase(store.session(), a.bootstrap, t, { startFrom, fastForward: false })
+
+  t.absent(d.fastForwardEnabled)
+
+  await replicateAndSync([a, b, c, d])
+  const core = d.system.core.getBackingCore()
+  const sparse = await isSparse(core)
+
+  t.is(d.linearizer.indexers.length, 3)
+
+  t.ok(startFrom.length > sparse)
+
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+})
+
 async function isSparse (core) {
   let n = 0
   for (let i = 0; i < core.length; i++) {
