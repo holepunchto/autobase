@@ -64,6 +64,7 @@ for (let i = 0; i < 1000; i++) {
     await b2.ready()
     console.log('READY')
     await t.execution(b2.ready())
+    await b2.store.close()
 
     async function applyOldState (batch, view, base) {
       for (const { value } of batch) {
