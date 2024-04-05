@@ -386,6 +386,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _onError (err) {
+    if (this.debug) console.log(err)
     if (this.closing) return
     this.close().catch(safetyCatch)
 
@@ -972,6 +973,7 @@ module.exports = class Autobase extends ReadyResource {
     try {
       await this._drain()
     } catch (err) {
+      if (this.debug) console.log('DEBUG', err)
       this._onError(err)
       return
     }
