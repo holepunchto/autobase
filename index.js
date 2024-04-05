@@ -300,6 +300,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   getSystemPointer () {
+    if (!this.system.core.getBackingCore()) return null
+
     return {
       key: this.system.core.key,
       length: this.system.core.getBackingCore().indexedLength
