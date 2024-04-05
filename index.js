@@ -379,8 +379,8 @@ module.exports = class Autobase extends ReadyResource {
     if (this._primaryBootstrap) await this._primaryBootstrap.close()
     if (this.debug) console.log('awaiting store closing...')
     await this.store.close()
-    if (this.debug) console.log('awaiting closing...', this.currentDrainState)
-    if (this.debug) setTimeout(() => console.log('...', this.currentDrainState), 100)
+    if (this.debug) console.log('awaiting closing...', this.currentDrainState, this.currentApplyState)
+    if (this.debug) setTimeout(() => console.log('...', this.currentDrainState, this.currentApplyState), 100)
     await closing
     if (this.debug) console.log('closed')
   }
@@ -1436,7 +1436,9 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _applyUpdate (u) {
+    this.currentApplyState = 0
     await this._viewStore.flush()
+    this.currentApplyState = 1
 
     if (u.undo) this._undo(u.undo)
 
@@ -1445,6 +1447,7 @@ module.exports = class Autobase extends ReadyResource {
 
     // make sure the latest changes is reflected on the system...
     await this.system.update()
+    this.currentApplyState = 2
 
     let batch = 0
     let applyBatch = []
@@ -1478,6 +1481,7 @@ module.exports = class Autobase extends ReadyResource {
 
       return u.indexed.slice(i).concat(u.tip)
     }
+    this.currentApplyState = 3
 
     for (i = u.shared; i < u.length; i++) {
       if (this.fastForwardTo !== null && this.fastForwardTo.length > this.system.core.length && b4a.equals(this.fastForwardTo.key, this.system.core.key)) {
@@ -1528,13 +1532,16 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this.system.bootstrapping) await this._bootstrap()
 
+      this.currentApplyState = 4
       if (applyBatch.length && this._hasApply === true) {
         await this._handlers.apply(applyBatch, this.view, this)
       }
+      this.currentApplyState = 5
 
       update.indexers = !!this.system.indexerUpdate
 
       await this.system.flush(await this._getViewInfo(update.indexers))
+      this.currentApplyState = 6
 
       this._applying = null
 
@@ -1548,6 +1555,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       if (!indexed) continue
+      this.currentApplyState = 7
 
       this._shiftWriter(node.writer)
 
