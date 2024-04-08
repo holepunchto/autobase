@@ -546,6 +546,34 @@ test('fast-forward - ignore bogus initial ff', async t => {
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
+test('fast-forward - initial ff length 0', async t => {
+  t.plan(3)
+
+  const { bases } = await create(1, t, { fastForward: true, storage: () => tmpDir(t) })
+  const [store] = await createStores(1, t, { offset: 1, storage: () => tmpDir(t) })
+
+  const [a] = bases
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append('a' + i)
+  }
+
+  const fastForward = { key: a.system.core.key, length: 0 }
+
+  const b = await createBase(store.session(), a.bootstrap, t, { fastForward })
+
+  await t.execution(replicateAndSync([a, b]))
+
+  const core = a.system.core.getBackingCore()
+  const sparse = await isSparse(core)
+
+  t.is(b.linearizer.indexers.length, 1)
+
+  t.absent(a.fastForwardTo) // fastForward was cleared
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+})
+
 test('fast-forward - upgrade available', async t => {
   const [s1, s2, s3] = await createStores(3, t)
 
