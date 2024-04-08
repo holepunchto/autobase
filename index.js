@@ -1454,7 +1454,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _applyUpdate (u) {
-    await this._viewStore.flush()
+    assert(await this._viewStore.flush(), 'Views failed to open')
 
     if (u.undo) this._undo(u.undo)
 
