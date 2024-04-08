@@ -306,11 +306,12 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   getSystemPointer () {
-    if (!this.system.core.getBackingCore()) return null
+    const core = this.system.core.getBackingCore()
+    if (!core || core.indexedLength === 0) return null
 
     return {
-      key: this.system.core.key,
-      length: this.system.core.getBackingCore().indexedLength
+      key: core.key,
+      length: core.indexedLength
     }
   }
 
@@ -349,7 +350,9 @@ module.exports = class Autobase extends ReadyResource {
       const { key, length, timeout } = this.fastForwardTo
       this.fastForwardTo = null // will get reset once ready
 
-      this.initialFastForward(key, length, timeout || DEFAULT_FF_TIMEOUT)
+      if (length !== 0) {
+        this.initialFastForward(key, length, timeout || DEFAULT_FF_TIMEOUT)
+      }
     }
 
     if (this.localWriter && this._ackInterval) this._startAckTimer()
