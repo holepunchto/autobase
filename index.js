@@ -43,9 +43,11 @@ module.exports = class Autobase extends ReadyResource {
     this.keyPair = handlers.keyPair || null
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
-    this.encryptionKey = handlers.encryptionKey || null
-    this._primaryBootstrap = null
 
+    this.encrypted = handlers.encrypted || !!handlers.encryptionKey
+    this.encryptionKey = handlers.encryptionKey || null
+
+    this._primaryBootstrap = null
     if (this.bootstrap) {
       this._primaryBootstrap = this.store.get({ key: this.bootstrap, compat: false, encryptionKey: this.encryptionKey })
       this.store = this.store.namespace(this._primaryBootstrap, { detach: false })
@@ -228,6 +230,10 @@ module.exports = class Autobase extends ReadyResource {
         // not needed but, just for good meassure
         if (this._primaryBootstrap) this._primaryBootstrap.setEncryptionKey(this.encryptionKey)
       }
+    }
+
+    if (this.encrypted) {
+      assert(this.encryptionKey !== null, 'Encryption key is expected')
     }
 
     // stateless open
