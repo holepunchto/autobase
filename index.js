@@ -343,7 +343,9 @@ module.exports = class Autobase extends ReadyResource {
       const { key, length, timeout } = this.fastForwardTo
       this.fastForwardTo = null // will get reset once ready
 
-      this.initialFastForward(key, length, timeout || DEFAULT_FF_TIMEOUT)
+      if (length !== 0) {
+        this.initialFastForward(key, length, timeout || DEFAULT_FF_TIMEOUT)
+      }
     }
 
     if (this.localWriter && this._ackInterval) this._startAckTimer()
