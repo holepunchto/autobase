@@ -395,6 +395,7 @@ module.exports = class Autobase extends ReadyResource {
       await this.update()
       await this.local.setUserData('autobase/reindexed', b4a.from([0]))
       this.reindexing = false
+      this.emit('reindexed')
     } catch (err) {
       safetyCatch(err)
     }
