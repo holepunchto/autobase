@@ -1,6 +1,7 @@
 const test = require('brittle')
 const tmpDir = require('test-tmp')
 const cenc = require('compact-encoding')
+const safetyCatch = require('safety-catch')
 
 const Autobase = require('..')
 const { BootRecord } = require('../lib/messages')
@@ -301,6 +302,7 @@ test('fast-forward - open with no remote io', async t => {
   await b2.ready()
   await t.execution(b2.ready())
 
+  b2.close().catch(safetyCatch)
   b2.view.getBackingCore().session.close() // close to kill pending request
 
   async function applyOldState (batch, view, base) {
