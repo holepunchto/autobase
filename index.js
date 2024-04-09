@@ -383,7 +383,9 @@ module.exports = class Autobase extends ReadyResource {
 
     // queue a full bump that handles wakeup etc (not legal to wait for that here)
     this._queueBump()
-    this._advanced = this._advancing.then(() => { this.reindexing = false }, safetyCatch)
+    this._advanced = this._advancing
+
+    if (this.reindexing) this.update().then(() => { this.reindexing = false }, safetyCatch)
 
     this.queueFastForward()
   }
