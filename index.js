@@ -583,7 +583,8 @@ module.exports = class Autobase extends ReadyResource {
 
     // make sure all local nodes are processed before continuing
     while (!this.closing && this.localWriter.core.length > this.localWriter.length) {
-      await this._bump()
+      await this.localWriter.waitForSynced()
+      await this._bump() // make sure its all flushed...
     }
 
     if (this._appending === null) this._appending = []
