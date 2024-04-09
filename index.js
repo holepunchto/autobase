@@ -337,13 +337,13 @@ module.exports = class Autobase extends ReadyResource {
       await this._initialSystem.close()
       this._initialSystem = null
       this._initialViews = null
-    } else {
-      // check if this is a v0 base
-      const record = await this.local.getUserData('autobase/system')
-      if (record !== null) {
-        this.reindexing = true
-        this.emit('reindexing')
-      }
+    }
+
+    // check if this is a v0 base
+    const record = await this.local.getUserData('autobase/system')
+    if (record !== null && (await this.local.getUserData('autobase/reindexed')) === null) {
+      this.reindexing = true
+      this.emit('reindexing')
     }
 
     // load previous digest if available
@@ -385,9 +385,19 @@ module.exports = class Autobase extends ReadyResource {
     this._queueBump()
     this._advanced = this._advancing
 
-    if (this.reindexing) this.update().then(() => { this.reindexing = false }, safetyCatch)
+    if (this.reindexing) this._setReindexed()
 
     this.queueFastForward()
+  }
+
+  async _setReindexed () {
+    try {
+      await this.update()
+      await this.local.setUserData('autobase/reindexed', b4a.from([0]))
+      this.reindexing = false
+    } catch (err) {
+      safetyCatch(err)
+    }
   }
 
   async _close () {
