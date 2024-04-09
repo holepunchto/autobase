@@ -339,7 +339,7 @@ module.exports = class Autobase extends ReadyResource {
       this._initialViews = null
     } else {
       // check if this is a v0 base
-      const record = await this.getUserData('autobase/system')
+      const record = await this.local.getUserData('autobase/system')
       if (record !== null) {
         this.reindexing = true
         this.emit('reindexing')
