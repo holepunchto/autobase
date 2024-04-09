@@ -301,7 +301,7 @@ test('fast-forward - open with no remote io', async t => {
   await b2.ready()
   await t.execution(b2.ready())
 
-  stores[1].close() // close store to kill pending get
+  b2.view.getBackingCore().session.close() // close to kill pending request
 
   async function applyOldState (batch, view, base) {
     for (const { value } of batch) {
