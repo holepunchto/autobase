@@ -343,6 +343,7 @@ module.exports = class Autobase extends ReadyResource {
     if (record !== null && (await this.local.getUserData('autobase/reindexed')) === null) {
       this.reindexing = true
       this.emit('reindexing')
+      this._onreindexing(record).catch(safetyCatch)
     }
 
     // load previous digest if available
@@ -357,6 +358,56 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     if (this.localWriter && this._ackInterval) this._startAckTimer()
+  }
+
+  async _onreindexing (record) {
+    const { key, length } = messages.Checkout.decode({ buffer: record, start: 0, end: record.byteLength })
+    const encryptionKey = this._viewStore.getBlockKey(this._viewStore.getSystemCore().name)
+    const core = this.store.get({ key, encryptionKey, isBlockKey: true }).batch({ checkout: length, session: false })
+
+    const base = this
+    const system = new SystemView(core, length)
+    await system.ready()
+
+    const indexerCores = []
+    for (const { key } of system.indexers) {
+      const core = this.store.get({ key, compat: false, valueEncoding: messages.OplogMessage, encryptionKey: this.encryptionKey })
+      indexerCores.push(core)
+    }
+
+    await system.close()
+
+    for (const core of indexerCores) tail(core).catch(safetyCatch)
+
+    async function onsyskey (key) {
+      for (const core of indexerCores) await core.close()
+      if (key === null || !base.reindexing) return
+      base.initialFastForward(key, DEFAULT_FF_TIMEOUT)
+    }
+
+    async function tail (core) {
+      await core.ready()
+
+      while (base.reindexing) {
+        const seq = core.length - 1
+        const blk = seq >= 0 ? await core.get(seq) : null
+        if (blk && blk.version >= 1) {
+          const sysKey = await getSystemKey(core, seq, blk)
+          if (sysKey) return onsyskey(sysKey)
+        }
+
+        await core.get(core.length) // force get next blk
+      }
+
+      return onsyskey(null)
+    }
+
+    async function getSystemKey (core, seq, blk) {
+      if (!blk.digest) return null
+      if (blk.digest.key) return blk.digest.key
+      const p = await core.get(seq - blk.digest.pointer)
+      return p.digest && p.digest.key
+    }
   }
 
   async _restoreLocalState () {
@@ -1143,7 +1194,10 @@ module.exports = class Autobase extends ReadyResource {
       }
     })
 
-    if (!length) return
+    if (!length) {
+      await core.close()
+      return
+    }
 
     const target = await this._preFastForward(core, length, timeout)
     await core.close()
