@@ -399,7 +399,7 @@ module.exports = class Autobase extends ReadyResource {
         await core.get(core.length) // force get next blk
       }
 
-      onsyskey(null)
+      return onsyskey(null)
     }
 
     async function getSystemKey (core, seq, blk) {
