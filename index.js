@@ -1121,7 +1121,7 @@ module.exports = class Autobase extends ReadyResource {
 
       const timer = setTimeout(() => {
         core.off('append', resolveLength)
-        resolve(-1)
+        resolve(0)
       }, timeout)
 
       core.once('append', resolveLength)
@@ -1132,7 +1132,7 @@ module.exports = class Autobase extends ReadyResource {
       }
     })
 
-    if (length === -1) return
+    if (!length) return
 
     const target = await this._preFastForward(core, length, timeout)
     await core.close()
