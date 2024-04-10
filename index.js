@@ -1113,21 +1113,26 @@ module.exports = class Autobase extends ReadyResource {
     const encryptionKey = this._viewStore.getBlockKey(this._viewStore.getSystemCore().name)
 
     const core = this.store.get({ key, encryptionKey, isBlockKey: true })
+    await core.ready()
 
     // get length from network
     const length = await new Promise((resolve, reject) => {
+      if (core.length) return resolve(core.length)
+
       const timer = setTimeout(() => {
-        core.off('append', resolve)
-        resolve(null)
+        core.off('append', resolveLength)
+        resolve(-1)
       }, timeout)
 
-      core.once('append', () => {
+      core.once('append', resolveLength)
+
+      function resolveLength () {
         clearTimeout(timer)
         resolve(core.length)
-      })
+      }
     })
 
-    if (length === null) return
+    if (length === -1) return
 
     const target = await this._preFastForward(core, length, timeout)
     await core.close()
