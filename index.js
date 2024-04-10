@@ -352,12 +352,9 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     if (this.fastForwardTo !== null) {
-      const { key, length, timeout } = this.fastForwardTo
+      const { key, timeout } = this.fastForwardTo
       this.fastForwardTo = null // will get reset once ready
-
-      if (length !== 0) {
-        this.initialFastForward(key, length, timeout || DEFAULT_FF_TIMEOUT)
-      }
+      this.initialFastForward(key, timeout || DEFAULT_FF_TIMEOUT)
     }
 
     if (this.localWriter && this._ackInterval) this._startAckTimer()
@@ -1112,11 +1109,27 @@ module.exports = class Autobase extends ReadyResource {
     await this._makeLinearizer(this.system)
   }
 
-  async initialFastForward (key, length, timeout) {
+  async initialFastForward (key, timeout) {
     const encryptionKey = this._viewStore.getBlockKey(this._viewStore.getSystemCore().name)
 
     const core = this.store.get({ key, encryptionKey, isBlockKey: true })
-    const target = await this._preFastForward(core, length, timeout)
+
+    // get length from network
+    const length = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        core.off('append', resolve)
+        resolve(null)
+      }, timeout)
+
+      core.once('append', () => {
+        clearTimeout(timer)
+        resolve(core.length)
+      })
+    })
+
+    if (length === null) return
+
+    const target = await this._preFastForward(core, core.length, timeout)
     await core.close()
 
     // initial fast-forward failed
