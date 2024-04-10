@@ -382,7 +382,6 @@ module.exports = class Autobase extends ReadyResource {
     async function onsyskey (key) {
       for (const core of indexerCores) await core.close()
       if (key === null || !base.reindexing) return
-
       base.initialFastForward(key, DEFAULT_FF_TIMEOUT)
     }
 
@@ -1195,7 +1194,10 @@ module.exports = class Autobase extends ReadyResource {
       }
     })
 
-    if (!length) return
+    if (!length) {
+      await core.close()
+      return
+    }
 
     const target = await this._preFastForward(core, length, timeout)
     await core.close()
