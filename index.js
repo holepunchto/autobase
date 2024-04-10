@@ -139,9 +139,7 @@ module.exports = class Autobase extends ReadyResource {
     this.system = new SystemView(this._viewStore.get({ name: '_system', exclusive: true, cache: true }))
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
 
-    if (handlers.eagerReady !== false) {
-      this.ready().catch(safetyCatch)
-    }
+    this.ready().catch(safetyCatch)
   }
 
   [inspect] (depth, opts) {
@@ -211,6 +209,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _openPreSystem () {
+    if (this._handlers.wait) await this._handlers.wait()
     await this.store.ready()
 
     const opts = {
