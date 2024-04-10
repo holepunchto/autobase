@@ -306,14 +306,9 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  getSystemPointer () {
+  getSystemKey () {
     const core = this.system.core.getBackingCore()
-    if (!core || core.indexedLength === 0) return null
-
-    return {
-      key: core.key,
-      length: core.indexedLength
-    }
+    return core ? core.key : null
   }
 
   async _openPreBump () {
