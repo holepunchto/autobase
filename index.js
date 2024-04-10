@@ -391,7 +391,7 @@ module.exports = class Autobase extends ReadyResource {
       while (base.reindexing) {
         const seq = core.length - 1
         const blk = seq >= 0 ? await core.get(seq) : null
-        if (blk && blk.version === 1) {
+        if (blk && blk.version >= 1) {
           const sysKey = await getSystemKey(core, seq, blk)
           if (sysKey) return onsyskey(sysKey)
         }
