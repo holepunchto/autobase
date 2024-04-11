@@ -983,6 +983,26 @@ module.exports = class Autobase extends ReadyResource {
     await this.local.setUserData('autobase/boot', pointer)
   }
 
+  async _wakeupPeers () {
+    const peers = this.linearizer.indexers[0].core.peers
+
+    for (const w of this.activeWriters) {
+      for (const peer of peers) {
+        let found = false
+        for (const p of w.core.peers) {
+          if (!b4a.equals(peer.remotePublicKey, p.remotePublicKey)) continue
+          found = true
+          break
+        }
+
+        if (!found) {
+          this.system.sendWakeup(peer.remotePublicKey)
+          break
+        }
+      }
+    }
+  }
+
   async _drain () {
     while (!this.closing) {
       if (this.fastForwardTo !== null) {
@@ -1017,6 +1037,8 @@ module.exports = class Autobase extends ReadyResource {
       if (indexed) await this.onindex(this)
 
       if (this.closing) return
+
+      this._wakeupPeers()
 
       // force reset state in worst case
       if (this._queueViewReset && this._appending === null) {
