@@ -7,6 +7,7 @@ const Autobase = require('..')
 const { BootRecord } = require('../lib/messages')
 
 const {
+  sync,
   addWriterAndSync,
   replicateAndSync,
   replicate,
@@ -750,6 +751,52 @@ test('fast-forward - initial ff upgrade available', async t => {
 
   await t.execution(upgradeEvent)
   await t.exception(upgradeError)
+})
+
+test.solo('fast-forward - initial fast forward with in between writer', async t => {
+  t.plan(3)
+
+  const { bases } = await create(2, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b] = bases
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append('a' + i)
+  }
+
+  await addWriterAndSync(a, b, false)
+
+  await replicateAndSync([a, b])
+  await b.append('in between')
+  await replicateAndSync([a, b])
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append('a' + i + 1000)
+  }
+
+  await replicateAndSync([a, b])
+
+  t.is(a.linearizer.indexers.length, 1)
+
+  const length = a.system.core.signedLength
+  const fastForward = { key: a.system.core.key }
+
+  const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
+  const c = await createBase(store.session(), a.bootstrap, t, { fastForward, debug: true })
+
+  t.teardown(await replicate([a, c]))
+  await new Promise(resolve => setTimeout(resolve, 1000))
+
+  t.teardown(await replicate([a, b]))
+  await b.append('c no see')
+
+  await t.execution(sync([a, b, c]))
+
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
 async function isSparse (core) {
