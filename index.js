@@ -1342,24 +1342,24 @@ module.exports = class Autobase extends ReadyResource {
 
     const migrated = !b4a.equals(key, this.system.core.key)
 
-    const encryptionKey = this._viewStore.getBlockKey(this._viewStore.getSystemCore().name)
+    const name = this._viewStore.getSystemCore().name
+    const encryptionKey = this._viewStore.getBlockKey(name)
 
     const core = this.store.get({ key, encryptionKey, isBlockKey: true })
     await core.ready()
 
     const from = this.system.core.getBackingCore().length
 
-    // just extra sanity check
-    // TODO: if we simply load the core from the corestore the key check isn't needed
-    // getting rid of that is essential for dbl ff, but for now its ok with some safety from migrations
-    if (length <= from) {
+    // just extra sanity check that we are not going back in time, nor that we cleared the storage needed for ff
+    if (from >= length || core.length < length) {
       this._clearFastForward()
       return
     }
 
-    const system = new SystemView(core.session(), length)
+    const system = new SystemView(core, length)
     await system.ready()
 
+    const opened = []
     const indexers = [] // only used in migrate branch
     const prologues = [] // only used in migrate branch
 
@@ -1403,7 +1403,19 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       if (!view) {
+        await closeAll(opened)
         this._clearFastForward() // something wrong somewhere, likely a bug, just safety
+        return
+      }
+
+      const core = this.store.get(v.key)
+      await core.ready()
+
+      opened.push(core)
+
+      if (core.length < v.length) { // sanity check in case there was a migration etc
+        await closeAll(opened)
+        this._clearFastForward()
         return
       }
 
@@ -1433,18 +1445,17 @@ module.exports = class Autobase extends ReadyResource {
     // manually set the digest
     if (migrated) this._setDigest(key)
 
-    const to = length
-
     if (b4a.equals(this.fastForwardTo.key, key) && this.fastForwardTo.length === length) {
       this.fastForwardTo = null
     }
 
     this.updating = true
-
-    this.emit('fast-forward', to, from)
+    this.emit('fast-forward', length, from)
 
     // requeue in case we can do another jump!
     this.queueFastForward()
+
+    await closeAll(opened)
   }
 
   async _flushIndexes () {
@@ -1939,4 +1950,8 @@ function isObject (obj) {
 function emitWarning (err) {
   safetyCatch(err)
   this.emit('warning', err)
+}
+
+async function closeAll (list) {
+  for (const core of list) await core.close()
 }
