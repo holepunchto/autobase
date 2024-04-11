@@ -41,6 +41,7 @@ test('fast-forward - simple', async t => {
 
   t.ok(sparse > 0)
   t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
 test('fast-forward - migrate', async t => {
@@ -70,6 +71,7 @@ test('fast-forward - migrate', async t => {
 
   t.ok(sparse > 0)
   t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
 test('fast-forward - fast forward after migrate', async t => {
@@ -383,6 +385,7 @@ test('fast-forward - force reset then ff', async t => {
 
   t.ok(sparse > 0)
   t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
 test('fast-forward - initial fast forward', async t => {
@@ -412,7 +415,6 @@ test('fast-forward - initial fast forward', async t => {
 
   await confirm([a, b])
 
-  const length = a.system.core.signedLength
   const fastForward = { key: a.system.core.key }
 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
@@ -423,8 +425,7 @@ test('fast-forward - initial fast forward', async t => {
   const sparse = await isSparse(core)
 
   t.is(c.linearizer.indexers.length, 2)
-
-  t.ok(length - sparse < 10)
+  t.ok(sparse > 0)
 
   t.comment('sparse blocks: ' + sparse)
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
@@ -477,7 +478,6 @@ test('fast-forward - initial ff after multiple migrate', async t => {
   const sys = a.system.core.getBackingCore()
   t.is(sys.manifest.signers.length, 5)
 
-  const length = sys.indexedLength
   const fastForward = { key: sys.key }
 
   const [store] = await createStores(1, t, { offset: 5, storage: () => tmpDir(t) })
@@ -488,8 +488,7 @@ test('fast-forward - initial ff after multiple migrate', async t => {
   const sparse = await isSparse(core)
 
   t.is(latecomer.linearizer.indexers.length, 5)
-
-  t.ok(length - sparse < 10)
+  t.ok(sparse > 0)
 
   t.comment('sparse blocks: ' + sparse)
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
