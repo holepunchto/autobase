@@ -434,7 +434,12 @@ module.exports = class Autobase extends ReadyResource {
 
   async _setReindexed () {
     try {
-      await this.update()
+      while (true) {
+        await this.update()
+        const p = this.progress()
+        if (p.processed === p.total) break
+      }
+      if (this.closing) return
       await this.local.setUserData('autobase/reindexed', b4a.from([0]))
       this.reindexing = false
       this.emit('reindexed')
