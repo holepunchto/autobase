@@ -86,7 +86,7 @@ module.exports = class Autobase extends ReadyResource {
     this._pendingRemoval = false
     this._completeRemovalAt = null
     this._systemPointer = 0
-    this._missedCores = new Set()
+    this._missedCores = new Map()
 
     this._updates = []
     this._handlers = handlers || {}
@@ -348,8 +348,12 @@ module.exports = class Autobase extends ReadyResource {
       await this._restoreLocalState()
     }
 
-    this.store.on('no-remote', core => {
-      this._missedCores.add(core.key)
+    this.store.on('no-remote', (core, peer) => {
+      const hex = core.key.toString('hex')
+      if (!this._missedCores.has(hex)) {
+        this._missedCores.set(hex, new Set())
+      }
+      this._missedCores.get(hex).add(peer)
     })
 
     if (this.fastForwardTo !== null) {
@@ -988,14 +992,35 @@ module.exports = class Autobase extends ReadyResource {
     await this.local.setUserData('autobase/boot', pointer)
   }
 
-  _shouldWakeupPeers () {
-    for (const key of this._missedCores) {
-      if (this.activeWriters.has(key)) {
-        this._missedCores.clear() // probably should use a better heuristic for when to clear
-        return true
+  _findBehindPeers () {
+    const findSystemPeerBound = findSystemPeer.bind(this)
+
+    const cached = new Set()
+    const behind = new Set()
+
+    for (const [hex, peers] of this._missedCores) {
+      if (this.activeWriters.has(b4a.from(hex, 'hex'))) {
+        for (const p of peers) {
+          const peer = findSystemPeerBound(p.remotePublicKey)
+          if (peer) behind.add(peer)
+        }
       }
     }
-    return false
+
+    return behind
+
+    function findSystemPeer (key) {
+      const hex = b4a.toString(key, 'hex')
+      if (cached.has(hex)) return null
+
+      for (const peer of this.system.core.getBackingCore().session.peers) {
+        if (!b4a.equals(peer.remotePublicKey, key)) continue
+        cached.add(hex)
+        return peer
+      }
+
+      return null
+    }
   }
 
   async _drain () {
@@ -1033,9 +1058,13 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this.closing) return
 
-      if (this._shouldWakeupPeers()) {
-        this.system.broadcastWakeup()
+      const needWakeup = this._findBehindPeers()
+      for (const peer of needWakeup) {
+        this.system.sendWakeup(peer)
       }
+
+      // todo: also need to gc in case this never hits
+      if (needWakeup.size) this._missedCores.clear()
 
       // force reset state in worst case
       if (this._queueViewReset && this._appending === null) {
