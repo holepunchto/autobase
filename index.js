@@ -86,6 +86,7 @@ module.exports = class Autobase extends ReadyResource {
     this._pendingRemoval = false
     this._completeRemovalAt = null
     this._systemPointer = 0
+    this._missedCores = new Set()
 
     this._updates = []
     this._handlers = handlers || {}
@@ -346,6 +347,10 @@ module.exports = class Autobase extends ReadyResource {
     if (this.localWriter && !this.system.bootstrapping) {
       await this._restoreLocalState()
     }
+
+    this.store.on('no-remote', core => {
+      this._missedCores.add(core.key)
+    })
 
     if (this.fastForwardTo !== null) {
       const { key, timeout } = this.fastForwardTo
@@ -983,24 +988,14 @@ module.exports = class Autobase extends ReadyResource {
     await this.local.setUserData('autobase/boot', pointer)
   }
 
-  async _wakeupPeers () {
-    const peers = this.linearizer.indexers[0].core.peers
-
-    for (const w of this.activeWriters) {
-      for (const peer of peers) {
-        let found = false
-        for (const p of w.core.peers) {
-          if (!b4a.equals(peer.remotePublicKey, p.remotePublicKey)) continue
-          found = true
-          break
-        }
-
-        if (!found) {
-          this.system.sendWakeup(peer.remotePublicKey)
-          break
-        }
+  _shouldWakeupPeers () {
+    for (const key of this._missedCores) {
+      if (this.activeWriters.has(key)) {
+        this._missedCores.clear() // probably should use a better heuristic for when to clear
+        return true
       }
     }
+    return false
   }
 
   async _drain () {
@@ -1038,7 +1033,9 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this.closing) return
 
-      this._wakeupPeers()
+      if (this._shouldWakeupPeers()) {
+        this.system.broadcastWakeup()
+      }
 
       // force reset state in worst case
       if (this._queueViewReset && this._appending === null) {
