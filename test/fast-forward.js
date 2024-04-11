@@ -787,13 +787,16 @@ test.solo('fast-forward - initial fast forward with in between writer', async t 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
   const c = await createBase(store.session(), a.bootstrap, t, { fastForward, debug: true })
 
-  t.teardown(await replicate([a, c]))
+  t.teardown(replicate([a, c]))
+
+  // wait some time so c's initial wakeup is not up to date
   await new Promise(resolve => setTimeout(resolve, 1000))
 
-  t.teardown(await replicate([a, b]))
+  t.teardown(replicate([a, b]))
   await b.append('c no see')
 
-  await t.execution(sync([a, b, c]))
+  const syncing = sync([a, b, c])
+  await t.execution(syncing)
 
   t.comment('sparse blocks: ' + sparse)
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
