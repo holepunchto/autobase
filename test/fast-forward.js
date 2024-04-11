@@ -794,8 +794,9 @@ test.solo('fast-forward - initial fast forward with in between writer', async t 
   t.teardown(replicate([a, b]))
   await b.append('c no see')
 
-  const syncing = sync([a, b, c])
-  await t.execution(syncing)
+  await t.execution(sync([a, b, c]))
+
+  t.pass()
 })
 
 async function isSparse (core) {
