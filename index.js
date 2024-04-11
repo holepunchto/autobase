@@ -434,8 +434,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async _setReindexed () {
     try {
-      // wait up to 20s of inactivity for it to be "done" done or for the signal to fire
-      for (let i = 0; i < 10 && !this.closing; i++) {
+      while (true) {
         await this.update()
         const p = this.progress()
         if (p.processed === p.total) break
