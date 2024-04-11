@@ -781,7 +781,6 @@ test.solo('fast-forward - initial fast forward with in between writer', async t 
 
   t.is(a.linearizer.indexers.length, 1)
 
-  const length = a.system.core.signedLength
   const fastForward = { key: a.system.core.key }
 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
@@ -797,9 +796,6 @@ test.solo('fast-forward - initial fast forward with in between writer', async t 
 
   const syncing = sync([a, b, c])
   await t.execution(syncing)
-
-  t.comment('sparse blocks: ' + sparse)
-  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
 async function isSparse (core) {
