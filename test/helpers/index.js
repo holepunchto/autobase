@@ -68,6 +68,8 @@ async function createBase (store, key, t, opts = {}) {
   }
 
   const base = new Autobase(store.session(), key, moreOpts)
+  if (opts.debug) base.debug = true
+
   await base.ready()
 
   t.teardown(() => base.close(), { order: 1 })
