@@ -1538,6 +1538,11 @@ module.exports = class Autobase extends ReadyResource {
     return complete
   }
 
+  // triggered from writer
+  _onindexerpeeradd () {
+    this._maybeWakeupPeers = true
+  }
+
   // triggered from linearized core
   _onviewappend (core, blocks) {
     assert(this._applying !== null, 'Append is only allowed in apply')
