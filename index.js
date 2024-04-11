@@ -80,13 +80,13 @@ module.exports = class Autobase extends ReadyResource {
     this._localDigest = null
     this._needsWakeup = true
     this._needsWakeupHeads = true
+    this._maybeWakeupPeers = false
     this._addCheckpoints = false
     this._firstCheckpoint = true
     this._hasPendingCheckpoint = false
     this._pendingRemoval = false
     this._completeRemovalAt = null
     this._systemPointer = 0
-    this._missedCores = new Map()
 
     this._updates = []
     this._handlers = handlers || {}
@@ -347,14 +347,6 @@ module.exports = class Autobase extends ReadyResource {
     if (this.localWriter && !this.system.bootstrapping) {
       await this._restoreLocalState()
     }
-
-    this.store.on('no-remote', (core, peer) => {
-      const hex = core.key.toString('hex')
-      if (!this._missedCores.has(hex)) {
-        this._missedCores.set(hex, new Set())
-      }
-      this._missedCores.get(hex).add(peer)
-    })
 
     if (this.fastForwardTo !== null) {
       const { key, timeout } = this.fastForwardTo
@@ -788,6 +780,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     this.activeWriters.add(w)
+    this._maybeWakeupPeers = true
     this._checkWriters.push(w)
 
     assert(w.opened)
@@ -992,33 +985,34 @@ module.exports = class Autobase extends ReadyResource {
     await this.local.setUserData('autobase/boot', pointer)
   }
 
-  _findBehindPeers () {
-    const findSystemPeerBound = findSystemPeer.bind(this)
+  async _wakeupPeers () {
+    if (!this._maybeWakeupPeers) return
+    this._maybeWakeupPeers = false
 
-    const cached = new Set()
-    const behind = new Set()
+    const peers = this.linearizer.indexers[0].core.peers
 
-    for (const [hex, peers] of this._missedCores) {
-      if (this.activeWriters.has(b4a.from(hex, 'hex'))) {
-        for (const p of peers) {
-          const peer = findSystemPeerBound(p.remotePublicKey)
-          if (peer) behind.add(peer)
+    for (const w of this.activeWriters) {
+      for (const peer of peers) {
+        let found = false
+        for (const p of w.core.peers) {
+          if (!b4a.equals(peer.remotePublicKey, p.remotePublicKey)) continue
+          found = true
+          break
+        }
+
+        if (!found) {
+          const sysPeer = findSystemPeer(peer.remotePublicKey)
+          if (sysPeer) this.system.sendWakeup(sysPeer)
+          break
         }
       }
     }
 
-    return behind
-
     function findSystemPeer (key) {
-      const hex = b4a.toString(key, 'hex')
-      if (cached.has(hex)) return null
-
       for (const peer of this.system.core.getBackingCore().session.peers) {
         if (!b4a.equals(peer.remotePublicKey, key)) continue
-        cached.add(hex)
         return peer
       }
-
       return null
     }
   }
@@ -1058,13 +1052,7 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this.closing) return
 
-      const needWakeup = this._findBehindPeers()
-      for (const peer of needWakeup) {
-        this.system.sendWakeup(peer)
-      }
-
-      // todo: also need to gc in case this never hits
-      if (needWakeup.size) this._missedCores.clear()
+      this._wakeupPeers()
 
       // force reset state in worst case
       if (this._queueViewReset && this._appending === null) {
