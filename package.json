@@ -48,7 +48,7 @@
   "devDependencies": {
     "autobase-test-helpers": "^2.0.1",
     "brittle": "^3.1.1",
-    "corestore": "^6.16.1",
+    "corestore": "github:holepunchto/corestore#no-remote-event",
     "random-access-memory": "^6.2.0",
     "same-data": "^1.0.0",
     "standard": "^17.0.0",
