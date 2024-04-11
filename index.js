@@ -1001,19 +1001,11 @@ module.exports = class Autobase extends ReadyResource {
         }
 
         if (!found) {
-          const sysPeer = findSystemPeer(peer.remotePublicKey)
+          const sysPeer = this.system._getRemotePeer(peer.remotePublicKey)
           if (sysPeer) this.system.sendWakeup(sysPeer)
           break
         }
       }
-    }
-
-    function findSystemPeer (key) {
-      for (const peer of this.system.core.getBackingCore().session.peers) {
-        if (!b4a.equals(peer.remotePublicKey, key)) continue
-        return peer
-      }
-      return null
     }
   }
 
