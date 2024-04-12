@@ -73,6 +73,7 @@ module.exports = class Autobase extends ReadyResource {
     this._appending = null
     this._wakeup = new AutoWakeup(this)
     this._wakeupHints = new Set()
+    this._wakeupPeers = new Set()
     this._queueViewReset = false
 
     this._applying = null
@@ -80,7 +81,6 @@ module.exports = class Autobase extends ReadyResource {
     this._localDigest = null
     this._needsWakeup = true
     this._needsWakeupHeads = true
-    this._maybeWakeupPeers = false
     this._addCheckpoints = false
     this._firstCheckpoint = true
     this._hasPendingCheckpoint = false
@@ -347,6 +347,10 @@ module.exports = class Autobase extends ReadyResource {
     if (this.localWriter && !this.system.bootstrapping) {
       await this._restoreLocalState()
     }
+
+    this.store.on('no-remote', (core, peer) => {
+      this._wakeupPeers.add(b4a.toString(peer.remotePublicKey, 'hex'))
+    })
 
     if (this.fastForwardTo !== null) {
       const { key, timeout } = this.fastForwardTo
@@ -780,7 +784,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     this.activeWriters.add(w)
-    this._maybeWakeupPeers = true
     this._checkWriters.push(w)
 
     assert(w.opened)
@@ -985,19 +988,14 @@ module.exports = class Autobase extends ReadyResource {
     await this.local.setUserData('autobase/boot', pointer)
   }
 
-  // triggered from writer
-  _onindexerpeeradd () {
-    this._maybeWakeupPeers = true
-  }
+  async _maybeWakeupPeers () {
+    if (!this._wakeupPeers.size) return
 
-  async _wakeupPeers () {
-    if (!this._maybeWakeupPeers) return
-
-    for (const peer of this.linearizer.indexers[0].core.peers) {
-      const hex = b4a.toString(peer.remotePublicKey, 'hex')
+    for (const hex of this._wakeupPeers) {
       for (const w of this.activeWriters) {
         if (!w.activePeers.has(hex)) {
           this.system.sendWakeup(b4a.from(hex, 'hex'))
+          this._wakeupPeers.delete(hex)
         }
       }
     }
@@ -1038,7 +1036,7 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this.closing) return
 
-      this._wakeupPeers()
+      this._maybeWakeupPeers()
 
       // force reset state in worst case
       if (this._queueViewReset && this._appending === null) {
