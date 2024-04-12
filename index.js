@@ -73,7 +73,7 @@ module.exports = class Autobase extends ReadyResource {
     this._appending = null
     this._wakeup = new AutoWakeup(this)
     this._wakeupHints = new Set()
-    this._wakeupPeers = new Set()
+    this._wakeupPeers = new Map()
     this._queueViewReset = false
 
     this._applying = null
@@ -986,19 +986,37 @@ module.exports = class Autobase extends ReadyResource {
     await this.local.setUserData('autobase/boot', pointer)
   }
 
-  _onnoremote (core, peer) {
-    this._wakeupPeers.add(b4a.toString(peer.remotePublicKey, 'hex'))
+  async _onnoremote (core, peer) {
+    try {
+      if (!(await this.system.has(core.key))) return
+    } catch (err) {
+      safetyCatch(err)
+      return
+    }
+
+    const hex = b4a.toString(peer.remotePublicKey, 'hex')
+    if (!this._wakeupPeers.has(hex)) this._wakeupPeers.set(hex, new Set())
+
+    this._wakeupPeers.get(hex).add(b4a.toString(core.key, 'hex'))
   }
 
-  async _maybeWakeupPeers () {
+  _maybeWakeupPeers () {
     if (!this._wakeupPeers.size) return
 
-    for (const hex of this._wakeupPeers) {
-      for (const w of this.activeWriters) {
-        if (!w.activePeers.has(hex)) {
-          this.system.sendWakeup(b4a.from(hex, 'hex'))
-          this._wakeupPeers.delete(hex)
-        }
+    for (const [hex, cores] of this._wakeupPeers) {
+      const missing = cores.size
+
+      for (const key of cores) {
+        const w = this.activeWriters.get(b4a.from(key, 'hex'))
+        if (!w) continue
+
+        cores.delete(key)
+        break
+      }
+
+      if (cores.size < missing) {
+        this.system.sendWakeup(b4a.from(hex, 'hex'))
+        if (cores.size === 0) this._wakeupPeers.delete(hex)
       }
     }
   }
