@@ -617,7 +617,6 @@ module.exports = class Autobase extends ReadyResource {
 
   async append (value) {
     if (!this.opened) await this.ready()
-
     if (this.closing) throw new Error('Autobase is closing')
 
     await this._advanced // ensure all local state has been applied, only needed until persistent batches
@@ -738,6 +737,8 @@ module.exports = class Autobase extends ReadyResource {
       return w
     }
 
+    let isActive = true
+
     if (len === -1) {
       const sys = system || this.system
       const writerInfo = await sys.get(key)
@@ -751,9 +752,12 @@ module.exports = class Autobase extends ReadyResource {
 
       if (!allowGC && writerInfo === null) return null
       len = writerInfo === null ? 0 : writerInfo.length
+      isActive = writerInfo !== null && !writerInfo.isRemoved
     }
 
-    w = this._makeWriter(key, len)
+    w = this._makeWriter(key, len, isActive)
+    if (!w) return null
+
     w.seen(seen)
     await w.ready()
 
@@ -785,11 +789,12 @@ module.exports = class Autobase extends ReadyResource {
     return core
   }
 
-  _makeWriter (key, length) {
+  _makeWriter (key, length, isActive) {
     const core = this._makeWriterCore(key)
     const w = new Writer(this, core, length)
 
     if (core.writable) {
+      if (!isActive) return null
       this.localWriter = w
       if (this._ackInterval) this._startAckTimer()
       this.emit('writable')
@@ -809,7 +814,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _bootstrapLinearizer () {
-    const bootstrap = this._makeWriter(this.bootstrap, 0)
+    const bootstrap = this._makeWriter(this.bootstrap, 0, true)
 
     this.activeWriters.add(bootstrap)
     this._checkWriters.push(bootstrap)
@@ -1498,7 +1503,7 @@ module.exports = class Autobase extends ReadyResource {
     assert(this._applying !== null, 'System changes are only allowed in apply')
     await this.system.add(key, { isIndexer, isPending: true })
 
-    const writer = (await this._getWriterByKey(key, -1, 0, false)) || this._makeWriter(key, 0)
+    const writer = (await this._getWriterByKey(key, -1, 0, false)) || this._makeWriter(key, 0, true)
     await writer.ready()
 
     // If we are getting added as indexer, already start adding checkpoints while we get confirmed...
