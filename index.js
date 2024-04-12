@@ -985,25 +985,19 @@ module.exports = class Autobase extends ReadyResource {
     await this.local.setUserData('autobase/boot', pointer)
   }
 
+  // triggered from writer
+  _onindexerpeeradd () {
+    this._maybeWakeupPeers = true
+  }
+
   async _wakeupPeers () {
     if (!this._maybeWakeupPeers) return
-    this._maybeWakeupPeers = false
 
-    const peers = this.linearizer.indexers[0].core.peers
-
-    for (const w of this.activeWriters) {
-      for (const peer of peers) {
-        let found = false
-        for (const p of w.core.peers) {
-          if (!b4a.equals(peer.remotePublicKey, p.remotePublicKey)) continue
-          found = true
-          break
-        }
-
-        if (!found) {
-          const sysPeer = this.system._getRemotePeer(peer.remotePublicKey)
-          if (sysPeer) this.system.sendWakeup(sysPeer)
-          break
+    for (const peer of this.linearizer.indexers[0].core.peers) {
+      const hex = b4a.toString(peer.remotePublicKey, 'hex')
+      for (const w of this.activeWriters) {
+        if (!w.activePeers.has(hex)) {
+          this.system.sendWakeup(b4a.from(hex, 'hex'))
         }
       }
     }
@@ -1528,11 +1522,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return complete
-  }
-
-  // triggered from writer
-  _onindexerpeeradd () {
-    this._maybeWakeupPeers = true
   }
 
   // triggered from linearized core
