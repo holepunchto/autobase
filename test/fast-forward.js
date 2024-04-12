@@ -753,7 +753,7 @@ test('fast-forward - initial ff upgrade available', async t => {
   await t.exception(upgradeError)
 })
 
-test.solo('fast-forward - initial fast forward with in between writer', async t => {
+test('fast-forward - initial fast forward with in between writer', async t => {
   t.plan(3)
 
   const { bases } = await create(2, t, {
