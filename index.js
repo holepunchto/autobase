@@ -761,7 +761,7 @@ module.exports = class Autobase extends ReadyResource {
     w.seen(seen)
     await w.ready()
 
-    if (allowGC && w.flushed()) {
+    if (allowGC && w.flushed() && w !== this.localWriter) {
       this._wakeup.unqueue(key, len)
       await w.close()
       return w
@@ -1436,6 +1436,7 @@ module.exports = class Autobase extends ReadyResource {
     await system.close()
 
     for (const w of this.activeWriters) {
+      if (w === this.localWriter) continue
       await w.close()
       this.activeWriters.delete(w)
     }
