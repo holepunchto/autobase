@@ -348,9 +348,7 @@ module.exports = class Autobase extends ReadyResource {
       await this._restoreLocalState()
     }
 
-    this.store.on('no-remote', (core, peer) => {
-      this._wakeupPeers.add(b4a.toString(peer.remotePublicKey, 'hex'))
-    })
+    this.store.on('no-remote', this._onnoremote.bind(this))
 
     if (this.fastForwardTo !== null) {
       const { key, timeout } = this.fastForwardTo
@@ -986,6 +984,10 @@ module.exports = class Autobase extends ReadyResource {
     })
 
     await this.local.setUserData('autobase/boot', pointer)
+  }
+
+  _onnoremote (core, peer) {
+    this._wakeupPeers.add(b4a.toString(peer.remotePublicKey, 'hex'))
   }
 
   async _maybeWakeupPeers () {
