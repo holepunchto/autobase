@@ -91,6 +91,7 @@ module.exports = class Autobase extends ReadyResource {
     this._handlers = handlers || {}
     this._warn = emitWarning.bind(this)
 
+    this._draining = false
     this._advancing = null
     this._advanced = null
     this.reindexing = false
@@ -730,6 +731,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _getWriterByKey (key, len, seen, allowGC, system) {
+    assert(this._draining === true || (this.opening && !this.opened))
+
     let w = this.activeWriters.get(key)
     if (w !== null) {
       w.seen(seen)
@@ -764,7 +767,7 @@ module.exports = class Autobase extends ReadyResource {
       this._wakeup.unqueue(key, len)
       if (w !== this.localWriter) {
         await w.close()
-        return null
+        return w
       }
     }
 
@@ -1063,21 +1066,21 @@ module.exports = class Autobase extends ReadyResource {
       this._needsWakeup = false
 
       for (const { key } of this._wakeup) {
-        await this._getWriterByKey(key, -1, 0, true)
+        await this._getWriterByKey(key, -1, 0, true, null)
       }
 
       if (this._needsWakeupHeads === true) {
         this._needsWakeupHeads = false
 
         for (const { key } of await this._getLocallyStoredHeads()) {
-          await this._getWriterByKey(key, -1, 0, true)
+          await this._getWriterByKey(key, -1, 0, true, null)
         }
       }
     }
 
     for (const hex of this._wakeupHints) {
       const key = b4a.from(hex, 'hex')
-      await this._getWriterByKey(key, -1, 0, true)
+      await this._getWriterByKey(key, -1, 0, true, null)
     }
 
     this._wakeupHints.clear()
@@ -1086,11 +1089,12 @@ module.exports = class Autobase extends ReadyResource {
   async _advance () {
     if (this.opened === false) await this.ready()
 
-    // note: this might block due to network i/o
-    if (this._needsWakeup === true || this._wakeupHints.size > 0) await this._drainWakeup()
-
     try {
+      this._draining = true
+      // note: this might block due to network i/o
+      if (this._needsWakeup === true || this._wakeupHints.size > 0) await this._drainWakeup()
       await this._drain()
+      this._draining = false
     } catch (err) {
       this._onError(err)
       return
@@ -1514,7 +1518,7 @@ module.exports = class Autobase extends ReadyResource {
     assert(this._applying !== null, 'System changes are only allowed in apply')
     await this.system.add(key, { isIndexer, isPending: true })
 
-    const writer = (await this._getWriterByKey(key, -1, 0, false)) || this._makeWriter(key, 0, true)
+    const writer = (await this._getWriterByKey(key, -1, 0, false, null)) || this._makeWriter(key, 0, true)
     await writer.ready()
 
     // If we are getting added as indexer, already start adding checkpoints while we get confirmed...
@@ -1734,8 +1738,8 @@ module.exports = class Autobase extends ReadyResource {
   async _getViewInfo (indexerUpdate) {
     const indexers = []
 
-    for (const { key } of this.system.indexers) {
-      const indexer = await this._getWriterByKey(key)
+    for (const { key, length } of this.system.indexers) {
+      const indexer = await this._getWriterByKey(key, length, 0, false, null)
       indexers.push(indexer)
     }
 
@@ -1769,7 +1773,7 @@ module.exports = class Autobase extends ReadyResource {
 
     let localUnflushed = false
     for (const { key, length } of this.system.indexers) {
-      const w = await this._getWriterByKey(key, -1)
+      const w = await this._getWriterByKey(key, length, 0, false, null)
 
       if (length > w.core.length) localUnflushed = true // local writer has nodes in mem
       else fetch.push(w.core.get(length - 1))
@@ -1852,7 +1856,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const p = []
     for (const { key } of info.indexers) {
-      p.push(await this._getWriterByKey(key))
+      p.push(await this._getWriterByKey(key, -1, 0, false, null))
     }
 
     const indexers = await p
