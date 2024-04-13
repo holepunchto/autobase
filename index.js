@@ -763,7 +763,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (allowGC && w.flushed()) {
       this._wakeup.unqueue(key, len)
-      await w.close()
+      if (w !== this.localWriter) await w.close()
       return w
     }
 
@@ -1167,10 +1167,7 @@ module.exports = class Autobase extends ReadyResource {
       await core.reset(length)
     }
 
-    for (const w of this.activeWriters) {
-      await w.close()
-      this.activeWriters.delete(w)
-    }
+    await this._closeAllActiveWriters()
 
     await this.system.update()
     await this._makeLinearizer(this.system)
@@ -1434,11 +1431,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     await system.close()
-
-    for (const w of this.activeWriters) {
-      await w.close()
-      this.activeWriters.delete(w)
-    }
+    await this._closeAllActiveWriters()
 
     this._undoAll()
 
@@ -1466,6 +1459,13 @@ module.exports = class Autobase extends ReadyResource {
     this.queueFastForward()
 
     await closeAll(opened)
+  }
+
+  async _closeAllActiveWriters () {
+    for (const w of this.activeWriters) {
+      if (this.localWriter === w) continue
+      await this._closeWriter(w)
+    }
   }
 
   async _flushIndexes () {
