@@ -729,7 +729,6 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  // note: not parallel safe!
   async _getWriterByKey (key, len, seen, allowGC, system) {
     let w = this.activeWriters.get(key)
     if (w !== null) {
@@ -763,12 +762,24 @@ module.exports = class Autobase extends ReadyResource {
 
     if (allowGC && w.flushed()) {
       this._wakeup.unqueue(key, len)
-      if (w !== this.localWriter) await w.close()
-      return w
+      if (w !== this.localWriter) {
+        await w.close()
+        return null
+      }
+    }
+
+    const existing = this.activeWriters.get(key)
+    if (existing) {
+      await w.close()
+      existing.seen(seen)
+      return existing
     }
 
     this.activeWriters.add(w)
     this._checkWriters.push(w)
+
+    assert(w.opened)
+    assert(!w.closed)
 
     return w
   }
