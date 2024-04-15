@@ -449,6 +449,7 @@ module.exports = class Autobase extends ReadyResource {
         if (p.processed === p.total && !(this.linearizer.indexers.length === 1 && this.linearizer.indexers[0].core.length === 0)) break
 
         await this._waiting.wait(2000)
+        await this._advancing
 
         p = this.progress()
         if (p.processed === p.total) break
