@@ -433,12 +433,27 @@ module.exports = class Autobase extends ReadyResource {
     this.queueFastForward()
   }
 
+  _reindexersIdle () {
+    for (const idx of this.linearizer.indexers) {
+      if (idx.core.length !== idx.length) return false
+    }
+    return !this.localWriter || this.localWriter.core.length === this.localWriter.length
+  }
+
   async _setReindexed () {
     try {
       while (true) {
-        await this.update()
-        const p = this.progress()
+        await this._bump()
+
+        let p = this.progress()
+        if (p.processed === p.total && !(this.linearizer.indexers.length === 1 && this.linearizer.indexers[0].core.length === 0)) break
+
+        await this._waiting.wait(2000)
+
+        p = this.progress()
         if (p.processed === p.total) break
+
+        if (this._reindexersIdle()) break
       }
       if (this.closing) return
       await this.local.setUserData('autobase/reindexed', b4a.from([0]))
