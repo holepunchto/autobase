@@ -62,7 +62,7 @@ module.exports = class Autobase extends ReadyResource {
     this.updating = false
 
     this.fastForwardEnabled = handlers.fastForward !== false
-    this.fastForwarding = false
+    this.fastForwarding = 0
     this.fastForwardTo = null
 
     if (this.fastForwardEnabled && isObject(handlers.fastForward)) {
@@ -377,14 +377,14 @@ module.exports = class Autobase extends ReadyResource {
 
     async function onsyskey (key) {
       for (const core of indexerCores) await core.close()
-      if (key === null || !base.reindexing) return
+      if (key === null || !base.reindexing || base._isFastForwarding()) return
       base.initialFastForward(key, DEFAULT_FF_TIMEOUT)
     }
 
     async function tail (core) {
       await core.ready()
 
-      while (base.reindexing) {
+      while (base.reindexing && !base._isFastForwarding()) {
         const seq = core.length - 1
         const blk = seq >= 0 ? await core.get(seq) : null
         if (blk && blk.version >= 1) {
@@ -584,7 +584,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _isFastForwarding () {
     if (this.fastForwardTo !== null) return true
-    return this.fastForwardEnabled && this.fastForwarding
+    return this.fastForwardEnabled && this.fastForwarding > 0
   }
 
   _backgroundAck () {
@@ -1205,6 +1205,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async initialFastForward (key, timeout) {
+    this.fastForwarding++
+
     const encryptionKey = this._viewStore.getBlockKey(this._viewStore.getSystemCore().name)
 
     const core = this.store.get({ key, encryptionKey, isBlockKey: true })
@@ -1229,18 +1231,21 @@ module.exports = class Autobase extends ReadyResource {
 
     if (!length) {
       await core.close()
+      this.fastForwarding--
+      this.queueFastForward()
       return
     }
 
     const target = await this._preFastForward(core, length, timeout)
     await core.close()
 
+    this.fastForwarding--
+
     // initial fast-forward failed
     if (target === null) return
 
     for (const w of this.activeWriters) w.pause()
 
-    this.fastForwarding = false
     this.fastForwardTo = target
 
     this._bumpAckTimer()
@@ -1249,14 +1254,16 @@ module.exports = class Autobase extends ReadyResource {
 
   async queueFastForward () {
     // if already FFing, let the finish. TODO: auto kill the attempt after a while and move to latest?
-    if (!this.fastForwardEnabled || this.fastForwarding) return
+    if (!this.fastForwardEnabled || this.fastForwarding > 0) return
 
     const core = this.system.core.getBackingCore()
 
     if (core.session.length <= core.length + FF_THRESHOLD) return
     if (this.fastForwardTo !== null && core.session.length <= this.fastForwardTo.length + FF_THRESHOLD) return
 
+    this.fastForwarding++
     const target = await this._preFastForward(core.session, core.session.length, null)
+    this.fastForwarding--
 
     // fast-forward failed
     if (target === null) return
@@ -1274,7 +1281,7 @@ module.exports = class Autobase extends ReadyResource {
 
   // NOTE: runs in parallel with everything, can never fail
   async _preFastForward (core, length, timeout) {
-    this.fastForwarding = true
+    if (length === 0) return null
 
     const info = { key: core.key, length }
 
@@ -1293,7 +1300,6 @@ module.exports = class Autobase extends ReadyResource {
           length
         }
 
-        this.fastForwarding = false
         this.emit('upgrade-available', upgrade)
         return null
       }
@@ -1361,8 +1367,6 @@ module.exports = class Autobase extends ReadyResource {
     } catch (err) {
       safetyCatch(err)
       return null
-    } finally {
-      this.fastForwarding = false
     }
 
     return info
