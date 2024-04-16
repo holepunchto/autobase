@@ -38,6 +38,7 @@
     "hypercore": "^10.33.0",
     "hypercore-crypto": "^3.4.0",
     "hypercore-id-encoding": "^1.2.0",
+    "mutexify": "^1.4.0",
     "nanoassert": "^2.0.0",
     "ready-resource": "^1.0.0",
     "safety-catch": "^1.0.2",
