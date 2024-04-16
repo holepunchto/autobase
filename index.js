@@ -1297,6 +1297,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (core.session.length <= core.length + FF_THRESHOLD) return
     if (this.fastForwardTo !== null && core.session.length <= this.fastForwardTo.length + FF_THRESHOLD) return
+    if (!core.session.length) return
 
     this.fastForwarding++
     const target = await this._preFastForward(core.session, core.session.length, DEFAULT_FF_TIMEOUT)
