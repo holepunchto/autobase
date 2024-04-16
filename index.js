@@ -1272,8 +1272,6 @@ module.exports = class Autobase extends ReadyResource {
     const target = await this._preFastForward(core, length, timeout)
     await core.close()
 
-    this.doneFastForwarding()
-
     // initial fast-forward failed
     if (target === null) return
 
@@ -1296,7 +1294,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this.fastForwarding++
     const target = await this._preFastForward(core.session, core.session.length, DEFAULT_FF_TIMEOUT)
-    this.doneFastForwarding()
 
     // fast-forward failed
     if (target === null) return
@@ -1318,10 +1315,10 @@ module.exports = class Autobase extends ReadyResource {
 
     const info = { key: core.key, length }
 
-    // pause writers
-    for (const w of this.activeWriters) w.pause()
-
     try {
+      // pause writers
+      for (const w of this.activeWriters) w.pause()
+
       // sys runs open with wait false, so get head block first for low complexity
       if (!(await core.has(length - 1))) {
         await core.get(length - 1, { timeout })
@@ -1403,6 +1400,8 @@ module.exports = class Autobase extends ReadyResource {
     } catch (err) {
       safetyCatch(err)
       return null
+    } finally {
+      this.doneFastForwarding()
     }
 
     return info
