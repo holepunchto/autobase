@@ -520,8 +520,6 @@ module.exports = class Autobase extends ReadyResource {
       const unqueued = this._wakeup.unqueue(w.core.key, w.core.length)
       if (!unqueued || w.isIndexer || this.localWriter === w) continue
 
-      // TODO: keep a random set around also for less cache churn...
-
       await this._closeWriter(w, false)
     }
 
