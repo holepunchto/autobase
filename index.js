@@ -27,7 +27,7 @@ const DEFAULT_ACK_INTERVAL = 10_000
 const DEFAULT_ACK_THRESHOLD = 4
 
 const FF_THRESHOLD = 16
-const DEFAULT_FF_TIMEOUT = 60_000
+const DEFAULT_FF_TIMEOUT = 10_000
 
 const REMOTE_ADD_BATCH = 64
 
@@ -354,7 +354,7 @@ module.exports = class Autobase extends ReadyResource {
     if (this.fastForwardTo !== null) {
       const { key, timeout } = this.fastForwardTo
       this.fastForwardTo = null // will get reset once ready
-      this.initialFastForward(key, timeout || DEFAULT_FF_TIMEOUT)
+      this.initialFastForward(key, timeout || DEFAULT_FF_TIMEOUT * 2)
     }
 
     if (this.localWriter && this._ackInterval) this._startAckTimer()
@@ -382,7 +382,7 @@ module.exports = class Autobase extends ReadyResource {
     async function onsyskey (key) {
       for (const core of indexerCores) await core.close()
       if (key === null || !base.reindexing || base._isFastForwarding()) return
-      base.initialFastForward(key, DEFAULT_FF_TIMEOUT)
+      base.initialFastForward(key, DEFAULT_FF_TIMEOUT * 2)
     }
 
     async function tail (core) {
@@ -814,7 +814,7 @@ module.exports = class Autobase extends ReadyResource {
       assert(w.opened)
       assert(!w.closed)
 
-      w.resume()
+      this._resumeWriter(w)
       return w
     } finally {
       release()
@@ -869,6 +869,10 @@ module.exports = class Autobase extends ReadyResource {
     this._updateAckThreshold()
   }
 
+  _resumeWriter (w) {
+    if (!this._isFastForwarding()) w.resume()
+  }
+
   async _bootstrapLinearizer () {
     const bootstrap = this._makeWriter(this.bootstrap, 0, true)
 
@@ -877,7 +881,7 @@ module.exports = class Autobase extends ReadyResource {
     bootstrap.isIndexer = true
     bootstrap.inflateBackground()
     await bootstrap.ready()
-    bootstrap.resume()
+    this._resumeWriter(bootstrap)
 
     this._updateLinearizer([bootstrap], [])
   }
@@ -1231,6 +1235,12 @@ module.exports = class Autobase extends ReadyResource {
     await this._makeLinearizer(this.system)
   }
 
+  doneFastForwarding () {
+    if (--this.fastForwarding === 0 && !this._isFastForwarding()) {
+      for (const w of this.activeWriters) w.resume()
+    }
+  }
+
   async initialFastForward (key, timeout) {
     this.fastForwarding++
 
@@ -1258,7 +1268,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (!length) {
       await core.close()
-      this.fastForwarding--
+      this.doneFastForwarding()
       this.queueFastForward()
       return
     }
@@ -1266,14 +1276,14 @@ module.exports = class Autobase extends ReadyResource {
     const target = await this._preFastForward(core, length, timeout)
     await core.close()
 
-    this.fastForwarding--
-
     // initial fast-forward failed
-    if (target === null) return
-
-    for (const w of this.activeWriters) w.pause()
+    if (target === null) {
+      this.doneFastForwarding()
+      return
+    }
 
     this.fastForwardTo = target
+    this.doneFastForwarding()
 
     this._bumpAckTimer()
     this._queueBump()
@@ -1287,20 +1297,25 @@ module.exports = class Autobase extends ReadyResource {
 
     if (core.session.length <= core.length + FF_THRESHOLD) return
     if (this.fastForwardTo !== null && core.session.length <= this.fastForwardTo.length + FF_THRESHOLD) return
+    if (!core.session.length) return
 
     this.fastForwarding++
-    const target = await this._preFastForward(core.session, core.session.length, null)
-    this.fastForwarding--
+    const target = await this._preFastForward(core.session, core.session.length, DEFAULT_FF_TIMEOUT)
 
     // fast-forward failed
-    if (target === null) return
+    if (target === null) {
+      this.doneFastForwarding()
+      return
+    }
 
     // if it migrated underneath us, ignore for now
-    if (core !== this.system.core.getBackingCore()) return
-
-    for (const w of this.activeWriters) w.pause()
+    if (core !== this.system.core.getBackingCore()) {
+      this.doneFastForwarding()
+      return
+    }
 
     this.fastForwardTo = target
+    this.doneFastForwarding()
 
     this._bumpAckTimer()
     this._queueBump()
@@ -1311,6 +1326,9 @@ module.exports = class Autobase extends ReadyResource {
     if (length === 0) return null
 
     const info = { key: core.key, length }
+
+    // pause writers
+    for (const w of this.activeWriters) w.pause()
 
     try {
       // sys runs open with wait false, so get head block first for low complexity
@@ -1379,7 +1397,7 @@ module.exports = class Autobase extends ReadyResource {
         info.key = this.deriveKey(name, indexers, prologue)
 
         const core = this.store.get(info.key)
-        await core.get(length - 1)
+        await core.get(length - 1, { timeout })
 
         closing.push(core.close())
       }
@@ -1399,10 +1417,12 @@ module.exports = class Autobase extends ReadyResource {
     return info
   }
 
-  _clearFastForward () {
-    for (const w of this.activeWriters) w.resume()
+  _clearFastForward (queue) {
+    if (this.fastForwarding === 0) {
+      for (const w of this.activeWriters) w.resume()
+    }
     this.fastForwardTo = null
-    this.queueFastForward() // queue in case we lost an ff while applying this one
+    if (queue) this.queueFastForward() // queue in case we lost an ff while applying this one
   }
 
   async _applyFastForward () {
@@ -1421,7 +1441,7 @@ module.exports = class Autobase extends ReadyResource {
 
     // just extra sanity check that we are not going back in time, nor that we cleared the storage needed for ff
     if (from >= length || core.length < length) {
-      this._clearFastForward()
+      this._clearFastForward(true)
       return
     }
 
@@ -1473,7 +1493,7 @@ module.exports = class Autobase extends ReadyResource {
 
       if (!view) {
         await closeAll(opened)
-        this._clearFastForward() // something wrong somewhere, likely a bug, just safety
+        this._clearFastForward(false) // something wrong somewhere, likely a bug, just safety
         return
       }
 
@@ -1484,7 +1504,7 @@ module.exports = class Autobase extends ReadyResource {
 
       if (core.length < v.length) { // sanity check in case there was a migration etc
         await closeAll(opened)
-        this._clearFastForward()
+        this._clearFastForward(true)
         return
       }
 
@@ -1511,7 +1531,7 @@ module.exports = class Autobase extends ReadyResource {
     if (migrated) this._setDigest(key)
 
     if (b4a.equals(this.fastForwardTo.key, key) && this.fastForwardTo.length === length) {
-      this.fastForwardTo = null
+      this._clearFastForward(false)
     }
 
     this.updating = true
@@ -1569,7 +1589,11 @@ module.exports = class Autobase extends ReadyResource {
     const writer = (await this._getWriterByKey(key, -1, 0, false, null)) || this._makeWriter(key, 0, true)
     await writer.ready()
 
-    writer.resume()
+    if (!this.activeWriters.has(key)) {
+      this.activeWriters.add(writer)
+      this._checkWriters.push(writer)
+      this._resumeWriter(writer)
+    }
 
     // If we are getting added as indexer, already start adding checkpoints while we get confirmed...
     if (writer === this.localWriter && isIndexer) this._addCheckpoints = true
