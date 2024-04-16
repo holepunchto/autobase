@@ -15,6 +15,7 @@ const Timer = require('./lib/timer')
 const Writer = require('./lib/writer')
 const ActiveWriters = require('./lib/active-writers')
 const AutoWakeup = require('./lib/wakeup')
+const mutexify = require('mutexify/promise')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 
@@ -74,6 +75,7 @@ module.exports = class Autobase extends ReadyResource {
     this._wakeup = new AutoWakeup(this)
     this._wakeupHints = new Set()
     this._queueViewReset = false
+    this._lock = mutexify()
 
     this._applying = null
     this._updatingCores = false
@@ -535,13 +537,21 @@ module.exports = class Autobase extends ReadyResource {
 
   async _waitForIdle () {
     let p = this.progress()
-    while (!this.closing) {
-      if (p.processed === p.total && !(this.linearizer.indexers.length === 1 && this.linearizer.indexers[0].core.length === 0)) return
+    while (!this.closing && this.reindexing) {
+      if (p.processed === p.total && !(this.linearizer.indexers.length === 1 && this.linearizer.indexers[0].core.length === 0)) break
       await this._waiting.wait(2000)
-      await this._bump()
+      await this._advancing
       const next = this.progress()
-      if (next.processed === p.processed && next.total === p.total) return
+      if (next.processed === p.processed && next.total === p.total) break
       p = next
+    }
+
+    if (this.localWriter) {
+      await this.localWriter.ready()
+      while (!this.closing && this.localWriter.core.length > this.localWriter.length) {
+        await this.localWriter.waitForSynced()
+        await this._bump() // make sure its all flushed...
+      }
     }
   }
 
@@ -749,58 +759,63 @@ module.exports = class Autobase extends ReadyResource {
   async _getWriterByKey (key, len, seen, allowGC, system) {
     assert(this._draining === true || (this.opening && !this.opened))
 
-    let w = this.activeWriters.get(key)
-    if (w !== null) {
-      w.seen(seen)
-      return w
+    const release = await this._lock()
+
+    if (this.closing) {
+      release()
+      throw new Error('Autobase is closing')
     }
 
-    let isActive = true
-
-    if (len === -1) {
-      const sys = system || this.system
-      const writerInfo = await sys.get(key)
-
-      // TODO: this indirectly disables backwards-dag-walk - we should reenable when FF is enabled
-      //       this is because the remote writer might not have our next heads in mem if it knows
-      //       that following the indexed sets makes that redundant. tmp(?) solution for now is to
-      //       just inflate the writers anyway - if FF is enabled simply jumping ahead is likely a better solution
-      // if (writerInfo === null) return null
-      // len = writerInfo.length
-
-      if (!allowGC && writerInfo === null) return null
-      len = writerInfo === null ? 0 : writerInfo.length
-      isActive = writerInfo !== null && !writerInfo.isRemoved
-    }
-
-    w = this._makeWriter(key, len, isActive)
-    if (!w) return null
-
-    w.seen(seen)
-    await w.ready()
-
-    if (allowGC && w.flushed()) {
-      this._wakeup.unqueue(key, len)
-      if (w !== this.localWriter) {
-        await w.close()
+    try {
+      let w = this.activeWriters.get(key)
+      if (w !== null) {
+        w.seen(seen)
         return w
       }
+
+      let isActive = true
+
+      if (len === -1) {
+        const sys = system || this.system
+        const writerInfo = await sys.get(key)
+
+        // TODO: this indirectly disables backwards-dag-walk - we should reenable when FF is enabled
+        //       this is because the remote writer might not have our next heads in mem if it knows
+        //       that following the indexed sets makes that redundant. tmp(?) solution for now is to
+        //       just inflate the writers anyway - if FF is enabled simply jumping ahead is likely a better solution
+        // if (writerInfo === null) return null
+        // len = writerInfo.length
+
+        if (!allowGC && writerInfo === null) return null
+        len = writerInfo === null ? 0 : writerInfo.length
+        isActive = writerInfo !== null && !writerInfo.isRemoved
+      }
+
+      w = this._makeWriter(key, len, isActive)
+      if (!w) return null
+
+      w.seen(seen)
+      await w.ready()
+
+      if (allowGC && w.flushed()) {
+        this._wakeup.unqueue(key, len)
+        if (w !== this.localWriter) {
+          await w.close()
+          return w
+        }
+      }
+
+      this.activeWriters.add(w)
+      this._checkWriters.push(w)
+
+      assert(w.opened)
+      assert(!w.closed)
+
+      w.resume()
+      return w
+    } finally {
+      release()
     }
-
-    const existing = this.activeWriters.get(key)
-    if (existing) {
-      await w.close()
-      existing.seen(seen)
-      return existing
-    }
-
-    this.activeWriters.add(w)
-    this._checkWriters.push(w)
-
-    assert(w.opened)
-    assert(!w.closed)
-
-    return w
   }
 
   _updateAll () {
@@ -851,6 +866,7 @@ module.exports = class Autobase extends ReadyResource {
     bootstrap.isIndexer = true
     bootstrap.inflateBackground()
     await bootstrap.ready()
+    bootstrap.resume()
 
     this._updateLinearizer([bootstrap], [])
   }
