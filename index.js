@@ -1388,7 +1388,7 @@ module.exports = class Autobase extends ReadyResource {
         info.key = this.deriveKey(name, indexers, prologue)
 
         const core = this.store.get(info.key)
-        await core.get(length - 1)
+        await core.get(length - 1, { timeout })
 
         closing.push(core.close())
       }
