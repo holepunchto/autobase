@@ -827,7 +827,7 @@ module.exports = class Autobase extends ReadyResource {
     return Promise.all(p)
   }
 
-  _makeWriterCore (key) {
+  _makeWriterCore (key, isActive) {
     const pooled = this.corePool.get(key)
     if (pooled) {
       pooled.valueEncoding = messages.OplogMessage
@@ -835,6 +835,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const local = b4a.equals(key, this.local.key)
+    if (local && !isActive) return null
 
     const core = local
       ? this.local.session({ valueEncoding: messages.OplogMessage, encryptionKey: this.encryptionKey })
@@ -844,11 +845,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _makeWriter (key, length, isActive) {
-    const core = this._makeWriterCore(key)
-    if (core.writable && !isActive) {
-      await core.close()
-      return
-    }
+    const core = this._makeWriterCore(key, isActive)
+    if (!core) return null
 
     const w = new Writer(this, core, length)
 
