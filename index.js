@@ -814,7 +814,7 @@ module.exports = class Autobase extends ReadyResource {
       assert(w.opened)
       assert(!w.closed)
 
-      w.resume()
+      this._resumeWriter(w)
       return w
     } finally {
       release()
@@ -869,6 +869,10 @@ module.exports = class Autobase extends ReadyResource {
     this._updateAckThreshold()
   }
 
+  _resumeWriter (w) {
+    if (!this._isFastForwarding()) w.resume()
+  }
+
   async _bootstrapLinearizer () {
     const bootstrap = this._makeWriter(this.bootstrap, 0, true)
 
@@ -877,7 +881,7 @@ module.exports = class Autobase extends ReadyResource {
     bootstrap.isIndexer = true
     bootstrap.inflateBackground()
     await bootstrap.ready()
-    bootstrap.resume()
+    this._resumeWriter(bootstrap)
 
     this._updateLinearizer([bootstrap], [])
   }
@@ -1273,11 +1277,13 @@ module.exports = class Autobase extends ReadyResource {
     await core.close()
 
     // initial fast-forward failed
-    if (target === null) return
-
-    for (const w of this.activeWriters) w.pause()
+    if (target === null) {
+      this.doneFastForwarding()
+      return
+    }
 
     this.fastForwardTo = target
+    this.doneFastForwarding()
 
     this._bumpAckTimer()
     this._queueBump()
@@ -1296,14 +1302,19 @@ module.exports = class Autobase extends ReadyResource {
     const target = await this._preFastForward(core.session, core.session.length, DEFAULT_FF_TIMEOUT)
 
     // fast-forward failed
-    if (target === null) return
+    if (target === null) {
+      this.doneFastForwarding()
+      return
+    }
 
     // if it migrated underneath us, ignore for now
-    if (core !== this.system.core.getBackingCore()) return
-
-    for (const w of this.activeWriters) w.pause()
+    if (core !== this.system.core.getBackingCore()) {
+      this.doneFastForwarding()
+      return
+    }
 
     this.fastForwardTo = target
+    this.doneFastForwarding()
 
     this._bumpAckTimer()
     this._queueBump()
@@ -1400,20 +1411,17 @@ module.exports = class Autobase extends ReadyResource {
     } catch (err) {
       safetyCatch(err)
       return null
-    } finally {
-      this.doneFastForwarding()
     }
 
     return info
   }
 
-  _clearFastForward () {
+  _clearFastForward (queue) {
     if (this.fastForwarding === 0) {
       for (const w of this.activeWriters) w.resume()
     }
-
     this.fastForwardTo = null
-    this.queueFastForward() // queue in case we lost an ff while applying this one
+    if (queue) this.queueFastForward() // queue in case we lost an ff while applying this one
   }
 
   async _applyFastForward () {
@@ -1432,7 +1440,7 @@ module.exports = class Autobase extends ReadyResource {
 
     // just extra sanity check that we are not going back in time, nor that we cleared the storage needed for ff
     if (from >= length || core.length < length) {
-      this._clearFastForward()
+      this._clearFastForward(true)
       return
     }
 
@@ -1484,7 +1492,7 @@ module.exports = class Autobase extends ReadyResource {
 
       if (!view) {
         await closeAll(opened)
-        this._clearFastForward() // something wrong somewhere, likely a bug, just safety
+        this._clearFastForward(false) // something wrong somewhere, likely a bug, just safety
         return
       }
 
@@ -1495,7 +1503,7 @@ module.exports = class Autobase extends ReadyResource {
 
       if (core.length < v.length) { // sanity check in case there was a migration etc
         await closeAll(opened)
-        this._clearFastForward()
+        this._clearFastForward(true)
         return
       }
 
@@ -1522,7 +1530,7 @@ module.exports = class Autobase extends ReadyResource {
     if (migrated) this._setDigest(key)
 
     if (b4a.equals(this.fastForwardTo.key, key) && this.fastForwardTo.length === length) {
-      this.fastForwardTo = null
+      this._clearFastForward(false)
     }
 
     this.updating = true
@@ -1580,7 +1588,11 @@ module.exports = class Autobase extends ReadyResource {
     const writer = (await this._getWriterByKey(key, -1, 0, false, null)) || this._makeWriter(key, 0, true)
     await writer.ready()
 
-    writer.resume()
+    if (!this.activeWriters.has(key)) {
+      this.activeWriters.add(writer)
+      this._checkWriters.push(writer)
+      this._resumeWriter(writer)
+    }
 
     // If we are getting added as indexer, already start adding checkpoints while we get confirmed...
     if (writer === this.localWriter && isIndexer) this._addCheckpoints = true
