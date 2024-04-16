@@ -1409,7 +1409,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _clearFastForward () {
-    if (this._isFastForwarding === 0) {
+    if (this.fastForwarding === 0) {
       for (const w of this.activeWriters) w.resume()
     }
 
