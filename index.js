@@ -1569,6 +1569,8 @@ module.exports = class Autobase extends ReadyResource {
     const writer = (await this._getWriterByKey(key, -1, 0, false, null)) || this._makeWriter(key, 0, true)
     await writer.ready()
 
+    writer.resume()
+
     // If we are getting added as indexer, already start adding checkpoints while we get confirmed...
     if (writer === this.localWriter && isIndexer) this._addCheckpoints = true
 
