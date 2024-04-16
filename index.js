@@ -23,7 +23,7 @@ const inspect = Symbol.for('nodejs.util.inspect.custom')
 const AUTOBASE_VERSION = 1
 
 // default is to automatically ack
-const DEFAULT_ACK_INTERVAL = 60_000
+const DEFAULT_ACK_INTERVAL = 10_000
 const DEFAULT_ACK_THRESHOLD = 4
 
 const FF_THRESHOLD = 16
@@ -354,7 +354,7 @@ module.exports = class Autobase extends ReadyResource {
     if (this.fastForwardTo !== null) {
       const { key, timeout } = this.fastForwardTo
       this.fastForwardTo = null // will get reset once ready
-      this.initialFastForward(key, timeout || DEFAULT_FF_TIMEOUT)
+      this.initialFastForward(key, timeout || DEFAULT_FF_TIMEOUT * 2)
     }
 
     if (this.localWriter && this._ackInterval) this._startAckTimer()
