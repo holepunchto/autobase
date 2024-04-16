@@ -1315,10 +1315,10 @@ module.exports = class Autobase extends ReadyResource {
 
     const info = { key: core.key, length }
 
-    try {
-      // pause writers
-      for (const w of this.activeWriters) w.pause()
+    // pause writers
+    for (const w of this.activeWriters) w.pause()
 
+    try {
       // sys runs open with wait false, so get head block first for low complexity
       if (!(await core.has(length - 1))) {
         await core.get(length - 1, { timeout })
