@@ -23,7 +23,7 @@ const inspect = Symbol.for('nodejs.util.inspect.custom')
 const AUTOBASE_VERSION = 1
 
 // default is to automatically ack
-const DEFAULT_ACK_INTERVAL = 10_000
+const DEFAULT_ACK_INTERVAL = 60_000
 const DEFAULT_ACK_THRESHOLD = 4
 
 const FF_THRESHOLD = 16
@@ -1231,6 +1231,12 @@ module.exports = class Autobase extends ReadyResource {
     await this._makeLinearizer(this.system)
   }
 
+  doneFastForwarding () {
+    if (--this.fastForwarding === 0) {
+      for (const w of this.activeWriters) w.resume()
+    }
+  }
+
   async initialFastForward (key, timeout) {
     this.fastForwarding++
 
@@ -1258,7 +1264,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (!length) {
       await core.close()
-      this.fastForwarding--
+      this.doneFastForwarding()
       this.queueFastForward()
       return
     }
@@ -1266,7 +1272,7 @@ module.exports = class Autobase extends ReadyResource {
     const target = await this._preFastForward(core, length, timeout)
     await core.close()
 
-    this.fastForwarding--
+    this.doneFastForwarding()
 
     // initial fast-forward failed
     if (target === null) return
@@ -1289,8 +1295,8 @@ module.exports = class Autobase extends ReadyResource {
     if (this.fastForwardTo !== null && core.session.length <= this.fastForwardTo.length + FF_THRESHOLD) return
 
     this.fastForwarding++
-    const target = await this._preFastForward(core.session, core.session.length, null)
-    this.fastForwarding--
+    const target = await this._preFastForward(core.session, core.session.length, DEFAULT_FF_TIMEOUT)
+    this.doneFastForwarding()
 
     // fast-forward failed
     if (target === null) return
@@ -1311,6 +1317,9 @@ module.exports = class Autobase extends ReadyResource {
     if (length === 0) return null
 
     const info = { key: core.key, length }
+
+    // pause writers
+    for (const w of this.activeWriters) w.pause()
 
     try {
       // sys runs open with wait false, so get head block first for low complexity
