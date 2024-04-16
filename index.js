@@ -1902,15 +1902,28 @@ module.exports = class Autobase extends ReadyResource {
     const pending = this.system.core._source.pendingIndexedLength
     const info = await this.system.getIndexedInfo(pending)
 
-    const p = []
-    for (const { key } of info.indexers) {
-      p.push(await this._getWriterByKey(key, -1, 0, false, null))
+    let same = info.indexers.length === this.linearizer.indexers.length
+    if (same) {
+      for (let i = 0; i < info.indexers.length; i++) {
+        if (!b4a.equals(info.indexers[i].key, this.linearizer.indexers[i].core.key)) {
+          same = false
+          break
+        }
+      }
     }
 
-    const indexers = await p
+    let key = this.system.core.key
 
-    const sys = this._viewStore.getSystemCore()
-    const key = await sys.deriveKey(indexers, pending)
+    if (!same) {
+      const p = []
+      for (const { key } of info.indexers) {
+        p.push(await this._getWriterByKey(key, -1, 0, false, null))
+      }
+
+      const indexers = await p
+      const sys = this._viewStore.getSystemCore()
+      key = await sys.deriveKey(indexers, pending)
+    }
 
     if (this._localDigest.key && b4a.equals(key, this._localDigest.key)) return
 
