@@ -1356,7 +1356,7 @@ module.exports = class Autobase extends ReadyResource {
       const systemShouldMigrate = b4a.equals(core.key, this.system.core.key) &&
         !system.sameIndexers(this.linearizer.indexers)
 
-      const localLookup = this.localWriter ? system.get(this.local.key) : null
+      const localLookup = this.localWriter ? system.get(this.local.key, { timeout }) : null
 
       const indexers = []
       const pendingViews = []
