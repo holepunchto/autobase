@@ -1325,7 +1325,11 @@ module.exports = class Autobase extends ReadyResource {
   async _preFastForward (core, length, timeout) {
     if (length === 0) return null
 
-    const info = { key: core.key, length }
+    const info = {
+      key: core.key,
+      length,
+      localLength: 0
+    }
 
     // pause writers
     for (const w of this.activeWriters) w.pause()
@@ -1352,6 +1356,8 @@ module.exports = class Autobase extends ReadyResource {
       const systemShouldMigrate = b4a.equals(core.key, this.system.core.key) &&
         !system.sameIndexers(this.linearizer.indexers)
 
+      const localLookup = this.localWriter ? system.get(this.local.key, { timeout }) : null
+
       const indexers = []
       const pendingViews = []
 
@@ -1375,6 +1381,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const promises = []
+
       for (const { core, length } of indexers) {
         if (core.length === 0 && length > 0) promises.push(core.get(length - 1, { timeout }))
       }
@@ -1385,6 +1392,11 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       await Promise.all(promises)
+
+      if (localLookup) {
+        const value = await localLookup
+        if (value) info.localLength = value.length
+      }
 
       const closing = []
 
@@ -1427,7 +1439,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async _applyFastForward () {
     // remember these in case another fast forward gets queued
-    const { key, length } = this.fastForwardTo
+    const { key, length, localLength } = this.fastForwardTo
 
     const migrated = !b4a.equals(key, this.system.core.key)
 
@@ -1524,7 +1536,7 @@ module.exports = class Autobase extends ReadyResource {
 
     await this.system.update()
 
-    if (this.localWriter) this.localWriter.reset()
+    if (this.localWriter) this.localWriter.reset(localLength)
 
     await this._makeLinearizer(this.system)
     await this._advanceBootRecord(length)
