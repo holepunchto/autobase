@@ -1524,6 +1524,8 @@ module.exports = class Autobase extends ReadyResource {
 
     await this.system.update()
 
+    if (this.localWriter) this.localWriter.reset()
+
     await this._makeLinearizer(this.system)
     await this._advanceBootRecord(length)
 
