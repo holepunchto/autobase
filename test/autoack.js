@@ -567,7 +567,6 @@ test('autoack - minority indexers with non-indexer tails', async t => {
   t.is(b.linearizer.size, bsize)
 })
 
-
 function getWriter (base, writer) {
   return base.activeWriters.get(writer.core.key)
 }
