@@ -508,6 +508,66 @@ test('autoack - minority indexers who are both tails', async t => {
   t.is(b.linearizer.size, bsize)
 })
 
+test('autoack - minority indexers with non-indexer tails', async t => {
+  const { bases } = await create(5, t, {
+    ackInterval: 10,
+    ackThreshold: 0
+  })
+
+  const [a, b, c, d, e] = bases
+
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c)
+  await addWriterAndSync(a, d)
+  await addWriterAndSync(a, e, false)
+
+  await replicateAndSync([a, b, c, d])
+  await b.append(null)
+  await c.append(null)
+  await d.append(null)
+
+  await confirm([a, b, c, d])
+
+  // this will get confirmed
+  await a.append(null)
+
+  await replicateAndSync([a, b]) // e is inert, use them to "one way" sync
+
+  // we want these two left as tails
+  await e.append('e0')
+  await a.append('a0')
+  await b.append('b0')
+
+  await replicateAndSync([b, c])
+  await c.append(null)
+  await replicateAndSync([c, d])
+  await d.append(null)
+  await replicateAndSync([b, d])
+  await b.append(null)
+
+  // now we keep c and d offline
+  t.teardown(await replicate([a, b, e]))
+
+  await new Promise(resolve => setTimeout(resolve, 400))
+
+  const alen = a.local.length
+  const blen = b.local.length
+
+  const asize = a.linearizer.size
+  const bsize = b.linearizer.size
+
+  await new Promise(resolve => setTimeout(resolve, 400))
+
+  t.absent(b.linearizer.shouldAck(b.localWriter))
+
+  t.is(a.local.length, alen)
+  t.is(a.linearizer.size, asize)
+
+  t.is(b.local.length, blen)
+  t.is(b.linearizer.size, bsize)
+})
+
+
 function getWriter (base, writer) {
   return base.activeWriters.get(writer.core.key)
 }
