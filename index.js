@@ -710,10 +710,11 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   static async getUserData (core) {
-    const viewName = await core.getUserData('autobase/view')
+    const view = await core.getUserData('autobase/view')
+
     return {
       referrer: await core.getUserData('referrer'),
-      view: viewName ? b4a.toString(viewName) : null
+      view: (!view || view[0] !== 0) ? null : c.decode(messages.ViewRecord, view)
     }
   }
 
