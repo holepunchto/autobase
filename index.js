@@ -293,7 +293,7 @@ module.exports = class Autobase extends ReadyResource {
     const core = actualCore.batch({ checkout: length, session: false })
 
     // safety check the batch is not corrupt
-    if (!(await core.has(length))) {
+    if (length === 0 || !(await core.has(length - 1))) {
       await this.local.setUserData('autobase/boot', null)
       return { bootstrap, system: null }
     }
