@@ -948,7 +948,10 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _onUpgrade (version) {
-    if (version > this.maxSupportedVersion) throw new Error('Autobase upgrade required')
+    if (version > this.maxSupportedVersion) {
+      console.trace('UPGRADE')
+      throw new Error('Autobase upgrade required')
+    }
   }
 
   _addLocalHeads () {
