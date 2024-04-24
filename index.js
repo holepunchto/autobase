@@ -1054,6 +1054,7 @@ module.exports = class Autobase extends ReadyResource {
     for (const [hex, vote] of tally) {
       if (vote < maj) continue
       if (!this._isFastForwarding()) this.initialFastForward(b4a.from(hex, 'hex'), DEFAULT_FF_TIMEOUT * 2)
+      else console.log('already ffing')
       return
     }
   }
