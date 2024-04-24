@@ -90,6 +90,7 @@ module.exports = class Autobase extends ReadyResource {
     this._pendingRemoval = false
     this._completeRemovalAt = null
     this._systemPointer = 0
+    this._maybeStaticFastForward = false // writer bumps this
 
     this._updates = []
     this._handlers = handlers || {}
@@ -1043,19 +1044,23 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
-    if (tally !== null) {
-      const maj = (this.linearizer.indexers.length >> 1) + 1
-      for (const [hex, vote] of tally) {
-        if (vote >= maj) {
-          if (!this._isFastForwarding()) this.initialFastForward(b4a.from(hex, 'hex'), DEFAULT_FF_TIMEOUT * 2)
-        }
-      }
+    if (tally === null) {
+      this._maybeStaticFastForward = false
+      return
+    }
+
+    const maj = (this.linearizer.indexers.length >> 1) + 1
+
+    for (const [hex, vote] of tally) {
+      if (vite < maj) continue
+      if (!this._isFastForwarding()) this.initialFastForward(b4a.from(hex, 'hex'), DEFAULT_FF_TIMEOUT * 2)
+      return
     }
   }
 
   async _drain () {
     while (!this.closing) {
-      this._checkStaticFastForward()
+      if (this._maybeStaticFastForward === true) this._checkStaticFastForward()
 
       if (this.fastForwardTo !== null) {
         await this._applyFastForward()
