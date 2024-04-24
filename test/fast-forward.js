@@ -615,8 +615,6 @@ test('fast-forward - upgrade available', async t => {
     fastForward: true
   })
 
-  await c0.ready()
-
   // this should fire when we try to fast forward
   const upgradeEvent = new Promise((resolve, reject) => {
     const timeout = setTimeout(reject, 1000, new Error('event did not fire'))
@@ -637,6 +635,8 @@ test('fast-forward - upgrade available', async t => {
       reject(err)
     })
   })
+
+  await c0.ready()
 
   replicateAndSync([a1, b1, c0]).catch(() => {}) // throws
 
