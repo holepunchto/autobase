@@ -290,14 +290,15 @@ module.exports = class Autobase extends ReadyResource {
 
     await actualCore.ready()
 
-    if (!(await actualCore.has(length))) {
+    const core = actualCore.batch({ checkout: length, session: false })
+
+    // safety check the batch is not corrupt
+    if (!(await core.has(length))) {
       this.local.setUserData('autobase/boot', null)
       return { bootstrap, system: null }
     }
 
-    const core = actualCore.batch({ checkout: length, session: false })
     const system = new SystemView(core, length)
-
     await system.ready()
 
     if (system.version > this.maxSupportedVersion) {
