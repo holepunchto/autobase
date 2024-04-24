@@ -1,4 +1,5 @@
 const os = require('os')
+const { on } = require('events')
 const test = require('brittle')
 const tmpDir = require('test-tmp')
 const cenc = require('compact-encoding')
@@ -750,6 +751,88 @@ test('fast-forward - initial ff upgrade available', async t => {
 
   await t.execution(upgradeEvent)
   await t.exception(upgradeError)
+})
+
+test('fast-forward - double ff', async t => {
+  const { bases } = await create(5, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b, c, d, e] = bases
+
+  const migrations = []
+
+  for (let i = 0; i < 300; i++) {
+    await a.append('a' + i)
+  }
+
+  await addWriterAndSync(a, b)
+  await confirm(bases)
+
+  for (let i = 0; i < 300; i++) {
+    await b.append('b' + i)
+  }
+
+  migrations.push(a.system.core.getBackingCore().manifest.prologue.length)
+
+  await addWriterAndSync(b, c)
+  await confirm(bases)
+
+  for (let i = 0; i < 300; i++) {
+    await c.append('c' + i)
+  }
+
+  migrations.push(a.system.core.getBackingCore().manifest.prologue.length)
+
+  await addWriterAndSync(c, d)
+  await confirm(bases)
+
+  for (let i = 0; i < 300; i++) {
+    await d.append('d' + i)
+  }
+
+  migrations.push(a.system.core.getBackingCore().manifest.prologue.length)
+
+  await addWriterAndSync(d, e)
+  await confirm(bases)
+
+  for (let i = 0; i < 300; i++) {
+    await e.append('e' + i)
+  }
+
+  migrations.push(a.system.core.getBackingCore().manifest.prologue.length)
+
+  await confirm(bases)
+
+  const sys = a.system.core.getBackingCore()
+  t.is(sys.manifest.signers.length, 5)
+
+  const [store] = await createStores(1, t, { offset: 5, storage: () => tmpDir(t) })
+  const latecomer = await createBase(store.session(), a.bootstrap, t, {
+    fastForward: true
+  })
+
+  const p = replicateAndSync([...bases, latecomer])
+
+  // check that the migration happened from start to end
+  for await (const [to, from] of on(latecomer, 'fast-forward')) {
+    t.ok(from < migrations.shift())
+    t.ok(migrations.length > 1)
+
+    if (!migrations.length || to > migrations[migrations.length - 1]) break
+  }
+
+  await p
+
+  const core = latecomer.system.core.getBackingCore()
+  const sparse = await isSparse(core)
+
+  t.is(latecomer.linearizer.indexers.length, 5)
+  t.ok(sparse > 0)
+
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
 async function isSparse (core) {
