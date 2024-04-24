@@ -290,6 +290,11 @@ module.exports = class Autobase extends ReadyResource {
 
     await actualCore.ready()
 
+    if (!(await actualCore.has(length))) {
+      this.local.setUserData('autobase/boot', null)
+      return { bootstrap, system: null }
+    }
+
     const core = actualCore.batch({ checkout: length, session: false })
     const system = new SystemView(core, length)
 
