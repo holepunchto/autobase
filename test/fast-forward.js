@@ -636,12 +636,14 @@ test('fast-forward - upgrade available', async t => {
     })
   })
 
+  const exception = t.exception(upgradeError)
+
   await c0.ready()
 
   replicateAndSync([a1, b1, c0]).catch(() => {}) // throws
 
   await t.execution(upgradeEvent)
-  await t.exception(upgradeError)
+  await exception
 })
 
 test('fast-forward - initial ff upgrade available', async t => {
