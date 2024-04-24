@@ -541,7 +541,7 @@ test('fast-forward - ignore bogus initial ff', async t => {
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
-test('fast-forward - upgrade available', async t => {
+test.solo('fast-forward - upgrade available', async t => {
   const [s1, s2, s3] = await createStores(3, t)
 
   const a = new Autobase(s1.session(), null, {
