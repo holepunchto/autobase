@@ -1052,7 +1052,7 @@ module.exports = class Autobase extends ReadyResource {
     const maj = (this.linearizer.indexers.length >> 1) + 1
 
     for (const [hex, vote] of tally) {
-      if (vite < maj) continue
+      if (vote < maj) continue
       if (!this._isFastForwarding()) this.initialFastForward(b4a.from(hex, 'hex'), DEFAULT_FF_TIMEOUT * 2)
       return
     }
@@ -1060,7 +1060,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async _drain () {
     while (!this.closing) {
-      if (this._maybeStaticFastForward === true) this._checkStaticFastForward()
+      if (this._maybeStaticFastForward === true && this.fastForwardEnabled === true) this._checkStaticFastForward()
 
       if (this.fastForwardTo !== null) {
         await this._applyFastForward()
