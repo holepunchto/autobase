@@ -1,8 +1,10 @@
 const test = require('brittle')
 const tmpDir = require('test-tmp')
+const c = require('compact-encoding')
 const b4a = require('b4a')
 
 const Autobase = require('..')
+const { BootRecord } = require('../lib/messages')
 
 const {
   create,
@@ -902,6 +904,42 @@ test('suspend - incomplete migrate', async t => {
   t.is(b2.activeWriters.size, 2)
 
   await t.execution(replicateAndSync([a, b2]))
+})
+
+test('suspend - recover from bad sys core', async t => {
+  const { bases, stores } = await create(2, t, { storage: () => tmpDir(t) })
+
+  const [a, b] = bases
+
+  await a.append('a0')
+  await a.append('a1')
+  await a.append('a2')
+  await a.append('a3')
+
+  await replicateAndSync([a, b])
+
+  const len = b.system.core.length
+
+  await b.close()
+
+  const raw = await b.local.getUserData('autobase/boot')
+  const record = c.decode(BootRecord, raw)
+
+  const core = stores[1].get(record.indexed.key)
+  await core.ready()
+
+  for (let i = 6; i < record.indexed.length; i++) {
+    core.core.bitfield.set(i, false)
+  }
+
+  const b1 = await createBase(stores[1], null, t)
+
+  t.not(b1.system.core.length, len)
+  t.is(b1.system.core.length, 0)
+
+  await replicateAndSync([a, b1])
+
+  t.is(b1.system.core.length, len)
 })
 
 function openMultiple (store) {
