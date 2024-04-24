@@ -1060,8 +1060,6 @@ module.exports = class Autobase extends ReadyResource {
 
   async _drain () {
     while (!this.closing) {
-      if (this._maybeStaticFastForward === true && this.fastForwardEnabled === true) this._checkStaticFastForward()
-
       if (this.fastForwardTo !== null) {
         await this._applyFastForward()
         this.system.requestWakeup()
@@ -1070,6 +1068,7 @@ module.exports = class Autobase extends ReadyResource {
       const remoteAdded = await this._addRemoteHeads()
       const localNodes = this._appending === null ? null : this._addLocalHeads()
 
+      if (this._maybeStaticFastForward === true && this.fastForwardEnabled === true) this._checkStaticFastForward()
       if (this.closing) return
 
       if (remoteAdded > 0 || localNodes !== null) {
