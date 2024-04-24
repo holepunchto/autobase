@@ -294,7 +294,7 @@ module.exports = class Autobase extends ReadyResource {
 
     // safety check the batch is not corrupt
     if (!(await core.has(length))) {
-      this.local.setUserData('autobase/boot', null)
+      await this.local.setUserData('autobase/boot', null)
       return { bootstrap, system: null }
     }
 
