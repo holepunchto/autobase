@@ -632,6 +632,7 @@ test.solo('fast-forward - upgrade available', async t => {
     const timeout = setTimeout(resolve, 5000)
 
     c0.once('error', err => {
+      console.log('error', err)
       clearTimeout(timeout)
       reject(err)
     })
