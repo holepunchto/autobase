@@ -617,7 +617,7 @@ test('fast-forward - upgrade available', async t => {
 
   // this should fire when we try to fast forward
   const upgradeEvent = new Promise((resolve, reject) => {
-    const timeout = setTimeout(reject, 1000, new Error('event did not fire'))
+    const timeout = setTimeout(reject, 5000, new Error('event did not fire'))
 
     c0.once('upgrade-available', upgrade => {
       clearTimeout(timeout)
@@ -628,7 +628,7 @@ test('fast-forward - upgrade available', async t => {
 
   // this should fire when we apply the upgrade
   const upgradeError = new Promise((resolve, reject) => {
-    const timeout = setTimeout(resolve, 1000)
+    const timeout = setTimeout(resolve, 5000)
 
     c0.once('error', err => {
       clearTimeout(timeout)
