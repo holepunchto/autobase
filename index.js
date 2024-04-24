@@ -1034,10 +1034,20 @@ module.exports = class Autobase extends ReadyResource {
 
   _checkStaticFastForward () {
     let tally = null
+    let upgraded = 0
+
+    const maj = (this.linearizer.indexers.length >> 1) + 1
 
     for (let i = 0; i < this.linearizer.indexers.length; i++) {
       const w = this.linearizer.indexers[i]
-      if (w.system !== null && b4a.equals(w.system, this.system.core.key) === false) {
+      if (w.digestVersion > this.maxSupportedVersion) {
+        if (++upgraded < maj) continue
+        this.emit('upgrade-available', { version: w.digestVersion })
+        this._maybeStaticFastForward = false
+        return
+      }
+
+      if (w.system !== null && !b4a.equals(w.system, this.system.core.key)) {
         if (tally === null) tally = new Map()
         const hex = b4a.toString(w.system, 'hex')
         tally.set(hex, (tally.get(hex) || 0) + 1)
@@ -1048,8 +1058,6 @@ module.exports = class Autobase extends ReadyResource {
       this._maybeStaticFastForward = false
       return
     }
-
-    const maj = (this.linearizer.indexers.length >> 1) + 1
 
     for (const [hex, vote] of tally) {
       if (vote < maj) continue
