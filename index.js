@@ -1031,8 +1031,32 @@ module.exports = class Autobase extends ReadyResource {
     await this.local.setUserData('autobase/boot', pointer)
   }
 
+  _checkStaticFastForward () {
+    let tally = null
+
+    for (let i = 0; i < this.linearizer.indexers.length; i++) {
+      const w = this.linearizer.indexers[i]
+      if (w.system !== null && b4a.equals(w.system, this.system.core.key) === false) {
+        if (tally === null) tally = new Map()
+        const hex = b4a.toString(w.system, 'hex')
+        tally.set(hex, (tally.get(hex) || 0) + 1)
+      }
+    }
+
+    if (tally !== null) {
+      const maj = (this.linearizer.indexers.length >> 1) + 1
+      for (const [hex, vote] of tally) {
+        if (vote >= maj) {
+          if (!this._isFastForwarding()) this.initialFastForward(b4a.from(hex, 'hex'), DEFAULT_FF_TIMEOUT * 2)
+        }
+      }
+    }
+  }
+
   async _drain () {
     while (!this.closing) {
+      this._checkStaticFastForward()
+
       if (this.fastForwardTo !== null) {
         await this._applyFastForward()
         this.system.requestWakeup()
@@ -1267,7 +1291,7 @@ module.exports = class Autobase extends ReadyResource {
       }
     })
 
-    if (!length) {
+    if (!length || length < this.system.core.indexedLength) {
       await core.close()
       this.doneFastForwarding()
       this.queueFastForward()
