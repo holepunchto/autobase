@@ -1386,6 +1386,7 @@ module.exports = class Autobase extends ReadyResource {
         console.log('fetched...', await core.get(length - 1, { timeout }))
       }
 
+      console.log('has block', await core.has(length - 1))
       block = await core.get(length - 1, { wait: false })
       console.log('block', block.toString('hex'))
 
