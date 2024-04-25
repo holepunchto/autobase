@@ -1054,7 +1054,6 @@ module.exports = class Autobase extends ReadyResource {
     for (const [hex, vote] of tally) {
       if (vote < maj) continue
       if (!this._isFastForwarding()) this.initialFastForward(b4a.from(hex, 'hex'), DEFAULT_FF_TIMEOUT * 2)
-      else console.log('already ffing')
       return
     }
   }
@@ -1304,6 +1303,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const target = await this._preFastForward(core, length, timeout)
+
     await core.close()
 
     // initial fast-forward failed
@@ -1366,8 +1366,21 @@ module.exports = class Autobase extends ReadyResource {
 
     try {
       // sys runs open with wait false, so get head block first for low complexity
-      if (!(await core.has(length - 1))) {
-        await core.get(length - 1, { timeout })
+      const start = Date.now()
+      while (length > 0) {
+        if (Date.now() - start > timeout) throw new Error('Failed to find block')
+
+        if (!(await core.has(length - 1))) {
+          await core.get(length - 1, { timeout })
+        }
+
+        try {
+          const block = await core.get(length - 1, { wait: false })
+          SystemView.decodeInfo(block)
+          break
+        } catch {
+          length--
+        }
       }
 
       const system = new SystemView(core.session(), length)

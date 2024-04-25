@@ -621,7 +621,6 @@ test.solo('fast-forward - upgrade available', async t => {
 
     c0.once('upgrade-available', upgrade => {
       clearTimeout(timeout)
-      console.log(upgrade)
       t.is(upgrade.version, version + 1)
       resolve()
     })
