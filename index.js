@@ -1279,7 +1279,7 @@ module.exports = class Autobase extends ReadyResource {
   async initialFastForward (key, timeout) {
     this.fastForwarding++
 
-    console.log('calling initial ff')
+    console.trace('calling initial ff')
 
     const encryptionKey = this._viewStore.getBlockKey(this._viewStore.getSystemCore().name)
 
