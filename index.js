@@ -1381,18 +1381,30 @@ module.exports = class Autobase extends ReadyResource {
 
     try {
       // sys runs open with wait false, so get head block first for low complexity
-      if (!(await core.has(length - 1))) {
-        console.log('pre ff fetch first block')
-        await core.get(length - 1, { timeout })
+      const start = Date.now()
+      let system = null
+
+      while (length-- > 0) {
+        if (Date.now() - start < timeout) throw new Error('Failed to find block')
+
+        if (!(await core.has(length - 1))) {
+          console.log('pre ff fetch first block')
+          await core.get(length - 1, { timeout })
+        }
+
+        console.log('pre ff core has latest block')
+
+        try {
+          system = new SystemView(core.session(), length)
+          console.log('pre ff system readying...')
+          await system.ready()
+        } catch {
+          continue
+        }
+        console.log('pre ff system ready!')
       }
 
-      console.log('pre ff core has latest block')
-
-      const system = new SystemView(core.session(), length)
-
-      console.log('pre ff system readying...')
-      await system.ready()
-      console.log('pre ff system ready!')
+      if (system === null) return new
 
       console.log('pre ff system', system.version, core.key, length, this.maxSupportedVersion)
 
