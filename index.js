@@ -1380,28 +1380,12 @@ module.exports = class Autobase extends ReadyResource {
 
     try {
       // sys runs open with wait false, so get head block first for low complexity
-      const start = Date.now()
-      while (length > 0) {
-        console.log('pre ff while...')
-        if (Date.now() - start > timeout) throw new Error('Failed to find block')
-
-        if (!(await core.has(length - 1))) {
-          console.log('pre ff fetch first block', length)
-          await core.get(length - 1, { timeout })
-        }
-
-        let block
-        try {
-          block = await core.get(length - 1, { wait: false })
-          SystemView.decodeInfo(block)
-          break
-        } catch (err) {
-          console.log(block && block.toString('hex'))
-          console.log(err)
-          length--
-        }
+      if (!(await core.has(length - 1))) {
+        console.log('pre ff fetch first block', length)
+        await core.get(length - 1, { timeout })
       }
 
+      const block = await core.get(length - 1, { wait: false })
       const system = new SystemView(core.session(), length)
       await system.ready()
       console.log('pre ff system', system.version, core.key, length, this.maxSupportedVersion)
@@ -1488,6 +1472,7 @@ module.exports = class Autobase extends ReadyResource {
       await Promise.allSettled(closing)
     } catch (err) {
       safetyCatch(err)
+      console.log(block.toString('hex'))
       console.log('pre-ff caught', err)
       return null
     }
