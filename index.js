@@ -1387,6 +1387,8 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       block = await core.get(length - 1, { wait: false })
+      console.log('block' block.toString('hex'))
+
       const system = new SystemView(core.session(), length)
       await system.ready()
       console.log('pre ff system', system.version, core.key, length, this.maxSupportedVersion)
@@ -1473,7 +1475,7 @@ module.exports = class Autobase extends ReadyResource {
       await Promise.allSettled(closing)
     } catch (err) {
       safetyCatch(err)
-      console.log(block.toString('hex'))
+      console.log(block && block.toString('hex'))
       console.log('pre-ff caught', err)
       return null
     }
