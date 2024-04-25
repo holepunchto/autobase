@@ -1056,10 +1056,12 @@ module.exports = class Autobase extends ReadyResource {
 
     for (const [hex, vote] of tally) {
       if (vote < maj) continue
+      console.log('static ff triggered')
       if (!this._isFastForwarding()) this.initialFastForward(b4a.from(hex, 'hex'), DEFAULT_FF_TIMEOUT * 2)
       else console.log('already ffing')
       return
     }
+    console.log('static ff did not trigger')
   }
 
   async _drain () {
@@ -1276,6 +1278,8 @@ module.exports = class Autobase extends ReadyResource {
 
   async initialFastForward (key, timeout) {
     this.fastForwarding++
+
+    console.log('calling initial ff')
 
     const encryptionKey = this._viewStore.getBlockKey(this._viewStore.getSystemCore().name)
 
