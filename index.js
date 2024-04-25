@@ -1380,13 +1380,13 @@ module.exports = class Autobase extends ReadyResource {
 
     let block
     try {
-      console.log('length 1', length)
+      console.log('length 1', length, core.length)
       // sys runs open with wait false, so get head block first for low complexity
       if (!(await core.has(length - 1))) {
         console.log('pre ff fetch first block', length)
         console.log('fetched...', await core.get(length - 1, { timeout, debug: true }))
       }
-      console.log('length 2', length)
+      console.log('length 2', length, core.length)
 
       console.log('has block', length, await core.has(length - 1))
       block = await core.get(length - 1, { wait: false, debug: true })
