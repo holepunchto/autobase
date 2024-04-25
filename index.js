@@ -1365,18 +1365,8 @@ module.exports = class Autobase extends ReadyResource {
 
     try {
       // sys runs open with wait false, so get head block first for low complexity
-      const start = Date.now()
-      while (length > 0) {
-        if (Date.now() - start > timeout) throw new Error('Fast forward timeout expired')
-
-        const block = await core.get(length - 1, { timeout })
-
-        try {
-          SystemView.decodeInfo(block)
-          break
-        } catch {
-          length--
-        }
+      if (!(await core.has(length - 1))) {
+        await core.get(length - 1, { timeout })
       }
 
       const system = new SystemView(core.session(), length)
