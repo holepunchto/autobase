@@ -1379,6 +1379,7 @@ module.exports = class Autobase extends ReadyResource {
           SystemView.decodeInfo(block)
           break
         } catch {
+          console.log(block.toString('hex'))
           length--
         }
       }
