@@ -1386,7 +1386,7 @@ module.exports = class Autobase extends ReadyResource {
         console.log('fetched...', await core.get(length - 1, { timeout }))
       }
 
-      console.log('has block', await core.has(length - 1))
+      console.log('has block', length, await core.has(length - 1))
       block = await core.get(length - 1, { wait: false, debug: true })
       console.log('block', block.toString('hex'))
 
@@ -1476,7 +1476,7 @@ module.exports = class Autobase extends ReadyResource {
       await Promise.allSettled(closing)
     } catch (err) {
       safetyCatch(err)
-      console.log(block && block.toString('hex'))
+      console.log('caught block', block && block.toString('hex'))
       console.log('pre-ff caught', err)
       return null
     }
