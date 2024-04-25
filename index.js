@@ -1387,7 +1387,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       console.log('has block', await core.has(length - 1))
-      block = await core.get(length - 1, { wait: false })
+      block = await core.get(length - 1, { wait: false, debug: true })
       console.log('block', block.toString('hex'))
 
       const system = new SystemView(core.session(), length)
