@@ -1395,8 +1395,9 @@ module.exports = class Autobase extends ReadyResource {
           block = await core.get(length - 1, { wait: false })
           SystemView.decodeInfo(block)
           break
-        } catch {
+        } catch (err) {
           console.log(block.toString('hex'))
+          console.log(err)
           length--
         }
       }
