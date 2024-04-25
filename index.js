@@ -1303,19 +1303,19 @@ module.exports = class Autobase extends ReadyResource {
       }
     })
 
-    console.trace('initial ff has length!')
+    console.log('initial ff has length!')
 
     if (!length || length < this.system.core.indexedLength) {
       await core.close()
       this.doneFastForwarding()
       this.queueFastForward()
-      console.trace('initial ff bailing...')
+      console.log('initial ff bailing...')
       return
     }
 
     console.log('initial ff', length, this.system.core.getBackingCore().session.length)
     const target = await this._preFastForward(core, length, timeout)
-    console.trace('initial ff has target', target)
+    console.log('initial ff has target', target)
 
     await core.close()
 
