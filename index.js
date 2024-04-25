@@ -1376,16 +1376,20 @@ module.exports = class Autobase extends ReadyResource {
       const system = new SystemView(core.session(), length)
       await system.ready()
 
+      console.log('pre ff system', system.version, core.key, length, this.maxSupportedVersion)
+
       if (system.version > this.maxSupportedVersion) {
         const upgrade = {
           version: system.version,
           length
         }
 
+        console.log('upgrade is available')
         this.emit('upgrade-available', upgrade)
         return null
       }
 
+      console.log('continuing with ff...')
       const systemShouldMigrate = b4a.equals(core.key, this.system.core.key) &&
         !system.sameIndexers(this.linearizer.indexers)
 
