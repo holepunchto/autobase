@@ -1405,7 +1405,6 @@ module.exports = class Autobase extends ReadyResource {
           console.log(err)
           continue
         }
-
       }
 
       console.log('pre ff system', system.version, core.key, length, this.maxSupportedVersion)
