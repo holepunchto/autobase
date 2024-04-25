@@ -1376,15 +1376,17 @@ module.exports = class Autobase extends ReadyResource {
 
     // pause writers
     for (const w of this.activeWriters) w.pause()
-    console.log('pre ff starts...')
+    console.log('pre ff starts...', length)
 
     let block
     try {
+      console.log('length 1', length)
       // sys runs open with wait false, so get head block first for low complexity
       if (!(await core.has(length - 1))) {
         console.log('pre ff fetch first block', length)
         console.log('fetched...', await core.get(length - 1, { timeout }))
       }
+      console.log('length 2', length)
 
       console.log('has block', length, await core.has(length - 1))
       block = await core.get(length - 1, { wait: false, debug: true })
