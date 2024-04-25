@@ -1367,7 +1367,7 @@ module.exports = class Autobase extends ReadyResource {
       // sys runs open with wait false, so get head block first for low complexity
       const start = Date.now()
       while (length > 0) {
-        if (Date.now() - start > timeout) throw new Error('Failed to find block')
+        if (Date.now() - start > timeout) throw new Error('Fast forward timeout expired')
 
         const block = await core.get(length - 1, { timeout })
 
