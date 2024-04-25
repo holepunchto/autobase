@@ -1314,6 +1314,7 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
+    console.log('initial ff', length, this.system.core.getBackingCore().session.length)
     const target = await this._preFastForward(core, length, timeout)
     console.trace('initial ff has target', target)
 
