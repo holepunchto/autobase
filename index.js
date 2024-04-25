@@ -1032,32 +1032,6 @@ module.exports = class Autobase extends ReadyResource {
     await this.local.setUserData('autobase/boot', pointer)
   }
 
-  _checkStaticFastForward () {
-    let tally = null
-
-    for (let i = 0; i < this.linearizer.indexers.length; i++) {
-      const w = this.linearizer.indexers[i]
-      if (w.system !== null && !b4a.equals(w.system, this.system.core.key)) {
-        if (tally === null) tally = new Map()
-        const hex = b4a.toString(w.system, 'hex')
-        tally.set(hex, (tally.get(hex) || 0) + 1)
-      }
-    }
-
-    if (tally === null) {
-      this._maybeStaticFastForward = false
-      return
-    }
-
-    const maj = (this.linearizer.indexers.length >> 1) + 1
-
-    for (const [hex, vote] of tally) {
-      if (vote < maj) continue
-      if (!this._isFastForwarding()) this.initialFastForward(b4a.from(hex, 'hex'), DEFAULT_FF_TIMEOUT * 2)
-      return
-    }
-  }
-
   async _drain () {
     while (!this.closing) {
       if (this.fastForwardTo !== null) {
@@ -1267,6 +1241,32 @@ module.exports = class Autobase extends ReadyResource {
   doneFastForwarding () {
     if (--this.fastForwarding === 0 && !this._isFastForwarding()) {
       for (const w of this.activeWriters) w.resume()
+    }
+  }
+
+  _checkStaticFastForward () {
+    let tally = null
+
+    for (let i = 0; i < this.linearizer.indexers.length; i++) {
+      const w = this.linearizer.indexers[i]
+      if (w.system !== null && !b4a.equals(w.system, this.system.core.key)) {
+        if (tally === null) tally = new Map()
+        const hex = b4a.toString(w.system, 'hex')
+        tally.set(hex, (tally.get(hex) || 0) + 1)
+      }
+    }
+
+    if (tally === null) {
+      this._maybeStaticFastForward = false
+      return
+    }
+
+    const maj = (this.linearizer.indexers.length >> 1) + 1
+
+    for (const [hex, vote] of tally) {
+      if (vote < maj) continue
+      if (!this._isFastForwarding()) this.initialFastForward(b4a.from(hex, 'hex'), DEFAULT_FF_TIMEOUT * 2)
+      return
     }
   }
 
