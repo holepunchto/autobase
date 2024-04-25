@@ -1472,6 +1472,7 @@ module.exports = class Autobase extends ReadyResource {
       await Promise.allSettled(closing)
     } catch (err) {
       safetyCatch(err)
+      console.log('pre-ff caught', e.message)
       return null
     }
 
