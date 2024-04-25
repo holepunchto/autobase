@@ -35,7 +35,7 @@
     "bare-events": "^2.2.0",
     "debounceify": "^1.0.0",
     "hyperbee": "^2.15.0",
-    "hypercore": "github:holepunchto/hypercore#get-wait-false-debug",
+    "hypercore": "github:holepunchto/hypercore#copy-from-non-destructive",
     "hypercore-crypto": "^3.4.0",
     "hypercore-id-encoding": "^1.2.0",
     "mutexify": "^1.4.0",
