@@ -1369,12 +1369,9 @@ module.exports = class Autobase extends ReadyResource {
       while (length > 0) {
         if (Date.now() - start > timeout) throw new Error('Failed to find block')
 
-        if (!(await core.has(length - 1))) {
-          await core.get(length - 1, { timeout })
-        }
+        const block = await core.get(length - 1, { timeout })
 
         try {
-          const block = await core.get(length - 1, { wait: false })
           SystemView.decodeInfo(block)
           break
         } catch {
