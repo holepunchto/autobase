@@ -1378,6 +1378,7 @@ module.exports = class Autobase extends ReadyResource {
     for (const w of this.activeWriters) w.pause()
     console.log('pre ff starts...')
 
+    let block
     try {
       // sys runs open with wait false, so get head block first for low complexity
       if (!(await core.has(length - 1))) {
@@ -1385,7 +1386,7 @@ module.exports = class Autobase extends ReadyResource {
         await core.get(length - 1, { timeout })
       }
 
-      const block = await core.get(length - 1, { wait: false })
+      block = await core.get(length - 1, { wait: false })
       const system = new SystemView(core.session(), length)
       await system.ready()
       console.log('pre ff system', system.version, core.key, length, this.maxSupportedVersion)
