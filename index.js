@@ -1042,7 +1042,7 @@ module.exports = class Autobase extends ReadyResource {
       const remoteAdded = await this._addRemoteHeads()
       const localNodes = this._appending === null ? null : this._addLocalHeads()
 
-      if (this._maybeStaticFastForward === true && this.fastForwardEnabled === true) this._checkStaticFastForward()
+      if (this._maybeStaticFastForward === true && this.fastForwardEnabled === true) await this._checkStaticFastForward()
       if (this.closing) return
 
       if (remoteAdded > 0 || localNodes !== null) {
@@ -1244,7 +1244,11 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  _checkStaticFastForward () {
+  async _auditSystemKey (key) {
+    return true // TODO: verify chain of system keys
+  }
+
+  async _checkStaticFastForward () {
     let tally = null
 
     for (let i = 0; i < this.linearizer.indexers.length; i++) {
@@ -1263,11 +1267,21 @@ module.exports = class Autobase extends ReadyResource {
 
     const maj = (this.linearizer.indexers.length >> 1) + 1
 
+    let candidate = null
     for (const [hex, vote] of tally) {
       if (vote < maj) continue
-      if (!this._isFastForwarding()) this.initialFastForward(b4a.from(hex, 'hex'), DEFAULT_FF_TIMEOUT * 2)
+      candidate = b4a.from(hex, 'hex')
+      break
+    }
+
+    if (!candidate) return
+
+    if (this.system.version !== 0 && await this._auditSystemKey(candidate)) {
+      // TODO: emit error
       return
     }
+
+    if (!this._isFastForwarding()) return this.initialFastForward(candidate, DEFAULT_FF_TIMEOUT * 2)
   }
 
   async initialFastForward (key, timeout) {
