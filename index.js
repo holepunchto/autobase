@@ -1303,7 +1303,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const target = await this._preFastForward(core, length, timeout)
-
     await core.close()
 
     // initial fast-forward failed
