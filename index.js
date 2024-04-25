@@ -1389,7 +1389,10 @@ module.exports = class Autobase extends ReadyResource {
       console.log('pre ff core has latest block')
 
       const system = new SystemView(core.session(), length)
+
+      console.log('pre ff system readying...')
       await system.ready()
+      console.log('pre ff system ready!')
 
       console.log('pre ff system', system.version, core.key, length, this.maxSupportedVersion)
 
