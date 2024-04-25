@@ -1386,6 +1386,8 @@ module.exports = class Autobase extends ReadyResource {
         await core.get(length - 1, { timeout })
       }
 
+      console.log('pre ff core has latest block')
+
       const system = new SystemView(core.session(), length)
       await system.ready()
 
