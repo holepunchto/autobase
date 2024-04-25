@@ -50,6 +50,7 @@ module.exports = class Autobase extends ReadyResource {
     this.encrypted = handlers.encrypted || !!handlers.encryptionKey
     this.encryptionKey = handlers.encryptionKey || null
 
+    this._tryLoadingLocal = true
     this._primaryBootstrap = null
     if (this.bootstrap) {
       this._primaryBootstrap = this.store.get({ key: this.bootstrap, compat: false, encryptionKey: this.encryptionKey })
@@ -881,6 +882,12 @@ module.exports = class Autobase extends ReadyResource {
     if (!this._isFastForwarding()) w.resume()
   }
 
+  async _loadLocalWriter (sys) {
+    if (this.localWriter !== null) return
+    await this._getWriterByKey(this.local.key, -1, 0, false, sys)
+    this._tryLoadingLocal = false
+  }
+
   async _bootstrapLinearizer () {
     const bootstrap = this._makeWriter(this.bootstrap, 0, true)
 
@@ -895,12 +902,15 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _makeLinearizer (sys) {
+    this._tryLoadingLocal = true
+
     if (sys === null) {
       return this._bootstrapLinearizer()
     }
 
-    // always load local to see if relevant...
-    await this._getWriterByKey(this.local.key, -1, 0, false, sys)
+    if (this.opened || await sys.hasLocal(this.local.key)) {
+      await this._loadLocalWriter(sys)
+    }
 
     const indexers = []
 
@@ -1043,6 +1053,11 @@ module.exports = class Autobase extends ReadyResource {
       if (this.fastForwardTo !== null) {
         await this._applyFastForward()
         this.system.requestWakeup()
+      }
+
+      if (this.localWriter === null && this._tryLoadingLocal === true) {
+        // in case we cleared system blocks we need to defer loading of the local writer
+        await this._loadLocalWriter(this.system)
       }
 
       const remoteAdded = await this._addRemoteHeads()
