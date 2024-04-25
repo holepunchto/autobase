@@ -948,7 +948,10 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _onUpgrade (version) {
-    if (version > this.maxSupportedVersion) throw new Error('Autobase upgrade required')
+    if (version > this.maxSupportedVersion) {
+      console.trace('UPGRADE')
+      throw new Error('Autobase upgrade required')
+    }
   }
 
   _addLocalHeads () {
@@ -1053,9 +1056,12 @@ module.exports = class Autobase extends ReadyResource {
 
     for (const [hex, vote] of tally) {
       if (vote < maj) continue
+      console.log('static ff triggered')
       if (!this._isFastForwarding()) this.initialFastForward(b4a.from(hex, 'hex'), DEFAULT_FF_TIMEOUT * 2)
+      else console.log('already ffing')
       return
     }
+    console.log('static ff did not trigger')
   }
 
   async _drain () {
@@ -1273,6 +1279,8 @@ module.exports = class Autobase extends ReadyResource {
   async initialFastForward (key, timeout) {
     this.fastForwarding++
 
+    console.log('calling initial ff')
+
     const encryptionKey = this._viewStore.getBlockKey(this._viewStore.getSystemCore().name)
 
     const core = this.store.get({ key, encryptionKey, isBlockKey: true })
@@ -1295,14 +1303,19 @@ module.exports = class Autobase extends ReadyResource {
       }
     })
 
+    console.trace('initial ff has length!')
+
     if (!length || length < this.system.core.indexedLength) {
       await core.close()
       this.doneFastForwarding()
       this.queueFastForward()
+      console.trace('initial ff bailing...')
       return
     }
 
+    console.log('initial ff', length, this.system.core.getBackingCore().session.length)
     const target = await this._preFastForward(core, length, timeout)
+    console.trace('initial ff has target', target)
 
     await core.close()
 
@@ -1363,16 +1376,23 @@ module.exports = class Autobase extends ReadyResource {
 
     // pause writers
     for (const w of this.activeWriters) w.pause()
+    console.log('pre ff starts...')
 
     try {
       // sys runs open with wait false, so get head block first for low complexity
       const start = Date.now()
       while (length > 0) {
+        console.log('pre ff while...')
         if (Date.now() - start > timeout) throw new Error('Failed to find block')
 
-        const block = await core.get(length - 1, { timeout })
+        if (!(await core.has(length - 1))) {
+          console.log('pre ff fetch first block', length)
+          await core.get(length - 1, { timeout })
+        }
 
+        let block
         try {
+          block = await core.get(length - 1, { wait: false })
           SystemView.decodeInfo(block)
           break
         } catch {
@@ -1383,6 +1403,7 @@ module.exports = class Autobase extends ReadyResource {
 
       const system = new SystemView(core.session(), length)
       await system.ready()
+      console.log('pre ff system', system.version, core.key, length, this.maxSupportedVersion)
 
       if (system.version > this.maxSupportedVersion) {
         const upgrade = {
@@ -1390,10 +1411,12 @@ module.exports = class Autobase extends ReadyResource {
           length
         }
 
+        console.log('upgrade is available')
         this.emit('upgrade-available', upgrade)
         return null
       }
 
+      console.log('continuing with ff...')
       const systemShouldMigrate = b4a.equals(core.key, this.system.core.key) &&
         !system.sameIndexers(this.linearizer.indexers)
 
@@ -1464,6 +1487,7 @@ module.exports = class Autobase extends ReadyResource {
       await Promise.allSettled(closing)
     } catch (err) {
       safetyCatch(err)
+      console.log('pre-ff caught', err)
       return null
     }
 
