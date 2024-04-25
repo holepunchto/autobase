@@ -1280,7 +1280,6 @@ module.exports = class Autobase extends ReadyResource {
     this.fastForwarding++
 
     console.log('calling initial ff')
-    console.trace('calling initial ff')
 
     const encryptionKey = this._viewStore.getBlockKey(this._viewStore.getSystemCore().name)
 
@@ -1382,32 +1381,26 @@ module.exports = class Autobase extends ReadyResource {
     try {
       // sys runs open with wait false, so get head block first for low complexity
       const start = Date.now()
-      let system = null
-
       while (length > 0) {
+        console.log('pre ff while...')
         if (Date.now() - start > timeout) throw new Error('Failed to find block')
 
         if (!(await core.has(length - 1))) {
-          console.log('pre ff fetch first block')
+          console.log('pre ff fetch first block', length)
           await core.get(length - 1, { timeout })
         }
 
-        console.log('pre ff core has latest block')
-
         try {
-          system = new SystemView(core.session(), length)
-          console.log('pre ff system readying...')
-          await system.ready()
-          console.log('pre ff system ready!')
+          const block = await core.get(length - 1, { wait: false })
+          SystemView.decodeInfo(block)
           break
-        } catch (err) {
+        } catch {
           length--
-          console.log(err)
-          continue
         }
       }
 
-      console.log('pre ff system', system.version, core.key, length, this.maxSupportedVersion)
+      const system = new SystemView(core.session(), length)
+      await system.ready()
 
       if (system.version > this.maxSupportedVersion) {
         const upgrade = {
