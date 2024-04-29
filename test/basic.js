@@ -1268,6 +1268,213 @@ test('basic - remove multiple indexers concurrently', async t => {
   }
 })
 
+test('basic - indexer removes themselves', async t => {
+  const { bases } = await create(3, t, { apply })
+  const [a, b, c] = bases
+
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(b, c)
+
+  await a.append('a1')
+
+  await confirm([a, b, c])
+
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 3)
+
+  await a.append({ remove: b4a.toString(a.local.key, 'hex') })
+
+  await confirm([a, b, c])
+
+  t.is(a.writable, false)
+  t.is(a.view.getBackingCore().session.manifest.signers.length, 2)
+
+  await t.exception(a.append('fail'), /Not writable/)
+
+  const length = a.view.length
+  const indexedLength = a.view.indexedLength
+
+  await t.execution(b.append('b1'))
+  await t.execution(c.append('c1'))
+
+  await replicateAndSync([a, b, c])
+
+  t.not(a.view.length, length) // can still read
+
+  await confirm([a, b, c])
+
+  t.not(a.view.indexedLength, indexedLength) // b,c can still index
+
+  async function apply (batch, view, base) {
+    for (const { value } of batch) {
+      if (value.add) {
+        await base.addWriter(b4a.from(value.add, 'hex'))
+        continue
+      }
+
+      if (value.remove) {
+        await base.removeWriter(b4a.from(value.remove, 'hex'))
+        continue
+      }
+
+      await view.append(value)
+    }
+  }
+})
+
+// todo: version 0 static ff guard
+
+test('basic - all indexers removed', async t => {
+  const { bases } = await create(2, t, { apply })
+  const [a, b] = bases
+
+  await a.append('a1')
+
+  await replicateAndSync([a, b])
+
+  t.is(a.view.length, 1)
+  t.is(b.view.length, 1)
+
+  t.is(a.view.indexedLength, 1)
+  t.is(b.view.indexedLength, 1)
+
+  t.is(a.view.getBackingCore().session.manifest.signers.length, 1)
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 1)
+
+  await a.append({ remove: b4a.toString(a.local.key, 'hex') })
+
+  await replicateAndSync([a, b])
+
+  t.is(a.writable, false)
+
+  t.is(a.view.getBackingCore().session.manifest.signers.length, 0)
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 0)
+
+  t.is(a.view.length, 1)
+  t.is(b.view.length, 1)
+
+  await t.exception(a.append('fail'), /Not writable/)
+  await t.exception(b.append('fail'), /Not writable/)
+
+  async function apply (batch, view, base) {
+    for (const { value } of batch) {
+      if (value.add) {
+        await base.addWriter(b4a.from(value.add, 'hex'))
+        continue
+      }
+
+      if (value.remove) {
+        await base.removeWriter(b4a.from(value.remove, 'hex'))
+        continue
+      }
+
+      await view.append(value)
+    }
+  }
+})
+
+test('basic - add new indexer after removing', async t => {
+  const { bases } = await create(3, t, { apply: applyWithRemove })
+  const [a, b, c] = bases
+
+  await addWriterAndSync(a, b)
+
+  await b.append('b1')
+
+  await confirm([a, b])
+
+  t.is(b.view.indexedLength, 1)
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 2)
+
+  await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+  await confirm([a, b])
+
+  t.is(b.writable, false)
+  t.is(b.localWriter, null)
+
+  t.is(a.linearizer.indexers.length, 1)
+  t.is(b.linearizer.indexers.length, 1)
+
+  t.is(a.system.core.getBackingCore().session.manifest.signers.length, 1)
+  t.is(b.system.core.getBackingCore().session.manifest.signers.length, 1)
+
+  await t.execution(a.append('hello'))
+  await replicateAndSync([a, b])
+
+  t.is(a.view.indexedLength, 2)
+  t.is(b.view.indexedLength, 2)
+
+  await addWriterAndSync(a, c)
+
+  await c.append('c1')
+
+  b.debug = true
+  t.is(b.writable, false)
+  t.is(b.localWriter, null)
+
+  await confirm([a, b, c])
+  await replicateAndSync([a, b, c])
+
+  t.is(a.view.indexedLength, 3)
+  t.is(b.view.indexedLength, 3)
+  t.is(c.view.indexedLength, 3)
+
+  t.is(a.linearizer.indexers.length, 2)
+  t.is(b.linearizer.indexers.length, 2)
+  t.is(c.linearizer.indexers.length, 2)
+
+  t.is(a.system.core.getBackingCore().session.manifest.signers.length, 2)
+  t.is(b.system.core.getBackingCore().session.manifest.signers.length, 2)
+  t.is(c.system.core.getBackingCore().session.manifest.signers.length, 2)
+})
+
+test('basic - readd removed indexer', async t => {
+  const { bases } = await create(2, t, { apply: applyWithRemove })
+  const [a, b] = bases
+
+  await addWriterAndSync(a, b)
+
+  await b.append('b1')
+
+  await confirm([a, b])
+
+  t.is(b.view.indexedLength, 1)
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 2)
+
+  await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+  await confirm([a, b])
+
+  t.is(b.writable, false)
+  await t.exception(b.append('fail'), /Not writable/)
+
+  t.is(a.linearizer.indexers.length, 1)
+  t.is(b.linearizer.indexers.length, 1)
+
+  t.is(a.system.core.getBackingCore().session.manifest.signers.length, 1)
+  t.is(b.system.core.getBackingCore().session.manifest.signers.length, 1)
+
+  await t.execution(a.append('hello'))
+  await replicateAndSync([a, b])
+
+  t.is(a.view.indexedLength, 2)
+  t.is(b.view.indexedLength, 2)
+
+  await addWriterAndSync(a, b)
+  t.is(b.writable, true)
+
+  await b.append('b1')
+
+  await confirm([a, b])
+
+  t.is(a.view.indexedLength, 3)
+  t.is(b.view.indexedLength, 3)
+
+  t.is(a.linearizer.indexers.length, 2)
+  t.is(b.linearizer.indexers.length, 2)
+
+  t.is(a.system.core.getBackingCore().session.manifest.signers.length, 2)
+  t.is(b.system.core.getBackingCore().session.manifest.signers.length, 2)
+})
+
 async function applyWithRemove (batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
