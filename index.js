@@ -950,17 +950,19 @@ module.exports = class Autobase extends ReadyResource {
 
     if (!this._pendingRemoval) return
 
-    this._pendingRemoval = false
-    for (const idx of this.linearizer.indexers) {
-      if (idx !== this.localWriter) continue
-      this._pendingRemoval = true
-      break
+    // check if we have been removed
+    let idx = null
+    for (idx of this.linearizer.indexers) {
+      if (idx === this.localWriter) break
+      idx = null
     }
 
-    if (this._pendingRemoval) return // still pending
-
-    this._addCheckpoints = false
-    this.localWriter = null
+    // local writer has been removed
+    if (idx === null) {
+      this._pendingRemoval = false
+      this._addCheckpoints = false
+      this.localWriter = null
+    }
   }
 
   _onUpgrade (version) {
