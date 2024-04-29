@@ -1244,11 +1244,10 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _auditSystemKey (key) {
-    return true // TODO: verify chain of system keys
-  }
-
   async _checkStaticFastForward () {
+    // TODO: enable for v1 once we audit key properly
+    if (this.system.version !== 0) return
+
     let tally = null
 
     for (let i = 0; i < this.linearizer.indexers.length; i++) {
@@ -1274,14 +1273,9 @@ module.exports = class Autobase extends ReadyResource {
       break
     }
 
-    if (!candidate) return
-
-    if (this.system.version !== 0 && await this._auditSystemKey(candidate)) {
-      // TODO: emit error
-      return
+    if (candidate && !this._isFastForwarding()) {
+      await this.initialFastForward(candidate, DEFAULT_FF_TIMEOUT * 2)
     }
-
-    if (!this._isFastForwarding()) return this.initialFastForward(candidate, DEFAULT_FF_TIMEOUT * 2)
   }
 
   async initialFastForward (key, timeout) {
