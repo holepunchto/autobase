@@ -796,7 +796,7 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _getWriterByKey (key, len, seen, allowGC, system) {
+  async _getWriterByKey (key, len, seen, allowGC, added, system) {
     assert(this._draining === true || (this.opening && !this.opened))
 
     const release = await this._lock()
@@ -809,6 +809,7 @@ module.exports = class Autobase extends ReadyResource {
     try {
       let w = this.activeWriters.get(key)
       if (w !== null) {
+        if (added && w.core.writable && this.localWriter === null) this.localWriter = w
         w.seen(seen)
         return w
       }
@@ -828,7 +829,7 @@ module.exports = class Autobase extends ReadyResource {
 
         if (!allowGC && writerInfo === null) return null
         len = writerInfo === null ? 0 : writerInfo.length
-        isActive = writerInfo !== null && !writerInfo.isRemoved
+        isActive = writerInfo !== null && (added || !writerInfo.isRemoved)
       }
 
       w = this._makeWriter(key, len, isActive)
@@ -916,7 +917,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async _loadLocalWriter (sys) {
     if (this.localWriter !== null) return
-    await this._getWriterByKey(this.local.key, -1, 0, false, sys)
+    await this._getWriterByKey(this.local.key, -1, 0, false, false, sys)
     this._tryLoadingLocal = false
   }
 
@@ -947,7 +948,7 @@ module.exports = class Autobase extends ReadyResource {
     const indexers = []
 
     for (const head of sys.indexers) {
-      const writer = await this._getWriterByKey(head.key, head.length, 0, false, sys)
+      const writer = await this._getWriterByKey(head.key, head.length, 0, false, false, sys)
       writer.isIndexer = true
       writer.inflateBackground()
       indexers.push(writer)
@@ -956,7 +957,7 @@ module.exports = class Autobase extends ReadyResource {
     this._updateLinearizer(indexers, sys.heads)
 
     for (const { key, length } of sys.heads) {
-      await this._getWriterByKey(key, length, 0, false, sys)
+      await this._getWriterByKey(key, length, 0, false, false, sys)
     }
   }
 
@@ -1181,14 +1182,14 @@ module.exports = class Autobase extends ReadyResource {
       this._needsWakeup = false
 
       for (const { key } of this._wakeup) {
-        await this._getWriterByKey(key, -1, 0, true, null)
+        await this._getWriterByKey(key, -1, 0, true, false, null)
       }
 
       if (this._needsWakeupHeads === true) {
         this._needsWakeupHeads = false
 
         for (const { key } of await this._getLocallyStoredHeads()) {
-          await this._getWriterByKey(key, -1, 0, true, null)
+          await this._getWriterByKey(key, -1, 0, true, false, null)
         }
       }
     }
@@ -1200,7 +1201,7 @@ module.exports = class Autobase extends ReadyResource {
         if (info && length < info.length) continue // stale hint
       }
 
-      await this._getWriterByKey(key, -1, 0, true, null)
+      await this._getWriterByKey(key, -1, 0, true, false, null)
     }
 
     this._wakeupHints.clear()
@@ -1704,7 +1705,7 @@ module.exports = class Autobase extends ReadyResource {
     assert(this._applying !== null, 'System changes are only allowed in apply')
     await this.system.add(key, { isIndexer, isPending: true })
 
-    const writer = (await this._getWriterByKey(key, -1, 0, false, null)) || this._makeWriter(key, 0, true)
+    const writer = (await this._getWriterByKey(key, -1, 0, false, true, null)) || this._makeWriter(key, 0, true)
     await writer.ready()
 
     if (!this.activeWriters.has(key)) {
@@ -1931,7 +1932,7 @@ module.exports = class Autobase extends ReadyResource {
     const indexers = []
 
     for (const { key, length } of this.system.indexers) {
-      const indexer = await this._getWriterByKey(key, length, 0, false, null)
+      const indexer = await this._getWriterByKey(key, length, 0, false, false, null)
       indexers.push(indexer)
     }
 
@@ -1953,7 +1954,15 @@ module.exports = class Autobase extends ReadyResource {
       views.push({ view, key })
     }
 
-    return views
+    const currentIndexers = new Set()
+    for (const idx of this.linearizer.indexers) {
+      currentIndexers.add(b4a.toString(idx.core.key, 'hex'))
+    }
+
+    return {
+      views,
+      currentIndexers
+    }
   }
 
   async _checkVersion () {
@@ -1965,7 +1974,7 @@ module.exports = class Autobase extends ReadyResource {
 
     let localUnflushed = false
     for (const { key, length } of this.system.indexers) {
-      const w = await this._getWriterByKey(key, length, 0, false, null)
+      const w = await this._getWriterByKey(key, length, 0, false, false, null)
 
       if (length > w.core.length) localUnflushed = true // local writer has nodes in mem
       else fetch.push(w.core.get(length - 1))
@@ -2061,7 +2070,7 @@ module.exports = class Autobase extends ReadyResource {
     if (!same) {
       const p = []
       for (const { key } of info.indexers) {
-        p.push(await this._getWriterByKey(key, -1, 0, false, null))
+        p.push(await this._getWriterByKey(key, -1, 0, false, false, null))
       }
 
       const indexers = await p
