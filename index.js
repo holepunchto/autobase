@@ -982,21 +982,27 @@ module.exports = class Autobase extends ReadyResource {
 
     if (!this._pendingRemoval) return
 
-    this._pendingRemoval = false
-    for (const idx of this.linearizer.indexers) {
-      if (idx !== this.localWriter) continue
-      this._pendingRemoval = true
-      break
+    let idx = null
+    for (idx of this.linearizer.indexers) {
+      if (idx === this.localWriter) break
+      idx = null
     }
 
-    if (this._pendingRemoval) return // still pending
-
-    this._addCheckpoints = false
-    this.localWriter = null
+    if (idx !== null) {
+      this._addCheckpoints = false
+      this.localWriter = null
+      this._pendingRemoval = false
+    }
   }
 
   _onUpgrade (version) {
     if (version > this.maxSupportedVersion) throw new Error('Autobase upgrade required')
+  }
+
+  _clearLocalWriter () {
+    this.localWriter = null
+    this._addCheckpoints = false
+    this._pendingRemoval = false
   }
 
   _addLocalHeads () {
@@ -1721,7 +1727,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (b4a.equals(key, this.local.key)) {
       if (this._addCheckpoints) this._pendingRemoval = true
-      else this.localWriter = null // immediately remove
+      else this._clearLocalWriter() // immediately remove
     }
 
     this._queueBump()
@@ -2125,6 +2131,7 @@ module.exports = class Autobase extends ReadyResource {
       this.localWriter._addCheckpoints(checkpoint)
 
       this._hasPendingCheckpoint = false
+      if (this._pendingRemoval) this._clearLocalWriter()
     }
   }
 }

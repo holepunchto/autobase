@@ -1099,6 +1099,11 @@ test('basic - remove indexer', async t => {
 
   t.is(c.writable, false)
 
+  const info = await a.system.get(c.local.key)
+
+  t.is(info.isIndexer, false)
+  t.is(info.isRemoved, true)
+
   t.is(b.system.members, 2)
   t.is(b.system.indexers.length, 2)
   t.is(b.system.members, c.system.members)
