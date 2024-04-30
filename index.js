@@ -1727,8 +1727,7 @@ module.exports = class Autobase extends ReadyResource {
     await this.system.remove(key)
 
     if (b4a.equals(key, this.local.key)) {
-      if (this._addCheckpoints) this._pendingRemoval = true
-      else this._clearLocalWriter() // immediately remove
+      this._pendingRemoval = true
     }
 
     this._queueBump()
@@ -2132,8 +2131,9 @@ module.exports = class Autobase extends ReadyResource {
       this.localWriter._addCheckpoints(checkpoint)
 
       this._hasPendingCheckpoint = false
-      if (this._pendingRemoval) this._clearLocalWriter()
     }
+
+    if (this._pendingRemoval) this._clearLocalWriter()
   }
 }
 
