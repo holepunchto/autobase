@@ -797,7 +797,7 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _getWriterByKey (key, len, seen, allowGC, added, system) {
+  async _getWriterByKey (key, len, seen, allowGC, isAdded, system) {
     assert(this._draining === true || (this.opening && !this.opened))
 
     const release = await this._lock()
@@ -810,28 +810,23 @@ module.exports = class Autobase extends ReadyResource {
     try {
       let w = this.activeWriters.get(key)
       if (w !== null) {
-        if (added && w.core.writable && this.localWriter === null) this.localWriter = w
+        if (isAdded && w.core.writable && this.localWriter === null) this.localWriter = w
         w.seen(seen)
         return w
       }
 
       let isActive = true
 
+      const sys = system || this.system
+      const writerInfo = await sys.get(key)
+
       if (len === -1) {
-        const sys = system || this.system
-        const writerInfo = await sys.get(key)
-
-        // TODO: this indirectly disables backwards-dag-walk - we should reenable when FF is enabled
-        //       this is because the remote writer might not have our next heads in mem if it knows
-        //       that following the indexed sets makes that redundant. tmp(?) solution for now is to
-        //       just inflate the writers anyway - if FF is enabled simply jumping ahead is likely a better solution
-        // if (writerInfo === null) return null
-        // len = writerInfo.length
-
         if (!allowGC && writerInfo === null) return null
+
         len = writerInfo === null ? 0 : writerInfo.length
-        isActive = writerInfo !== null && (added || !writerInfo.isRemoved)
       }
+
+      isActive = writerInfo !== null && (isAdded || !writerInfo.isRemoved)
 
       w = this._makeWriter(key, len, isActive)
       if (!w) return null
@@ -870,7 +865,7 @@ module.exports = class Autobase extends ReadyResource {
     return Promise.all(p)
   }
 
-  _makeWriterCore (key, isActive) {
+  _makeWriterCore (key) {
     const pooled = this.corePool.get(key)
     if (pooled) {
       pooled.valueEncoding = messages.OplogMessage
@@ -878,7 +873,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const local = b4a.equals(key, this.local.key)
-    if (local && !isActive) return null
 
     const core = local
       ? this.local.session({ valueEncoding: messages.OplogMessage, encryptionKey: this.encryptionKey })
@@ -889,11 +883,9 @@ module.exports = class Autobase extends ReadyResource {
 
   _makeWriter (key, length, isActive) {
     const core = this._makeWriterCore(key, isActive)
-    if (!core) return null
-
     const w = new Writer(this, core, length)
 
-    if (core.writable) {
+    if (core.writable && isActive) {
       this.localWriter = w
       if (this._ackInterval) this._startAckTimer()
       this.emit('writable')
