@@ -884,11 +884,13 @@ module.exports = class Autobase extends ReadyResource {
     const core = this._makeWriterCore(key)
     const w = new Writer(this, core, length)
 
-    if (core.writable && isActive) {
+    if (core.writable) {
+      if (!isActive) return w // do not set inactive writer
+
       this.localWriter = w
       if (this._ackInterval) this._startAckTimer()
       this.emit('writable')
-    } else  {
+    } else {
       core.on('append', this._onremotewriterchangeBound)
       core.on('download', this._onremotewriterchangeBound)
       core.on('manifest', this._onremotewriterchangeBound)
