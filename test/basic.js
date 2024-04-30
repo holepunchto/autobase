@@ -1073,6 +1073,27 @@ test('basic - remove writer', async t => {
   t.is(b.system.members, c.system.members)
 })
 
+test('basic - non-indexer writer removes themselves', async t => {
+  const { bases } = await create(2, t, { apply: applyWithRemove, open: null })
+  const [a, b] = bases
+
+  await addWriter(a, b, false)
+
+  await confirm([a, b])
+
+  t.is(a.system.members, 2)
+  t.is(a.system.members, b.system.members)
+
+  await b.append({ remove: b4a.toString(b.local.key, 'hex') })
+
+  await t.exception(b.append('fail'), /Not writable/)
+
+  await confirm([a, b])
+
+  t.is(a.system.members, 1)
+  t.is(a.system.members, a.system.members)
+})
+
 test('basic - remove indexer', async t => {
   const { bases } = await create(3, t, { apply: applyWithRemove, open: null })
   const [a, b, c] = bases
