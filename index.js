@@ -1954,15 +1954,7 @@ module.exports = class Autobase extends ReadyResource {
       views.push({ view, key })
     }
 
-    const currentIndexers = new Set()
-    for (const idx of this.linearizer.indexers) {
-      currentIndexers.add(b4a.toString(idx.core.key, 'hex'))
-    }
-
-    return {
-      views,
-      currentIndexers
-    }
+    return views
   }
 
   async _checkVersion () {
