@@ -2108,6 +2108,7 @@ module.exports = class Autobase extends ReadyResource {
 
     for (let i = 0; i < blocks.length; i++) {
       const { value, heads, batch } = localNodes[i]
+      const isNull = this._pendingIndexerRemoval || value === null
 
       blocks[i] = {
         version: 1,
@@ -2117,7 +2118,7 @@ module.exports = class Autobase extends ReadyResource {
         node: {
           heads,
           batch,
-          value: value === null ? null : c.encode(this.valueEncoding, value)
+          value: isNull ? null : c.encode(this.valueEncoding, value)
         },
         trace: []
       }
@@ -2130,8 +2131,6 @@ module.exports = class Autobase extends ReadyResource {
     if (this._addCheckpoints) {
       const { checkpoint } = blocks[blocks.length - 1]
       this.localWriter._addCheckpoints(checkpoint)
-
-      if (this._pendingIndexerRemoval) this._clearLocalWriter()
       this._hasPendingCheckpoint = false
     }
   }
