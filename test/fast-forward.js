@@ -3,6 +3,7 @@ const { on } = require('events')
 const test = require('brittle')
 const tmpDir = require('test-tmp')
 const cenc = require('compact-encoding')
+const b4a = require('b4a')
 
 const Autobase = require('..')
 const { BootRecord } = require('../lib/messages')
@@ -904,10 +905,68 @@ test('fast-forward - initial fast forward with in between writer', async t => {
   t.pass()
 })
 
+test('fast-forward - writer removed', async t => {
+  t.plan(3)
+
+  const { bases } = await create(3, t, {
+    fastForward: true,
+    apply: applyWithRemove,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b, c] = bases
+
+  for (let i = 0; i < 2000; i++) {
+    await a.append('a' + i)
+  }
+
+  await addWriterAndSync(a, b, false)
+
+  t.is(b.writable, true)
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append('a' + i)
+  }
+
+  await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append('a' + i)
+  }
+
+  await replicateAndSync([a, b])
+
+  const core = b.view.getBackingCore()
+  const sparse = await isSparse(core)
+
+  t.is(b.writable, false)
+
+  t.ok(sparse > 0)
+
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+})
+
 async function isSparse (core) {
   let n = 0
   for (let i = 0; i < core.length; i++) {
     if (!await core.has(i)) n++
   }
   return n
+}
+
+async function applyWithRemove (batch, view, base) {
+  for (const { value } of batch) {
+    if (value.add) {
+      await base.addWriter(b4a.from(value.add, 'hex'), { indexer: value.indexer !== false })
+      continue
+    }
+
+    if (value.remove) {
+      await base.removeWriter(b4a.from(value.remove, 'hex'))
+      continue
+    }
+
+    await view.append(value)
+  }
 }
