@@ -970,6 +970,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const sameIndexers = this.system.sameIndexers(this.linearizer.indexers)
 
+    await this._closeAllActiveWriters(true)
     await this._makeLinearizer(this.system)
     if (!sameIndexers) await this._viewStore.migrate()
 
@@ -977,9 +978,10 @@ module.exports = class Autobase extends ReadyResource {
 
     this.queueFastForward()
 
-    if (nodes) {
-      for (const node of nodes) node.reset()
-      for (const node of nodes) this.linearizer.addHead(node)
+    if (this.localWriter) {
+      const value = await this.system.get(this.local.key)
+      const length = value ? value.length : 0
+      this.localWriter.reset(length)
     }
 
     if (!this._pendingIndexerRemoval) return
@@ -998,6 +1000,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _clearLocalWriter () {
+    if (this.localWriter) this._closeWriter(this.localWriter, true)
     this.localWriter = null
     this._addCheckpoints = false
     this._pendingIndexerRemoval = false
@@ -1303,7 +1306,7 @@ module.exports = class Autobase extends ReadyResource {
       await core.reset(length)
     }
 
-    await this._closeAllActiveWriters()
+    await this._closeAllActiveWriters(false)
 
     await this.system.update()
     await this._makeLinearizer(this.system)
@@ -1630,7 +1633,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     await system.close()
-    await this._closeAllActiveWriters()
+    await this._closeAllActiveWriters(false)
 
     this._undoAll()
 
@@ -1666,12 +1669,12 @@ module.exports = class Autobase extends ReadyResource {
     await closeAll(opened)
   }
 
-  async _closeAllActiveWriters () {
+  async _closeAllActiveWriters (keepPool) {
     for (const w of this.activeWriters) {
       if (this.localWriter === w) continue
       await this._closeWriter(w, true)
     }
-    await this.corePool.clear()
+    if (keepPool) await this.corePool.clear()
   }
 
   async _flushIndexes () {
