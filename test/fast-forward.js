@@ -908,13 +908,13 @@ test('fast-forward - initial fast forward with in between writer', async t => {
 test('fast-forward - writer removed', async t => {
   t.plan(3)
 
-  const { bases } = await create(3, t, {
+  const { bases } = await create(2, t, {
     fastForward: true,
     apply: applyWithRemove,
     storage: () => tmpDir(t)
   })
 
-  const [a, b, c] = bases
+  const [a, b] = bases
 
   for (let i = 0; i < 2000; i++) {
     await a.append('a' + i)
