@@ -1258,7 +1258,7 @@ test('basic - remove multiple indexers concurrently', async t => {
 
   t.is(b.view.getBackingCore().session.manifest.signers.length, 3)
 
-  await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+  a.append({ remove: b4a.toString(b.local.key, 'hex') })
   await a.append({ remove: b4a.toString(c.local.key, 'hex') })
 
   await confirm([a, b, c])
@@ -1346,8 +1346,6 @@ test('basic - indexer removes themselves', async t => {
     }
   }
 })
-
-// todo: version 0 static ff guard
 
 test('basic - all indexers removed', async t => {
   const { bases } = await create(2, t, { apply })

@@ -2108,7 +2108,6 @@ module.exports = class Autobase extends ReadyResource {
 
     for (let i = 0; i < blocks.length; i++) {
       const { value, heads, batch } = localNodes[i]
-      const isNull = this._pendingIndexerRemoval || value === null
 
       blocks[i] = {
         version: 1,
@@ -2118,7 +2117,7 @@ module.exports = class Autobase extends ReadyResource {
         node: {
           heads,
           batch,
-          value: isNull ? null : c.encode(this.valueEncoding, value)
+          value: value === null ? null : c.encode(this.valueEncoding, value)
         },
         trace: []
       }
