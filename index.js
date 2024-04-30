@@ -6,6 +6,7 @@ const safetyCatch = require('safety-catch')
 const hypercoreId = require('hypercore-id-encoding')
 const assert = require('nanoassert')
 const SignalPromise = require('signal-promise')
+const CoreCoupler = require('core-coupler')
 
 const Linearizer = require('./lib/linearizer')
 const AutoStore = require('./lib/store')
@@ -77,6 +78,9 @@ module.exports = class Autobase extends ReadyResource {
     this._appending = null
     this._wakeup = new AutoWakeup(this)
     this._wakeupHints = new Set()
+    this._wakeupPeerBound = this._wakeupPeer.bind(this)
+    this._coupler = null
+
     this._queueViewReset = false
     this._lock = mutexify()
 
@@ -535,6 +539,8 @@ module.exports = class Autobase extends ReadyResource {
       if (!w.flushed()) continue
 
       const unqueued = this._wakeup.unqueue(w.core.key, w.core.length)
+      this._coupler.remove(w.core)
+
       if (!unqueued || w.isIndexer || this.localWriter === w) continue
 
       await this._closeWriter(w, false)
@@ -829,6 +835,9 @@ module.exports = class Autobase extends ReadyResource {
       this.activeWriters.add(w)
       this._checkWriters.push(w)
 
+      // will only add non-indexer writers
+      if (this._coupler) this._coupler.add(w.core)
+
       assert(w.opened)
       assert(!w.closed)
 
@@ -884,6 +893,7 @@ module.exports = class Autobase extends ReadyResource {
   _updateLinearizer (indexers, heads) {
     this.linearizer = new Linearizer(indexers, { heads, writers: this.activeWriters })
     this._addCheckpoints = !!(this.localWriter && (this.localWriter.isIndexer || this._isPending()))
+    this._coupler = new CoreCoupler(indexers[0].core, this._wakeupPeerBound)
     this._updateAckThreshold()
   }
 
@@ -912,6 +922,11 @@ module.exports = class Autobase extends ReadyResource {
 
   async _makeLinearizer (sys) {
     this._tryLoadingLocal = true
+
+    if (this._coupler) {
+      this._coupler.destroy()
+      this._coupler = null
+    }
 
     if (sys === null) {
       return this._bootstrapLinearizer()
@@ -1141,6 +1156,10 @@ module.exports = class Autobase extends ReadyResource {
     const buffer = await this.local.getUserData('autobase/boot')
     if (!buffer) return []
     return c.decode(messages.BootRecord, buffer).heads
+  }
+
+  _wakeupPeer (peer) {
+    this.system.sendWakeup(peer.remotePublicKey)
   }
 
   async _drainWakeup () { // TODO: parallel load the writers here later
