@@ -92,6 +92,7 @@ module.exports = class Autobase extends ReadyResource {
     this._addCheckpoints = false
     this._firstCheckpoint = true
     this._hasPendingCheckpoint = false
+    this._pendingIndexerRemoval = false
     this._pendingRemoval = false
     this._completeRemovalAt = null
     this._systemPointer = 0
@@ -981,7 +982,7 @@ module.exports = class Autobase extends ReadyResource {
       for (const node of nodes) this.linearizer.addHead(node)
     }
 
-    if (!this._pendingRemoval) return
+    if (!this._pendingIndexerRemoval) return
 
     let idx = null
     for (idx of this.linearizer.indexers) {
@@ -989,11 +990,7 @@ module.exports = class Autobase extends ReadyResource {
       idx = null
     }
 
-    if (idx !== null) {
-      this._addCheckpoints = false
-      this.localWriter = null
-      this._pendingRemoval = false
-    }
+    if (idx === null) this._clearLocalWriter()
   }
 
   _onUpgrade (version) {
@@ -1003,6 +1000,7 @@ module.exports = class Autobase extends ReadyResource {
   _clearLocalWriter () {
     this.localWriter = null
     this._addCheckpoints = false
+    this._pendingIndexerRemoval = false
     this._pendingRemoval = false
   }
 
@@ -1120,6 +1118,8 @@ module.exports = class Autobase extends ReadyResource {
       if (this.localWriter !== null && localNodes !== null) {
         await this._flushLocal(localNodes)
       }
+
+      if (this._pendingRemoval) this._clearLocalWriter()
 
       if (this.closing) return
 
@@ -1727,7 +1727,8 @@ module.exports = class Autobase extends ReadyResource {
     await this.system.remove(key)
 
     if (b4a.equals(key, this.local.key)) {
-      this._pendingRemoval = true
+      if (this.localWriter.isIndexer) this._pendingIndexerRemoval = true
+      else this._pendingRemoval = true
     }
 
     this._queueBump()
@@ -2130,10 +2131,9 @@ module.exports = class Autobase extends ReadyResource {
       const { checkpoint } = blocks[blocks.length - 1]
       this.localWriter._addCheckpoints(checkpoint)
 
+      if (this._pendingIndexerRemoval) this._clearLocalWriter()
       this._hasPendingCheckpoint = false
     }
-
-    if (this._pendingRemoval) this._clearLocalWriter()
   }
 }
 
