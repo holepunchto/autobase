@@ -1501,6 +1501,7 @@ module.exports = class Autobase extends ReadyResource {
       if (localLookup) {
         const value = await localLookup
         if (value) info.localLength = value.length
+        if (value.isRemoved) info.localLength = -1
       }
 
       const closing = []
@@ -1641,7 +1642,10 @@ module.exports = class Autobase extends ReadyResource {
 
     await this.system.update()
 
-    if (this.localWriter) this.localWriter.reset(localLength)
+    if (this.localWriter) {
+      if (localLength < 0) this._clearLocalWriter()
+      else this.localWriter.reset(localLength)
+    }
 
     await this._makeLinearizer(this.system)
     await this._advanceBootRecord(length)
