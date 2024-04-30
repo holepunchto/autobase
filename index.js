@@ -817,16 +817,15 @@ module.exports = class Autobase extends ReadyResource {
 
       let isActive = true
 
-      const sys = system || this.system
-      const writerInfo = await sys.get(key)
+      if (len === -1 || b4a.equals(key, this.local.key)) {
+        const sys = system || this.system
+        const writerInfo = await sys.get(key)
 
-      if (len === -1) {
         if (!allowGC && writerInfo === null) return null
 
         len = writerInfo === null ? 0 : writerInfo.length
+        isActive = writerInfo !== null && (isAdded || !writerInfo.isRemoved)
       }
-
-      isActive = writerInfo !== null && (isAdded || !writerInfo.isRemoved)
 
       w = this._makeWriter(key, len, isActive)
       if (!w) return null
@@ -882,10 +881,12 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _makeWriter (key, length, isActive) {
-    const core = this._makeWriterCore(key, isActive)
+    const core = this._makeWriterCore(key)
     const w = new Writer(this, core, length)
 
-    if (core.writable && isActive) {
+    if (!isActive) return w
+
+    if (core.writable) {
       this.localWriter = w
       if (this._ackInterval) this._startAckTimer()
       this.emit('writable')
