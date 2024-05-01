@@ -815,19 +815,23 @@ module.exports = class Autobase extends ReadyResource {
         return w
       }
 
-      let isActive = true
+      const sys = system || this.system
+      const writerInfo = await sys.get(key)
 
-      if (len === -1 || b4a.equals(key, this.local.key)) {
-        const sys = system || this.system
-        const writerInfo = await sys.get(key)
-
+      if (len === -1) {
         if (!allowGC && writerInfo === null) return null
-
         len = writerInfo === null ? 0 : writerInfo.length
-        isActive = writerInfo !== null && (isAdded || !writerInfo.isRemoved)
       }
 
-      w = this._makeWriter(key, len, isActive)
+      const isActive = writerInfo !== null && (isAdded || !writerInfo.isRemoved)
+
+      // if len > 0 and no system entry, then they
+      // must have been referenced by a removed writer
+      const isRemoved = len > 0
+        ? writerInfo === null || (!isAdded && writerInfo.isRemoved)
+        : writerInfo !== null && (!isAdded && writerInfo.isRemoved)
+
+      w = this._makeWriter(key, len, isActive, isRemoved)
       if (!w) return null
 
       w.seen(seen)
@@ -880,9 +884,9 @@ module.exports = class Autobase extends ReadyResource {
     return core
   }
 
-  _makeWriter (key, length, isActive) {
+  _makeWriter (key, length, isActive, isRemoved) {
     const core = this._makeWriterCore(key)
-    const w = new Writer(this, core, length)
+    const w = new Writer(this, core, length, isRemoved)
 
     if (core.writable) {
       if (!isActive) return w // do not set inactive writer
