@@ -1735,6 +1735,10 @@ module.exports = class Autobase extends ReadyResource {
       else this._pendingRemoval = true
     }
 
+    if (this.activeWriters.has(key)) {
+      this.activeWriters.get(key).isRemoved = true
+    }
+
     this._queueBump()
   }
 
@@ -1803,6 +1807,8 @@ module.exports = class Autobase extends ReadyResource {
     // make sure the latest changes is reflected on the system...
     await this.system.update()
 
+    // todo: refresh the active writer set in case any were removed
+
     let batch = 0
     let applyBatch = []
     let versionUpgrade = false
@@ -1856,7 +1862,7 @@ module.exports = class Autobase extends ReadyResource {
 
       this.system.addHead(node)
 
-      if (node.value !== null) {
+      if (node.value !== null && !node.writer.isRemoved) {
         applyBatch.push({
           indexed,
           from: node.writer.core,
