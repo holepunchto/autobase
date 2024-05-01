@@ -959,8 +959,8 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _reindex (nodes) {
-    if (nodes && nodes.length) {
+  async _reindex () {
+    if (this._updates.length) {
       this._undoAll()
       await this.system.update()
     }
@@ -1148,7 +1148,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       await this._gcWriters()
-      await this._reindex(changed)
+      await this._reindex()
     }
   }
 
@@ -1839,12 +1839,12 @@ module.exports = class Autobase extends ReadyResource {
       // flushed to local appends in same iteration
       await this._updateDigest()
 
-      return u.indexed.slice(i).concat(u.tip)
+      return true
     }
 
     for (i = u.shared; i < u.length; i++) {
       if (this.fastForwardTo !== null && this.fastForwardTo.length > this.system.core.length && b4a.equals(this.fastForwardTo.key, this.system.core.key)) {
-        return null
+        return false
       }
 
       const indexed = i < u.indexed.length
@@ -1927,7 +1927,7 @@ module.exports = class Autobase extends ReadyResource {
       this._queueIndexFlush(i + 1)
       await this._updateDigest() // see above
 
-      return u.indexed.slice(i + 1).concat(u.tip)
+      return true
     }
 
     if (u.indexed.length) {
@@ -1935,7 +1935,7 @@ module.exports = class Autobase extends ReadyResource {
       await this._updateDigest() // see above
     }
 
-    return null
+    return false
   }
 
   async _getViewInfo (indexerUpdate) {
