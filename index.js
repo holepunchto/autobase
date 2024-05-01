@@ -334,6 +334,12 @@ module.exports = class Autobase extends ReadyResource {
     return core ? core.key : null
   }
 
+  recouple () {
+    if (this._coupler) this._coupler.destroy()
+    const core = this.system.core.getBackingCore()
+    this._coupler = new CoreCoupler(core.session, this._wakeupPeerBound)
+  }
+
   async _openPreBump () {
     this._presystem = this._openPreSystem()
 
@@ -370,6 +376,8 @@ module.exports = class Autobase extends ReadyResource {
     if (this.localWriter && !this.system.bootstrapping) {
       await this._restoreLocalState()
     }
+
+    this.recouple()
 
     if (this.fastForwardTo !== null) {
       const { key, timeout } = this.fastForwardTo
@@ -893,7 +901,6 @@ module.exports = class Autobase extends ReadyResource {
   _updateLinearizer (indexers, heads) {
     this.linearizer = new Linearizer(indexers, { heads, writers: this.activeWriters })
     this._addCheckpoints = !!(this.localWriter && (this.localWriter.isIndexer || this._isPending()))
-    this._coupler = new CoreCoupler(indexers[0].core, this._wakeupPeerBound)
     this._updateAckThreshold()
   }
 
@@ -922,11 +929,6 @@ module.exports = class Autobase extends ReadyResource {
 
   async _makeLinearizer (sys) {
     this._tryLoadingLocal = true
-
-    if (this._coupler) {
-      this._coupler.destroy()
-      this._coupler = null
-    }
 
     if (sys === null) {
       return this._bootstrapLinearizer()
