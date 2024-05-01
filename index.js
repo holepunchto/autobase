@@ -77,7 +77,7 @@ module.exports = class Autobase extends ReadyResource {
     this._checkWriters = []
     this._appending = null
     this._wakeup = new AutoWakeup(this)
-    this._wakeupHints = new Set()
+    this._wakeupHints = new Map()
     this._wakeupPeerBound = this._wakeupPeer.bind(this)
     this._coupler = null
 
@@ -209,8 +209,10 @@ module.exports = class Autobase extends ReadyResource {
 
   hintWakeup (keys) {
     if (!Array.isArray(keys)) keys = [keys]
-    for (const key of keys) {
-      this._wakeupHints.add(b4a.toString(key, 'hex'))
+    for (const { key, length } of keys) {
+      const hex = b4a.toString(key, 'hex')
+      const prev = this._wakeupHints.get(hex)
+      if (!prev || prev < length) this._wakeupHints.set(hex, length)
     }
     this._queueBump()
   }
@@ -1181,8 +1183,10 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
-    for (const hex of this._wakeupHints) {
+    for (const [hex, length] of this._wakeupHints) {
       const key = b4a.from(hex, 'hex')
+      const info = await this.system.get(key)
+      if (info && info.length > length) continue // stale hint
       await this._getWriterByKey(key, -1, 0, true, null)
     }
 
