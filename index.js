@@ -319,6 +319,11 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  async flush () {
+    if (this.opened === false) await this.ready()
+    await this._advancing
+  }
+
   getSystemKey () {
     const core = this.system.core.getBackingCore()
     return core ? core.key : null
