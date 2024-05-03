@@ -174,6 +174,10 @@ module.exports = class Autobase extends ReadyResource {
     return this._primaryBootstrap === null ? this.local.discoveryKey : this._primaryBootstrap.discoveryKey
   }
 
+  get tipSize () {
+    return this.linearizer ? this.linearizer.tipSize : 0
+  }
+
   replicate (init, opts) {
     return this.store.replicate(init, opts)
   }

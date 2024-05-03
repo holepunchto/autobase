@@ -1226,6 +1226,24 @@ test('basic - remove multiple indexers concurrently', async t => {
   }
 })
 
+test('basic - tipSize getter is correct', async t => {
+  const { bases } = await create(2, t)
+  const [a, b] = bases
+
+  t.is(b.tipSize, 0)
+  await addWriterAndSync(a, b, false)
+  await confirm([a, b])
+  t.is(b.tipSize, 1)
+
+  await b.append({ message: 'b0' })
+  await b.append({ message: 'b1' })
+  await b.append({ message: 'b2' })
+  t.is(b.tipSize, 4)
+
+  await confirm([a, b])
+  t.is(b.tipSize, 1)
+})
+
 async function applyWithRemove (batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
