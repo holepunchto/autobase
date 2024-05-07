@@ -42,6 +42,43 @@ test('basic - two writers', async t => {
   // t.alike(await base1.system.checkpoint(), await base3.system.checkpoint())
 })
 
+test('basic - no truncates when history is linear', async t => {
+  const { bases } = await create(3, t)
+  const [base1, base2, base3] = bases
+
+  await addWriter(base1, base2, false)
+
+  await confirm([base1, base2, base3])
+
+  await addWriter(base2, base3, false)
+
+  await confirm([base1, base2, base3])
+
+  await base2.append('hello')
+
+  await replicateAndSync([base1, base2, base3])
+
+  await base1.append('world')
+
+  await replicateAndSync([base1, base2, base3])
+
+  await base3.append('hej')
+
+  await replicateAndSync([base1, base2, base3])
+
+  await base1.append('verden')
+
+  const all = []
+  for (let i = 0; i < base1.view.indexedLength; i++) {
+    all.push(await base1.view.get(i))
+  }
+
+  t.alike(all, ['hello', 'world', 'hej', 'verden'])
+  t.is(base1.view.fork, 0)
+  t.is(base2.view.fork, 0)
+  t.is(base3.view.fork, 0)
+})
+
 test('basic - writable event fires', async t => {
   t.plan(1)
   const { bases } = await create(2, t, { open: null })
