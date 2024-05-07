@@ -890,6 +890,7 @@ test('suspend - incomplete migrate', async t => {
   const b2 = await createBase(stores[1], a.local.key, t)
 
   await b2.ready()
+  await b2.update() // needed cause we arent persisting the tip
 
   t.is(a.view.indexedLength, 3)
   t.is(a.view.signedLength, 2)
