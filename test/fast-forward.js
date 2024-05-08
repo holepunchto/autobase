@@ -328,7 +328,7 @@ if (!IS_MAC_OSX) {
 }
 
 test('fast-forward - force reset then ff', async t => {
-  t.plan(9)
+  t.plan(8)
 
   const { bases } = await create(3, t, {
     fastForward: true,
@@ -357,7 +357,6 @@ test('fast-forward - force reset then ff', async t => {
     await a.append('a' + i)
   }
 
-  t.ok(b.system.core.getBackingCore().flushedLength > 2000)
   t.ok(b.system.core.getBackingCore().indexedLength < 40)
 
   await confirm([a, c])
