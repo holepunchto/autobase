@@ -810,7 +810,7 @@ test('autobase upgrade - consensus 3 writers', async t => {
     b0.on('error', reject)
   })
 
-  confirm([a1, b0, c1])
+  confirm([a1, b0, c1]).catch(noop)
   await t.exception(error, /Autobase upgrade required/)
 
   t.is((await b0.system.getIndexedInfo()).version, version)
@@ -1496,3 +1496,5 @@ async function applyv1 (batch, view, base) {
     await view.data.append({ version: 'v1', data: value.data })
   }
 }
+
+function noop () {}
