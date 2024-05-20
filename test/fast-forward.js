@@ -26,7 +26,8 @@ test('fast-forward - simple', async t => {
 
   const { bases } = await create(2, t, {
     fastForward: true,
-    storage: () => tmpDir(t)
+    storage: () => tmpDir(t),
+    close: view => view.close()
   })
 
   const [a, b] = bases
