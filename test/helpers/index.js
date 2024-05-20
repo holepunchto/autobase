@@ -24,6 +24,7 @@ module.exports = {
 }
 
 let cores
+let sessions
 
 async function createStores (n, t, opts = {}) {
   const storage = opts.storage || (() => ram.reusable())
@@ -92,7 +93,7 @@ async function createBase (store, key, t, opts = {}) {
   await base.ready()
 
   t.teardown(async () => {
-    console.log([...base.store.cores.values()].map(c => c.key))
+    sessions = [...base.store.cores.values()]
     console.log(base.view.getBackingCore().session.manifest)
     base.view.getBackingCore().session.core.debug = true
     base.view.getBackingCore().session.tagged = 'witney'
@@ -101,7 +102,7 @@ async function createBase (store, key, t, opts = {}) {
   }, { order: 1 })
   t.teardown(() => {
     const view = base.view.getBackingCore().session
-    console.log('----', view.manifest, view.tagged, cores.includes(view), view.closed)
+    console.log('----', view.manifest, view.tagged, sessions.includes(view), cores.includes(view), view.closed)
   }, { order: 3 })
 
   return base
