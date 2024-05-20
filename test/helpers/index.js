@@ -33,7 +33,10 @@ async function createStores (n, t, opts = {}) {
     stores.push(new Corestore(await storage(), { primaryKey, encryptionKey }))
   }
 
-  t.teardown(() => Promise.all(stores.map(s => s.close())), { order: 2 })
+  t.teardown(async () => {
+    await Promise.all(stores.map(s => s.close()))
+    console.log('store is closed')
+  }, { order: 2 })
 
   return stores
 }
