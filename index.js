@@ -91,6 +91,7 @@ module.exports = class Autobase extends ReadyResource {
     this._pendingRemoval = false
     this._completeRemovalAt = null
     this._systemPointer = 0
+    this._maybeStaticFastForward = false // writer bumps this
 
     this._updates = []
     this._handlers = handlers || {}
@@ -1070,6 +1071,7 @@ module.exports = class Autobase extends ReadyResource {
       const remoteAdded = await this._addRemoteHeads()
       const localNodes = this._appending === null ? null : this._addLocalHeads()
 
+      if (this._maybeStaticFastForward === true && this.fastForwardEnabled === true) await this._checkStaticFastForward()
       if (this.closing) return
 
       if (remoteAdded > 0 || localNodes !== null) {
@@ -1271,6 +1273,37 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  async _checkStaticFastForward () {
+    let tally = null
+
+    for (let i = 0; i < this.linearizer.indexers.length; i++) {
+      const w = this.linearizer.indexers[i]
+      if (w.system !== null && !b4a.equals(w.system, this.system.core.key)) {
+        if (tally === null) tally = new Map()
+        const hex = b4a.toString(w.system, 'hex')
+        tally.set(hex, (tally.get(hex) || 0) + 1)
+      }
+    }
+
+    if (tally === null) {
+      this._maybeStaticFastForward = false
+      return
+    }
+
+    const maj = (this.linearizer.indexers.length >> 1) + 1
+
+    let candidate = null
+    for (const [hex, vote] of tally) {
+      if (vote < maj) continue
+      candidate = b4a.from(hex, 'hex')
+      break
+    }
+
+    if (candidate && !this._isFastForwarding()) {
+      await this.initialFastForward(candidate, DEFAULT_FF_TIMEOUT * 2)
+    }
+  }
+
   async initialFastForward (key, timeout) {
     this.fastForwarding++
 
@@ -1296,7 +1329,7 @@ module.exports = class Autobase extends ReadyResource {
       }
     })
 
-    if (!length) {
+    if (!length || length < this.system.core.indexedLength) {
       await core.close()
       this.doneFastForwarding()
       this.queueFastForward()

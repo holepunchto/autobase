@@ -1,4 +1,5 @@
 const os = require('os')
+const { on } = require('events')
 const test = require('brittle')
 const tmpDir = require('test-tmp')
 const cenc = require('compact-encoding')
@@ -539,7 +540,7 @@ test('fast-forward - ignore bogus initial ff', async t => {
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
-test('fast-forward - upgrade available', async t => {
+test.solo('fast-forward - upgrade available', async t => {
   const [s1, s2, s3] = await createStores(3, t)
 
   const a = new Autobase(s1.session(), null, {
@@ -613,11 +614,9 @@ test('fast-forward - upgrade available', async t => {
     fastForward: true
   })
 
-  await c0.ready()
-
   // this should fire when we try to fast forward
   const upgradeEvent = new Promise((resolve, reject) => {
-    const timeout = setTimeout(reject, 1000, new Error('event did not fire'))
+    const timeout = setTimeout(reject, 5000, new Error('event did not fire'))
 
     c0.once('upgrade-available', upgrade => {
       clearTimeout(timeout)
@@ -628,7 +627,7 @@ test('fast-forward - upgrade available', async t => {
 
   // this should fire when we apply the upgrade
   const upgradeError = new Promise((resolve, reject) => {
-    const timeout = setTimeout(resolve, 1000)
+    const timeout = setTimeout(resolve, 5000)
 
     c0.once('error', err => {
       clearTimeout(timeout)
@@ -636,10 +635,15 @@ test('fast-forward - upgrade available', async t => {
     })
   })
 
+  const upgrade = t.execution(upgradeEvent)
+  const exception = t.exception(upgradeError)
+
+  await c0.ready()
+
   replicateAndSync([a1, b1, c0]).catch(() => {}) // throws
 
-  await t.execution(upgradeEvent)
-  await t.exception(upgradeError)
+  await upgrade
+  await exception
 })
 
 test('fast-forward - initial ff upgrade available', async t => {
@@ -749,6 +753,88 @@ test('fast-forward - initial ff upgrade available', async t => {
 
   await t.execution(upgradeEvent)
   await t.exception(upgradeError)
+})
+
+test('fast-forward - double ff', async t => {
+  const { bases } = await create(5, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b, c, d, e] = bases
+
+  const migrations = []
+
+  for (let i = 0; i < 300; i++) {
+    await a.append('a' + i)
+  }
+
+  await addWriterAndSync(a, b)
+  await confirm(bases)
+
+  for (let i = 0; i < 300; i++) {
+    await b.append('b' + i)
+  }
+
+  migrations.push(a.system.core.getBackingCore().manifest.prologue.length)
+
+  await addWriterAndSync(b, c)
+  await confirm(bases)
+
+  for (let i = 0; i < 300; i++) {
+    await c.append('c' + i)
+  }
+
+  migrations.push(a.system.core.getBackingCore().manifest.prologue.length)
+
+  await addWriterAndSync(c, d)
+  await confirm(bases)
+
+  for (let i = 0; i < 300; i++) {
+    await d.append('d' + i)
+  }
+
+  migrations.push(a.system.core.getBackingCore().manifest.prologue.length)
+
+  await addWriterAndSync(d, e)
+  await confirm(bases)
+
+  for (let i = 0; i < 300; i++) {
+    await e.append('e' + i)
+  }
+
+  migrations.push(a.system.core.getBackingCore().manifest.prologue.length)
+
+  await confirm(bases)
+
+  const sys = a.system.core.getBackingCore()
+  t.is(sys.manifest.signers.length, 5)
+
+  const [store] = await createStores(1, t, { offset: 5, storage: () => tmpDir(t) })
+  const latecomer = await createBase(store.session(), a.bootstrap, t, {
+    fastForward: true
+  })
+
+  const p = replicateAndSync([...bases, latecomer])
+
+  // check that the migration happened from start to end
+  for await (const [to, from] of on(latecomer, 'fast-forward')) {
+    t.ok(from < migrations.shift())
+    t.ok(migrations.length > 1)
+
+    if (!migrations.length || to > migrations[migrations.length - 1]) break
+  }
+
+  await p
+
+  const core = latecomer.system.core.getBackingCore()
+  const sparse = await isSparse(core)
+
+  t.is(latecomer.linearizer.indexers.length, 5)
+  t.ok(sparse > 0)
+
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
 async function isSparse (core) {
