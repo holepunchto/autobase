@@ -1245,9 +1245,6 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _checkStaticFastForward () {
-    // TODO: enable for v1 once we audit key properly
-    if (this.system.version !== 0) return
-
     let tally = null
 
     for (let i = 0; i < this.linearizer.indexers.length; i++) {
