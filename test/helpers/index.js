@@ -34,8 +34,12 @@ async function createStores (n, t, opts = {}) {
   }
 
   t.teardown(async () => {
-    await Promise.all(stores.map(s => s.close()))
-    console.log('store is closed')
+    let i = 0
+    for (const store of stores) {
+      console.log(store._root === store)
+      await store.close()
+      console.log('store is closed', i++)
+    }
   }, { order: 2 })
 
   return stores
