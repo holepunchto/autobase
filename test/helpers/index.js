@@ -37,7 +37,14 @@ async function createStores (n, t, opts = {}) {
     let i = 0
     for (const store of stores) {
       console.log(store._root === store)
-      await store.close()
+      const cores = [...store.cores.values()]
+      console.log(cores.map(c => c.key))
+      try {
+        await store.close()
+      } catch (e) {
+        console.log('error closing store', e)
+      }
+      console.log(cores.map(c => c.closed))
       console.log('store is closed', i++)
     }
   }, { order: 2 })
