@@ -24,7 +24,6 @@ module.exports = {
 }
 
 let cores
-let view
 
 async function createStores (n, t, opts = {}) {
   const storage = opts.storage || (() => ram.reusable())
@@ -97,11 +96,13 @@ async function createBase (store, key, t, opts = {}) {
     console.log(base.view.getBackingCore().session.manifest)
     base.view.getBackingCore().session.core.debug = true
     base.view.getBackingCore().session.tagged = 'witney'
-    if (base.local.key[0] === 0x8b) view = base.view.getBackingCore().session
     await base.close()
     console.log(base.view.getBackingCore().session.manifest)
   }, { order: 1 })
-  t.teardown(() => { console.log('----', view.manifest, base.view.getBackingCore().session.tagged, cores.includes(view), view.closed) }, { order: 3 })
+  t.teardown(() => {
+    const view = base.view.getBackingCore().session
+    console.log('----', view.manifest, view.tagged, cores.includes(view), view.closed)
+  }, { order: 3 })
 
   return base
 }
