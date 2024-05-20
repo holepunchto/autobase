@@ -71,6 +71,7 @@ async function createBase (store, key, t, opts = {}) {
   await base.ready()
 
   t.teardown(() => base.close(), { order: 1 })
+  t.teardown(() => { console.log(base.view.getBackingCore().session.closed) }, { order: 3 })
 
   return base
 }

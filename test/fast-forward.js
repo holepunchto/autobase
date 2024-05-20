@@ -40,8 +40,6 @@ test.solo('fast-forward - simple', async t => {
 
   const core = b.view.getBackingCore()
   const sparse = await isSparse(core)
-  await core.session.close()
-  // await a.view.getBackingCore().session.close()
 
   t.ok(sparse > 0)
   t.comment('sparse blocks: ' + sparse)
