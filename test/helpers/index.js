@@ -23,6 +23,8 @@ module.exports = {
   ...helpers
 }
 
+let cores
+
 async function createStores (n, t, opts = {}) {
   const storage = opts.storage || (() => ram.reusable())
   const offset = opts.offset || 0
@@ -37,7 +39,12 @@ async function createStores (n, t, opts = {}) {
     let i = 0
     for (const store of stores) {
       console.log(store._root === store)
-      const cores = [...store.cores.values()]
+      cores = [...store.cores.values()]
+      const sessions = []
+      for (const c of cores) {
+        sessions.push(...c.sessions)
+      }
+      cores.push(...sessions)
       console.log(cores.map(c => c.key))
       try {
         await store.close()
@@ -85,7 +92,8 @@ async function createBase (store, key, t, opts = {}) {
   await base.ready()
 
   t.teardown(() => base.close(), { order: 1 })
-  t.teardown(() => { console.log(base.view.getBackingCore().session.closed) }, { order: 3 })
+  const core = base.view.getBackingCore().session
+  t.teardown(() => { console.log(core, cores.includes(core), core.closed) }, { order: 3 })
 
   return base
 }
