@@ -21,7 +21,7 @@ const {
 
 const IS_MAC_OSX = os.platform() === 'darwin'
 
-test('fast-forward - simple', async t => {
+test.solo('fast-forward - simple', async t => {
   t.plan(1)
 
   const { bases } = await create(2, t, {
@@ -40,6 +40,7 @@ test('fast-forward - simple', async t => {
 
   const core = b.view.getBackingCore()
   const sparse = await isSparse(core)
+  await core.close()
 
   t.ok(sparse > 0)
   t.comment('sparse blocks: ' + sparse)
