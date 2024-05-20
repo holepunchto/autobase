@@ -143,7 +143,7 @@ module.exports = class Autobase extends ReadyResource {
     this._initialViews = null
     this._waiting = new SignalPromise()
 
-    this.system = new SystemView(this._viewStore.get({ name: '_system', exclusive: true, cache: true }))
+    this.system = new SystemView(this._viewStore.get({ name: '_system', exclusive: true }))
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
 
     this.ready().catch(safetyCatch)
@@ -288,7 +288,7 @@ module.exports = class Autobase extends ReadyResource {
     if (!length) return { bootstrap, system: null }
 
     const encryptionKey = AutoStore.getBlockKey(bootstrap, this.encryptionKey, '_system')
-    const actualCore = this.store.get({ key, exclusive: false, cache: true, compat: false, encryptionKey, isBlockKey: true })
+    const actualCore = this.store.get({ key, exclusive: false, compat: false, encryptionKey, isBlockKey: true })
 
     await actualCore.ready()
 
