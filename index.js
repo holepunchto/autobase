@@ -500,6 +500,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this._hasClose) await this._handlers.close(this.view)
     if (this._primaryBootstrap) await this._primaryBootstrap.close()
+    for (const w of this.activeWriters) await w.close()
     await this.corePool.clear()
     await this.store.close()
     await closing
