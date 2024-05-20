@@ -91,9 +91,14 @@ async function createBase (store, key, t, opts = {}) {
   const base = new Autobase(store.session(), key, moreOpts)
   await base.ready()
 
-  t.teardown(() => base.close(), { order: 1 })
+  t.teardown(() => {
+    console.log([...base.store.cores.values()].map(c => c.key))
+    console.log(base.view.getBackingCore().session.manifest)
+    base.view.getBackingCore().session.tagged = 'witney'
+    return base.close()
+  }, { order: 1 })
   const core = base.view.getBackingCore().session
-  t.teardown(() => { console.log(core, cores.includes(core), core.closed) }, { order: 3 })
+  t.teardown(() => { console.log(base.store.closed, base.view.getBackingCore().session.tagged, core.manifest, cores.includes(core), core.closed) }, { order: 3 })
 
   return base
 }
