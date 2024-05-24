@@ -977,6 +977,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _addLocalHeads () {
+    if (!this.localWriter.idle()) return null
+
     const nodes = new Array(this._appending.length)
     for (let i = 0; i < this._appending.length; i++) {
       const heads = this.linearizer.getHeads()
