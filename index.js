@@ -1550,7 +1550,7 @@ module.exports = class Autobase extends ReadyResource {
     const views = new Map()
 
     const sysView = this.system.core._source
-    const sysInfo = { key, length }
+    const sysInfo = { key, length, systemIndex: -1 }
 
     views.set(sysView, sysInfo)
 
@@ -1586,8 +1586,7 @@ module.exports = class Autobase extends ReadyResource {
         return
       }
 
-      views.set(view, v)
-      view.systemIndex = i
+      views.set(view, { key: v.key, length: v.length, systemIndex: i })
     }
 
     await system.close()
@@ -1596,8 +1595,10 @@ module.exports = class Autobase extends ReadyResource {
     this._undoAll()
 
     for (const view of this._viewStore.opened.values()) {
-      if (!views.has(view)) continue
-      await view.catchup(views.get(view))
+      const info = views.get(view)
+      if (!info) continue
+
+      await view.catchup(info)
     }
 
     await this.system.update()
