@@ -178,6 +178,26 @@ test('fast-forward - multiple writers added', async t => {
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
+test.solo('fast-forward - multiple queues', async t => {
+  const { bases } = await create(4, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b, c, d] = bases
+
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c, false)
+
+  await b.append('b')
+  await c.append('c')
+
+  await confirm([a, b, c])
+  await replicateAndSync([a, b, c, d])
+
+  t.is(a.system.core.signedLength, c.system.core.signedLength)
+})
+
 test('fast-forward - multiple queues', async t => {
   const { bases } = await create(4, t, {
     fastForward: true,
