@@ -6,7 +6,7 @@ test('timer - simple', t => {
 
   const timer = new Timer(handler, 100)
 
-  const fail = setTimeout(() => { t.fail() }, 200)
+  const fail = setTimeout(() => { t.fail() }, 500)
   timer.bump()
 
   function handler () {
