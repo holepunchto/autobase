@@ -207,12 +207,12 @@ module.exports = class Autobase extends ReadyResource {
     return false
   }
 
-  hintWakeup (keys) {
-    if (!Array.isArray(keys)) keys = [keys]
-    for (const { key, length } of keys) {
+  hintWakeup (hints) {
+    if (!Array.isArray(hints)) hints = [hints]
+    for (const { key, length } of hints) {
       const hex = b4a.toString(key, 'hex')
       const prev = this._wakeupHints.get(hex)
-      if (!prev || prev < length) this._wakeupHints.set(hex, length)
+      if (!prev || length === -1 || prev < length) this._wakeupHints.set(hex, length)
     }
     this._queueBump()
   }
@@ -1185,8 +1185,11 @@ module.exports = class Autobase extends ReadyResource {
 
     for (const [hex, length] of this._wakeupHints) {
       const key = b4a.from(hex, 'hex')
-      const info = await this.system.get(key)
-      if (info && info.length > length) continue // stale hint
+      if (length !== -1) {
+        const info = await this.system.get(key)
+        if (info && length < info.length) continue // stale hint
+      }
+
       await this._getWriterByKey(key, -1, 0, true, null)
     }
 
