@@ -33,6 +33,7 @@
   "dependencies": {
     "b4a": "^1.6.1",
     "bare-events": "^2.2.0",
+    "core-coupler": "^1.0.0",
     "debounceify": "^1.0.0",
     "hyperbee": "^2.15.0",
     "hypercore": "^10.37.1",

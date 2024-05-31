@@ -10,6 +10,7 @@ const { BootRecord } = require('../lib/messages')
 const {
   addWriterAndSync,
   replicateAndSync,
+  sync,
   replicate,
   eventFlush,
   confirm,
@@ -855,6 +856,52 @@ test('fast-forward - unindexed cores should migrate', async t => {
   await replicateAndSync([a, b, c, d])
 
   t.is(a.system.core.signedLength, c.system.core.signedLength)
+})
+
+test('fast-forward - initial fast forward with in between writer', async t => {
+  t.plan(3)
+
+  const { bases } = await create(2, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b] = bases
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append('a' + i)
+  }
+
+  await addWriterAndSync(a, b, false)
+
+  await replicateAndSync([a, b])
+  await b.append('in between')
+  await replicateAndSync([a, b])
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append('a' + i + 1000)
+  }
+
+  await replicateAndSync([a, b])
+
+  t.is(a.linearizer.indexers.length, 1)
+
+  const fastForward = { key: a.system.core.key }
+
+  const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
+  const c = await createBase(store.session(), a.bootstrap, t, { fastForward, debug: true })
+
+  t.teardown(replicate([a, c]))
+
+  // wait some time so c's initial wakeup is not up to date
+  await new Promise(resolve => setTimeout(resolve, 1000))
+
+  t.teardown(replicate([a, b]))
+  await b.append('c no see')
+
+  await t.execution(sync([a, b, c]))
+
+  t.pass()
 })
 
 async function isSparse (core) {

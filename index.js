@@ -6,6 +6,7 @@ const safetyCatch = require('safety-catch')
 const hypercoreId = require('hypercore-id-encoding')
 const assert = require('nanoassert')
 const SignalPromise = require('signal-promise')
+const CoreCoupler = require('core-coupler')
 
 const Linearizer = require('./lib/linearizer')
 const AutoStore = require('./lib/store')
@@ -76,7 +77,10 @@ module.exports = class Autobase extends ReadyResource {
     this._checkWriters = []
     this._appending = null
     this._wakeup = new AutoWakeup(this)
-    this._wakeupHints = new Set()
+    this._wakeupHints = new Map()
+    this._wakeupPeerBound = this._wakeupPeer.bind(this)
+    this._coupler = null
+
     this._queueViewReset = false
     this._lock = mutexify()
 
@@ -207,10 +211,12 @@ module.exports = class Autobase extends ReadyResource {
     return false
   }
 
-  hintWakeup (keys) {
-    if (!Array.isArray(keys)) keys = [keys]
-    for (const key of keys) {
-      this._wakeupHints.add(b4a.toString(key, 'hex'))
+  hintWakeup (hints) {
+    if (!Array.isArray(hints)) hints = [hints]
+    for (const { key, length } of hints) {
+      const hex = b4a.toString(key, 'hex')
+      const prev = this._wakeupHints.get(hex)
+      if (!prev || length === -1 || prev < length) this._wakeupHints.set(hex, length)
     }
     this._queueBump()
   }
@@ -334,6 +340,12 @@ module.exports = class Autobase extends ReadyResource {
     return core ? core.key : null
   }
 
+  recouple () {
+    if (this._coupler) this._coupler.destroy()
+    const core = this.system.core.getBackingCore()
+    this._coupler = new CoreCoupler(core.session, this._wakeupPeerBound)
+  }
+
   async _openPreBump () {
     this._presystem = this._openPreSystem()
 
@@ -370,6 +382,8 @@ module.exports = class Autobase extends ReadyResource {
     if (this.localWriter && !this.system.bootstrapping) {
       await this._restoreLocalState()
     }
+
+    this.recouple()
 
     if (this.fastForwardTo !== null) {
       const { key, timeout } = this.fastForwardTo
@@ -539,6 +553,8 @@ module.exports = class Autobase extends ReadyResource {
       if (!w.flushed()) continue
 
       const unqueued = this._wakeup.unqueue(w.core.key, w.core.length)
+      this._coupler.remove(w.core)
+
       if (!unqueued || w.isIndexer || this.localWriter === w) continue
 
       await this._closeWriter(w, false)
@@ -832,6 +848,9 @@ module.exports = class Autobase extends ReadyResource {
 
       this.activeWriters.add(w)
       this._checkWriters.push(w)
+
+      // will only add non-indexer writers
+      if (this._coupler) this._coupler.add(w.core)
 
       assert(w.opened)
       assert(!w.closed)
@@ -1147,6 +1166,10 @@ module.exports = class Autobase extends ReadyResource {
     return c.decode(messages.BootRecord, buffer).heads
   }
 
+  _wakeupPeer (peer) {
+    this.system.sendWakeup(peer.remotePublicKey)
+  }
+
   async _drainWakeup () { // TODO: parallel load the writers here later
     if (this._needsWakeup === true) {
       this._needsWakeup = false
@@ -1164,8 +1187,13 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
-    for (const hex of this._wakeupHints) {
+    for (const [hex, length] of this._wakeupHints) {
       const key = b4a.from(hex, 'hex')
+      if (length !== -1) {
+        const info = await this.system.get(key)
+        if (info && length < info.length) continue // stale hint
+      }
+
       await this._getWriterByKey(key, -1, 0, true, null)
     }
 
