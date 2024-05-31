@@ -1624,9 +1624,8 @@ module.exports = class Autobase extends ReadyResource {
 
     for (const view of this._viewStore.opened.values()) {
       const info = views.get(view)
-      if (!info) continue
-
-      await view.catchup(info)
+      if (info) await view.catchup(info)
+      else if (migrated) view.migrateTo(indexers, 0)
     }
 
     await this.system.update()
