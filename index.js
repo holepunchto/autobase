@@ -175,6 +175,10 @@ module.exports = class Autobase extends ReadyResource {
     return this._primaryBootstrap === null ? this.local.discoveryKey : this._primaryBootstrap.discoveryKey
   }
 
+  get isIndexer () {
+    return this.localWriter ? this.localWriter.isIndexer : false
+  }
+
   replicate (init, opts) {
     return this.store.replicate(init, opts)
   }
