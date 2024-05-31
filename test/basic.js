@@ -36,6 +36,11 @@ test('basic - two writers', async t => {
   t.is(base2.system.members, base2.activeWriters.size)
   t.is(base3.system.members, base3.activeWriters.size)
 
+  t.ok(base1.isIndexer)
+  t.ok(base2.isIndexer)
+  t.ok(base3.isIndexer)
+
+  t.not(base1.system.core.manifest, null)
   // tests skipped: fix with linearizer update - batching
 
   // t.alike(await base1.system.checkpoint(), await base2.system.checkpoint())
