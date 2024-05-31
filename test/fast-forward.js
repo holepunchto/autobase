@@ -178,7 +178,7 @@ test('fast-forward - multiple writers added', async t => {
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
-test.skip('fast-forward - multiple queues', async t => {
+test('fast-forward - multiple queues', async t => {
   const { bases } = await create(4, t, {
     fastForward: true,
     storage: () => tmpDir(t)
