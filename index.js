@@ -91,7 +91,6 @@ module.exports = class Autobase extends ReadyResource {
     this._needsWakeupHeads = true
     this._addCheckpoints = false
     this._firstCheckpoint = true
-    this._hasPendingCheckpoint = false
     this._pendingRemoval = false
     this._completeRemovalAt = null
     this._systemPointer = 0
@@ -664,7 +663,7 @@ module.exports = class Autobase extends ReadyResource {
     if (this._ackTimer && bg) await this._ackTimer.asapStandalone()
     if (this.closing) return
 
-    const unflushed = this._hasPendingCheckpoint || this.hasUnflushedIndexers()
+    const unflushed = this.hasUnflushedIndexers()
     if (!this.closing && (isPendingIndexer || this.linearizer.shouldAck(this.localWriter, unflushed))) {
       try {
         await this.append(null)
@@ -2111,8 +2110,6 @@ module.exports = class Autobase extends ReadyResource {
     if (this._addCheckpoints) {
       const { checkpoint } = blocks[blocks.length - 1]
       this.localWriter._addCheckpoints(checkpoint)
-
-      this._hasPendingCheckpoint = false
     }
   }
 }
