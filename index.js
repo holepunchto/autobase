@@ -1242,29 +1242,17 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
-    // flush any pending migrates
-    for (const view of this._viewStore.opened.values()) {
-      if (view.queued === -1) continue
-
-      const checkpoint = view.signer.bestCheckpoint(this.localWriter)
-      const length = checkpoint ? checkpoint.length : 0
-
-      if (length < view.queued && length < view.indexedLength) {
-        this._hasPendingCheckpoint = true
-        return true
+    if (this._ackTimer) { // the bool in this case is implicitly an "asap" signal
+      for (const w of this.linearizer.indexers) {
+        if (w.core.length > w.length) return false // wait for the normal ack cycle in this case
       }
     }
 
+    // flush any pending indexers
+    if (this.hasUnflushedIndexers()) return true
+
     // flush if threshold is reached and we are not already acking
     if (this._ackTickThreshold && !this._acking && this._ackTick >= this._ackTickThreshold) {
-      if (this._ackTimer) { // the bool in this case is implicitly an "asap" signal
-        for (const w of this.linearizer.indexers) {
-          if (w.core.length > w.length) return false // wait for the normal ack cycle in this case
-        }
-
-        return this.linearizer.shouldAck(this.localWriter, this.hasUnflushedIndexers())
-      }
-
       return true
     }
 
