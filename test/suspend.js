@@ -858,10 +858,10 @@ test('suspend - append waits for drain after boot', async t => {
   t.is(node.heads[0].length, 101) // links the last node
 })
 
-test('suspend - incomplete migrate', async t => {
+test('suspend - restart before migrate', async t => {
   const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
 
-  const [a, b] = bases
+  const [a, b, c] = bases
 
   await a.append('a0')
   await a.append('a1')
@@ -873,38 +873,39 @@ test('suspend - incomplete migrate', async t => {
 
   await replicateAndSync([a, b])
 
-  await b.append('b0')
-
+  await addWriter(b, c)
   await replicateAndSync([a, b])
 
-  await a.append('a1') // this indexes b0
-  await replicateAndSync([a, b])
+  await a.append('a2') // this indexes b0
+  await replicateAndSync([a, b, c])
 
-  await b.append('b1') // this indexes a1
+  await b.append('b1') // this indexes writer add
 
-  t.is(b.view.indexedLength, 4)
-  t.is(b.view.signedLength, 2)
+  await replicateAndSync([b, c])
+  await replicateAndSync([a, c])
+
+  t.is(a.linearizer.indexers.length, 3)
+  t.is(a.view.indexedLength, 3)
+  t.is(a.view.signedLength, 3)
+  t.is(a.view.getBackingCore().indexedLength, 3)
 
   await b.close()
 
   const b2 = await createBase(stores[1], a.local.key, t)
 
   await b2.ready()
-  await b2.update() // needed cause we arent persisting the tip
 
-  t.is(a.view.indexedLength, 3)
-  t.is(a.view.signedLength, 2)
-  t.is(a.view.getBackingCore().indexedLength, 2)
-
-  t.is(b2.view.indexedLength, 4)
-  t.is(b2.view.signedLength, 2)
-  t.is(b2.view.getBackingCore().indexedLength, 2)
-
-  await b2.update()
+  t.is(b2.linearizer.indexers.length, 2)
+  t.is(b2.view.indexedLength, 3)
+  t.is(b2.view.signedLength, 3)
+  t.is(b2.view.getBackingCore().indexedLength, 3)
 
   t.is(b2.activeWriters.size, 2)
 
   await t.execution(replicateAndSync([a, b2]))
+
+  t.is(b2.linearizer.indexers.length, 3)
+  t.is(b2.activeWriters.size, 3)
 })
 
 test('suspend - recover from bad sys core', async t => {
