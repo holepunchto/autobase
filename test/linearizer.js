@@ -418,18 +418,30 @@ test('linearizer - shouldAck', async t => {
   const [a, b, c] = bases
 
   await addWriterAndSync(a, b)
-  await addWriterAndSync(a, c)
+  await addWriterAndSync(a, c, false)
 
-  await a.ack() // be the last node
+  await c.append('value')
+
+  await replicateAndSync([a, b, c])
+
+  // everyone needs to ack
+  t.ok(a.linearizer.shouldAck(a.localWriter))
+  t.ok(b.linearizer.shouldAck(b.localWriter))
+
+  // consistent across bases
+  t.ok(a.linearizer.shouldAck(getWriter(a, b.localWriter)))
+  t.ok(b.linearizer.shouldAck(getWriter(b, a.localWriter)))
+  t.ok(c.linearizer.shouldAck(getWriter(c, b.localWriter)))
+  t.ok(c.linearizer.shouldAck(getWriter(c, a.localWriter)))
+
+  // c is not an indexer
+  t.absent(a.linearizer.shouldAck(getWriter(a, c.localWriter)))
+  t.absent(b.linearizer.shouldAck(getWriter(b, c.localWriter)))
 
   await replicateAndSync(bases)
 
-  // someone needs to ack
-  t.ok(a.linearizer.shouldAck(a.localWriter) || b.linearizer.shouldAck(b.localWriter))
-
-  // consistent across bases
-  t.is(b.linearizer.shouldAck(getWriter(b, a.localWriter)), a.linearizer.shouldAck(a.localWriter))
-  t.is(c.linearizer.shouldAck(getWriter(c, a.localWriter)), a.linearizer.shouldAck(a.localWriter))
+  t.is(a.linearizer.shouldAck(a.localWriter), b.linearizer.shouldAck(getWriter(b, a.localWriter)))
+  t.is(c.linearizer.shouldAck(getWriter(c, a.localWriter)), b.linearizer.shouldAck(a.localWriter))
 
   t.is(a.linearizer.shouldAck(getWriter(a, b.localWriter)), b.linearizer.shouldAck(b.localWriter))
   t.is(c.linearizer.shouldAck(getWriter(c, b.localWriter)), b.linearizer.shouldAck(b.localWriter))
