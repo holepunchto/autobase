@@ -16,6 +16,7 @@ module.exports = {
   addWriterAndSync,
   apply,
   confirm,
+  printIndexerTip,
   printTip,
   compare,
   compareViews,
@@ -84,6 +85,52 @@ function open (store) {
 
 async function addWriter (base, add, indexer = true) {
   return base.append({ add: add.local.key.toString('hex'), indexer })
+}
+
+function printIndexerTip (tip, indexers) {
+  let string = '```mermaid\n'
+  string += 'graph TD;\n'
+
+  const clock = new Map()
+  const indexerTip = []
+
+  // find lower bound for each writer
+  for (const node of tip) {
+    if (!indexers.includes(node.writer)) continue
+
+    indexerTip.push(node)
+
+    const hex = node.writer.core.key.toString('hex')
+    if (clock.has(hex) && clock.get(hex) < node.length) continue
+
+    clock.set(hex, node.length)
+  }
+
+  const state = new Map()
+
+  // tip is already sorted
+  for (const node of indexerTip) {
+    const label = `${node.writer.core.key[0].toString(16)}:${node.length}`
+
+    if (!state.has(node.writer)) state.set(node.writer, new Map())
+    const last = state.get(node.writer)
+
+    for (let [key, length] of node.clock) {
+      const hex = key.toString('hex')
+
+      if (hex === node.writer.core.key.toString('hex')) length--
+      if (length < clock.get(hex) || length <= last.get(hex)) continue
+
+      last.set(hex, length)
+
+      const depLabel = `${key[0].toString(16)}:${length}`
+      string += `  ${label}-->${depLabel};\n`
+    }
+  }
+
+  string += '```'
+
+  return string
 }
 
 function printTip (tip, indexers) {
