@@ -810,7 +810,7 @@ module.exports = class Autobase extends ReadyResource {
     try {
       let w = this.activeWriters.get(key)
       if (w !== null) {
-        if (isAdded && w.core.writable && this.localWriter === null) this.localWriter = w
+        if (isAdded && w.core.writable && this.localWriter === null) this._setLocalWriter(w)
         w.seen(seen)
         return w
       }
@@ -889,16 +889,13 @@ module.exports = class Autobase extends ReadyResource {
     const w = new Writer(this, core, length, isRemoved)
 
     if (core.writable) {
-      if (!isActive) return w // do not set inactive writer
-
-      this.localWriter = w
-      if (this._ackInterval) this._startAckTimer()
-      this.emit('writable')
-    } else {
-      core.on('append', this._onremotewriterchangeBound)
-      core.on('download', this._onremotewriterchangeBound)
-      core.on('manifest', this._onremotewriterchangeBound)
+      if (isActive) this._setLocalWriter(w) // only set active writer
+      return w
     }
+
+    core.on('append', this._onremotewriterchangeBound)
+    core.on('download', this._onremotewriterchangeBound)
+    core.on('manifest', this._onremotewriterchangeBound)
 
     return w
   }
@@ -989,19 +986,27 @@ module.exports = class Autobase extends ReadyResource {
       idx = null
     }
 
-    if (idx === null) this._clearLocalWriter()
+    if (idx === null) this._unsetLocalWriter()
   }
 
   _onUpgrade (version) {
     if (version > this.maxSupportedVersion) throw new Error('Autobase upgrade required')
   }
 
-  _clearLocalWriter () {
+  _setLocalWriter (w) {
+    this.localWriter = w
+    if (this._ackInterval) this._startAckTimer()
+    this.emit('writable')
+  }
+
+  _unsetLocalWriter () {
     if (this.localWriter) this._closeWriter(this.localWriter, true)
+    if (this._ackTimer) this._ackTimer.stop()
     this.localWriter = null
     this._addCheckpoints = false
     this._pendingIndexerRemoval = false
     this._pendingRemoval = false
+    this.emit('unwritable')
   }
 
   _addLocalHeads () {
@@ -1119,7 +1124,7 @@ module.exports = class Autobase extends ReadyResource {
         await this._flushLocal(localNodes)
       }
 
-      if (this._pendingRemoval) this._clearLocalWriter()
+      if (this._pendingRemoval) this._unsetLocalWriter()
 
       if (this.closing) return
 
@@ -1643,7 +1648,7 @@ module.exports = class Autobase extends ReadyResource {
     await this.system.update()
 
     if (this.localWriter) {
-      if (localLength < 0) this._clearLocalWriter()
+      if (localLength < 0) this._unsetLocalWriter()
       else this.localWriter.reset(localLength)
     }
 
