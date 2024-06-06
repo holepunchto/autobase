@@ -1002,10 +1002,13 @@ module.exports = class Autobase extends ReadyResource {
   _unsetLocalWriter () {
     if (this.localWriter) this._closeWriter(this.localWriter, true)
     if (this._ackTimer) this._ackTimer.stop()
+
     this.localWriter = null
+    this._ackTimer = null
     this._addCheckpoints = false
     this._pendingIndexerRemoval = false
     this._pendingRemoval = false
+
     this.emit('unwritable')
   }
 
