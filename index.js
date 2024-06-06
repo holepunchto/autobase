@@ -1089,6 +1089,16 @@ module.exports = class Autobase extends ReadyResource {
     await this._setBootRecord(this.system.core.key, length, this.system.heads, views)
   }
 
+  async _updateBootRecordHeads (heads) {
+    const p = await this.local.getUserData('autobase/boot')
+    if (!p) return // first tick
+
+    const pointer = c.decode(messages.BootRecord, p)
+    pointer.heads = heads
+
+    await this.local.setUserData('autobase/boot', c.encode(messages.BootRecord, pointer))
+  }
+
   async _setBootRecord (key, length, heads, views) {
     const pointer = c.encode(messages.BootRecord, {
       indexed: { key, length },
@@ -1126,6 +1136,8 @@ module.exports = class Autobase extends ReadyResource {
       const indexed = !!this._updatingCores
 
       if (this.closing) return
+
+      if (this.opened) await this._updateBootRecordHeads(this.system.heads)
 
       if (this.localWriter !== null && localNodes !== null) {
         await this._flushLocal(localNodes)
