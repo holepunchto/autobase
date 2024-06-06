@@ -980,7 +980,8 @@ module.exports = class Autobase extends ReadyResource {
     if (!(this.localWriter && this.localWriter.isIndexer)) return
 
     if (!hasWriter(this.linearizer.indexers, this.localWriter)) {
-      this._unsetLocalWriter()
+      this._clearLocalIndexer()
+      if (this._pendingLocalRemoval) this._unsetLocalWriter()
     }
   }
 
