@@ -1073,6 +1073,27 @@ test('basic - remove writer', async t => {
   t.is(b.system.members, c.system.members)
 })
 
+test('basic - non-indexer writer removes themselves', async t => {
+  const { bases } = await create(2, t, { apply: applyWithRemove, open: null })
+  const [a, b] = bases
+
+  await addWriter(a, b, false)
+
+  await confirm([a, b])
+
+  t.is(a.system.members, 2)
+  t.is(a.system.members, b.system.members)
+
+  await b.append({ remove: b4a.toString(b.local.key, 'hex') })
+
+  await t.exception(b.append('fail'), /Not writable/)
+
+  await confirm([a, b])
+
+  t.is(a.system.members, 1)
+  t.is(a.system.members, a.system.members)
+})
+
 test('basic - remove indexer', async t => {
   const { bases } = await create(3, t, { apply: applyWithRemove, open: null })
   const [a, b, c] = bases
@@ -1098,6 +1119,11 @@ test('basic - remove indexer', async t => {
   await confirm([a, b, c])
 
   t.is(c.writable, false)
+
+  const info = await a.system.get(c.local.key)
+
+  t.is(info.isIndexer, false)
+  t.is(info.isRemoved, true)
 
   t.is(b.system.members, 2)
   t.is(b.system.indexers.length, 2)
@@ -1232,7 +1258,7 @@ test('basic - remove multiple indexers concurrently', async t => {
 
   t.is(b.view.getBackingCore().session.manifest.signers.length, 3)
 
-  await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+  a.append({ remove: b4a.toString(b.local.key, 'hex') })
   await a.append({ remove: b4a.toString(c.local.key, 'hex') })
 
   await confirm([a, b, c])
@@ -1266,6 +1292,320 @@ test('basic - remove multiple indexers concurrently', async t => {
       await view.append(value)
     }
   }
+})
+
+test('basic - indexer removes themselves', async t => {
+  const { bases } = await create(3, t, { apply })
+  const [a, b, c] = bases
+
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(b, c)
+
+  await a.append('a1')
+
+  await confirm([a, b, c])
+
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 3)
+
+  await a.append({ remove: b4a.toString(a.local.key, 'hex') })
+
+  await confirm([a, b, c])
+
+  t.is(a.writable, false)
+  t.is(a.view.getBackingCore().session.manifest.signers.length, 2)
+
+  await t.exception(a.append('fail'), /Not writable/)
+
+  const length = a.view.length
+  const indexedLength = a.view.indexedLength
+
+  await t.execution(b.append('b1'))
+  await t.execution(c.append('c1'))
+
+  await replicateAndSync([a, b, c])
+
+  t.not(a.view.length, length) // can still read
+
+  await confirm([a, b, c])
+
+  t.not(a.view.indexedLength, indexedLength) // b,c can still index
+
+  async function apply (batch, view, base) {
+    for (const { value } of batch) {
+      if (value.add) {
+        await base.addWriter(b4a.from(value.add, 'hex'))
+        continue
+      }
+
+      if (value.remove) {
+        await base.removeWriter(b4a.from(value.remove, 'hex'))
+        continue
+      }
+
+      await view.append(value)
+    }
+  }
+})
+
+test('basic - all indexers removed', async t => {
+  const { bases } = await create(2, t, { apply })
+  const [a, b] = bases
+
+  await a.append('a1')
+
+  await replicateAndSync([a, b])
+
+  t.is(a.view.length, 1)
+  t.is(b.view.length, 1)
+
+  t.is(a.view.indexedLength, 1)
+  t.is(b.view.indexedLength, 1)
+
+  t.is(a.view.getBackingCore().session.manifest.signers.length, 1)
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 1)
+
+  await a.append({ remove: b4a.toString(a.local.key, 'hex') })
+
+  await replicateAndSync([a, b])
+
+  t.is(a.writable, false)
+
+  t.is(a.view.getBackingCore().session.manifest.signers.length, 0)
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 0)
+
+  t.is(a.view.length, 1)
+  t.is(b.view.length, 1)
+
+  await t.exception(a.append('fail'), /Not writable/)
+  await t.exception(b.append('fail'), /Not writable/)
+
+  async function apply (batch, view, base) {
+    for (const { value } of batch) {
+      if (value.add) {
+        await base.addWriter(b4a.from(value.add, 'hex'))
+        continue
+      }
+
+      if (value.remove) {
+        await base.removeWriter(b4a.from(value.remove, 'hex'))
+        continue
+      }
+
+      await view.append(value)
+    }
+  }
+})
+
+test('basic - add new indexer after removing', async t => {
+  const { bases } = await create(3, t, { apply: applyWithRemove })
+  const [a, b, c] = bases
+
+  await addWriterAndSync(a, b)
+
+  await b.append('b1')
+
+  await confirm([a, b])
+
+  t.is(b.view.indexedLength, 1)
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 2)
+
+  await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+  await confirm([a, b])
+
+  t.is(b.writable, false)
+  t.is(b.localWriter, null)
+
+  t.is(a.linearizer.indexers.length, 1)
+  t.is(b.linearizer.indexers.length, 1)
+
+  t.is(a.system.core.getBackingCore().session.manifest.signers.length, 1)
+  t.is(b.system.core.getBackingCore().session.manifest.signers.length, 1)
+
+  await t.execution(a.append('hello'))
+  await replicateAndSync([a, b])
+
+  t.is(a.view.indexedLength, 2)
+  t.is(b.view.indexedLength, 2)
+
+  await addWriterAndSync(a, c)
+
+  await c.append('c1')
+
+  b.debug = true
+  t.is(b.writable, false)
+  t.is(b.localWriter, null)
+
+  await confirm([a, b, c])
+  await replicateAndSync([a, b, c])
+
+  t.is(a.view.indexedLength, 3)
+  t.is(b.view.indexedLength, 3)
+  t.is(c.view.indexedLength, 3)
+
+  t.is(a.linearizer.indexers.length, 2)
+  t.is(b.linearizer.indexers.length, 2)
+  t.is(c.linearizer.indexers.length, 2)
+
+  t.is(a.system.core.getBackingCore().session.manifest.signers.length, 2)
+  t.is(b.system.core.getBackingCore().session.manifest.signers.length, 2)
+  t.is(c.system.core.getBackingCore().session.manifest.signers.length, 2)
+})
+
+test('basic - readd removed indexer', async t => {
+  const { bases } = await create(2, t, { apply: applyWithRemove })
+  const [a, b] = bases
+
+  await addWriterAndSync(a, b)
+
+  await b.append('b1')
+
+  await confirm([a, b])
+
+  t.is(b.view.indexedLength, 1)
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 2)
+
+  await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+  await confirm([a, b])
+
+  t.is(b.writable, false)
+  await t.exception(b.append('fail'), /Not writable/)
+
+  t.is(a.linearizer.indexers.length, 1)
+  t.is(b.linearizer.indexers.length, 1)
+
+  t.is(a.system.core.getBackingCore().session.manifest.signers.length, 1)
+  t.is(b.system.core.getBackingCore().session.manifest.signers.length, 1)
+
+  await t.execution(a.append('hello'))
+  await replicateAndSync([a, b])
+
+  t.is(a.view.indexedLength, 2)
+  t.is(b.view.indexedLength, 2)
+
+  await addWriterAndSync(a, b)
+  t.is(b.writable, true)
+
+  await b.append('b1')
+
+  await confirm([a, b])
+
+  t.is(a.view.indexedLength, 3)
+  t.is(b.view.indexedLength, 3)
+
+  t.is(a.linearizer.indexers.length, 2)
+  t.is(b.linearizer.indexers.length, 2)
+
+  t.is(a.system.core.getBackingCore().session.manifest.signers.length, 2)
+  t.is(b.system.core.getBackingCore().session.manifest.signers.length, 2)
+})
+
+// todo: this test is hard, probably have to rely on ff to fix
+test('basic - writer adds a writer while being removed', async t => {
+  const { bases } = await create(2, t, { apply: applyWithRemove })
+  const [a, b] = bases
+
+  await addWriterAndSync(a, b, false)
+
+  await b.append('b1')
+
+  await confirm([a, b])
+
+  t.is(b.view.indexedLength, 1)
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 1)
+
+  await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+
+  t.is(a.view.indexedLength, 1)
+  t.is(a.view.length, 1)
+  t.is(a.system.members, 1)
+
+  t.is(b.writable, true)
+
+  await b.append('b2')
+  await b.append('b3')
+  await b.append('b4')
+
+  t.is(b.view.indexedLength, 1)
+  t.is(b.view.length, 4)
+  t.is(b.system.members, 2)
+
+  await replicateAndSync([a, b])
+
+  t.is(b.view.indexedLength, 1)
+  t.is(b.view.length, 1)
+  t.is(b.system.members, 1)
+
+  await a.append(null)
+  await replicateAndSync([a, b])
+
+  t.is(a.view.indexedLength, 1)
+  t.is(b.view.indexedLength, 1)
+
+  const ainfo = await a.system.get(b.local.key)
+  const binfo = await b.system.get(b.local.key)
+
+  t.is(ainfo.length, b.local.length)
+  t.is(ainfo.length, b.local.length)
+
+  t.is(ainfo.isRemoved, true)
+  t.is(binfo.isRemoved, true)
+})
+
+// todo: this test is hard, probably have to rely on ff to recover
+test.skip('basic - writer adds a writer while being removed', async t => {
+  const { bases } = await create(4, t, { apply: applyWithRemove })
+  const [a, b, c, d] = bases
+
+  await addWriterAndSync(a, b, false)
+
+  await b.append('b1')
+
+  await confirm([a, b])
+
+  t.is(b.view.indexedLength, 1)
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 1)
+
+  await addWriterAndSync(a, d, false)
+  await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+
+  console.log('d', d.system.core.length)
+
+  t.is(b.writable, true)
+  await addWriterAndSync(b, c, false)
+
+  await c.append('c1')
+
+  await replicateAndSync([b, c, d])
+
+  t.is(c.writable, true)
+  t.is(c.system.members, 4)
+
+  await replicateAndSync([b, c, d])
+
+  await d.append('d1')
+
+  t.is(d.view.indexedLength, 1)
+  t.is(d.view.length, 3)
+  t.is(d.system.members, 4)
+
+  console.log('clen', c.local.length)
+  // d.debug = true
+  a.debug = true
+
+  await replicateAndSync([a, d])
+  t.is(a.system.members, 2)
+  t.is(d.system.members, 2)
+  t.is(d.view.indexedLength, 1)
+  t.is(d.view.length, 2)
+
+  await a.append(null)
+
+  await replicateAndSync([a, d])
+
+  t.is(d.view.indexedLength, 2)
+
+  t.is(await d.view.get(0), 'b1')
+  t.is(await d.view.get(1), 'd1')
 })
 
 async function applyWithRemove (batch, view, base) {
