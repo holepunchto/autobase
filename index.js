@@ -7,6 +7,7 @@ const hypercoreId = require('hypercore-id-encoding')
 const assert = require('nanoassert')
 const SignalPromise = require('signal-promise')
 const CoreCoupler = require('core-coupler')
+const mutexify = require('mutexify/promise')
 
 const Linearizer = require('./lib/linearizer')
 const AutoStore = require('./lib/store')
@@ -17,7 +18,6 @@ const Writer = require('./lib/writer')
 const ActiveWriters = require('./lib/active-writers')
 const CorePool = require('./lib/core-pool')
 const AutoWakeup = require('./lib/wakeup')
-const mutexify = require('mutexify/promise')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 
