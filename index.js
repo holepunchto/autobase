@@ -92,8 +92,7 @@ module.exports = class Autobase extends ReadyResource {
     this._addCheckpoints = false
     this._firstCheckpoint = true
     this._hasPendingCheckpoint = false
-    this._pendingIndexerRemoval = false
-    this._pendingRemoval = false
+    this._pendingLocalRemoval = false
     this._completeRemovalAt = null
     this._systemPointer = 0
     this._maybeStaticFastForward = false // writer bumps this
@@ -978,15 +977,11 @@ module.exports = class Autobase extends ReadyResource {
       this.localWriter.reset(length)
     }
 
-    if (!this._pendingIndexerRemoval) return
+    if (!(this.localWriter && this.localWriter.isIndexer)) return
 
-    let idx = null
-    for (idx of this.linearizer.indexers) {
-      if (idx === this.localWriter) break
-      idx = null
+    if (!hasWriter(this.linearizer.indexers, this.localWriter)) {
+      this._unsetLocalWriter()
     }
-
-    if (idx === null) this._unsetLocalWriter()
   }
 
   _onUpgrade (version) {
@@ -1000,16 +995,25 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _unsetLocalWriter () {
-    if (this.localWriter) this._closeWriter(this.localWriter, true)
-    if (this._ackTimer) this._ackTimer.stop()
+    if (!this.localWriter) return
+
+    this._closeWriter(this.localWriter, true)
+    if (this.localWriter.isIndexer) this._clearLocalIndexer()
 
     this.localWriter = null
-    this._ackTimer = null
-    this._addCheckpoints = false
-    this._pendingIndexerRemoval = false
-    this._pendingRemoval = false
+    this._pendingLocalRemoval = false
 
     this.emit('unwritable')
+  }
+
+  _clearLocalIndexer () {
+    if (!this.localWriter) return
+
+    this.localWriter.isIndexer = false
+
+    if (this._ackTimer) this._ackTimer.stop()
+    this._ackTimer = null
+    this._addCheckpoints = false
   }
 
   _addLocalHeads () {
@@ -1127,7 +1131,7 @@ module.exports = class Autobase extends ReadyResource {
         await this._flushLocal(localNodes)
       }
 
-      if (this._pendingRemoval) this._unsetLocalWriter()
+      if (this._pendingLocalRemoval && !this.localWriter.isIndexer) this._unsetLocalWriter()
 
       if (this.closing) return
 
@@ -1245,8 +1249,6 @@ module.exports = class Autobase extends ReadyResource {
 
   _ackIsNeeded () {
     if (!this._addCheckpoints) return false // ack has no impact
-
-    if (this._pendingRemoval) return true
 
     // flush any pending indexers
     if (this.system.pendingIndexers.length > 0) {
@@ -1738,10 +1740,7 @@ module.exports = class Autobase extends ReadyResource {
     assert(this._applying !== null, 'System changes are only allowed in apply')
     await this.system.remove(key)
 
-    if (b4a.equals(key, this.local.key)) {
-      if (this.localWriter.isIndexer) this._pendingIndexerRemoval = true
-      else this._pendingRemoval = true
-    }
+    if (b4a.equals(key, this.local.key)) this._pendingLocalRemoval = true
 
     if (this.activeWriters.has(key)) {
       this.activeWriters.get(key).isRemoved = true
@@ -2202,4 +2201,9 @@ function emitWarning (err) {
 
 async function closeAll (list) {
   for (const core of list) await core.close()
+}
+
+function hasWriter (writers, target) {
+  for (const w of writers) if (w === target) return true
+  return false
 }
