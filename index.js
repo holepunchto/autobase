@@ -96,6 +96,7 @@ module.exports = class Autobase extends ReadyResource {
     this._completeRemovalAt = null
     this._systemPointer = 0
     this._maybeStaticFastForward = false // writer bumps this
+    this._initialBatch = null
 
     this._updates = []
     this._handlers = handlers || {}
@@ -469,6 +470,58 @@ module.exports = class Autobase extends ReadyResource {
     if (this.reindexing) this._setReindexed()
 
     this.queueFastForward()
+
+    await this.catchup()
+  }
+
+  async catchup () {
+    const pointer = await this.local.getUserData('autobase/boot')
+    if (!pointer) return
+
+    const { heads } = c.decode(messages.BootRecord, pointer)
+
+    const ordered = []
+    const writers = new Map()
+
+    while (heads.length) {
+      const head = heads.shift()
+      const record = await this.system.get(head.key)
+
+      if (record && record.length >= head.length) continue
+      if (ordered.findIndex(h => sameHead(h, head)) !== -1) continue
+
+      const hex = b4a.toString(head.key, 'hex')
+
+      if (!writers.has(hex)) {
+        writers.set(hex, await this._getWriterByKey(head.key, head.length, 0, false, null))
+      }
+
+      const w = writers.get(hex)
+
+      if (record) w.seen(record.length)
+
+      ordered.push(head)
+
+      const { node } = await w.core.get(head.length - 1)
+
+      for (const dep of node.heads) {
+        heads.push(dep)
+      }
+    }
+
+    this._initialBatch = []
+
+    for (let i = ordered.length - 1; i >= 0; i--) {
+      const { key } = ordered[i]
+
+      const w = writers.get(b4a.toString(key, 'hex'))
+      await w.update()
+
+      const node = w.advance()
+      assert(node !== null, 'Node should always be available')
+
+      this._initialBatch.push(node)
+    }
   }
 
   _reindexersIdle () {
@@ -1121,8 +1174,19 @@ module.exports = class Autobase extends ReadyResource {
         await this._loadLocalWriter(this.system)
       }
 
-      const remoteAdded = await this._addRemoteHeads()
-      const localNodes = this._appending === null ? null : this._addLocalHeads()
+      let remoteAdded = null
+      let localNodes = null
+
+      if (this._initialBatch) {
+        for (const node of this._initialBatch) {
+          this.linearizer.addHead(node)
+        }
+        remoteAdded = this._initialBatch.length
+        this._initialBatch = null
+      } else {
+        remoteAdded = await this._addRemoteHeads()
+        localNodes = this._appending === null ? null : this._addLocalHeads()
+      }
 
       if (this._maybeStaticFastForward === true && this.fastForwardEnabled === true) await this._checkStaticFastForward()
       if (this.closing) return
@@ -2188,6 +2252,10 @@ function isAutobaseMessage (msg) {
 
 function compareNodes (a, b) {
   return b4a.compare(a.key, b.key)
+}
+
+function sameHead (a, b) {
+  return b4a.equals(a.key, b.key) && a.length === b.length
 }
 
 function descendingVersion (a, b) {
