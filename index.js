@@ -977,7 +977,7 @@ module.exports = class Autobase extends ReadyResource {
       this.localWriter.reset(length)
     }
 
-    if (!(this.localWriter && this.localWriter.isIndexer)) return
+    if (!this.localWriter || !this.localWriter.isIndexer) return
 
     if (!hasWriter(this.linearizer.indexers, this.localWriter)) {
       this._clearLocalIndexer()
@@ -1743,9 +1743,8 @@ module.exports = class Autobase extends ReadyResource {
 
     if (b4a.equals(key, this.local.key)) this._pendingLocalRemoval = true
 
-    if (this.activeWriters.has(key)) {
-      this.activeWriters.get(key).isRemoved = true
-    }
+    const w = this.activeWriters.get(key)
+    if (w) w.isRemoved = true
 
     this._queueBump()
   }
@@ -2205,6 +2204,8 @@ async function closeAll (list) {
 }
 
 function hasWriter (writers, target) {
-  for (const w of writers) if (w === target) return true
+  for (const w of writers) {
+    if (w === target) return true
+  }
   return false
 }
