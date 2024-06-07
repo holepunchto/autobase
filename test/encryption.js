@@ -64,6 +64,8 @@ test('encryption - restart', async t => {
   }
 
   t.absent(found)
+
+  await base.close()
 })
 
 test('encryption - expect encryption key', async t => {

@@ -3,7 +3,6 @@ const tmpDir = require('test-tmp')
 const c = require('compact-encoding')
 const b4a = require('b4a')
 
-const Autobase = require('..')
 const { BootRecord } = require('../lib/messages')
 
 const {
@@ -12,11 +11,9 @@ const {
   createStores,
   replicate,
   replicateAndSync,
-  apply,
   addWriter,
   addWriterAndSync,
   confirm,
-  encryptionKey,
   eventFlush
 } = require('./helpers')
 
@@ -46,7 +43,7 @@ test('suspend - pass exisiting store', async t => {
 
   await base2.close()
 
-  const base3 = await createBase(stores[1], base1.local.key, t)
+  const base3 = createBase(stores[1], base1.local.key, t)
   await base3.ready()
 
   t.is(base3.activeWriters.size, 2)
@@ -65,7 +62,8 @@ test('suspend - pass exisiting fs store', async t => {
     storage: () => tmpDir(t)
   })
 
-  const base2 = await createBase(store, base1.local.key, t, { open: null })
+  const base2 = createBase(store, base1.local.key, t, { open: null })
+  await base2.ready()
 
   await base1.append({
     add: base2.local.key.toString('hex'),
@@ -88,7 +86,7 @@ test('suspend - pass exisiting fs store', async t => {
 
   await base2.close()
 
-  const base3 = await createBase(store, base1.local.key, t, { open: null })
+  const base3 = createBase(store, base1.local.key, t, { open: null })
   await base3.ready()
 
   t.is(base3.activeWriters.size, 2)
@@ -124,7 +122,8 @@ test('suspend - 2 exisiting fs stores', async t => {
 
   await base2.close()
 
-  const base3 = await createBase(stores[1], base1.local.key, t)
+  const base3 = createBase(stores[1], base1.local.key, t)
+  await base3.ready()
 
   t.is(base3.activeWriters.size, 2)
 
@@ -159,7 +158,8 @@ test('suspend - reopen after index', async t => {
 
   await b.close()
 
-  const b2 = await createBase(stores[1], a.local.key, t)
+  const b2 = createBase(stores[1], a.local.key, t)
+  await b2.ready()
 
   await b2.update()
 
@@ -235,7 +235,8 @@ test('suspend - reopen with sync in middle', async t => {
 
   await unreplicate()
 
-  const b2 = await createBase(bstore, a.local.key, t)
+  const b2 = createBase(bstore, a.local.key, t)
+  await b2.ready()
 
   await b2.update()
 
@@ -283,7 +284,8 @@ test('suspend - reopen with indexing in middle', async t => {
 
   await confirm([a, b])
 
-  const c2 = await createBase(stores[2], a.local.key, t)
+  const c2 = createBase(stores[2], a.local.key, t)
+  await c2.ready()
 
   await c2.update()
 
@@ -372,7 +374,8 @@ test.skip('suspend - reopen with indexing + sync in middle', async t => {
 
   await unreplicate()
 
-  const c2 = await createBase(cstore, a.local.key, t)
+  const c2 = createBase(cstore, a.local.key, t)
+  await c2.ready()
 
   t.is(c2.view.length, order.length)
 
@@ -426,7 +429,8 @@ test('suspend - non-indexed writer', async t => {
 
   await b.close()
 
-  const b2 = await createBase(stores[1], a.local.key, t)
+  const b2 = createBase(stores[1], a.local.key, t)
+  await b2.ready()
 
   t.is(b2.view.indexedLength, a.view.indexedLength)
   t.is(b2.view.length, a.view.length)
@@ -476,7 +480,7 @@ test('suspend - open new index after reopen', async t => {
 
   await b.close()
 
-  const b2 = await createBase(stores[1], a.local.key, t, {
+  const b2 = createBase(stores[1], a.local.key, t, {
     apply: applyMultiple,
     open: openMultiple
   })
@@ -563,10 +567,12 @@ test('suspend - reopen multiple indexes', async t => {
 
   await b.close()
 
-  const b2 = await createBase(stores[1], a.local.key, t, {
+  const b2 = createBase(stores[1], a.local.key, t, {
     apply: applyMultiple,
     open: openMultiple
   })
+
+  await b2.ready()
 
   await b2.update()
 
@@ -617,10 +623,10 @@ test('suspend - reopen multiple indexes', async t => {
 test('restart non writer', async t => {
   const [storeA, storeB] = await createStores(2, t)
 
-  const base = new Autobase(storeA, { apply, valueEncoding: 'json', fastForward: false, encryptionKey })
+  const base = createBase(storeA, null, t)
   await base.append({ hello: 'world' })
 
-  const other = new Autobase(storeB.session(), base.key, { apply, valueEncoding: 'json', encryptionKey })
+  const other = createBase(storeB, base.key, t)
 
   await other.ready()
 
@@ -629,7 +635,7 @@ test('restart non writer', async t => {
   await other.close()
   await base.close()
 
-  const other2 = new Autobase(storeB.session(), base.key, { apply, valueEncoding: 'json', encryptionKey })
+  const other2 = createBase(storeB, base.key, t)
   await t.execution(other2.ready(), 'should be able to start')
   await other2.close()
 })
@@ -719,7 +725,7 @@ test.skip('suspend - append but not indexed then reopen', async t => {
 
   await c.close()
 
-  const c2 = await createBase(stores[2], a.local.key, t, {
+  const c2 = createBase(stores[2], a.local.key, t, {
     apply: applyMultiple,
     open: openMultiple
   })
@@ -805,7 +811,8 @@ test('suspend - migrations', async t => {
 
   await b.close()
 
-  const b2 = await createBase(stores[1], a.local.key, t)
+  const b2 = createBase(stores[1], a.local.key, t)
+  await b2.ready()
 
   t.is(b2.view.indexedLength, 3)
   t.is(b2.view.signedLength, 3)
@@ -846,10 +853,12 @@ test('suspend - append waits for drain after boot', async t => {
 
   await b.close()
 
-  const b2 = await createBase(stores[1], a.local.key, t, {
+  const b2 = createBase(stores[1], a.local.key, t, {
     apply: applyMultiple,
     open: openMultiple
   })
+
+  await b2.ready()
 
   await b2.append({ last: true })
 
@@ -887,7 +896,7 @@ test('suspend - incomplete migrate', async t => {
 
   await b.close()
 
-  const b2 = await createBase(stores[1], a.local.key, t)
+  const b2 = createBase(stores[1], a.local.key, t)
 
   await b2.ready()
   await b2.update() // needed cause we arent persisting the tip
@@ -933,7 +942,8 @@ test('suspend - recover from bad sys core', async t => {
     core.core.bitfield.set(i, false)
   }
 
-  const b1 = await createBase(stores[1], null, t)
+  const b1 = createBase(stores[1], null, t)
+  await b1.ready()
 
   t.not(b1.system.core.length, len)
   t.is(b1.system.core.length, 0)
