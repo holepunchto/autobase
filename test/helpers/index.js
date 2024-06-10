@@ -189,7 +189,7 @@ async function confirm (bases, options = {}) {
   console.log('init')
   const timeout = setTimeout(async () => console.log(await Promise.all(bases.map(b => b.heads()))), 10_000)
   await helpers.replicateAndSync(bases)
-  clearTimeuot(timeout)
+  clearTimeout(timeout)
 
   for (let i = 0; i < 2; i++) {
     const writers = bases.filter(b => !!b.localWriter)
