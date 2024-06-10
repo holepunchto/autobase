@@ -47,10 +47,11 @@ async function create (n, t, opts = {}) {
   if (n === 1) return { stores, bases }
 
   for (let i = 1; i < n; i++) {
-    bases.push(createBase(stores[i], bases[0].local.key, t, opts))
-  }
+    const base = createBase(stores[i], bases[0].local.key, t, opts)
+    await base.ready()
 
-  await Promise.all(bases.map(b => b.ready()))
+    bases.push(base)
+  }
 
   return {
     stores,
@@ -80,8 +81,9 @@ function createBase (store, key, t, opts = {}) {
   t.teardown(async () => {
     try {
       await base.close()
+    } finally {
       await base._viewStore.close()
-    } catch {}
+    }
   }, { order: 1 })
 
   return base
