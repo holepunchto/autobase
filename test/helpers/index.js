@@ -189,13 +189,17 @@ async function confirm (bases, options = {}) {
   await helpers.replicateAndSync(bases)
 
   for (let i = 0; i < 2; i++) {
+    console.log('init')
     const writers = bases.filter(b => !!b.localWriter)
     const maj = options.majority || (Math.floor(writers.length / 2) + 1)
     for (let j = 0; j < maj; j++) {
       if (!writers[j].writable) continue
 
+      console.log('-', i, j)
       await writers[j].append(null)
+      console.log('--')
       await helpers.replicateAndSync(bases)
+      console.log('---')
     }
   }
 
