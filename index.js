@@ -1660,7 +1660,10 @@ module.exports = class Autobase extends ReadyResource {
     await this._advanceBootRecord(length)
 
     // manually set the digest
-    if (migrated) this._setDigest(key)
+    if (migrated) {
+      this._setDigest(key)
+      this.recouple()
+    }
 
     if (b4a.equals(this.fastForwardTo.key, key) && this.fastForwardTo.length === length) {
       this._clearFastForward(false)
