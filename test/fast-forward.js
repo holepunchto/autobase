@@ -839,7 +839,7 @@ test('fast-forward - double ff', async t => {
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
-for (let i = 0; i < 100; i++) {
+for (let i = 0; i < 1000; i++) {
   test.solo('fast-forward - unindexed cores should migrate', async t => {
     const { bases } = await create(4, t, {
       fastForward: true,
