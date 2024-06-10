@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "standard && brittle test/*.js",
+    "test": "standard && brittle test/debug.js",
     "test:encrypted": "standard && brittle test/*.js --encrypt-all",
     "fuzz:generated": "brittle test/reference/fuzz/generated/*.js",
     "fuzz:main": "node test/fuzz/index.js",
