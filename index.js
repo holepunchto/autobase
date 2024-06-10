@@ -1646,7 +1646,7 @@ module.exports = class Autobase extends ReadyResource {
     for (const view of this._viewStore.opened.values()) {
       const info = views.get(view)
       if (info) await view.catchup(info)
-      else if (migrated) view.migrateTo(indexers, 0)
+      else if (migrated) await view.migrateTo(indexers, 0)
     }
 
     await this.system.update()
@@ -1660,7 +1660,10 @@ module.exports = class Autobase extends ReadyResource {
     await this._advanceBootRecord(length)
 
     // manually set the digest
-    if (migrated) this._setDigest(key)
+    if (migrated) {
+      this._setDigest(key)
+      this.recouple()
+    }
 
     if (b4a.equals(this.fastForwardTo.key, key) && this.fastForwardTo.length === length) {
       this._clearFastForward(false)
