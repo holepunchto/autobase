@@ -79,8 +79,8 @@ function createBase (store, key, t, opts = {}) {
   }
 
   t.teardown(async () => {
-    await base.close().catch(() => {})
-    await base._viewStore.close().catch(() => {})
+    await base.close().catch(console.error)
+    await base._viewStore.close().catch(console.error)
   }, { order: 1 })
 
   return base
