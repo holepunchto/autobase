@@ -29,8 +29,8 @@ for (let i = 0; i < 1000; i++) {
     await replicateAndSync([a, b, c, d])
 
     if (a.system.core.signedLength !== c.system.core.signedLength) {
-      console.log(a.system.core.indexedLength, a.system.getIndexedInfo())
-      console.log(c.system.core.indexedLength, c.system.getIndexedInfo())
+      console.log(a.system.core.indexedLength, await a.system.getIndexedInfo())
+      console.log(c.system.core.indexedLength, await c.system.getIndexedInfo())
     }
 
     t.is(a.system.core.signedLength, c.system.core.signedLength)
