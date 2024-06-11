@@ -480,8 +480,6 @@ module.exports = class Autobase extends ReadyResource {
 
     const { heads } = c.decode(messages.BootRecord, pointer)
 
-    this._initialBatchSize = 0
-
     const nodes = new Set()
     const writers = new Map()
     const record = new Map()
