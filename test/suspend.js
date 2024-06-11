@@ -953,7 +953,7 @@ test('suspend - recover from bad sys core', async t => {
   t.is(b1.system.core.length, len)
 })
 
-test('suspend - restart with unindexed local nodes', async t => {
+test('suspend - restart with unindexed nodes', async t => {
   const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
 
   const [a, b, c] = bases
@@ -972,7 +972,6 @@ test('suspend - restart with unindexed local nodes', async t => {
   await c.close()
 
   const c1 = createBase(stores[2], null, t)
-  c1.debug = true
 
   await c1.ready()
 
@@ -986,6 +985,38 @@ test('suspend - restart with unindexed local nodes', async t => {
   t.alike(last.node.heads, [exp])
 
   t.is(await a.view.get(a.view.length - 1), 'c0')
+})
+
+test('suspend - restart with unindexed local nodes', async t => {
+  const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
+
+  const [a, b, c] = bases
+
+  await addWriterAndSync(a, b)
+  await replicateAndSync([a, b, c])
+
+  await addWriterAndSync(a, c, false)
+  await confirm([a, b, c])
+
+  // bigger than autobase max batch size
+  for (let i = 0; i < 100; i++) await c.append('b' + i)
+
+  await replicateAndSync([b, c])
+
+  await c.close()
+
+  const c1 = createBase(stores[2], null, t)
+
+  await c1.append('c101')
+
+  const exp = { key: c.local.key, length: c.local.length - 1 }
+
+  const last = await c1.local.get(c1.local.length - 1)
+  t.alike(last.node.heads, [exp])
+
+  await replicateAndSync([a, c1])
+
+  t.is(await a.view.get(a.view.length - 1), 'c101')
 })
 
 function openMultiple (store) {
