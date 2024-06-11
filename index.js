@@ -738,8 +738,6 @@ module.exports = class Autobase extends ReadyResource {
     if (!this.opened) await this.ready()
     if (this.closing) throw new Error('Autobase is closing')
 
-    await this._advanced // ensure all local state has been applied, only needed until persistent batches
-
     // if a reset is scheduled await those
     while (this._queueViewReset && !this.closing) await this._bump()
 
