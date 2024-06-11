@@ -2,38 +2,21 @@ const test = require('brittle')
 const b4a = require('b4a')
 const c = require('compact-encoding')
 
-const Autobase = require('..')
-
 const {
-  apply,
+  createBase,
   createStores,
   replicateAndSync,
   addWriterAndSync,
-  encryptionKey,
   confirm
 } = require('./helpers')
 
 test('upgrade - do not proceed', async t => {
   const [s1, s2] = await createStores(2, t)
 
-  const a0 = new Autobase(s1.session(), null, {
-    apply: applyv0,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const a0 = createBase(s1, null, t, { open, apply: applyv0 })
   await a0.ready()
 
-  const b0 = new Autobase(s2.session(), a0.bootstrap, {
-    apply: applyv0,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const b0 = createBase(s2, a0.bootstrap, t, { open, apply: applyv0 })
   await b0.ready()
 
   await a0.append({ version: 0, data: '3' })
@@ -47,14 +30,7 @@ test('upgrade - do not proceed', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.bootstrap, {
-    apply: applyv1,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const a1 = createBase(s1, a0.bootstrap, t, { open, apply: applyv1 })
   await a1.ready()
 
   t.is(a1.view.data.indexedLength, 3)
@@ -70,24 +46,10 @@ test('upgrade - do not proceed', async t => {
 test('upgrade - proceed', async t => {
   const [s1, s2] = await createStores(2, t)
 
-  const a0 = new Autobase(s1.session(), null, {
-    apply: applyv0,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const a0 = createBase(s1, null, t, { open, apply: applyv0 })
   await a0.ready()
 
-  const b0 = new Autobase(s2.session(), a0.bootstrap, {
-    apply: applyv0,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const b0 = createBase(s2, a0.bootstrap, t, { open, apply: applyv0 })
   await b0.ready()
 
   await a0.append({ version: 0, data: '3' })
@@ -101,14 +63,7 @@ test('upgrade - proceed', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.bootstrap, {
-    apply: applyv1,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const a1 = createBase(s1, a0.bootstrap, t, { open, apply: applyv1 })
   await a1.ready()
 
   t.is(a1.view.data.indexedLength, 3)
@@ -122,15 +77,9 @@ test('upgrade - proceed', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.bootstrap, {
-    apply: applyv1,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const b1 = createBase(s2, a0.bootstrap, t, { open, apply: applyv1 })
   await b1.ready()
+
   await b1.update()
 
   t.is(b1.view.data.indexedLength, 4)
@@ -139,24 +88,10 @@ test('upgrade - proceed', async t => {
 test('upgrade - consensus', async t => {
   const [s1, s2] = await createStores(2, t)
 
-  const a0 = new Autobase(s1.session(), null, {
-    apply: applyv0,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const a0 = createBase(s1, null, t, { open, apply: applyv0 })
   await a0.ready()
 
-  const b0 = new Autobase(s2.session(), a0.bootstrap, {
-    apply: applyv0,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const b0 = createBase(s2, a0.bootstrap, t, { open, apply: applyv0 })
   await b0.ready()
 
   await addWriterAndSync(a0, b0)
@@ -174,13 +109,7 @@ test('upgrade - consensus', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.bootstrap, {
-    apply: applyv1,
-    open,
-    encryptionKey,
-    valueEncoding: 'json'
-  })
-
+  const a1 = createBase(s1, a0.bootstrap, t, { open, apply: applyv1 })
   await a1.ready()
 
   t.is(a1.view.data.indexedLength, 3)
@@ -199,14 +128,7 @@ test('upgrade - consensus', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.bootstrap, {
-    apply: applyv1,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const b1 = createBase(s2, a0.bootstrap, t, { open, apply: applyv1 })
   await b1.ready()
 
   await confirm([a1, b1])
@@ -217,34 +139,13 @@ test('upgrade - consensus', async t => {
 test('upgrade - consensus 3 writers', async t => {
   const [s1, s2, s3] = await createStores(3, t)
 
-  const a0 = new Autobase(s1.session(), null, {
-    apply: applyv0,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const a0 = createBase(s1, null, t, { open, apply: applyv0 })
   await a0.ready()
 
-  const b0 = new Autobase(s2.session(), a0.bootstrap, {
-    apply: applyv0,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const b0 = createBase(s2, a0.bootstrap, t, { open, apply: applyv0 })
   await b0.ready()
 
-  const c0 = new Autobase(s3.session(), a0.bootstrap, {
-    apply: applyv0,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const c0 = createBase(s3, a0.bootstrap, t, { open, apply: applyv0 })
   await c0.ready()
 
   await addWriterAndSync(a0, b0)
@@ -263,14 +164,7 @@ test('upgrade - consensus 3 writers', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.bootstrap, {
-    apply: applyv1,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const a1 = createBase(s1, a0.bootstrap, t, { open, apply: applyv1 })
   await a1.ready()
 
   t.is(a1.view.data.indexedLength, 3)
@@ -301,15 +195,9 @@ test('upgrade - consensus 3 writers', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.bootstrap, {
-    apply: applyv1,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const b1 = createBase(s2, a0.bootstrap, t, { open, apply: applyv1 })
   await b1.ready()
+
   await b1.update()
 
   t.is(b1.view.data.length, 5) // can update
@@ -324,34 +212,13 @@ test('upgrade - consensus 3 writers', async t => {
 test('upgrade - writer cannot append while behind', async t => {
   const [s1, s2, s3] = await createStores(3, t)
 
-  const a0 = new Autobase(s1.session(), null, {
-    apply: applyv0,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const a0 = createBase(s1, null, t, { open, apply: applyv0 })
   await a0.ready()
 
-  const b0 = new Autobase(s2.session(), a0.bootstrap, {
-    apply: applyv0,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
+  const b0 = createBase(s2, a0.bootstrap, t, { open, apply: applyv0 })
+  const c0 = createBase(s3, a0.bootstrap, t, { open, apply: applyv0 })
 
   await b0.ready()
-
-  const c0 = new Autobase(s3.session(), a0.bootstrap, {
-    apply: applyv0,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
   await c0.ready()
 
   await addWriterAndSync(a0, b0)
@@ -370,26 +237,12 @@ test('upgrade - writer cannot append while behind', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.bootstrap, {
-    apply: applyv1,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const a1 = createBase(s1, a0.bootstrap, t, { open, apply: applyv1 })
   await a1.ready()
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.bootstrap, {
-    apply: applyv1,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const b1 = createBase(s2, a0.bootstrap, t, { open, apply: applyv1 })
   await b1.ready()
 
   await a1.append({ version: 1, data: '4' })
@@ -420,27 +273,17 @@ test('upgrade - onindex hook', async t => {
   let aversion = 0
   let bversion = 0
 
-  const a0 = new Autobase(s1.session(), null, {
-    apply: applyv0,
-    open,
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const a0 = createBase(s1, null, t, { open, apply: applyv0 })
   await a0.ready()
 
-  const b0 = new Autobase(s2.session(), a0.bootstrap, {
+  const b0 = createBase(s2, a0.bootstrap, t, {
     apply: applyv0,
     open,
-    encryptionKey,
-    ackInterval: 0,
     onindex: async () => {
       const view = b0.view.version
       if (!view.indexedLength) return
       bversion = await view.get(view.indexedLength - 1)
-    },
-    valueEncoding: 'json'
+    }
   })
 
   await b0.ready()
@@ -456,17 +299,14 @@ test('upgrade - onindex hook', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.bootstrap, {
+  const a1 = createBase(s1, a0.bootstrap, t, {
     apply: applyv1,
     open,
-    encryptionKey,
-    ackInterval: 0,
     onindex: async () => {
       const view = a1.view.version
       if (!view.indexedLength) return
       aversion = await view.get(view.indexedLength - 1)
-    },
-    valueEncoding: 'json'
+    }
   })
 
   await a1.ready()
@@ -485,17 +325,14 @@ test('upgrade - onindex hook', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.bootstrap, {
+  const b1 = createBase(s2, a0.bootstrap, t, {
     apply: applyv1,
     open,
-    encryptionKey,
-    ackInterval: 0,
     onindex: async () => {
       const view = b1.view.version
       if (!view.indexedLength) return
       bversion = await view.get(view.indexedLength - 1)
-    },
-    valueEncoding: 'json'
+    }
   })
 
   await b1.ready()
@@ -507,26 +344,12 @@ test('upgrade - onindex hook', async t => {
 test('autobase upgrade - do not proceed', async t => {
   const [s1, s2] = await createStores(2, t)
 
-  const a0 = new Autobase(s1.session(), null, {
-    apply,
-    open: store => store.get('view', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const a0 = createBase(s1, null, t)
   await a0.ready()
 
   const version = a0.maxSupportedVersion
 
-  const b0 = new Autobase(s2.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('view', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const b0 = createBase(s2, a0.bootstrap, t)
   await b0.ready()
 
   await a0.append({ data: '3' })
@@ -540,17 +363,8 @@ test('autobase upgrade - do not proceed', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('view', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
   // simulate version upgrade
-  a1.maxSupportedVersion = version + 1
-
+  const a1 = createBase(s1, a0.bootstrap, t, { maxSupportedVersion: version + 1 })
   await a1.ready()
 
   t.is(a1.view.indexedLength, 3)
@@ -566,26 +380,12 @@ test('autobase upgrade - do not proceed', async t => {
 test('autobase upgrade - proceed', async t => {
   const [s1, s2] = await createStores(2, t)
 
-  const a0 = new Autobase(s1.session(), null, {
-    apply,
-    open: store => store.get('view', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const a0 = createBase(s1, null, t)
   await a0.ready()
 
   const version = a0.maxSupportedVersion
 
-  const b0 = new Autobase(s2.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('view', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const b0 = createBase(s2, a0.bootstrap, t)
   await b0.ready()
 
   await a0.append({ data: '3' })
@@ -599,17 +399,8 @@ test('autobase upgrade - proceed', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('view', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
   // simulate version upgrade
-  a1.maxSupportedVersion = version + 1
-
+  const a1 = createBase(s1, a0.bootstrap, t, { maxSupportedVersion: version + 1 })
   await a1.ready()
 
   t.is(a1.view.indexedLength, 3)
@@ -623,16 +414,8 @@ test('autobase upgrade - proceed', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('view', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
   // simulate version upgrade
-  b1.maxSupportedVersion = version + 1
+  const b1 = createBase(s2, a0.bootstrap, t, { maxSupportedVersion: version + 1 })
 
   await b1.ready()
   await b1.update()
@@ -643,26 +426,12 @@ test('autobase upgrade - proceed', async t => {
 test('autobase upgrade - consensus', async t => {
   const [s1, s2] = await createStores(2, t)
 
-  const a0 = new Autobase(s1.session(), null, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const a0 = createBase(s1, null, t)
   await a0.ready()
 
   const version = a0.maxSupportedVersion
 
-  const b0 = new Autobase(s2.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const b0 = createBase(s2, a0.bootstrap, t)
   await b0.ready()
 
   await addWriterAndSync(a0, b0)
@@ -680,17 +449,8 @@ test('autobase upgrade - consensus', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
   // simulate version upgrade
-  a1.maxSupportedVersion = version + 1
-
+  const a1 = createBase(s1, a0.bootstrap, t, { maxSupportedVersion: version + 1 })
   await a1.ready()
 
   t.is(a1.view.indexedLength, 3)
@@ -709,17 +469,8 @@ test('autobase upgrade - consensus', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
   // simulate version upgrade
-  b1.maxSupportedVersion = version + 1
-
+  const b1 = createBase(s2, a0.bootstrap, t, { maxSupportedVersion: version + 1 })
   await b1.ready()
 
   await confirm([a1, b1])
@@ -731,36 +482,15 @@ test('autobase upgrade - consensus', async t => {
 test('autobase upgrade - consensus 3 writers', async t => {
   const [s1, s2, s3] = await createStores(3, t)
 
-  const a0 = new Autobase(s1.session(), null, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
+  const a0 = createBase(s1, null, t)
   await a0.ready()
 
   const version = a0.maxSupportedVersion
 
-  const b0 = new Autobase(s2.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
+  const b0 = createBase(s2, a0.bootstrap, t)
+  const c0 = createBase(s3, a0.bootstrap, t)
 
   await b0.ready()
-
-  const c0 = new Autobase(s3.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
   await c0.ready()
 
   await addWriterAndSync(a0, b0)
@@ -780,24 +510,9 @@ test('autobase upgrade - consensus 3 writers', async t => {
   await a0.close()
   await c0.close()
 
-  const a1 = new Autobase(s1.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
-  const c1 = new Autobase(s3.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
-  a1.maxSupportedVersion = version + 1
-  c1.maxSupportedVersion = version + 1
+  // simulate version upgrade
+  const a1 = createBase(s1, a0.bootstrap, t, { maxSupportedVersion: version + 1 })
+  const c1 = createBase(s3, a0.bootstrap, t, { maxSupportedVersion: version + 1 })
 
   await a1.ready()
 
@@ -820,16 +535,8 @@ test('autobase upgrade - consensus 3 writers', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
   // simulate version upgrade
-  b1.maxSupportedVersion = version + 1
+  const b1 = createBase(s2, a0.bootstrap, t, { maxSupportedVersion: version + 1 })
 
   await b1.ready()
   await b1.update()
@@ -846,17 +553,10 @@ test('autobase upgrade - consensus 3 writers', async t => {
 test('autobase upgrade - downgrade', async t => {
   const [s1] = await createStores(1, t)
 
-  const a0 = new Autobase(s1.session(), null, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
+  const a0 = createBase(s1, null, t)
+  await a0.ready()
 
   const version = a0.maxSupportedVersion
-
-  await a0.ready()
 
   await a0.append({ data: 'version 0' })
 
@@ -864,16 +564,7 @@ test('autobase upgrade - downgrade', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
-  a1.maxSupportedVersion = version + 1
-
+  const a1 = createBase(s1, a0.bootstrap, t, { maxSupportedVersion: version + 1 })
   await a1.ready()
 
   t.is(a1.view.indexedLength, 1)
@@ -890,13 +581,8 @@ test('autobase upgrade - downgrade', async t => {
   t.not(await a1.local.getUserData('autobase/boot'), null)
 
   // go back to previous version
-  const fail = new Autobase(s1.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
+  const fail = createBase(s1, a0.bootstrap, t)
+  fail.on('error', () => {})
 
   await t.exception(fail.ready())
 
@@ -906,13 +592,7 @@ test('autobase upgrade - downgrade', async t => {
 test('autobase upgrade - downgrade then restart', async t => {
   const [s1] = await createStores(1, t)
 
-  const a0 = new Autobase(s1.session(), null, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
+  const a0 = createBase(s1, null, t)
 
   const version = a0.maxSupportedVersion
 
@@ -924,16 +604,7 @@ test('autobase upgrade - downgrade then restart', async t => {
 
   await a0.close()
 
-  const a1 = new Autobase(s1.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
-  a1.maxSupportedVersion = version + 1
-
+  const a1 = createBase(s1, a0.bootstrap, t, { maxSupportedVersion: version + 1 })
   await a1.ready()
 
   t.is(a1.view.indexedLength, 1)
@@ -949,26 +620,14 @@ test('autobase upgrade - downgrade then restart', async t => {
   t.not(await a1.local.getUserData('autobase/boot'), null)
 
   // go back to previous version
-  const fail = new Autobase(s1.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
+  const fail = createBase(s1, a0.bootstrap, t)
 
   await t.exception(fail.ready())
 
   t.is(await fail.local.getUserData('autobase/boot'), null)
 
   // go back to previous version
-  const failAgain = new Autobase(s1.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
+  const failAgain = createBase(s1, a0.bootstrap, t)
 
   // ready passes since we unset pointer
   await t.execution(failAgain.ready())
@@ -981,16 +640,8 @@ test('autobase upgrade - downgrade then restart', async t => {
   // update should fail as we get to version upgrade
   await t.exception(updateFail)
 
-  // go back to previous version
-  const succeed = new Autobase(s1.session(), a0.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
-  succeed.maxSupportedVersion = version + 1
+  // restore version
+  const succeed = createBase(s1, a0.bootstrap, t, { maxSupportedVersion: version + 1 })
 
   await t.execution(succeed.ready())
 
@@ -1006,15 +657,7 @@ test('autobase upgrade - downgrade then restart', async t => {
 test('autobase upgrade - upgrade before writer joins', async t => {
   const [s1, s2] = await createStores(2, t)
 
-  const opts = {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  }
-
-  const a = new Autobase(s1.session(), null, opts)
+  const a = createBase(s1, null, t)
   a.maxSupportedVersion++
 
   await a.ready()
@@ -1022,7 +665,7 @@ test('autobase upgrade - upgrade before writer joins', async t => {
 
   t.is(a.version, a.maxSupportedVersion)
 
-  const b = new Autobase(s2.session(), a.bootstrap, opts)
+  const b = createBase(s2, a.bootstrap, t)
   await b.ready()
 
   const fail = new Promise((resolve, reject) => {
@@ -1038,18 +681,10 @@ test('autobase upgrade - upgrade before writer joins', async t => {
 test('autobase upgrade - fix borked version', async t => {
   const [s1, s2] = await createStores(2, t)
 
-  const opts = {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  }
-
-  const a0 = new Autobase(s1.session(), null, opts)
+  const a0 = createBase(s1, null, t)
   await a0.ready()
 
-  const b0 = new Autobase(s2.session(), a0.bootstrap, opts)
+  const b0 = createBase(s2, a0.bootstrap, t)
   await b0.ready()
 
   const version = a0.maxSupportedVersion
@@ -1067,13 +702,11 @@ test('autobase upgrade - fix borked version', async t => {
 
   await a0.close()
 
-  // borked version
-  opts.apply = applyHalts
-
-  const a1 = new Autobase(s1.session(), a0.bootstrap, opts)
-
-  // simulate version upgrade
-  a1.maxSupportedVersion = version + 1
+  // borked apply
+  const a1 = createBase(s1, a0.bootstrap, t, {
+    apply: applyHalts,
+    maxSupportedVersion: version + 1
+  })
 
   await a1.ready()
 
@@ -1084,10 +717,11 @@ test('autobase upgrade - fix borked version', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.bootstrap, opts)
-
-  // simulate version upgrade
-  b1.maxSupportedVersion = version + 1
+  // borked apply
+  const b1 = createBase(s2, a0.bootstrap, t, {
+    apply: applyHalts,
+    maxSupportedVersion: version + 1
+  })
 
   await b1.ready()
 
@@ -1116,18 +750,12 @@ test('autobase upgrade - fix borked version', async t => {
   await a1.close()
   await b1.close()
 
-  // unbork apply
-  opts.apply = apply
+  // unbork apply, can go forward
+  const a2 = createBase(s1, a0.bootstrap, t, { maxSupportedVersion: version + 2 })
+  const b2 = createBase(s2, a0.bootstrap, t, { maxSupportedVersion: version + 2 })
 
-  const a2 = new Autobase(s1.session(), a0.bootstrap, opts)
-  const b2 = new Autobase(s2.session(), a0.bootstrap, opts)
-
-  // can go forward
-  a2.maxSupportedVersion = version + 2
-  b2.maxSupportedVersion = version + 2
-
-  await t.execution(a2.ready())
-  await t.execution(b2.ready())
+  await a2.ready()
+  await b2.ready()
 
   await t.execution(a2.append('three'))
   await t.execution(b2.append('four'))
@@ -1143,18 +771,10 @@ test('autobase upgrade - fix borked version', async t => {
 test('autobase upgrade - downgrade then fix bork', async t => {
   const [s1, s2] = await createStores(2, t)
 
-  const opts = {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  }
-
-  const a0 = new Autobase(s1.session(), null, opts)
+  const a0 = createBase(s1, null, t)
   await a0.ready()
 
-  const b0 = new Autobase(s2.session(), a0.bootstrap, opts)
+  const b0 = createBase(s2, a0.bootstrap, t)
   await b0.ready()
 
   const version = a0.maxSupportedVersion
@@ -1172,13 +792,11 @@ test('autobase upgrade - downgrade then fix bork', async t => {
 
   await a0.close()
 
-  // borked version
-  opts.apply = applyHalts
-
-  const a1 = new Autobase(s1.session(), a0.bootstrap, opts)
-
-  // simulate version upgrade
-  a1.maxSupportedVersion = version + 1
+  // borked apply
+  const a1 = createBase(s1, a0.bootstrap, t, {
+    apply: applyHalts,
+    maxSupportedVersion: version + 1
+  })
 
   await a1.ready()
 
@@ -1189,10 +807,11 @@ test('autobase upgrade - downgrade then fix bork', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.bootstrap, opts)
-
-  // simulate version upgrade
-  b1.maxSupportedVersion = version + 1
+  // borked apply
+  const b1 = createBase(s2, a0.bootstrap, t, {
+    apply: applyHalts,
+    maxSupportedVersion: version + 1
+  })
 
   await b1.ready()
 
@@ -1221,21 +840,15 @@ test('autobase upgrade - downgrade then fix bork', async t => {
   await a1.close()
   await b1.close()
 
-  // unbork apply
-  opts.apply = apply
-
   // downgrade to version 0
-  const fail = new Autobase(s1.session(), a0.bootstrap, opts)
+  const fail = createBase(s1, a0.bootstrap, t)
 
   await t.exception(fail.ready())
   t.is(await fail.local.getUserData('autobase/boot'), null)
 
-  const a2 = new Autobase(s1.session(), a0.bootstrap, opts)
-  const b2 = new Autobase(s2.session(), a0.bootstrap, opts)
-
   // can go forward
-  a2.maxSupportedVersion = version + 2
-  b2.maxSupportedVersion = version + 2
+  const a2 = createBase(s1, a0.bootstrap, t, { maxSupportedVersion: version + 2 })
+  const b2 = createBase(s2, a0.bootstrap, t, { maxSupportedVersion: version + 2 })
 
   await t.execution(a2.ready())
   await t.execution(b2.ready())
@@ -1254,22 +867,13 @@ test('autobase upgrade - downgrade then fix bork', async t => {
 test('autobase upgrade - 3 writers always increasing', async t => {
   const [s1, s2, s3] = await createStores(3, t)
 
-  const opts = {
-    apply,
-    ackInterval: 0,
-    ackThreshold: 0,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    valueEncoding: 'json'
-  }
-
-  const a0 = new Autobase(s1.session(), null, opts)
+  const a0 = createBase(s1.session(), null, t)
   await a0.ready()
 
   const version = a0.maxSupportedVersion
 
-  const b0 = new Autobase(s2.session(), a0.bootstrap, opts)
-  const c0 = new Autobase(s3.session(), a0.bootstrap, opts)
+  const b0 = createBase(s2.session(), a0.bootstrap, t)
+  const c0 = createBase(s3.session(), a0.bootstrap, t)
 
   await b0.ready()
   await c0.ready()
@@ -1289,11 +893,8 @@ test('autobase upgrade - 3 writers always increasing', async t => {
   await a0.close()
   await c0.close()
 
-  const a1 = new Autobase(s1.session(), a0.bootstrap, opts)
-  const c1 = new Autobase(s3.session(), a0.bootstrap, opts)
-
-  a1.maxSupportedVersion = version + 1
-  c1.maxSupportedVersion = version + 2
+  const a1 = createBase(s1.session(), a0.bootstrap, t, { maxSupportedVersion: version + 1 })
+  const c1 = createBase(s3.session(), a0.bootstrap, t, { maxSupportedVersion: version + 2 })
 
   await a1.ready()
   await c1.ready()
@@ -1309,14 +910,12 @@ test('autobase upgrade - 3 writers always increasing', async t => {
   await a1.close()
   await c1.close()
 
-  const a2 = new Autobase(s1.session(), a0.bootstrap, opts)
-  const c2 = new Autobase(s3.session(), a0.bootstrap, opts)
-
-  a2.maxSupportedVersion = version + 3
-  c2.maxSupportedVersion = version + 4
+  const a2 = createBase(s1.session(), a0.bootstrap, t, { maxSupportedVersion: version + 3 })
+  const c2 = createBase(s3.session(), a0.bootstrap, t, { maxSupportedVersion: version + 4 })
 
   await a2.ready()
   await c2.ready()
+
   await replicateAndSync([a2, c2])
 
   await a2.append('v3')
@@ -1342,9 +941,7 @@ test('autobase upgrade - 3 writers always increasing', async t => {
 
   await b0.close()
 
-  const b1 = new Autobase(s2.session(), a0.bootstrap, opts)
-  b1.maxSupportedVersion = version + 1
-
+  const b1 = createBase(s2.session(), a0.bootstrap, t, { maxSupportedVersion: version + 1 })
   await b1.ready()
 
   await t.exception(new Promise((resolve, reject) => {
@@ -1355,10 +952,9 @@ test('autobase upgrade - 3 writers always increasing', async t => {
   t.is((await b1.system.getIndexedInfo()).version, version + 1)
   t.ok(b1.closing)
 
-  const b2 = new Autobase(s2.session(), a0.bootstrap, opts)
-  b2.maxSupportedVersion = a2.maxSupportedVersion
-
+  const b2 = createBase(s2.session(), a0.bootstrap, t, { maxSupportedVersion: a2.maxSupportedVersion })
   await b2.ready()
+
   await t.execution(replicateAndSync([a2, b2]))
 
   t.not(b2.view.signedLength, 6)
@@ -1373,25 +969,13 @@ test('autobase upgrade - 3 writers always increasing', async t => {
 test('autobase upgrade - non monotonic version', async t => {
   const [s1, s2] = await createStores(2, t)
 
-  const a = new Autobase(s1.session(), null, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
+  const a = createBase(s1, null, t)
 
   await a.ready()
 
   const version = a.maxSupportedVersion
 
-  const b = new Autobase(s2.session(), a.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
+  const b = createBase(s2, a.bootstrap, t)
 
   await b.ready()
 
@@ -1402,17 +986,9 @@ test('autobase upgrade - non monotonic version', async t => {
   await confirm([a, b])
 
   await a.close()
-  const a1 = new Autobase(s1.session(), a.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
 
   // simulate version upgrade
-  a1.maxSupportedVersion = version + 1
-
+  const a1 = createBase(s1, a.bootstrap, t, { maxSupportedVersion: version + 1 })
   await a1.ready()
 
   await a1.append('2')
@@ -1426,29 +1002,15 @@ test('autobase upgrade - non monotonic version', async t => {
 
   await a1.close()
 
-  const a2 = new Autobase(s1.session(), a.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
+  const a2 = createBase(s1, a.bootstrap, t)
 
   await t.exception(a2.ready())
   await t.exception(a2.append('3'))
 
   // can recover
-  const a3 = new Autobase(s1.session(), a.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    encryptionKey,
-    ackInterval: 0,
-    valueEncoding: 'json'
-  })
-
-  a3.maxSupportedVersion = version + 1
-
+  const a3 = createBase(s1, a.bootstrap, t, { maxSupportedVersion: version + 1 })
   await a3.ready()
+
   await a3.append('3')
 
   await confirm([a3, b])

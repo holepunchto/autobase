@@ -102,7 +102,9 @@ test('basic - local key pair', async t => {
   const keyPair = crypto.keyPair()
   const [store] = await createStores(1, t)
 
-  const base = await createBase(store, null, t, { keyPair })
+  const base = createBase(store, null, t, { keyPair })
+  await base.ready()
+
   const key = base.bootstrap
 
   const block = { message: 'hello, world!' }
@@ -114,7 +116,9 @@ test('basic - local key pair', async t => {
 
   await base.close()
 
-  const base2 = await createBase(store, key, t)
+  const base2 = createBase(store, key, t)
+  await base2.ready()
+
   t.alike(base2.local.key, base.local.key)
   t.alike(await base2.view.get(0), block)
   t.alike(base2.local.manifest.signers[0].publicKey, keyPair.publicKey)
@@ -465,6 +469,8 @@ test('basic - restarting sets bootstrap correctly', async t => {
     t.alike(base.bootstrap, bootstrapKey)
     t.alike(base.local.key, base.bootstrap)
     t.alike(base.local.key, localKey)
+
+    await base.close()
   }
 })
 

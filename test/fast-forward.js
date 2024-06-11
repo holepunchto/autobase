@@ -5,7 +5,6 @@ const tmpDir = require('test-tmp')
 const cenc = require('compact-encoding')
 const b4a = require('b4a')
 
-const Autobase = require('..')
 const { BootRecord } = require('../lib/messages')
 
 const {
@@ -16,7 +15,6 @@ const {
   eventFlush,
   confirm,
   create,
-  apply,
   createStores,
   createBase
 } = require('./helpers')
@@ -304,11 +302,7 @@ if (!IS_MAC_OSX) {
     s1.destroy()
     await new Promise(resolve => s2.on('close', resolve))
 
-    const b2 = await createBase(stores[1].session(), a.local.key, t, {
-      apply: applyOldState
-    })
-
-    await b2.ready()
+    const b2 = createBase(stores[1].session(), a.local.key, t, { apply: applyOldState })
     await t.execution(b2.ready())
 
     async function applyOldState (batch, view, base) {
@@ -420,7 +414,9 @@ test('fast-forward - initial fast forward', async t => {
   const fastForward = { key: a.system.core.key }
 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
-  const c = await createBase(store.session(), a.bootstrap, t, { fastForward })
+
+  const c = createBase(store.session(), a.bootstrap, t, { fastForward })
+  await c.ready()
 
   await replicateAndSync([a, b, c])
   const core = c.system.core.getBackingCore()
@@ -483,7 +479,9 @@ test('fast-forward - initial ff after multiple migrate', async t => {
   const fastForward = { key: sys.key }
 
   const [store] = await createStores(1, t, { offset: 5, storage: () => tmpDir(t) })
-  const latecomer = await createBase(store.session(), a.bootstrap, t, { fastForward })
+
+  const latecomer = createBase(store.session(), a.bootstrap, t, { fastForward })
+  await latecomer.ready()
 
   await replicateAndSync([...bases, latecomer])
   const core = latecomer.system.core.getBackingCore()
@@ -529,7 +527,9 @@ test('fast-forward - ignore bogus initial ff', async t => {
   }
 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
-  const latecomer = await createBase(store.session(), a.bootstrap, t, { fastForward })
+
+  const latecomer = createBase(store.session(), a.bootstrap, t, { fastForward })
+  await latecomer.ready()
 
   await replicateAndSync([...bases, latecomer])
   const core = latecomer.system.core.getBackingCore()
@@ -545,23 +545,13 @@ test('fast-forward - ignore bogus initial ff', async t => {
 test('fast-forward - upgrade available', async t => {
   const [s1, s2, s3] = await createStores(3, t)
 
-  const a = new Autobase(s1.session(), null, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    valueEncoding: 'json'
-  })
-
+  const a = createBase(s1, null, t, { fastForward: true })
   await a.ready()
 
-  const version = a.maxSupportedVersion
-
-  const b = new Autobase(s2.session(), a.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    valueEncoding: 'json'
-  })
-
+  const b = createBase(s2, a.bootstrap, t, { fastForward: true })
   await b.ready()
+
+  const version = a.maxSupportedVersion
 
   await addWriterAndSync(a, b)
   await confirm([a, b])
@@ -575,24 +565,11 @@ test('fast-forward - upgrade available', async t => {
   await a.close()
   await b.close()
 
-  const a1 = new Autobase(s1.session(), a.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    valueEncoding: 'json'
-  })
-  // simulate version upgrade
-  a1.maxSupportedVersion = version + 1
-
-  const b1 = new Autobase(s2.session(), a.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    valueEncoding: 'json'
-  })
-
-  // simulate version upgrade
-  b1.maxSupportedVersion = version + 1
-
+  const a1 = createBase(s1, a.bootstrap, t, { fastForward: true, maxSupportedVersion: version + 1 })
   await a1.ready()
+
+  const b1 = createBase(s2, a.bootstrap, t, { fastForward: true, maxSupportedVersion: version + 1 })
+  await b1.ready()
 
   await a1.append('2')
   await confirm([a1, b1])
@@ -609,12 +586,8 @@ test('fast-forward - upgrade available', async t => {
 
   await confirm([a1, b1])
 
-  const c0 = new Autobase(s3.session(), a.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    valueEncoding: 'json',
-    fastForward: true
-  })
+  const c0 = createBase(s3, a.bootstrap, t, { fastForward: true })
+  await c0.ready()
 
   // this should fire when we try to fast forward
   const upgradeEvent = new Promise((resolve, reject) => {
@@ -651,23 +624,13 @@ test('fast-forward - upgrade available', async t => {
 test('fast-forward - initial ff upgrade available', async t => {
   const [s1, s2, s3] = await createStores(3, t)
 
-  const a = new Autobase(s1.session(), null, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    valueEncoding: 'json'
-  })
-
+  const a = createBase(s1, null, t, { fastForward: true })
   await a.ready()
 
-  const version = a.maxSupportedVersion
-
-  const b = new Autobase(s2.session(), a.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    valueEncoding: 'json'
-  })
-
+  const b = createBase(s2, a.bootstrap, t, { fastForward: true })
   await b.ready()
+
+  const version = a.maxSupportedVersion
 
   await addWriterAndSync(a, b)
   await confirm([a, b])
@@ -681,24 +644,11 @@ test('fast-forward - initial ff upgrade available', async t => {
   await a.close()
   await b.close()
 
-  const a1 = new Autobase(s1.session(), a.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    valueEncoding: 'json'
-  })
-  // simulate version upgrade
-  a1.maxSupportedVersion = version + 1
-
-  const b1 = new Autobase(s2.session(), a.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    valueEncoding: 'json'
-  })
-
-  // simulate version upgrade
-  b1.maxSupportedVersion = version + 1
-
+  const a1 = createBase(s1, a.bootstrap, t, { fastForward: true, maxSupportedVersion: version + 1 })
   await a1.ready()
+
+  const b1 = createBase(s2, a.bootstrap, t, { fastForward: true, maxSupportedVersion: version + 1 })
+  await b1.ready()
 
   await a1.append('2')
   await confirm([a1, b1])
@@ -720,13 +670,7 @@ test('fast-forward - initial ff upgrade available', async t => {
     length: a1.system.core.getBackingCore().indexedLength
   }
 
-  const c0 = new Autobase(s3.session(), a.bootstrap, {
-    apply,
-    open: store => store.get('test', { valueEncoding: 'json' }),
-    valueEncoding: 'json',
-    fastForward
-  })
-
+  const c0 = createBase(s3, a.bootstrap, t, { fastForward })
   await c0.ready()
 
   // this should fire when we try to fast forward
@@ -813,9 +757,9 @@ test('fast-forward - double ff', async t => {
   t.is(sys.manifest.signers.length, 5)
 
   const [store] = await createStores(1, t, { offset: 5, storage: () => tmpDir(t) })
-  const latecomer = await createBase(store.session(), a.bootstrap, t, {
-    fastForward: true
-  })
+
+  const latecomer = createBase(store.session(), a.bootstrap, t, { fastForward: true })
+  await latecomer.ready()
 
   const p = replicateAndSync([...bases, latecomer])
 
@@ -890,7 +834,9 @@ test('fast-forward - initial fast forward with in between writer', async t => {
   const fastForward = { key: a.system.core.key }
 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
-  const c = await createBase(store.session(), a.bootstrap, t, { fastForward, debug: true })
+
+  const c = createBase(store.session(), a.bootstrap, t, { fastForward, debug: true })
+  await c.ready()
 
   t.teardown(replicate([a, c]))
 

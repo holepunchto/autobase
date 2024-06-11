@@ -5,6 +5,7 @@ const Autobase = require('..')
 
 const {
   create,
+  createBase,
   createStores,
   replicate,
   replicateAndSync,
@@ -457,13 +458,7 @@ test('apply - catch exception', async t => {
 
   const [store] = await createStores(1, t, { offset: 1 })
 
-  const b = new Autobase(store, a.local.key, {
-    apply: applyThrow,
-    valueEncoding: 'json',
-    ackInterval: 0,
-    encryptionKey,
-    ackThreshold: 0
-  })
+  const b = createBase(store, a.local.key, t, { apply: applyThrow })
 
   b.on('error', err => {
     t.pass(!!err)

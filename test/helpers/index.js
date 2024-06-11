@@ -41,12 +41,16 @@ async function createStores (n, t, opts = {}) {
 
 async function create (n, t, opts = {}) {
   const stores = await createStores(n, t, opts)
-  const bases = [await createBase(stores[0], null, t, opts)]
+  const bases = [createBase(stores[0], null, t, opts)]
+  await bases[0].ready()
 
   if (n === 1) return { stores, bases }
 
   for (let i = 1; i < n; i++) {
-    bases.push(await createBase(stores[i], bases[0].local.key, t, opts))
+    const base = createBase(stores[i], bases[0].local.key, t, opts)
+    await base.ready()
+
+    bases.push(base)
   }
 
   return {
@@ -55,7 +59,7 @@ async function create (n, t, opts = {}) {
   }
 }
 
-async function createBase (store, key, t, opts = {}) {
+function createBase (store, key, t, opts = {}) {
   const moreOpts = {
     apply,
     open,
@@ -69,11 +73,14 @@ async function createBase (store, key, t, opts = {}) {
   }
 
   const base = new Autobase(store.session(), key, moreOpts)
-  await base.ready()
+
+  if (opts.maxSupportedVersion !== undefined) {
+    base.maxSupportedVersion = opts.maxSupportedVersion
+  }
 
   t.teardown(async () => {
-    await base.close()
-    await base._viewStore.close()
+    await base.close().catch(() => {})
+    await base._viewStore.close().catch(() => {})
   }, { order: 1 })
 
   return base
