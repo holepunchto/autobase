@@ -124,64 +124,59 @@ test('fast-forward - fast forward after migrate', async t => {
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
-for (let i = 0; i < 100; i++) {
-  test.solo('fast-forward - multiple writers added', async t => {
-    t.plan(2)
+test('fast-forward - multiple writers added', async t => {
+  t.plan(2)
 
-    const MESSAGES_PER_ROUND = 200
+  const MESSAGES_PER_ROUND = 200
 
-    const { bases } = await create(4, t, {
-      fastForward: true,
-      storage: () => tmpDir(t)
-    })
-
-    const [a, b, c, d] = bases
-
-    await addWriterAndSync(a, b)
-    await addWriterAndSync(a, c)
-
-    await b.append('b')
-    await c.append('c')
-
-    await confirm([a, b, c])
-
-    const online = [a, b, c]
-
-    console.log('---- messages start')
-    for (let i = 0; i < 10; i++) {
-      const unreplicate = replicate(online)
-      await eventFlush()
-
-      const as = Math.random() * MESSAGES_PER_ROUND
-      const bs = Math.random() * MESSAGES_PER_ROUND
-      const cs = Math.random() * MESSAGES_PER_ROUND
-
-      for (let j = 0; j < Math.max(as, bs, cs); j++) {
-        if (j < as) a.append('a' + j)
-        if (j < bs) b.append('b' + j)
-        if (j < cs) c.append('c' + j)
-
-        if (j % 2 === 0) await eventFlush()
-      }
-
-      await unreplicate()
-      await confirm(online)
-      console.log('---- confirm', i)
-
-      if (i === 8) online.push(d)
-    }
-    console.log('---- messages done')
-
-    const core = d.view.getBackingCore()
-    const sparse = await isSparse(core)
-
-    t.is(d.linearizer.indexers.length, 3)
-
-    t.ok(sparse > 0)
-    t.comment('sparse blocks: ' + sparse)
-    t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+  const { bases } = await create(4, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
   })
-}
+
+  const [a, b, c, d] = bases
+
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c)
+
+  await b.append('b')
+  await c.append('c')
+
+  await confirm([a, b, c])
+
+  const online = [a, b, c]
+
+  for (let i = 0; i < 10; i++) {
+    const unreplicate = replicate(online)
+    await eventFlush()
+
+    const as = Math.random() * MESSAGES_PER_ROUND
+    const bs = Math.random() * MESSAGES_PER_ROUND
+    const cs = Math.random() * MESSAGES_PER_ROUND
+
+    for (let j = 0; j < Math.max(as, bs, cs); j++) {
+      if (j < as) a.append('a' + j)
+      if (j < bs) b.append('b' + j)
+      if (j < cs) c.append('c' + j)
+
+      if (j % 2 === 0) await eventFlush()
+    }
+
+    await unreplicate()
+    await confirm(online)
+
+    if (i === 8) online.push(d)
+  }
+
+  const core = d.view.getBackingCore()
+  const sparse = await isSparse(core)
+
+  t.is(d.linearizer.indexers.length, 3)
+
+  t.ok(sparse > 0)
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+})
 
 test('fast-forward - multiple queues', async t => {
   const { bases } = await create(4, t, {

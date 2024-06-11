@@ -41,13 +41,14 @@ async function createStores (n, t, opts = {}) {
 
 async function create (n, t, opts = {}) {
   const stores = await createStores(n, t, opts)
-  const bases = [await createBase(stores[0], null, t, opts)]
+  const bases = [createBase(stores[0], null, t, opts)]
+  await bases[0].ready()
 
   if (n === 1) return { stores, bases }
 
   for (let i = 1; i < n; i++) {
-    const base = await createBase(stores[i], bases[0].local.key, t, opts)
-    // await base.ready()
+    const base = createBase(stores[i], bases[0].local.key, t, opts)
+    await base.ready()
 
     bases.push(base)
   }
@@ -58,7 +59,7 @@ async function create (n, t, opts = {}) {
   }
 }
 
-async function createBase (store, key, t, opts = {}) {
+function createBase (store, key, t, opts = {}) {
   const moreOpts = {
     apply,
     open,
@@ -72,15 +73,14 @@ async function createBase (store, key, t, opts = {}) {
   }
 
   const base = new Autobase(store.session(), key, moreOpts)
-  await base.ready()
 
-  // if (opts.maxSupportedVersion !== undefined) {
-  //   base.maxSupportedVersion = opts.maxSupportedVersion
-  // }
+  if (opts.maxSupportedVersion !== undefined) {
+    base.maxSupportedVersion = opts.maxSupportedVersion
+  }
 
   t.teardown(async () => {
-    await base.close()
-    await base._viewStore.close()
+    await base.close().catch(() => {})
+    await base._viewStore.close().catch(() => {})
   }, { order: 1 })
 
   return base
@@ -186,10 +186,7 @@ async function addWriterAndSync (base, add, indexer = true, bases = [base, add])
 }
 
 async function confirm (bases, options = {}) {
-  console.log('init')
-  const timeout = setTimeout(async () => console.log(await Promise.all(bases.map(b => b.heads()))), 10_000)
   await helpers.replicateAndSync(bases)
-  clearTimeout(timeout)
 
   for (let i = 0; i < 2; i++) {
     const writers = bases.filter(b => !!b.localWriter)
@@ -197,11 +194,8 @@ async function confirm (bases, options = {}) {
     for (let j = 0; j < maj; j++) {
       if (!writers[j].writable) continue
 
-      console.log('-', i, j)
       await writers[j].append(null)
-      console.log('--')
       await helpers.replicateAndSync(bases)
-      console.log('---')
     }
   }
 
