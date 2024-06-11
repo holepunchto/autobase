@@ -753,7 +753,11 @@ module.exports = class Autobase extends ReadyResource {
       this._append(value)
     }
 
-    await this._bump()
+    // await in case append is in current tick
+    if (this._advancing) await this._advancing
+
+    // only bump if there are unflushed nodes
+    if (this._appending !== null) return this._bump()
   }
 
   _append (value) {
