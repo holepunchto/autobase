@@ -497,7 +497,7 @@ module.exports = class Autobase extends ReadyResource {
 
       if (min === undefined) {
         const r = await this.system.get(head.key)
-        min = r ? r.min : -1
+        min = r ? r.length : -1
 
         record.set(hex, min)
       }
