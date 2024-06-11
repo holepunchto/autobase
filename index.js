@@ -96,7 +96,6 @@ module.exports = class Autobase extends ReadyResource {
     this._completeRemovalAt = null
     this._systemPointer = 0
     this._maybeStaticFastForward = false // writer bumps this
-    this._initialBatch = null
 
     this._updates = []
     this._handlers = handlers || {}
@@ -144,6 +143,7 @@ module.exports = class Autobase extends ReadyResource {
     this._ackTimer = null
     this._acking = false
 
+    this._initialBatchSize = 0
     this._initialSystem = null
     this._initialViews = null
     this._waiting = new SignalPromise()
@@ -480,47 +480,47 @@ module.exports = class Autobase extends ReadyResource {
 
     const { heads } = c.decode(messages.BootRecord, pointer)
 
-    const ordered = []
+    this._initialBatchSize = 0
+
+    const nodes = new Set()
     const writers = new Map()
+    const record = new Map()
 
     while (heads.length) {
       const head = heads.shift()
-      const record = await this.system.get(head.key)
-
-      if (record && record.length >= head.length) continue
-      if (ordered.findIndex(h => sameHead(h, head)) !== -1) continue
 
       const hex = b4a.toString(head.key, 'hex')
+      const ref = hex + ':' + head.length
 
-      if (!writers.has(hex)) {
-        writers.set(hex, await this._getWriterByKey(head.key, head.length, 0, false, null))
+      if (nodes.has(ref)) continue
+      nodes.add(ref)
+
+      let min = record.get(hex)
+
+      if (min === undefined) {
+        const r = await this.system.get(head.key)
+        min = r ? r.min : -1
+
+        record.set(hex, min)
       }
 
-      const w = writers.get(hex)
+      if (min >= head.length) continue
+
+      this._initialBatchSize++
+
+      let w = writers.get(hex)
+      if (!w) {
+        w = await this._getWriterByKey(head.key, head.length, 0, false, false, null)
+        writers.set(hex, w)
+      }
 
       if (record) w.seen(record.length)
-
-      ordered.push(head)
 
       const { node } = await w.core.get(head.length - 1)
 
       for (const dep of node.heads) {
         heads.push(dep)
       }
-    }
-
-    this._initialBatch = []
-
-    for (let i = ordered.length - 1; i >= 0; i--) {
-      const { key } = ordered[i]
-
-      const w = writers.get(b4a.toString(key, 'hex'))
-      await w.update()
-
-      const node = w.advance()
-      assert(node !== null, 'Node should always be available')
-
-      this._initialBatch.push(node)
     }
   }
 
@@ -1084,10 +1084,10 @@ module.exports = class Autobase extends ReadyResource {
     return nodes
   }
 
-  async _addRemoteHeads () {
+  async _addRemoteHeads (maxBatchSize) {
     let added = 0
 
-    while (added < REMOTE_ADD_BATCH) {
+    while (added < maxBatchSize) {
       await this._updateAll()
 
       let advanced = 0
@@ -1168,19 +1168,12 @@ module.exports = class Autobase extends ReadyResource {
         await this._loadLocalWriter(this.system)
       }
 
-      let remoteAdded = null
-      let localNodes = null
+      const remoteAdded = await this._addRemoteHeads(this._initialBatchSize || REMOTE_ADD_BATCH)
 
-      if (this._initialBatch) {
-        for (const node of this._initialBatch) {
-          this.linearizer.addHead(node)
-        }
-        remoteAdded = this._initialBatch.length
-        this._initialBatch = null
-      } else {
-        remoteAdded = await this._addRemoteHeads()
-        localNodes = this._appending === null ? null : this._addLocalHeads()
-      }
+      const shouldAddLocal = this._initialBatchSize || this._appending === null
+      const localNodes = shouldAddLocal ? null : this._addLocalHeads()
+
+      this._initialBatchSize = 0
 
       if (this._maybeStaticFastForward === true && this.fastForwardEnabled === true) await this._checkStaticFastForward()
       if (this.closing) return
@@ -2246,10 +2239,6 @@ function isAutobaseMessage (msg) {
 
 function compareNodes (a, b) {
   return b4a.compare(a.key, b.key)
-}
-
-function sameHead (a, b) {
-  return b4a.equals(a.key, b.key) && a.length === b.length
 }
 
 function descendingVersion (a, b) {
