@@ -512,7 +512,7 @@ module.exports = class Autobase extends ReadyResource {
         writers.set(hex, w)
       }
 
-      if (record) w.seen(record.length)
+      if (min !== -1) w.seen(min)
 
       const { node } = await w.core.get(head.length - 1)
 
