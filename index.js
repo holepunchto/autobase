@@ -485,7 +485,7 @@ module.exports = class Autobase extends ReadyResource {
     const record = new Map()
 
     while (heads.length) {
-      const head = heads.shift()
+      const head = heads.pop()
 
       const hex = b4a.toString(head.key, 'hex')
       const ref = hex + ':' + head.length
