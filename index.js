@@ -143,9 +143,11 @@ module.exports = class Autobase extends ReadyResource {
     this._ackTimer = null
     this._acking = false
 
-    this._initialBatchSize = 0
+    this._initialHeads = null
     this._initialSystem = null
     this._initialViews = null
+    this._initialBatchSize = 0
+
     this._waiting = new SignalPromise()
 
     this.system = new SystemView(this._viewStore.get({ name: '_system', exclusive: true }))
@@ -272,7 +274,7 @@ module.exports = class Autobase extends ReadyResource {
       this.local.setUserData('autobase/local', this.local.key)
     }
 
-    const { bootstrap, system } = await this._loadSystemInfo()
+    const { bootstrap, system, heads } = await this._loadSystemInfo()
 
     this.version = system
       ? system.version
@@ -281,7 +283,9 @@ module.exports = class Autobase extends ReadyResource {
         : this.maxSupportedVersion
 
     this.bootstrap = bootstrap
+
     this._initialSystem = system
+    this._initialHeads = heads
 
     await this._makeLinearizer(system)
   }
@@ -289,9 +293,9 @@ module.exports = class Autobase extends ReadyResource {
   async _loadSystemInfo () {
     const pointer = await this.local.getUserData('autobase/boot')
     const bootstrap = this.bootstrap || (await this.local.getUserData('referrer')) || this.local.key
-    if (!pointer) return { bootstrap, system: null }
+    if (!pointer) return { bootstrap, system: null, heads: [] }
 
-    const { indexed, views } = c.decode(messages.BootRecord, pointer)
+    const { indexed, views, heads } = c.decode(messages.BootRecord, pointer)
     const { key, length } = indexed
 
     this._systemPointer = length
@@ -327,7 +331,8 @@ module.exports = class Autobase extends ReadyResource {
 
     return {
       bootstrap,
-      system
+      system,
+      heads
     }
   }
 
@@ -471,14 +476,11 @@ module.exports = class Autobase extends ReadyResource {
 
     this.queueFastForward()
 
-    await this.catchup()
+    await this.catchup(this._initialHeads)
   }
 
-  async catchup () {
-    const pointer = await this.local.getUserData('autobase/boot')
-    if (!pointer) return
-
-    const { heads: nodes } = c.decode(messages.BootRecord, pointer)
+  async catchup (nodes) {
+    if (!nodes.length) return
 
     const visited = new Set()
     const writers = new Map()
