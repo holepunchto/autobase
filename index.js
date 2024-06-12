@@ -960,9 +960,11 @@ module.exports = class Autobase extends ReadyResource {
       await this.system.update()
     }
 
+    const active = []
+    for (const w of this.activeWriters) active.push(w.core.key)
+
     const sameIndexers = this.system.sameIndexers(this.linearizer.indexers)
 
-    await this._closeAllActiveWriters(true)
     await this._makeLinearizer(this.system)
     if (!sameIndexers) await this._viewStore.migrate()
 
@@ -970,10 +972,11 @@ module.exports = class Autobase extends ReadyResource {
 
     this.queueFastForward()
 
-    if (this.localWriter) {
-      const value = await this.system.get(this.local.key)
+    for (const w of this.activeWriters) {
+      const value = await this.system.get(w.core.key)
       const length = value ? value.length : 0
-      this.localWriter.reset(length)
+      w.reset(length)
+      this._resumeWriter(w)
     }
 
     if (!this.localWriter || !this.localWriter.isIndexer) return
