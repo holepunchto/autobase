@@ -1126,24 +1126,17 @@ module.exports = class Autobase extends ReadyResource {
 
     this._systemPointer = length
 
-    const cores = this._viewStore.getIndexedCores()
-    const views = new Array(cores.length - 1)
-    for (const core of cores) {
-      if (core.systemIndex === -1) continue
-      views[core.systemIndex] = core.name
-    }
+    const views = this._viewStore.indexedViewsByName()
 
     await this._setBootRecord(this.system.core.key, length, this.system.heads, views)
   }
 
   async _updateBootRecordHeads (heads) {
-    const p = await this.local.getUserData('autobase/boot')
-    if (!p) return // first tick
+    if (this._systemPointer === 0) return // first tick
 
-    const pointer = c.decode(messages.BootRecord, p)
-    pointer.heads = heads
+    const views = this._viewStore.indexedViewsByName()
 
-    await this.local.setUserData('autobase/boot', c.encode(messages.BootRecord, pointer))
+    await this._setBootRecord(this.system.core.key, this._systemPointer, heads, views)
   }
 
   async _setBootRecord (key, length, heads, views) {
