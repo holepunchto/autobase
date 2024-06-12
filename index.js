@@ -810,6 +810,7 @@ module.exports = class Autobase extends ReadyResource {
       let w = this.activeWriters.get(key)
       if (w !== null) {
         if (isAdded && w.core.writable && this.localWriter === null) this._setLocalWriter(w)
+        if (w.isRemoved && isAdded) w.isRemoved = false
         w.seen(seen)
         return w
       }
