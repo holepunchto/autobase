@@ -300,7 +300,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._systemPointer = length
 
-    if (!length) return { bootstrap, system: null }
+    if (!length) return { bootstrap, system: null, heads: [] }
 
     const encryptionKey = AutoStore.getBlockKey(bootstrap, this.encryptionKey, '_system')
     const actualCore = this.store.get({ key, exclusive: false, compat: false, encryptionKey, isBlockKey: true })
@@ -313,7 +313,7 @@ module.exports = class Autobase extends ReadyResource {
     if (length === 0 || !(await core.has(length - 1))) {
       await this.local.setUserData('autobase/boot', null)
       this._systemPointer = 0
-      return { bootstrap, system: null }
+      return { bootstrap, system: null, heads: [] }
     }
 
     const system = new SystemView(core, length)
