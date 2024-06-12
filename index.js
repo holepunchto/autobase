@@ -1170,7 +1170,7 @@ module.exports = class Autobase extends ReadyResource {
 
       const remoteAdded = await this._addRemoteHeads(this._initialBatchSize || REMOTE_ADD_BATCH)
 
-      const shouldAddLocal = this._initialBatchSize || this._appending === null
+      const shouldAddLocal = this._initialBatchSize > 0 || this._appending === null
       const localNodes = shouldAddLocal ? null : this._addLocalHeads()
 
       this._initialBatchSize = 0
