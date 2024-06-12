@@ -478,46 +478,46 @@ module.exports = class Autobase extends ReadyResource {
     const pointer = await this.local.getUserData('autobase/boot')
     if (!pointer) return
 
-    const { heads } = c.decode(messages.BootRecord, pointer)
+    const { heads: nodes } = c.decode(messages.BootRecord, pointer)
 
-    const nodes = new Set()
+    const visited = new Set()
     const writers = new Map()
     const record = new Map()
 
-    while (heads.length) {
-      const head = heads.pop()
+    while (nodes.length) {
+      const node = nodes.pop()
 
-      const hex = b4a.toString(head.key, 'hex')
-      const ref = hex + ':' + head.length
+      const hex = b4a.toString(node.key, 'hex')
+      const ref = hex + ':' + node.length
 
-      if (nodes.has(ref)) continue
-      nodes.add(ref)
+      if (visited.has(ref)) continue
+      visited.add(ref)
 
       let min = record.get(hex)
 
       if (min === undefined) {
-        const r = await this.system.get(head.key)
+        const r = await this.system.get(node.key)
         min = r ? r.length : -1
 
         record.set(hex, min)
       }
 
-      if (min >= head.length) continue
+      if (min >= node.length) continue
 
       this._initialBatchSize++
 
       let w = writers.get(hex)
       if (!w) {
-        w = await this._getWriterByKey(head.key, head.length, 0, false, false, null)
+        w = await this._getWriterByKey(node.key, node.length, 0, false, false, null)
         writers.set(hex, w)
       }
 
       if (min !== -1) w.seen(min)
 
-      const { node } = await w.core.get(head.length - 1)
+      const block = await w.core.get(node.length - 1)
 
-      for (const dep of node.heads) {
-        heads.push(dep)
+      for (const dep of block.node.heads) {
+        nodes.push(dep)
       }
     }
   }
