@@ -548,6 +548,8 @@ module.exports = class Autobase extends ReadyResource {
 
       this.linearizer.addHead(node)
     }
+
+    await this._gcWriters()
   }
 
   _reindexersIdle () {
