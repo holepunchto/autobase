@@ -487,6 +487,9 @@ test('suspend - open new index after reopen', async t => {
 
   await b2.ready()
 
+  t.is(b2.view.first.length, b.view.first.length)
+  t.is(b2.view.second.length, b.view.second.length)
+
   for (let i = 0; i < b2.view.first.length; i++) {
     t.alike(await b2.view.first.get(i), order[i])
   }
