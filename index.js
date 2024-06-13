@@ -502,7 +502,7 @@ module.exports = class Autobase extends ReadyResource {
         writers.set(hex, w)
       }
 
-      if (w.writer.length > length) continue
+      if (w.writer.length >= length) continue
 
       if (length > w.end) w.end = length
 
