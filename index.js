@@ -483,7 +483,6 @@ module.exports = class Autobase extends ReadyResource {
 
     const visited = new Set()
     const writers = new Map()
-    const record = new Map()
 
     const tip = []
 
@@ -496,26 +495,26 @@ module.exports = class Autobase extends ReadyResource {
       if (visited.has(ref)) continue
       visited.add(ref)
 
-      let min = record.get(hex)
-
-      if (min === undefined) {
-        const r = await this.system.get(key)
-        min = r ? r.length : -1
-
-        record.set(hex, min)
-      }
-
-      if (min >= length) continue
-
       let w = writers.get(hex)
       if (!w) {
-        w = await this._getWriterByKey(key, length, 0, false, false, null)
+        const r = await this.system.get(key)
+        const start = r ? r.length : 0
+
+        w = { writer: null, start, end: start }
+
         writers.set(hex, w)
       }
 
-      if (min !== -1) w.seen(min)
+      if (w.start >= length) continue
 
-      const block = await w.core.get(length - 1)
+      if (w.writer === null) {
+        w.writer = await this._getWriterByKey(key, w.start, 0, false, false, null)
+      }
+
+      if (w.start > 0) w.writer.seen(w.start)
+      if (length > w.end) w.end = length
+
+      const block = await w.writer.core.get(length - 1)
 
       tip.push([w, length])
 
@@ -524,29 +523,24 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
-    while (tip.length) {
-      const head = tip.pop()
-      const [writer, length] = head
+    while (writers.size) {
+      for (const [hex, info] of writers) {
+        const { writer, end } = info
 
-      if (writer.available < length) await writer.update()
+        if (writer === null) {
+          writers.delete(hex)
+          continue
+        }
 
-      if (writer.avialable < length) {
-        tip.unshift(head)
-        continue
+        if (writer.available <= writer.length) await writer.update()
+
+        const node = writer.advance()
+        if (!node) continue
+
+        this.linearizer.addHead(node)
+
+        if (writer.length === end) writers.delete(hex)
       }
-
-      while (writer.length < length) {
-        if (!writer.advance()) break
-      }
-
-      if (writer.length < length) {
-        tip.unshift(head)
-        continue
-      }
-
-      const node = await writer.get(length - 1)
-
-      this.linearizer.addHead(node)
     }
 
     await this._gcWriters()
