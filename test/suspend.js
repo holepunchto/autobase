@@ -486,6 +486,7 @@ test('suspend - open new index after reopen', async t => {
   })
 
   await b2.ready()
+  await b2.update()
 
   t.is(b2.view.first.length, b.view.first.length)
   t.is(b2.view.second.length, b.view.second.length)
@@ -576,7 +577,6 @@ test('suspend - reopen multiple indexes', async t => {
   })
 
   await b2.ready()
-
   await b2.update()
 
   for (let i = 0; i < b2.view.first.length; i++) {
