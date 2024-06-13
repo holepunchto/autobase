@@ -475,10 +475,10 @@ module.exports = class Autobase extends ReadyResource {
 
     this.queueFastForward()
 
-    await this.catchup(this._initialHeads)
+    await this._catchup(this._initialHeads)
   }
 
-  async catchup (nodes) {
+  async _catchup (nodes) {
     if (!nodes.length) return
 
     const visited = new Set()
@@ -495,21 +495,15 @@ module.exports = class Autobase extends ReadyResource {
 
       let w = writers.get(hex)
       if (!w) {
-        const r = await this.system.get(key)
-        const start = r ? r.length : 0
+        const writer = await this._getWriterByKey(key, -1, 0, true, false, null)
 
-        w = { writer: null, start, end: start }
+        w = { writer, end: writer.length }
 
         writers.set(hex, w)
       }
 
-      if (w.start >= length) continue
+      if (w.writer.length > length) continue
 
-      if (w.writer === null) {
-        w.writer = await this._getWriterByKey(key, w.start, 0, false, false, null)
-      }
-
-      if (w.start > 0) w.writer.seen(w.start)
       if (length > w.end) w.end = length
 
       const block = await w.writer.core.get(length - 1)
@@ -523,7 +517,7 @@ module.exports = class Autobase extends ReadyResource {
       for (const [hex, info] of writers) {
         const { writer, end } = info
 
-        if (writer === null) {
+        if (writer === null || writer.length === end) {
           writers.delete(hex)
           continue
         }
@@ -534,8 +528,6 @@ module.exports = class Autobase extends ReadyResource {
         if (!node) continue
 
         this.linearizer.addHead(node)
-
-        if (writer.length === end) writers.delete(hex)
       }
     }
 
