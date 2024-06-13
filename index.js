@@ -1479,7 +1479,7 @@ module.exports = class Autobase extends ReadyResource {
         if (length === 0) continue
         const core = this.store.get(key)
         await core.ready()
-        indexers.push({ core, length })
+        indexers.push({ key, core, length })
       }
 
       // handle rest of views
@@ -1496,8 +1496,9 @@ module.exports = class Autobase extends ReadyResource {
 
       const promises = []
 
-      for (const { core, length } of indexers) {
+      for (const { key, core, length } of indexers) {
         if (core.length === 0 && length > 0) promises.push(core.get(length - 1, { timeout }))
+        promises.push(system.get(key))
       }
 
       for (const { core, length } of pendingViews) {
