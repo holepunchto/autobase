@@ -960,9 +960,6 @@ module.exports = class Autobase extends ReadyResource {
       await this.system.update()
     }
 
-    const active = []
-    for (const w of this.activeWriters) active.push(w.core.key)
-
     const sameIndexers = this.system.sameIndexers(this.linearizer.indexers)
 
     await this._makeLinearizer(this.system)
