@@ -484,8 +484,6 @@ module.exports = class Autobase extends ReadyResource {
     const visited = new Set()
     const writers = new Map()
 
-    const tip = []
-
     while (nodes.length) {
       const { key, length } = nodes.pop()
 
@@ -515,8 +513,6 @@ module.exports = class Autobase extends ReadyResource {
       if (length > w.end) w.end = length
 
       const block = await w.writer.core.get(length - 1)
-
-      tip.push([w, length])
 
       for (const dep of block.node.heads) {
         nodes.push(dep)
