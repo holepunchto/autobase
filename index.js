@@ -531,7 +531,7 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
-    await this._gcWriters()
+    await this._drain() // runs for one tick
   }
 
   _reindexersIdle () {
@@ -1163,7 +1163,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async _drain () {
     while (!this.closing) {
-      if (this.fastForwardTo !== null) {
+      if (this.opened && this.fastForwardTo !== null) {
         await this._applyFastForward()
         this.system.requestWakeup()
       }
@@ -1173,8 +1173,8 @@ module.exports = class Autobase extends ReadyResource {
         await this._loadLocalWriter(this.system)
       }
 
-      const remoteAdded = await this._addRemoteHeads()
-      const localNodes = this._appending === null ? null : this._addLocalHeads()
+      const remoteAdded = this.opened ? await this._addRemoteHeads() : null
+      const localNodes = this.opened && this._appending !== null ? this._addLocalHeads() : null
 
       if (this._maybeStaticFastForward === true && this.fastForwardEnabled === true) await this._checkStaticFastForward()
       if (this.closing) return
@@ -1217,6 +1217,7 @@ module.exports = class Autobase extends ReadyResource {
       if (!changed) {
         if (this._checkWriters.length > 0) {
           await this._gcWriters()
+          if (!this.opened) break // at most one tick preready
           continue // rerun the update loop as a writer might have been added
         }
         if (remoteAdded >= REMOTE_ADD_BATCH) continue
