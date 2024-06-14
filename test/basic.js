@@ -23,13 +23,21 @@ test('basic - two writers', async t => {
   const { bases } = await create(3, t, { open: null })
   const [base1, base2, base3] = bases
 
-  await addWriter(base1, base2)
+  let added = false
+  base2.once('is-indexer', () => { added = true })
 
+  await addWriter(base1, base2)
   await confirm([base1, base2, base3])
+
+  t.ok(added)
+
+  added = false
+  base3.once('is-indexer', () => { added = true })
 
   await addWriter(base2, base3)
-
   await confirm([base1, base2, base3])
+
+  t.ok(added)
 
   t.is(base2.system.members, 3)
   t.is(base2.system.members, base3.system.members)
@@ -1461,7 +1469,14 @@ test('basic - readd removed indexer', async t => {
   const { bases } = await create(2, t, { apply: applyWithRemove })
   const [a, b] = bases
 
+  let added = false
+  b.on('is-indexer', () => { added = true })
+  b.on('is-non-indexer', () => { added = false })
+
   await addWriterAndSync(a, b)
+
+  t.ok(added)
+  t.is(b.isIndexer, true)
 
   await b.append('b1')
 
@@ -1471,6 +1486,12 @@ test('basic - readd removed indexer', async t => {
   t.is(b.view.getBackingCore().session.manifest.signers.length, 2)
 
   await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+
+  await replicateAndSync([a, b])
+
+  t.absent(added)
+  t.is(b.isIndexer, false)
+
   await confirm([a, b])
 
   t.is(b.writable, false)
@@ -1489,7 +1510,10 @@ test('basic - readd removed indexer', async t => {
   t.is(b.view.indexedLength, 2)
 
   await addWriterAndSync(a, b)
+
+  t.ok(added)
   t.is(b.writable, true)
+  t.is(b.isIndexer, true)
 
   await b.append('b1')
 
