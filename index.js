@@ -60,6 +60,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this.local = null
     this.localWriter = null
+    this.isIndexer = false
 
     this.activeWriters = new ActiveWriters()
     this.corePool = new CorePool()
@@ -179,10 +180,6 @@ module.exports = class Autobase extends ReadyResource {
 
   get discoveryKey () {
     return this._primaryBootstrap === null ? this.local.discoveryKey : this._primaryBootstrap.discoveryKey
-  }
-
-  get isIndexer () {
-    return this.localWriter ? this.localWriter.isIndexer : false
   }
 
   get isActiveIndexer () {
@@ -1071,14 +1068,14 @@ module.exports = class Autobase extends ReadyResource {
 
   _setLocalIndexer () {
     assert(this.localWriter !== null)
-    this.localWriter.isIndexer = true
+    this.isIndexer = true
 
     if (this.opened) this.emit('is-indexer')
   }
 
   _unsetLocalIndexer () {
     assert(this.localWriter !== null)
-    this.localWriter.isIndexer = false
+    this.isIndexer = false
 
     if (this.opened) this.emit('is-non-indexer')
   }
@@ -2036,7 +2033,7 @@ module.exports = class Autobase extends ReadyResource {
   _checkLocalIndexerUpdate () {
     if (!this.localWriter) return
 
-    const wasIndexer = this.localWriter.isIndexer
+    const wasIndexer = this.isIndexer
 
     let isIndexer = false
     for (const { key } of this.system.indexers) {
