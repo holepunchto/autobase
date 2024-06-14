@@ -81,7 +81,7 @@ function createBase (store, key, t, opts = {}) {
   t.teardown(() => {
     return new Promise(resolve => {
       const c = []
-      c.push(base.close())
+      c.push(base.close().catch(() => {})) // ignore error
       setImmediate(() => c.push(base._viewStore.close()))
 
       Promise.all(c).then(resolve)
