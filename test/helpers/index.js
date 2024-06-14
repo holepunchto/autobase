@@ -78,14 +78,10 @@ function createBase (store, key, t, opts = {}) {
     base.maxSupportedVersion = opts.maxSupportedVersion
   }
 
-  t.teardown(() => {
-    return new Promise(resolve => {
-      const c = []
-      c.push(base.close().catch(() => {})) // ignore error
-      setImmediate(() => c.push(base._viewStore.close()))
-
-      Promise.all(c).then(resolve)
-    })
+  t.teardown(async () => {
+    const p = base.close().catch(() => {})
+    setImmediate(() => base._viewStore.close().catch(() => {}))
+    await p
   }, { order: 1 })
 
   return base
