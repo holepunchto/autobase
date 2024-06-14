@@ -2031,7 +2031,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _checkLocalIndexerUpdate () {
-    if (!this.localWriter) return
+    if (!this.localWriter || (this.isIndexer && !this._pendingLocalRemoval)) return
 
     const wasIndexer = this.isIndexer
 
