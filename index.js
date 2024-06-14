@@ -1069,15 +1069,12 @@ module.exports = class Autobase extends ReadyResource {
   _setLocalIndexer () {
     assert(this.localWriter !== null)
     this.isIndexer = true
-
-    if (this.opened) this.emit('is-indexer')
+    this._addCheckpoints = true
   }
 
   _unsetLocalIndexer () {
     assert(this.localWriter !== null)
     this.isIndexer = false
-
-    if (this.opened) this.emit('is-non-indexer')
   }
 
   _clearLocalIndexer () {
@@ -1813,7 +1810,10 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     // If we are getting added as indexer, already start adding checkpoints while we get confirmed...
-    if (writer === this.localWriter && isIndexer) this._addCheckpoints = true
+    if (writer === this.localWriter) {
+      if (isIndexer) this._setLocalIndexer()
+      else this._unsetLocalIndexer() // unset if demoted
+    }
 
     // fetch any nodes needed for dependents
     this._queueBump()
@@ -1824,7 +1824,10 @@ module.exports = class Autobase extends ReadyResource {
     assert(this._applying !== null, 'System changes are only allowed in apply')
     await this.system.remove(key)
 
-    if (b4a.equals(key, this.local.key)) this._pendingLocalRemoval = true
+    if (b4a.equals(key, this.local.key)) {
+      this._pendingLocalRemoval = true
+      if (this.isIndexer) this._unsetLocalIndexer()
+    }
 
     const w = this.activeWriters.get(key)
     if (w) w.isRemoved = true
@@ -2031,7 +2034,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _checkLocalIndexerUpdate () {
-    if (!this.localWriter || (this.isIndexer && !this._pendingLocalRemoval)) return
+    if (!this.localWriter || this.isActiveIndexer === this.isIndexer) return
 
     const wasIndexer = this.isIndexer
 
@@ -2047,8 +2050,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (wasIndexer === isIndexer) return // no change
 
-    if (isIndexer) return this._setLocalIndexer()
-    if (wasIndexer) return this._unsetLocalIndexer()
+    this.emit(isIndexer ? 'is-indexer' : 'is-non-indexer')
   }
 
   async _getViewInfo (indexerUpdate) {
