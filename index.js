@@ -186,7 +186,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   get isActiveIndexer () {
-    return this.localWriter ? this.localWriter._isActiveIndexer : false
+    return this.localWriter ? this.localWriter.isActiveIndexer : false
   }
 
   replicate (init, opts) {
@@ -622,7 +622,7 @@ module.exports = class Autobase extends ReadyResource {
       const unqueued = this._wakeup.unqueue(w.core.key, w.core.length)
       this._coupler.remove(w.core)
 
-      if (!unqueued || w._isActiveIndexer || this.localWriter === w) continue
+      if (!unqueued || w.isActiveIndexer || this.localWriter === w) continue
 
       await this._closeWriter(w, false)
     }
@@ -715,7 +715,7 @@ module.exports = class Autobase extends ReadyResource {
     // if no one is waiting for our index manifest, wait for FF before pushing an ack
     if (!isPendingIndexer && this._isFastForwarding()) return
 
-    const isIndexer = this.localWriter._isActiveIndexer || isPendingIndexer
+    const isIndexer = this.localWriter.isActiveIndexer || isPendingIndexer
 
     if (!isIndexer || this._acking || this.closing) return
 
@@ -963,7 +963,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _updateLinearizer (indexers, heads) {
     this.linearizer = new Linearizer(indexers, { heads, writers: this.activeWriters })
-    this._addCheckpoints = !!(this.localWriter && (this.localWriter._isActiveIndexer || this._isPending()))
+    this._addCheckpoints = !!(this.localWriter && (this.localWriter.isActiveIndexer || this._isPending()))
     this._updateAckThreshold()
   }
 
@@ -982,7 +982,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this.activeWriters.add(bootstrap)
     this._checkWriters.push(bootstrap)
-    bootstrap._isActiveIndexer = true
+    bootstrap.isActiveIndexer = true
     bootstrap.inflateBackground()
     await bootstrap.ready()
     this._resumeWriter(bootstrap)
@@ -1005,7 +1005,7 @@ module.exports = class Autobase extends ReadyResource {
 
     for (const head of sys.indexers) {
       const writer = await this._getWriterByKey(head.key, head.length, 0, false, false, sys)
-      writer._isActiveIndexer = true
+      writer.isActiveIndexer = true
       writer.inflateBackground()
       indexers.push(writer)
     }
@@ -1039,7 +1039,7 @@ module.exports = class Autobase extends ReadyResource {
       this._resumeWriter(w)
     }
 
-    if (!this.localWriter || !this.localWriter._isActiveIndexer) return
+    if (!this.localWriter || !this.localWriter.isActiveIndexer) return
 
     if (!hasWriter(this.linearizer.indexers, this.localWriter)) {
       this._clearLocalIndexer()
@@ -1061,7 +1061,7 @@ module.exports = class Autobase extends ReadyResource {
     if (!this.localWriter) return
 
     this._closeWriter(this.localWriter, true)
-    if (this.localWriter._isActiveIndexer) this._clearLocalIndexer()
+    if (this.localWriter.isActiveIndexer) this._clearLocalIndexer()
 
     this.localWriter = null
     this._pendingLocalRemoval = false
@@ -1086,7 +1086,7 @@ module.exports = class Autobase extends ReadyResource {
   _clearLocalIndexer () {
     if (!this.localWriter) return
 
-    this.localWriter._isActiveIndexer = false
+    this.localWriter.isActiveIndexer = false
 
     if (this._ackTimer) this._ackTimer.stop()
     this._ackTimer = null
@@ -1213,7 +1213,7 @@ module.exports = class Autobase extends ReadyResource {
         await this._flushLocal(localNodes)
       }
 
-      if (this._pendingLocalRemoval && !this.localWriter._isActiveIndexer) this._unsetLocalWriter()
+      if (this._pendingLocalRemoval && !this.localWriter.isActiveIndexer) this._unsetLocalWriter()
 
       if (this.closing) return
 
