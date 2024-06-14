@@ -79,9 +79,10 @@ function createBase (store, key, t, opts = {}) {
   }
 
   t.teardown(async () => {
-    const p = base.close().catch(() => {})
+    // this just cancels pending view gets, no need to await
     setImmediate(() => base._viewStore.close().catch(() => {}))
-    await p
+
+    await base.close().catch(() => {})
   }, { order: 1 })
 
   return base
