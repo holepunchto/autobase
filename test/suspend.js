@@ -486,6 +486,10 @@ test('suspend - open new index after reopen', async t => {
   })
 
   await b2.ready()
+  await b2.update()
+
+  t.is(b2.view.first.length, b.view.first.length)
+  t.is(b2.view.second.length, b.view.second.length)
 
   for (let i = 0; i < b2.view.first.length; i++) {
     t.alike(await b2.view.first.get(i), order[i])
@@ -573,7 +577,6 @@ test('suspend - reopen multiple indexes', async t => {
   })
 
   await b2.ready()
-
   await b2.update()
 
   for (let i = 0; i < b2.view.first.length; i++) {
@@ -951,6 +954,189 @@ test('suspend - recover from bad sys core', async t => {
   await replicateAndSync([a, b1])
 
   t.is(b1.system.core.length, len)
+})
+
+test('suspend - restart with unindexed nodes', async t => {
+  const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
+
+  const [a, b, c] = bases
+
+  await addWriterAndSync(a, b)
+  await replicateAndSync([a, b, c])
+
+  await addWriterAndSync(a, c, false)
+  await confirm([a, b, c])
+
+  // bigger than autobase max batch size
+  for (let i = 0; i < 100; i++) await b.append('b' + i)
+
+  await replicateAndSync([b, c])
+
+  await c.close()
+
+  const c1 = createBase(stores[2], null, t)
+
+  await c1.ready()
+
+  await c1.append('c0')
+
+  await replicateAndSync([a, c1])
+
+  const exp = { key: b.local.key, length: b.local.length }
+
+  const last = await c1.local.get(0)
+  t.alike(last.node.heads, [exp])
+
+  t.is(await a.view.get(a.view.length - 1), 'c0')
+})
+
+test('suspend - restart with indexed and unindexed nodes', async t => {
+  const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
+
+  const [a, b, c] = bases
+
+  await addWriterAndSync(a, b)
+  await replicateAndSync([a, b, c])
+
+  await addWriterAndSync(a, c, false)
+  await confirm([a, b, c])
+
+  // bigger than autobase max batch size
+  for (let i = 0; i < 100; i++) await b.append('b' + i)
+
+  await confirm([a, b, c])
+
+  // bigger than autobase max batch size
+  for (let i = 100; i < 200; i++) await b.append('b' + i)
+
+  await replicateAndSync([b, c])
+
+  await c.close()
+
+  const c1 = createBase(stores[2], null, t)
+
+  await c1.ready()
+
+  await c1.append('c0')
+
+  await replicateAndSync([a, c1])
+
+  const exp = { key: b.local.key, length: b.local.length }
+
+  const last = await c1.local.get(0)
+  t.alike(last.node.heads, [exp])
+
+  t.is(await a.view.get(a.view.length - 1), 'c0')
+})
+
+test('suspend - restart with unindexed local nodes', async t => {
+  const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
+
+  const [a, b, c] = bases
+
+  await addWriterAndSync(a, b)
+  await replicateAndSync([a, b, c])
+
+  await addWriterAndSync(a, c, false)
+  await confirm([a, b, c])
+
+  // bigger than autobase max batch size
+  for (let i = 0; i < 100; i++) await c.append('c' + i)
+
+  await replicateAndSync([b, c])
+
+  await c.close()
+
+  const c1 = createBase(stores[2], null, t)
+
+  await c1.append('c101')
+
+  const exp = { key: c.local.key, length: c.local.length - 1 }
+
+  const last = await c1.local.get(c1.local.length - 1)
+  t.alike(last.node.heads, [exp])
+
+  await replicateAndSync([a, c1])
+
+  t.is(await a.view.get(a.view.length - 1), 'c101')
+})
+
+test('suspend - restart with indexed and unindexed local nodes', async t => {
+  const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
+
+  const [a, b, c] = bases
+
+  await addWriterAndSync(a, b)
+  await replicateAndSync([a, b, c])
+
+  await addWriterAndSync(a, c, false)
+  await confirm([a, b, c])
+
+  // writer has indexed nodes
+  for (let i = 0; i < 100; i++) await c.append('c' + i)
+
+  await confirm([a, b, c])
+
+  // bigger than autobase max batch size
+  for (let i = 100; i < 200; i++) await c.append('c' + i)
+
+  await replicateAndSync([b, c])
+
+  await c.close()
+
+  const c1 = createBase(stores[2], null, t)
+
+  await c1.append('c101')
+
+  const exp = { key: c.local.key, length: c.local.length - 1 }
+
+  const last = await c1.local.get(c1.local.length - 1)
+  t.alike(last.node.heads, [exp])
+
+  await replicateAndSync([a, c1])
+
+  t.is(await a.view.get(a.view.length - 1), 'c101')
+})
+
+test('suspend - restart with crosslinked non-indexer nodes', async t => {
+  const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
+
+  const [a, b, c] = bases
+
+  await addWriterAndSync(a, b, false)
+  await addWriterAndSync(a, c, false)
+
+  await replicateAndSync([a, b, c])
+
+  let n = 0
+
+  // writer has indexed nodes
+  for (let i = 0; i < 100; i++) await c.append('c' + n++)
+
+  await confirm([a, b, c])
+
+  // bigger than autobase max batch size
+  for (let i = 0; i < 40; i++) await b.append('b' + n++)
+  await replicateAndSync([b, c])
+  for (let i = 0; i < 40; i++) await c.append('c' + n++)
+  await replicateAndSync([b, c])
+  for (let i = 0; i < 40; i++) await b.append('b' + n++)
+  await replicateAndSync([b, c])
+
+  await c.close()
+
+  const c1 = createBase(stores[2], null, t)
+
+  await c1.append('c' + n)
+
+  const exp = { key: b.local.key, length: b.local.length }
+
+  const last = await c1.local.get(c1.local.length - 1)
+  t.alike(last.node.heads, [exp])
+
+  await replicateAndSync([a, c1])
+
+  t.is(await a.view.get(a.view.length - 1), 'c' + n)
 })
 
 function openMultiple (store) {
