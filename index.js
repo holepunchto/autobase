@@ -185,6 +185,14 @@ module.exports = class Autobase extends ReadyResource {
     return this.localWriter ? this.localWriter._isActiveIndexer : false
   }
 
+  get isIndexer () {
+    if (!this.localWriter) return false
+    for (const { key } of this.system.indexers) {
+      if (b4a.equals(key, this.local.key)) return true
+    }
+    return this._isPending()
+  }
+
   replicate (init, opts) {
     return this.store.replicate(init, opts)
   }
