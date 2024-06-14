@@ -51,7 +51,7 @@ class SkeletonWriter {
     this.seq = 0
     this.head = null
     this.majority = majority
-    this.isIndexer = !!indexer
+    this._isActiveIndexer = !!indexer
   }
 
   add (links = []) {
@@ -81,13 +81,13 @@ class SkeletonWriter {
 class Writer {
   constructor (key, indexer) {
     this.core = { key }
-    this.isIndexer = true
+    this._isActiveIndexer = true
     this.length = 0
     this.nodes = {
       offset: 0,
       nodes: []
     }
-    this.isIndexer = !!indexer
+    this._isActiveIndexer = !!indexer
   }
 
   get indexed () {
