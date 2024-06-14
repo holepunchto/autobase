@@ -463,6 +463,8 @@ module.exports = class Autobase extends ReadyResource {
     this._prebump = this._openPreBump()
     await this._prebump
 
+    await this._catchup(this._initialHeads)
+
     await this._wakeup.ready()
 
     this.system.requestWakeup()
@@ -474,8 +476,6 @@ module.exports = class Autobase extends ReadyResource {
     if (this.reindexing) this._setReindexed()
 
     this.queueFastForward()
-
-    await this._catchup(this._initialHeads)
   }
 
   async _catchup (nodes) {
