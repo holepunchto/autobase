@@ -979,6 +979,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this.activeWriters.add(bootstrap)
     this._checkWriters.push(bootstrap)
+    if (bootstrap === this.localWriter) this._setLocalIndexer()
     bootstrap.isActiveIndexer = true
     bootstrap.inflateBackground()
     await bootstrap.ready()
@@ -1070,11 +1071,13 @@ module.exports = class Autobase extends ReadyResource {
     assert(this.localWriter !== null)
     this.isIndexer = true
     this._addCheckpoints = true // unset once indexer is cleared
+    this.emit('is-indexer')
   }
 
   _unsetLocalIndexer () {
     assert(this.localWriter !== null)
     this.isIndexer = false
+    this.emit('is-non-indexer')
   }
 
   _clearLocalIndexer () {
@@ -1992,8 +1995,6 @@ module.exports = class Autobase extends ReadyResource {
 
       await this.system.flush(await this._getViewInfo(update.indexers))
 
-      this._checkLocalIndexerUpdate()
-
       this._applying = null
 
       batch = 0
@@ -2031,26 +2032,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return false
-  }
-
-  _checkLocalIndexerUpdate () {
-    if (!this.localWriter || this.isActiveIndexer === this.isIndexer) return
-
-    const wasIndexer = this.isIndexer
-
-    let isIndexer = false
-    for (const { key } of this.system.indexers) {
-      if (b4a.equals(key, this.local.key)) {
-        isIndexer = true
-        break
-      }
-    }
-
-    if (!isIndexer) isIndexer = this._isPending()
-
-    if (wasIndexer === isIndexer) return // no change
-
-    this.emit(isIndexer ? 'is-indexer' : 'is-non-indexer')
   }
 
   async _getViewInfo (indexerUpdate) {
