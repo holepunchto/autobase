@@ -1465,7 +1465,7 @@ test('basic - add new indexer after removing', async t => {
   t.is(c.system.core.getBackingCore().session.manifest.signers.length, 2)
 })
 
-test.solo('basic - readd removed indexer', async t => {
+test('basic - readd removed indexer', async t => {
   const { bases } = await create(2, t, { apply: applyWithRemove })
   const [a, b] = bases
 
