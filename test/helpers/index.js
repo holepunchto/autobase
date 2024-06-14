@@ -78,14 +78,11 @@ function createBase (store, key, t, opts = {}) {
     base.maxSupportedVersion = opts.maxSupportedVersion
   }
 
-  t.teardown(() => {
-    return new Promise(resolve => {
-      const c = []
-      c.push(base.close())
-      setImmediate(() => c.push(base._viewStore.close()))
+  t.teardown(async () => {
+    // this just cancels pending view gets, no need to await
+    setImmediate(() => base._viewStore.close().catch(() => {}))
 
-      Promise.all(c).then(resolve)
-    })
+    await base.close().catch(() => {})
   }, { order: 1 })
 
   return base
