@@ -1069,7 +1069,7 @@ module.exports = class Autobase extends ReadyResource {
   _setLocalIndexer () {
     assert(this.localWriter !== null)
     this.isIndexer = true
-    this._addCheckpoints = true
+    this._addCheckpoints = true // unset once indexer is cleared
   }
 
   _unsetLocalIndexer () {
