@@ -181,16 +181,12 @@ module.exports = class Autobase extends ReadyResource {
     return this._primaryBootstrap === null ? this.local.discoveryKey : this._primaryBootstrap.discoveryKey
   }
 
-  get isActiveIndexer () {
-    return this.localWriter ? this.localWriter._isActiveIndexer : false
+  get isIndexer () {
+    return this.localWriter ? this.localWriter.isIndexer : false
   }
 
-  get isIndexer () {
-    if (!this.localWriter) return false
-    for (const { key } of this.system.indexers) {
-      if (b4a.equals(key, this.local.key)) return true
-    }
-    return this._isPending()
+  get isActiveIndexer () {
+    return this.localWriter ? this.localWriter._isActiveIndexer : false
   }
 
   replicate (init, opts) {
@@ -1071,6 +1067,20 @@ module.exports = class Autobase extends ReadyResource {
     this._pendingLocalRemoval = false
 
     this.emit('unwritable')
+  }
+
+  _setLocalIndexer () {
+    assert(this.localWriter !== null)
+    this.localWriter.isIndexer = true
+
+    if (this.opened) this.emit('is-indexer')
+  }
+
+  _unsetLocalIndexer () {
+    assert(this.localWriter !== null)
+    this.localWriter.isIndexer = false
+
+    if (this.opened) this.emit('is-non-indexer')
   }
 
   _clearLocalIndexer () {
@@ -1982,6 +1992,8 @@ module.exports = class Autobase extends ReadyResource {
 
       await this.system.flush(await this._getViewInfo(update.indexers))
 
+      this._checkLocalIndexerUpdate()
+
       this._applying = null
 
       batch = 0
@@ -2019,6 +2031,27 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return false
+  }
+
+  _checkLocalIndexerUpdate () {
+    if (!this.localWriter) return
+
+    const wasIndexer = this.localWriter.isIndexer
+
+    let isIndexer = false
+    for (const { key } of this.system.indexers) {
+      if (b4a.equals(key, this.local.key)) {
+        isIndexer = true
+        break
+      }
+    }
+
+    if (!isIndexer) isIndexer = this._isPending()
+
+    if (wasIndexer === isIndexer) return // no change
+
+    if (isIndexer) return this._setLocalIndexer()
+    if (wasIndexer) return this._unsetLocalIndexer()
   }
 
   async _getViewInfo (indexerUpdate) {
