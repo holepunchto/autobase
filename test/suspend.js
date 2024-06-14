@@ -679,7 +679,8 @@ test('suspend - non-indexed writer catches up', async t => {
 
   await b.close()
 
-  await t.execution(createBase(stores[1], a.local.key, t))
+  const reopened = createBase(stores[1], a.local.key, t)
+  await t.execution(reopened.ready())
 
   t.pass('did not fail on open')
 
