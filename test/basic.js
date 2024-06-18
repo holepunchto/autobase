@@ -1624,11 +1624,11 @@ test('basic - maxCacheSize opt', async t => {
   t.is(base.system.db.maxCacheSize, 10, 'maxCacheSize applied to sys db')
 })
 
-test('basic - maxCacheSize has null default', async t => {
+test('basic - maxCacheSize has 0 default', async t => {
   const [store] = await createStores(1, t)
   const base = new Autobase(store.namespace('with-cache'))
   await base.ready()
-  t.is(base.maxCacheSize, null, 'maxCacheSize default null')
+  t.is(base.maxCacheSize, 0, 'maxCacheSize default 0')
 })
 
 // todo: this test is hard, probably have to rely on ff to recover

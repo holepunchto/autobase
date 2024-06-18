@@ -131,7 +131,7 @@ module.exports = class Autobase extends ReadyResource {
     this.system = null
     this.version = -1
 
-    this.maxCacheSize = handlers.maxCacheSize || null
+    this.maxCacheSize = handlers.maxCacheSize || 0 // 0 means the hyperbee default cache size will be used
 
     const {
       ackInterval = DEFAULT_ACK_INTERVAL,
