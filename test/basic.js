@@ -1616,6 +1616,21 @@ test('basic - writer adds a writer while being removed', async t => {
   t.is(binfo.isRemoved, true)
 })
 
+test('basic - maxCacheSize opt', async t => {
+  const [store] = await createStores(1, t)
+  const base = new Autobase(store.namespace('with-cache'), null, { maxCacheSize: 10 })
+  await base.ready()
+  t.is(base.maxCacheSize, 10, 'maxCacheSize set')
+  t.is(base.system.db.maxCacheSize, 10, 'maxCacheSize applied to sys db')
+})
+
+test('basic - maxCacheSize has null default', async t => {
+  const [store] = await createStores(1, t)
+  const base = new Autobase(store.namespace('with-cache'))
+  await base.ready()
+  t.is(base.maxCacheSize, null, 'maxCacheSize default null')
+})
+
 // todo: this test is hard, probably have to rely on ff to recover
 test.skip('basic - writer adds a writer while being removed', async t => {
   const { bases } = await create(4, t, { apply: applyWithRemove })

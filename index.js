@@ -131,6 +131,8 @@ module.exports = class Autobase extends ReadyResource {
     this.system = null
     this.version = -1
 
+    this.maxCacheSize = handlers.maxCacheSize || null
+
     const {
       ackInterval = DEFAULT_ACK_INTERVAL,
       ackThreshold = DEFAULT_ACK_THRESHOLD
@@ -150,7 +152,11 @@ module.exports = class Autobase extends ReadyResource {
 
     this._waiting = new SignalPromise()
 
-    this.system = new SystemView(this._viewStore.get({ name: '_system', exclusive: true }))
+    this.system = new SystemView(
+      this._viewStore.get({ name: '_system', exclusive: true }),
+      0,
+      { maxCacheSize: this.maxCacheSize }
+    )
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
 
     this.ready().catch(safetyCatch)
@@ -316,7 +322,7 @@ module.exports = class Autobase extends ReadyResource {
       return { bootstrap, system: null, heads: [] }
     }
 
-    const system = new SystemView(core, length)
+    const system = new SystemView(core, length, { maxCacheSize: this.maxCacheSize })
     await system.ready()
 
     if (system.version > this.maxSupportedVersion) {
@@ -406,7 +412,7 @@ module.exports = class Autobase extends ReadyResource {
     const core = this.store.get({ key, encryptionKey, isBlockKey: true }).batch({ checkout: length, session: false })
 
     const base = this
-    const system = new SystemView(core, length)
+    const system = new SystemView(core, length, { maxCacheSize: this.maxCacheSize })
     await system.ready()
 
     const indexerCores = []
@@ -1551,7 +1557,7 @@ module.exports = class Autobase extends ReadyResource {
         await core.get(length - 1, { timeout })
       }
 
-      const system = new SystemView(core.session(), length)
+      const system = new SystemView(core.session(), length, { maxCacheSize: this.maxCacheSize })
       await system.ready()
 
       if (system.version > this.maxSupportedVersion) {
@@ -1670,7 +1676,7 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
-    const system = new SystemView(core, length)
+    const system = new SystemView(core, length, { maxCacheSize: this.maxCacheSize })
     await system.ready()
 
     const opened = []
