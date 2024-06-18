@@ -1410,6 +1410,41 @@ test('basic - all indexers removed', async t => {
   }
 })
 
+test('basic - promote writer to indexer', async t => {
+  t.plan(9)
+
+  const { bases } = await create(2, t)
+
+  const [a, b] = bases
+
+  // add writer
+  await addWriter(a, b, false)
+  await replicateAndSync([a, b])
+
+  t.is(a.linearizer.indexers.length, 1)
+  t.is(b.linearizer.indexers.length, 1)
+
+  t.absent(b.isIndexer)
+  t.absent(b.isActiveIndexer)
+
+  await b.append(null)
+  await replicateAndSync([a, b])
+
+  // promote writer
+  await addWriter(a, b, true)
+
+  t.is(a.linearizer.indexers.length, 2)
+
+  const event = new Promise(resolve => b.on('is-indexer', resolve))
+
+  await replicateAndSync([a, b])
+
+  await t.execution(event)
+  t.is(b.linearizer.indexers.length, 2)
+  t.ok(b.isIndexer)
+  t.ok(b.isActiveIndexer)
+})
+
 test('basic - add new indexer after removing', async t => {
   const { bases } = await create(3, t, { apply: applyWithRemove })
   const [a, b, c] = bases
