@@ -523,7 +523,10 @@ module.exports = class Autobase extends ReadyResource {
           continue
         }
 
-        if (writer.available <= writer.length) await writer.update()
+        if (writer.available <= writer.length) {
+          // force in case they are not indexed yet
+          await writer.update(true)
+        }
 
         const node = writer.advance()
         if (!node) continue
