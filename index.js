@@ -1004,12 +1004,27 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const indexers = []
+    let localIndexer = false
+    const wasActiveIndexer = !!this.isActiveIndexer
 
     for (const head of sys.indexers) {
       const writer = await this._getWriterByKey(head.key, head.length, 0, false, false, sys)
+      if (writer === this.localWriter) localIndexer = true
       writer.isActiveIndexer = true
       writer.inflateBackground()
       indexers.push(writer)
+    }
+
+    for (const key of sys.pendingIndexers) {
+      if (b4a.equals(key, this.local.key)) localIndexer = true
+    }
+
+    if (localIndexer && !wasActiveIndexer) {
+      this._setLocalIndexer()
+    } else if (!localIndexer && wasActiveIndexer) {
+      this._unsetLocalIndexer()
+      this._clearLocalIndexer()
+      if (this._pendingLocalRemoval) this._unsetLocalWriter()
     }
 
     this._updateLinearizer(indexers, sys.heads)
@@ -1040,13 +1055,6 @@ module.exports = class Autobase extends ReadyResource {
       w.reset(length)
       this._resumeWriter(w)
     }
-
-    if (!this.localWriter || !this.localWriter.isActiveIndexer) return
-
-    if (!hasWriter(this.linearizer.indexers, this.localWriter)) {
-      this._clearLocalIndexer()
-      if (this._pendingLocalRemoval) this._unsetLocalWriter()
-    }
   }
 
   _onUpgrade (version) {
@@ -1073,6 +1081,8 @@ module.exports = class Autobase extends ReadyResource {
 
   _setLocalIndexer () {
     assert(this.localWriter !== null)
+    if (this.isIndexer) return
+
     this.isIndexer = true
     this._addCheckpoints = true // unset once indexer is cleared
     this.emit('is-indexer')
@@ -1080,12 +1090,14 @@ module.exports = class Autobase extends ReadyResource {
 
   _unsetLocalIndexer () {
     assert(this.localWriter !== null)
+    if (!this.isIndexer) return
+
     this.isIndexer = false
     this.emit('is-non-indexer')
   }
 
   _clearLocalIndexer () {
-    if (!this.localWriter) return
+    assert(this.localWriter !== null)
 
     this.localWriter.isActiveIndexer = false
 
@@ -2294,11 +2306,4 @@ function emitWarning (err) {
 
 async function closeAll (list) {
   for (const core of list) await core.close()
-}
-
-function hasWriter (writers, target) {
-  for (const w of writers) {
-    if (w === target) return true
-  }
-  return false
 }

@@ -8,6 +8,7 @@ const b4a = require('b4a')
 const { BootRecord } = require('../lib/messages')
 
 const {
+  addWriter,
   addWriterAndSync,
   replicateAndSync,
   sync,
@@ -891,6 +892,55 @@ test('fast-forward - writer removed', async t => {
 
   t.comment('sparse blocks: ' + sparse)
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+})
+
+test('fast-forward - is indexer set correctly', async t => {
+  t.plan(9)
+
+  const { bases } = await create(3, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b, c] = bases
+
+  for (let i = 0; i < 200; i++) {
+    await a.append('a' + i)
+  }
+
+  // add writer
+  await addWriter(a, b, false)
+  await replicateAndSync([a, b])
+
+  await b.append(null)
+  await replicateAndSync([a, b])
+
+  // promote writer
+  await addWriter(a, b, true)
+
+  t.is(a.linearizer.indexers.length, 2)
+  t.is(b.linearizer.indexers.length, 1)
+
+  t.absent(b.isIndexer)
+  t.absent(b.isActiveIndexer)
+
+  for (let i = 200; i < 400; i++) {
+    await a.append('a' + i)
+  }
+
+  // c has ff'd past addWriter
+  await replicateAndSync([a, c])
+
+  t.is(c.linearizer.indexers.length, 2)
+
+  const event = new Promise(resolve => b.on('is-indexer', resolve))
+
+  await replicateAndSync([b, c])
+
+  t.is(b.linearizer.indexers.length, 2)
+  t.ok(b.isIndexer)
+  t.ok(b.isActiveIndexer)
+  await t.execution(event)
 })
 
 async function isSparse (core) {
