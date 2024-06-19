@@ -937,10 +937,10 @@ test('fast-forward - is indexer set correctly', async t => {
 
   await replicateAndSync([b, c])
 
-  await t.execution(event)
   t.is(b.linearizer.indexers.length, 2)
   t.ok(b.isIndexer)
   t.ok(b.isActiveIndexer)
+  await t.execution(event)
 })
 
 async function isSparse (core) {
