@@ -1005,6 +1005,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const indexers = []
     let localIndexer = false
+    const wasActiveIndexer = !!this.isActiveIndexer
 
     for (const head of sys.indexers) {
       const writer = await this._getWriterByKey(head.key, head.length, 0, false, false, sys)
@@ -1018,9 +1019,9 @@ module.exports = class Autobase extends ReadyResource {
       if (b4a.equals(key, this.local.key)) localIndexer = true
     }
 
-    if (localIndexer && !this.isActiveIndexer) {
+    if (localIndexer && !wasActiveIndexer) {
       this._setLocalIndexer()
-    } else if (!localIndexer && this.isActiveIndexer) {
+    } else if (!localIndexer && wasActiveIndexer) {
       this._unsetLocalIndexer()
       this._clearLocalIndexer()
       if (this._pendingLocalRemoval) this._unsetLocalWriter()
