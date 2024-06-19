@@ -885,7 +885,7 @@ module.exports = class Autobase extends ReadyResource {
 
       const isActive = writerInfo !== null && (isAdded || !writerInfo.isRemoved)
 
-      const isRemoved = len === 0
+      const isRemoved = seen === 0
         ? writerInfo !== null && (!isAdded && writerInfo.isRemoved)
         : !isActive // a writer might have referenced a removed writer
 
