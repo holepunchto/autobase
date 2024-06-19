@@ -523,7 +523,10 @@ module.exports = class Autobase extends ReadyResource {
           continue
         }
 
-        if (writer.available <= writer.length) await writer.update()
+        if (writer.available <= writer.length) {
+          // force in case they are not indexed yet
+          await writer.update(true)
+        }
 
         const node = writer.advance()
         if (!node) continue
@@ -885,7 +888,8 @@ module.exports = class Autobase extends ReadyResource {
 
       const isActive = writerInfo !== null && (isAdded || !writerInfo.isRemoved)
 
-      const isRemoved = len === 0
+      // assumes that seen is passed 0 everywhere except in writer._ensureNodeDependencies
+      const isRemoved = seen === 0
         ? writerInfo !== null && (!isAdded && writerInfo.isRemoved)
         : !isActive // a writer might have referenced a removed writer
 
@@ -922,7 +926,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _updateAll () {
     const p = []
-    for (const w of this.activeWriters) p.push(w.update().catch(this._warn))
+    for (const w of this.activeWriters) p.push(w.update(false).catch(this._warn))
     return Promise.all(p)
   }
 
