@@ -1220,11 +1220,11 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this.closing) return
 
-      if (this.opened) await this._updateBootRecordHeads(this.system.heads)
-
       if (this.localWriter !== null && localNodes !== null) {
         await this._flushLocal(localNodes)
       }
+
+      if (this.opened) await this._updateBootRecordHeads(this.system.heads)
 
       if (this._pendingLocalRemoval && !this.localWriter.isActiveIndexer) this._unsetLocalWriter()
 
