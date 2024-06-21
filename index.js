@@ -464,7 +464,14 @@ module.exports = class Autobase extends ReadyResource {
     this._prebump = this._openPreBump()
     await this._prebump
 
-    await this._catchup(this._initialHeads)
+    try {
+      await this._catchup(this._initialHeads)
+    } catch (err) {
+      this._initialHeads = []
+      await this._updateBootRecordHeads(this.system.heads)
+
+      this._warn(err)
+    }
 
     await this._wakeup.ready()
 
