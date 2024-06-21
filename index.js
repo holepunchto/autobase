@@ -467,6 +467,8 @@ module.exports = class Autobase extends ReadyResource {
     try {
       await this._catchup(this._initialHeads)
     } catch (err) {
+      safetyCatch(err)
+
       this._initialHeads = []
       await this._updateBootRecordHeads(this.system.heads)
 
