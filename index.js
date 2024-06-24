@@ -464,16 +464,7 @@ module.exports = class Autobase extends ReadyResource {
     this._prebump = this._openPreBump()
     await this._prebump
 
-    try {
-      await this._catchup(this._initialHeads)
-    } catch (err) {
-      safetyCatch(err)
-
-      this._initialHeads = []
-      await this._updateBootRecordHeads(this.system.heads)
-
-      this._warn(err)
-    }
+    await this._catchup(this._initialHeads)
 
     await this._wakeup.ready()
 
@@ -519,9 +510,7 @@ module.exports = class Autobase extends ReadyResource {
       // we should have all nodes locally
       const block = await w.writer.core.get(length - 1, { wait: false })
 
-      if (block === null) {
-        throw new Error('Catchup failed: local block not available')
-      }
+      assert(block !== null, 'Catchup failed: local block not available')
 
       for (const dep of block.node.heads) {
         nodes.push(dep)
