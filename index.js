@@ -523,7 +523,10 @@ module.exports = class Autobase extends ReadyResource {
 
       if (length > w.end) w.end = length
 
-      const block = await w.writer.core.get(length - 1)
+      // we should have all nodes locally
+      const block = await w.writer.core.get(length - 1, { wait: false })
+
+      assert(block !== null, 'Catchup failed: local block not available')
 
       for (const dep of block.node.heads) {
         nodes.push(dep)
