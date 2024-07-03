@@ -47,7 +47,7 @@ module.exports = class Autobase extends ReadyResource {
     this.keyPair = handlers.keyPair || null
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
-
+    this.globalCache = store.globalCache
     this.encrypted = handlers.encrypted || !!handlers.encryptionKey
     this.encryptionKey = handlers.encryptionKey || null
 
