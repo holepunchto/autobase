@@ -47,7 +47,7 @@ module.exports = class Autobase extends ReadyResource {
     this.keyPair = handlers.keyPair || null
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
-    this.globalCache = store.globalCache
+    this.globalCache = store.globalCache || null
     this.encrypted = handlers.encrypted || !!handlers.encryptionKey
     this.encryptionKey = handlers.encryptionKey || null
 
@@ -131,8 +131,6 @@ module.exports = class Autobase extends ReadyResource {
     this.system = null
     this.version = -1
 
-    this.maxCacheSize = handlers.maxCacheSize || 0 // 0 means the hyperbee default cache size will be used
-
     const {
       ackInterval = DEFAULT_ACK_INTERVAL,
       ackThreshold = DEFAULT_ACK_THRESHOLD
@@ -155,8 +153,7 @@ module.exports = class Autobase extends ReadyResource {
     const sysCore = this._viewStore.get({ name: '_system', exclusive: true })
 
     this.system = new SystemView(sysCore, {
-      checkout: 0,
-      maxCacheSize: this.maxCacheSize
+      checkout: 0
     })
 
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
@@ -325,8 +322,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const system = new SystemView(core, {
-      checkout: length,
-      maxCacheSize: this.maxCacheSize
+      checkout: length
     })
 
     await system.ready()
@@ -419,8 +415,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const base = this
     const system = new SystemView(core, {
-      checkout: length,
-      maxCacheSize: this.maxCacheSize
+      checkout: length
     })
 
     await system.ready()
