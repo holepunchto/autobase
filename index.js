@@ -349,7 +349,7 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  interrupt (err = new Error('Apply interupted')) {
+  interrupt (err = new Error('Apply interrupted')) {
     assert(this._applying !== null, 'Interrupt is only allowed in apply')
     this.interrupted = true
     throw err // throw to interrupt apply
