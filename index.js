@@ -130,7 +130,7 @@ module.exports = class Autobase extends ReadyResource {
     this.view = null
     this.system = null
     this.version = -1
-    this.interupted = false
+    this.interrupted = false
 
     this.maxCacheSize = handlers.maxCacheSize || 0 // 0 means the hyperbee default cache size will be used
 
@@ -349,9 +349,9 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  interupt (err) {
-    this.interupted = true
-    throw err // throw to interupt apply
+  interrupt (err) {
+    this.interrupted = true
+    throw err // throw to interrupt apply
   }
 
   async flush () {
@@ -620,9 +620,9 @@ module.exports = class Autobase extends ReadyResource {
     if (this.closing) return
     this.close().catch(safetyCatch)
 
-    if (this.interupted) {
-      this.emit('interupt', err)
-      this.interupted = false
+    if (this.interrupted) {
+      this.emit('interrupt', err)
+      this.interrupted = false
       return
     }
 
