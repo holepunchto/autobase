@@ -20,6 +20,7 @@ const CorePool = require('./lib/core-pool')
 const AutoWakeup = require('./lib/wakeup')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
+const INTERRUPT = new Error('Apply interrupted')
 
 const AUTOBASE_VERSION = 1
 
@@ -130,6 +131,7 @@ module.exports = class Autobase extends ReadyResource {
     this.view = null
     this.system = null
     this.version = -1
+    this.interrupted = null
 
     this.maxCacheSize = handlers.maxCacheSize || 0 // 0 means the hyperbee default cache size will be used
 
@@ -346,6 +348,12 @@ module.exports = class Autobase extends ReadyResource {
       system,
       heads
     }
+  }
+
+  interrupt (reason) {
+    assert(this._applying !== null, 'Interrupt is only allowed in apply')
+    if (reason) this.interrupted = reason
+    throw INTERRUPT
   }
 
   async flush () {
@@ -613,6 +621,11 @@ module.exports = class Autobase extends ReadyResource {
   _onError (err) {
     if (this.closing) return
     this.close().catch(safetyCatch)
+
+    if (err === INTERRUPT) {
+      this.emit('interrupt', this.interrupted)
+      return
+    }
 
     // if no one is listening we should crash! we cannot rely on the EE here
     // as this is wrapped in a promise so instead of nextTick throw it
