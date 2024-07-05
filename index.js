@@ -130,6 +130,7 @@ module.exports = class Autobase extends ReadyResource {
     this.view = null
     this.system = null
     this.version = -1
+    this.interupted = false
 
     this.maxCacheSize = handlers.maxCacheSize || 0 // 0 means the hyperbee default cache size will be used
 
@@ -346,6 +347,11 @@ module.exports = class Autobase extends ReadyResource {
       system,
       heads
     }
+  }
+
+  interupt (err) {
+    this.interupted = true
+    throw err // throw to interupt apply
   }
 
   async flush () {
@@ -613,6 +619,12 @@ module.exports = class Autobase extends ReadyResource {
   _onError (err) {
     if (this.closing) return
     this.close().catch(safetyCatch)
+
+    if (this.interupted) {
+      this.emit('interupt', err)
+      this.interupted = false
+      return
+    }
 
     // if no one is listening we should crash! we cannot rely on the EE here
     // as this is wrapped in a promise so instead of nextTick throw it
