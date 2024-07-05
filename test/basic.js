@@ -1631,6 +1631,36 @@ test('basic - maxCacheSize has 0 default', async t => {
   t.is(base.maxCacheSize, 0, 'maxCacheSize default 0')
 })
 
+test('basic - interrupt', async t => {
+  t.plan(2)
+
+  const { bases } = await create(1, t, { apply: applyWithInterupt })
+
+  const a = bases[0]
+
+  a.on('error', function () {
+    t.fail('should not error')
+  })
+  a.on('interrupt', function () {
+    t.pass('was interrupted')
+  })
+
+  await a.append({ hello: true })
+  await a.append({ interrupt: true })
+
+  try {
+    await a.append({ hello: true })
+  } catch {
+    t.pass('should throw')
+  }
+
+  function applyWithInterupt (nodes) {
+    for (const node of nodes) {
+      if (node.value.interrupt) a.interrupt(new Error('stop'))
+    }
+  }
+})
+
 // todo: this test is hard, probably have to rely on ff to recover
 test.skip('basic - writer adds a writer while being removed', async t => {
   const { bases } = await create(4, t, { apply: applyWithRemove })
