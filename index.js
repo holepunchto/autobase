@@ -622,8 +622,8 @@ module.exports = class Autobase extends ReadyResource {
     this.close().catch(safetyCatch)
 
     if (this.interrupted) {
-      this.emit('interrupt', err)
       this.interrupted = false
+      this.emit('interrupt', err)
       return
     }
 
