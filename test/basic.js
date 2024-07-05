@@ -1654,9 +1654,9 @@ test('basic - interrupt', async t => {
     t.pass('should throw')
   }
 
-  function applyWithInterupt (nodes) {
+  function applyWithInterupt (nodes, view, base) {
     for (const node of nodes) {
-      if (node.value.interrupt) a.interrupt(new Error('stop'))
+      if (node.value.interrupt) base.interrupt()
     }
   }
 })
