@@ -20,6 +20,7 @@ const CorePool = require('./lib/core-pool')
 const AutoWakeup = require('./lib/wakeup')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
+const INTERRUPT = new Error('Apply interrupted')
 
 const AUTOBASE_VERSION = 1
 
@@ -130,7 +131,7 @@ module.exports = class Autobase extends ReadyResource {
     this.view = null
     this.system = null
     this.version = -1
-    this.interrupted = false
+    this.interrupted = null
 
     this.maxCacheSize = handlers.maxCacheSize || 0 // 0 means the hyperbee default cache size will be used
 
@@ -349,10 +350,10 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  interrupt (err = new Error('Apply interrupted')) {
+  interrupt (reason) {
     assert(this._applying !== null, 'Interrupt is only allowed in apply')
-    this.interrupted = true
-    throw err // throw to interrupt apply
+    if (reason) this.interrupted = reason
+    throw INTERRUPT
   }
 
   async flush () {
@@ -621,9 +622,8 @@ module.exports = class Autobase extends ReadyResource {
     if (this.closing) return
     this.close().catch(safetyCatch)
 
-    if (this.interrupted) {
-      this.interrupted = false
-      this.emit('interrupt', err)
+    if (err === INTERRUPT) {
+      this.emit('interrupt', this.interrupted)
       return
     }
 
