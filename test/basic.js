@@ -3,6 +3,7 @@ const ram = require('random-access-memory')
 const Corestore = require('corestore')
 const b4a = require('b4a')
 const crypto = require('hypercore-crypto')
+const Rache = require('rache')
 
 const Autobase = require('..')
 
@@ -1616,19 +1617,16 @@ test('basic - writer adds a writer while being removed', async t => {
   t.is(binfo.isRemoved, true)
 })
 
-test('basic - maxCacheSize opt', async t => {
-  const [store] = await createStores(1, t)
-  const base = new Autobase(store.namespace('with-cache'), null, { maxCacheSize: 10 })
-  await base.ready()
-  t.is(base.maxCacheSize, 10, 'maxCacheSize set')
-  t.is(base.system.db.maxCacheSize, 10, 'maxCacheSize applied to sys db')
-})
+test('basic - sessions use globalCache from corestore if it is set', async t => {
+  const globalCache = new Rache()
 
-test('basic - maxCacheSize has 0 default', async t => {
-  const [store] = await createStores(1, t)
-  const base = new Autobase(store.namespace('with-cache'))
+  const [store] = await createStores(1, t, { globalCache })
+  const base = createBase(store, null, t)
   await base.ready()
-  t.is(base.maxCacheSize, 0, 'maxCacheSize default 0')
+
+  t.is(base.globalCache, globalCache, 'globalCache set on autobase itself')
+  t.is(base.view.globalCache, globalCache, 'passed to autocore sessions')
+  t.is(base.system.core.globalCache, globalCache, 'passed to system')
 })
 
 test('basic - interrupt', async t => {

@@ -31,7 +31,8 @@ async function createStores (n, t, opts = {}) {
   const stores = []
   for (let i = offset; i < n + offset; i++) {
     const primaryKey = Buffer.alloc(32, i)
-    stores.push(new Corestore(await storage(), { primaryKey, encryptionKey }))
+    const globalCache = opts.globalCache || null
+    stores.push(new Corestore(await storage(), { primaryKey, encryptionKey, globalCache }))
   }
 
   t.teardown(() => Promise.all(stores.map(s => s.close())), { order: 2 })
