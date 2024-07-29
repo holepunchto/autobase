@@ -1599,6 +1599,7 @@ module.exports = class Autobase extends ReadyResource {
         !system.sameIndexers(this.linearizer.indexers)
 
       const localLookup = this.localWriter ? system.get(this.local.key, { timeout }) : null
+      if (localLookup) localLookup.catch(noop)
 
       const indexers = []
       const pendingViews = []
@@ -1637,8 +1638,6 @@ module.exports = class Autobase extends ReadyResource {
       await Promise.all(promises)
 
       if (localLookup) {
-        localLookup.catch(emitWarning)
-
         const value = await localLookup
         if (value) info.localLength = value.isRemoved ? -1 : value.length
       }
