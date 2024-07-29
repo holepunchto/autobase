@@ -1362,7 +1362,9 @@ test('basic - indexer removes themselves', async t => {
   }
 })
 
-test('basic - all indexers removed', async t => {
+test('basic - cannot remove last indexer', async t => {
+  t.plan(7)
+
   const { bases } = await create(2, t, { apply })
   const [a, b] = bases
 
@@ -1381,19 +1383,6 @@ test('basic - all indexers removed', async t => {
 
   await a.append({ remove: b4a.toString(a.local.key, 'hex') })
 
-  await replicateAndSync([a, b])
-
-  t.is(a.writable, false)
-
-  t.is(a.view.getBackingCore().session.manifest.signers.length, 0)
-  t.is(b.view.getBackingCore().session.manifest.signers.length, 0)
-
-  t.is(a.view.length, 1)
-  t.is(b.view.length, 1)
-
-  await t.exception(a.append('fail'), /Not writable/)
-  await t.exception(b.append('fail'), /Not writable/)
-
   async function apply (batch, view, base) {
     for (const { value } of batch) {
       if (value.add) {
@@ -1402,7 +1391,7 @@ test('basic - all indexers removed', async t => {
       }
 
       if (value.remove) {
-        await base.removeWriter(b4a.from(value.remove, 'hex'))
+        await t.exception(() => base.removeWriter(b4a.from(value.remove, 'hex')))
         continue
       }
 
