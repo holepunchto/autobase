@@ -1873,9 +1873,19 @@ module.exports = class Autobase extends ReadyResource {
     this._queueBump()
   }
 
+  removeable (key) {
+    if (this.system.indexers.length !== 1) return true
+    return !b4a.equals(this.system.indexers[0].key, key)
+  }
+
   // triggered from apply
   async removeWriter (key) { // just compat for old version
     assert(this._applying !== null, 'System changes are only allowed in apply')
+
+    if (!this.removeable(key)) {
+      throw new Error('Not allowed to remove the last indexer')
+    }
+
     await this.system.remove(key)
 
     if (b4a.equals(key, this.local.key)) {
