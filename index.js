@@ -1638,8 +1638,7 @@ module.exports = class Autobase extends ReadyResource {
 
       if (localLookup) {
         const value = await localLookup
-        if (value) info.localLength = value.length
-        if (value.isRemoved) info.localLength = -1
+        if (value) info.localLength = value.isRemoved ? -1 : value.length
       }
 
       const closing = []
