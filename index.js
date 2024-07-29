@@ -1637,6 +1637,8 @@ module.exports = class Autobase extends ReadyResource {
       await Promise.all(promises)
 
       if (localLookup) {
+        localLookup.catch(emitWarning)
+
         const value = await localLookup
         if (value) info.localLength = value.isRemoved ? -1 : value.length
       }
