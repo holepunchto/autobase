@@ -2304,6 +2304,7 @@ module.exports = class Autobase extends ReadyResource {
       if (this._addCheckpoints) this._localDigest.pointer++
     }
 
+    this.localWriter.core.setActive(true)
     await this.local.append(blocks)
 
     if (this._addCheckpoints) {
