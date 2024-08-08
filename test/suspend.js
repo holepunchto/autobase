@@ -1051,8 +1051,7 @@ test('suspend - restart with unindexed local nodes', async t => {
   const c1 = createBase(stores[2], null, t)
 
   await c1.append('c101')
-
-  const exp = { key: c.local.key, length: c.local.length - 1 }
+  const exp = { key: c1.local.key, length: c1.local.length - 1 }
 
   const last = await c1.local.get(c1.local.length - 1)
   t.alike(last.node.heads, [exp])
@@ -1089,7 +1088,7 @@ test('suspend - restart with indexed and unindexed local nodes', async t => {
 
   await c1.append('c101')
 
-  const exp = { key: c.local.key, length: c.local.length - 1 }
+  const exp = { key: c1.local.key, length: c1.local.length - 1 }
 
   const last = await c1.local.get(c1.local.length - 1)
   t.alike(last.node.heads, [exp])
