@@ -55,7 +55,7 @@ module.exports = class Autobase extends ReadyResource {
     this._tryLoadingLocal = true
     this._primaryBootstrap = null
     if (this.bootstrap) {
-      this._primaryBootstrap = this.store.get({ key: this.bootstrap, compat: false, encryptionKey: this.encryptionKey })
+      this._primaryBootstrap = this.store.get({ key: this.bootstrap, compat: false, active: false, encryptionKey: this.encryptionKey })
       this.store = this.store.namespace(this._primaryBootstrap, { detach: false })
     }
 
@@ -267,7 +267,7 @@ module.exports = class Autobase extends ReadyResource {
     // stateless open
     const ref = await this.local.getUserData('referrer')
     if (ref && !b4a.equals(ref, this.local.key) && !this._primaryBootstrap) {
-      this._primaryBootstrap = this.store.get({ key: ref, compat: false, encryptionKey: this.encryptionKey })
+      this._primaryBootstrap = this.store.get({ key: ref, compat: false, active: false, encryptionKey: this.encryptionKey })
       this.store = this.store.namespace(this._primaryBootstrap, { detach: false })
     }
 
@@ -644,12 +644,24 @@ module.exports = class Autobase extends ReadyResource {
 
     while (this._checkWriters.length > 0) {
       const w = this._checkWriters.pop()
-      if (!w.flushed()) continue
+
+      if (!w.flushed()) {
+        w.core.setActive(true)
+        continue
+      }
 
       const unqueued = this._wakeup.unqueue(w.core.key, w.core.length)
       this._coupler.remove(w.core)
 
-      if (!unqueued || w.isActiveIndexer || this.localWriter === w) continue
+      if (!unqueued || w.isActiveIndexer) {
+        w.core.setActive(true)
+        continue
+      }
+
+      if (this.localWriter === w) {
+        this.localWriter.core.setActive(false)
+        continue
+      }
 
       await this._closeWriter(w, false)
     }
@@ -832,7 +844,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   static getLocalCore (store, handlers, encryptionKey) {
-    const opts = { ...handlers, compat: false, exclusive: true, valueEncoding: messages.OplogMessage, encryptionKey }
+    const opts = { ...handlers, compat: false, active: false, exclusive: true, valueEncoding: messages.OplogMessage, encryptionKey }
     return opts.keyPair ? store.get(opts) : store.get({ ...opts, name: 'local' })
   }
 
@@ -967,7 +979,7 @@ module.exports = class Autobase extends ReadyResource {
     const local = b4a.equals(key, this.local.key)
 
     const core = local
-      ? this.local.session({ valueEncoding: messages.OplogMessage, encryptionKey: this.encryptionKey })
+      ? this.local.session({ valueEncoding: messages.OplogMessage, encryptionKey: this.encryptionKey, active: false })
       : this.store.get({ key, compat: false, writable: false, valueEncoding: messages.OplogMessage, encryptionKey: this.encryptionKey })
 
     return core
