@@ -1649,10 +1649,12 @@ test('basic - interrupt', async t => {
   const { bases } = await create(1, t, { apply: applyWithInterupt })
 
   const a = bases[0]
+  const onclose = () => t.fail('interrupt should not close')
 
   a.on('error', function () {
     t.fail('should not error')
   })
+  a.on('close', onclose)
   a.on('interrupt', function () {
     t.pass('was interrupted')
   })
@@ -1665,6 +1667,8 @@ test('basic - interrupt', async t => {
   } catch {
     t.pass('should throw')
   }
+
+  a.off('close', onclose) // teardown actually closes it
 
   function applyWithInterupt (nodes, view, base) {
     for (const node of nodes) {

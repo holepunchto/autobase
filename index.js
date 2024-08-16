@@ -106,7 +106,10 @@ module.exports = class Autobase extends ReadyResource {
     this._draining = false
     this._advancing = null
     this._advanced = null
+    this._interrupting = false
+
     this.reindexing = false
+    this.paused = false
 
     this._bump = debounceify(() => {
       this._advancing = this._advance()
@@ -348,6 +351,7 @@ module.exports = class Autobase extends ReadyResource {
 
   interrupt (reason) {
     assert(this._applying !== null, 'Interrupt is only allowed in apply')
+    this._interrupting = true
     if (reason) this.interrupted = reason
     throw INTERRUPT
   }
@@ -583,7 +587,7 @@ module.exports = class Autobase extends ReadyResource {
 
         if (this._reindexersIdle()) break
       }
-      if (this.closing) return
+      if (this._interrupting) return
       await this.local.setUserData('autobase/reindexed', b4a.from([0]))
       this.reindexing = false
       this.emit('reindexed')
@@ -593,6 +597,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _close () {
+    this._interrupting = true
     await Promise.resolve() // defer one tick
     this._waiting.notify(null)
 
@@ -615,12 +620,13 @@ module.exports = class Autobase extends ReadyResource {
 
   _onError (err) {
     if (this.closing) return
-    this.close().catch(safetyCatch)
 
     if (err === INTERRUPT) {
       this.emit('interrupt', this.interrupted)
       return
     }
+
+    this.close().catch(safetyCatch)
 
     // if no one is listening we should crash! we cannot rely on the EE here
     // as this is wrapped in a promise so instead of nextTick throw it
@@ -708,7 +714,7 @@ module.exports = class Autobase extends ReadyResource {
       if (this._acking) await this._bump() // if acking just rebump incase it was triggered from above...
       await this._waitForIdle()
     } catch (err) {
-      if (this.closing) return
+      if (this._interrupting) return
       throw err
     }
   }
@@ -721,7 +727,7 @@ module.exports = class Autobase extends ReadyResource {
     try {
       await this._bump()
     } catch (err) {
-      if (!this.closing) throw err
+      if (!this._interrupting) throw err
     }
   }
 
@@ -756,29 +762,29 @@ module.exports = class Autobase extends ReadyResource {
 
     const isIndexer = this.localWriter.isActiveIndexer || isPendingIndexer
 
-    if (!isIndexer || this._acking || this.closing) return
+    if (!isIndexer || this._acking || this._interrupting) return
 
     this._acking = true
 
     try {
       await this._bump()
     } catch (err) {
-      if (!this.closing) throw err
+      if (!this._interrupting) throw err
     }
 
     // avoid lumping acks together due to the bump wait here
     if (this._ackTimer && bg) await this._ackTimer.asapStandalone()
-    if (this.closing) return
+    if (this._interrupting) return
 
     const unflushed = this._hasPendingCheckpoint || this.hasUnflushedIndexers()
-    if (!this.closing && (isPendingIndexer || this.linearizer.shouldAck(this.localWriter, unflushed))) {
+    if (!this._interrupting && (isPendingIndexer || this.linearizer.shouldAck(this.localWriter, unflushed))) {
       try {
         await this.append(null)
       } catch (err) {
-        if (!this.closing) throw err
+        if (!this._interrupting) throw err
       }
 
-      if (!this.closing) {
+      if (!this._interrupting) {
         this._updateAckThreshold()
         this._bumpAckTimer()
       }
@@ -789,10 +795,10 @@ module.exports = class Autobase extends ReadyResource {
 
   async append (value) {
     if (!this.opened) await this.ready()
-    if (this.closing) throw new Error('Autobase is closing')
+    if (this._interrupting) throw new Error('Autobase is closing')
 
     // if a reset is scheduled await those
-    while (this._queueViewReset && !this.closing) await this._bump()
+    while (this._queueViewReset && !this._interrupting) await this._bump()
 
     if (this.localWriter === null) {
       throw new Error('Not writable')
@@ -903,7 +909,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const release = await this._lock()
 
-    if (this.closing) {
+    if (this._interrupting) {
       release()
       throw new Error('Autobase is closing')
     }
@@ -1232,7 +1238,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _drain () {
-    while (!this.closing) {
+    while (!this._interrupting && !this.paused) {
       if (this.opened && this.fastForwardTo !== null) {
         await this._applyFastForward()
         this.system.requestWakeup()
@@ -1247,7 +1253,7 @@ module.exports = class Autobase extends ReadyResource {
       const localNodes = this.opened && this._appending !== null ? this._addLocalHeads() : null
 
       if (this._maybeStaticFastForward === true && this.fastForwardEnabled === true) await this._checkStaticFastForward()
-      if (this.closing) return
+      if (this._interrupting) return
 
       if (remoteAdded > 0 || localNodes !== null) {
         this.updating = true
@@ -1257,7 +1263,7 @@ module.exports = class Autobase extends ReadyResource {
       const changed = u ? await this._applyUpdate(u) : null
       const indexed = !!this._updatingCores
 
-      if (this.closing) return
+      if (this._interrupting) return
 
       if (this.localWriter !== null && localNodes !== null) {
         await this._flushLocal(localNodes)
@@ -1267,14 +1273,14 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this._pendingLocalRemoval && !this.localWriter.isActiveIndexer) this._unsetLocalWriter()
 
-      if (this.closing) return
+      if (this._interrupting) return
 
       const flushed = (await this._flushIndexes()) ? this.system.core.getBackingCore().flushedLength : this._systemPointer
       if (this.updating || flushed > this._systemPointer) await this._advanceBootRecord(flushed)
 
       if (indexed) await this.onindex(this)
 
-      if (this.closing) return
+      if (this._interrupting) return
 
       // force reset state in worst case
       if (this._queueViewReset && this._appending === null) {
@@ -1354,8 +1360,18 @@ module.exports = class Autobase extends ReadyResource {
     this._wakeupHints.clear()
   }
 
+  pause () {
+    this.paused = true
+  }
+
+  resume () {
+    this.paused = false
+    this._queueBump()
+  }
+
   async _advance () {
     if (this.opened === false) await this.ready()
+    if (this.paused) return
 
     try {
       this._draining = true
@@ -1368,7 +1384,7 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
-    if (!this.closing && this.localWriter && this._ackIsNeeded()) {
+    if (!this._interrupting && this.localWriter && this._ackIsNeeded()) {
       if (this._ackTimer) this._ackTimer.asap()
       else this.ack()
     }
