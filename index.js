@@ -375,7 +375,7 @@ module.exports = class Autobase extends ReadyResource {
   recouple () {
     if (this._coupler) this._coupler.destroy()
     const core = this.system.core.getBackingCore()
-    this._coupler = new CoreCoupler(core.session, this._wakeupPeerBound)
+    this._coupler = new CoreCoupler(core, this._wakeupPeerBound)
   }
 
   _updateBootstrapWriters () {
@@ -1609,13 +1609,14 @@ module.exports = class Autobase extends ReadyResource {
     if (!this.fastForwardEnabled || this.fastForwarding > 0) return
 
     const core = this.system.core.getBackingCore()
+    const originalCore = this.system.core._source.originalCore
 
-    if (core.session.length <= core.length + FF_THRESHOLD) return
-    if (this.fastForwardTo !== null && core.session.length <= this.fastForwardTo.length + FF_THRESHOLD) return
-    if (!core.session.length) return
+    if (originalCore.length <= core.length + FF_THRESHOLD) return
+    if (this.fastForwardTo !== null && originalCore.length <= this.fastForwardTo.length + FF_THRESHOLD) return
+    if (!originalCore.length) return
 
     this.fastForwarding++
-    const target = await this._preFastForward(core.session, core.session.length, DEFAULT_FF_TIMEOUT)
+    const target = await this._preFastForward(originalCore, originalCore.length, DEFAULT_FF_TIMEOUT)
 
     // fast-forward failed
     if (target === null) {
@@ -1655,7 +1656,10 @@ module.exports = class Autobase extends ReadyResource {
         await core.get(length - 1, { timeout })
       }
 
-      const system = new SystemView(core.session(), {
+      const sess = core.session()
+      await sess.ready()
+
+      const system = new SystemView(sess, {
         checkout: length,
         maxCacheSize: this.maxCacheSize
       })
