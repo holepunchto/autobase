@@ -1114,7 +1114,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async _reindex () {
     if (this._updates.length) {
-      this._undoAll()
+      await this._undoAll()
       await this._refreshSystemState()
     }
 
@@ -1500,7 +1500,7 @@ module.exports = class Autobase extends ReadyResource {
   async _forceResetViews (length) {
     const info = await this.system.getIndexedInfo(length)
 
-    this._undoAll()
+    await this._undoAll()
     this._systemPointer = length
 
     const pointer = await this.local.getUserData('autobase/boot')
@@ -1855,7 +1855,7 @@ module.exports = class Autobase extends ReadyResource {
     await system.close()
     await this._closeAllActiveWriters(false)
 
-    this._undoAll()
+    await this._undoAll()
 
     for (const view of this._viewStore.opened.values()) {
       const info = views.get(view)
@@ -2001,11 +2001,15 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
+    const p = []
+
     for (const core of truncating) {
       const truncating = core.truncating
       core.truncating = 0
-      core._onundo(truncating)
+      p.push(core._onundo(truncating))
     }
+
+    return Promise.all(p)
   }
 
   async _getManifest (indexer, len) {
@@ -2036,7 +2040,7 @@ module.exports = class Autobase extends ReadyResource {
   async _applyUpdate (u) {
     assert(await this._viewStore.flush(), 'Views failed to open')
 
-    if (u.undo) this._undo(u.undo)
+    if (u.undo) await this._undo(u.undo)
 
     // if anything was indexed reset the ticks
     if (u.indexed.length) this._resetAckTick()
