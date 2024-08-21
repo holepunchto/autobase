@@ -1069,7 +1069,7 @@ module.exports = class Autobase extends ReadyResource {
     } else if (!localIndexer && wasActiveIndexer) {
       this._unsetLocalIndexer()
       this._clearLocalIndexer()
-      if (this._pendingLocalRemoval) this._unsetLocalWriter()
+      if (this._pendingLocalRemoval) this._unsetLocalWriter(true)
     }
 
     this._updateLinearizer(indexers, sys.heads)
@@ -1112,10 +1112,10 @@ module.exports = class Autobase extends ReadyResource {
     this.emit('writable')
   }
 
-  _unsetLocalWriter () {
+  _unsetLocalWriter (now) {
     if (!this.localWriter) return
 
-    this._closeWriter(this.localWriter, true)
+    this._closeWriter(this.localWriter, now)
     if (this.localWriter.isActiveIndexer) this._clearLocalIndexer()
 
     this.localWriter = null
@@ -1271,7 +1271,7 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this.opened) await this._updateBootRecordHeads(this.system.heads)
 
-      if (this._pendingLocalRemoval && !this.localWriter.isActiveIndexer) this._unsetLocalWriter()
+      if (this._pendingLocalRemoval && !this.localWriter.isActiveIndexer) this._unsetLocalWriter(true)
 
       if (this._interrupting) return
 
@@ -1813,7 +1813,7 @@ module.exports = class Autobase extends ReadyResource {
     await this.system.update()
 
     if (this.localWriter) {
-      if (localLength < 0) this._unsetLocalWriter()
+      if (localLength < 0) this._unsetLocalWriter(true)
       else this.localWriter.reset(localLength)
     }
 
@@ -1885,6 +1885,8 @@ module.exports = class Autobase extends ReadyResource {
     const writer = (await this._getWriterByKey(key, -1, 0, false, true, null)) || this._makeWriter(key, 0, true)
     await writer.ready()
 
+    this._applying.writers.add(writer)
+
     if (!this.activeWriters.has(key)) {
       this.activeWriters.add(writer)
       this._checkWriters.push(writer)
@@ -1940,6 +1942,13 @@ module.exports = class Autobase extends ReadyResource {
 
     while (popped > 0) {
       const u = this._updates.pop()
+
+      for (const w of this.activeWriters) {
+        if (u.writers.has(w)) {
+          if (w === this.localWriter) this._unsetLocalWriter(false)
+          else this._closeWriter(w, false)
+        }
+      }
 
       popped -= u.batch
 
@@ -2068,7 +2077,8 @@ module.exports = class Autobase extends ReadyResource {
         batch,
         indexers: false,
         views: [],
-        version: this.system.version
+        version: this.system.version,
+        writers: new WeakSet()
       }
 
       this._updates.push(update)
