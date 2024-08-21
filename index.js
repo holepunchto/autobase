@@ -2140,7 +2140,8 @@ module.exports = class Autobase extends ReadyResource {
         ? this.system.views[view.systemIndex].length
         : 0
 
-      const key = indexers.length > 1 && indexerUpdate
+      // TODO: the first part of this condition could be make clearer with a !this._isBootstrapping() condition instead
+      const key = (indexers.length > 1 || this.linearizer.indexers.length > indexers.length) && indexerUpdate
         ? await view.deriveKey(indexers, length + view.appending)
         : view.systemIndex === -1
           ? view.key
