@@ -1882,10 +1882,12 @@ module.exports = class Autobase extends ReadyResource {
     assert(this._applying !== null, 'System changes are only allowed in apply')
     await this.system.add(key, { isIndexer })
 
+    const hasWriter = this.activeWriters.has(key)
+
     const writer = (await this._getWriterByKey(key, -1, 0, false, true, null)) || this._makeWriter(key, 0, true)
     await writer.ready()
 
-    this._applying.writers.add(key)
+    if (!hasWriter) this._applying.writers.add(key)
 
     if (!this.activeWriters.has(key)) {
       this.activeWriters.add(writer)
