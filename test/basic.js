@@ -1631,7 +1631,7 @@ test('basic - removed writer nodes are not applied', async t => {
 })
 
 // todo: this test is hard, probably have to rely on ff to fix
-test.solo('basic - removed writer is readded then reorg', async t => {
+test('basic - removed writer is readded then reorg', async t => {
   const { bases } = await create(3, t, { apply: applyWithRemove })
   const [a, b, c] = bases
 
