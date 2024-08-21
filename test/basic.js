@@ -1579,8 +1579,7 @@ test('basic - readd removed indexer', async t => {
   t.is(b.system.core.getBackingCore().session.manifest.signers.length, 2)
 })
 
-// todo: this test is hard, probably have to rely on ff to fix
-test('basic - writer adds a writer while being removed', async t => {
+test('basic - removed writer nodes are not applied', async t => {
   const { bases } = await create(2, t, { apply: applyWithRemove })
   const [a, b] = bases
 
@@ -1629,6 +1628,64 @@ test('basic - writer adds a writer while being removed', async t => {
 
   t.is(ainfo.isRemoved, true)
   t.is(binfo.isRemoved, true)
+})
+
+// todo: this test is hard, probably have to rely on ff to fix
+test.solo('basic - removed writer is readded then reorg', async t => {
+  const { bases } = await create(3, t, { apply: applyWithRemove })
+  const [a, b, c] = bases
+
+  await addWriterAndSync(a, b, false)
+  await addWriterAndSync(a, c, false)
+
+  await b.append('b1')
+  await c.append('c1')
+
+  await confirm([a, b, c])
+
+  t.is(b.view.indexedLength, 2)
+  t.is(c.view.indexedLength, 2)
+
+  await a.append({ remove: b4a.toString(c.local.key, 'hex') })
+
+  await replicateAndSync([a, b, c])
+
+  t.is(a.view.indexedLength, 2)
+  t.is(a.view.length, 2)
+  t.is(a.system.members, 2)
+
+  t.is(b.writable, true)
+  t.is(c.writable, false)
+
+  await addWriterAndSync(b, c, false)
+
+  t.is(c.writable, true)
+
+  // load c into b.activeWriters
+  await c.append(null)
+
+  await replicateAndSync([b, c])
+
+  t.is(b.activeWriters.size, 3)
+
+  for (let i = 0; i < 10; i++) a.append('a' + i)
+
+  await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+
+  await replicateAndSync([a, b, c])
+
+  t.is(b.writable, false)
+  t.is(c.writable, false)
+
+  t.is(b.activeWriters.size, 1)
+  t.is(c.activeWriters.size, 1)
+
+  await t.exception(c.append('not writable'))
+
+  await t.execution(replicateAndSync([a, b, c]))
+
+  t.is(a.view.length, b.view.length)
+  t.is(a.view.length, c.view.length)
 })
 
 test('basic - sessions use globalCache from corestore if it is set', async t => {
