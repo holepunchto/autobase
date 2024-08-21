@@ -1885,7 +1885,7 @@ module.exports = class Autobase extends ReadyResource {
     const writer = (await this._getWriterByKey(key, -1, 0, false, true, null)) || this._makeWriter(key, 0, true)
     await writer.ready()
 
-    this._applying.writers.add(writer)
+    this._applying.writers.add(key)
 
     if (!this.activeWriters.has(key)) {
       this.activeWriters.add(writer)
@@ -1947,18 +1947,21 @@ module.exports = class Autobase extends ReadyResource {
     while (popped > 0) {
       const u = this._updates.pop()
 
-      for (const w of this.activeWriters) {
-        if (u.writers.has(w)) {
-          if (w === this.localWriter) this._unsetLocalWriter(false)
-          else this._closeWriter(w, false)
-        }
-      }
-
       popped -= u.batch
 
       for (const { core, appending } of u.views) {
         if (core.truncating === 0) truncating.push(core)
         core.truncating += appending
+      }
+
+      if (!u.writers.size) continue
+
+      for (const key of u.writers) {
+        const w = this.activeWriters.get(key)
+        if (!w) continue
+
+        if (w === this.localWriter) this._unsetLocalWriter(false)
+        else this._closeWriter(w, false)
       }
     }
 
@@ -2082,7 +2085,7 @@ module.exports = class Autobase extends ReadyResource {
         indexers: false,
         views: [],
         version: this.system.version,
-        writers: new WeakSet()
+        writers: new Set()
       }
 
       this._updates.push(update)
