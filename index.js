@@ -1924,7 +1924,11 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const w = this.activeWriters.get(key)
-    if (w) w.isRemoved = true
+
+    if (w) {
+      w.isRemoved = true
+      this._closeWriter(w)
+    }
 
     this._queueBump()
   }
