@@ -1936,7 +1936,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (w) {
       w.isRemoved = true
-      this._closeWriter(w)
+      if (!w.isActiveIndexer) this._closeWriter(w, true)
     }
 
     this._queueBump()
