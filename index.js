@@ -184,6 +184,10 @@ module.exports = class Autobase extends ReadyResource {
     return this.localWriter !== null && !this.localWriter.isRemoved
   }
 
+  get ackable () {
+    return this.localWriter !== null // prop should add .isIndexer but keeping it simple for now
+  }
+
   get key () {
     return this._primaryBootstrap === null ? this.local.key : this._primaryBootstrap.key
   }
@@ -753,7 +757,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async ack (bg = false) {
-    if (this.localWriter === null || this.localWriter.isRemoved) return
+    if (this.localWriter === null) return
 
     const isPendingIndexer = this._isPending()
 
@@ -779,7 +783,7 @@ module.exports = class Autobase extends ReadyResource {
     const unflushed = this._hasPendingCheckpoint || this.hasUnflushedIndexers()
     if (!this._interrupting && (isPendingIndexer || this.linearizer.shouldAck(this.localWriter, unflushed))) {
       try {
-        if (this.localWriter && !this.localWriter.isRemoved) await this.append(null)
+        if (this.localWriter) await this.append(null)
       } catch (err) {
         if (!this._interrupting) throw err
       }
@@ -800,7 +804,8 @@ module.exports = class Autobase extends ReadyResource {
     // if a reset is scheduled await those
     while (this._queueViewReset && !this._interrupting) await this._bump()
 
-    if (this.localWriter === null || this.localWriter.isRemoved) {
+    // we wanna allow acks so interdexers can flush
+    if (this.localWriter === null || (this.localWriter.isRemoved && value !== null)) {
       throw new Error('Not writable')
     }
 

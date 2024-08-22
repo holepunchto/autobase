@@ -195,7 +195,7 @@ async function confirm (bases, options = {}) {
     const writers = bases.filter(b => !!b.localWriter)
     const maj = options.majority || (Math.floor(writers.length / 2) + 1)
     for (let j = 0; j < maj; j++) {
-      if (!writers[j].writable) continue
+      if (!writers[j].ackable) continue
 
       await writers[j].append(null)
       await helpers.replicateAndSync(bases)
