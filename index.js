@@ -2062,8 +2062,9 @@ module.exports = class Autobase extends ReadyResource {
 
       if (node.version > this.system.version) versionUpgrade = true
 
+      // need to ensure the new writers state is consistent
       if (node.writer.closed) {
-        node.writer = await this._ensureWriter(node.writer.core.key, node.length
+        await this._ensureWriter(node.writer.core.key, node.length)
       }
 
       if (node.writer === this.localWriter) {
