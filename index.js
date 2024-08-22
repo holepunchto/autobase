@@ -904,6 +904,13 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  async _ensureWriter (key, length) {
+    const writer = await this._getWriterByKey(key, length, 0, true, false, null)
+    writer.reset(length)
+
+    return writer
+  }
+
   async _getWriterByKey (key, len, seen, allowGC, isAdded, system) {
     assert(this._draining === true || (this.opening && !this.opened))
 
@@ -2054,6 +2061,10 @@ module.exports = class Autobase extends ReadyResource {
       const node = indexed ? u.indexed[i] : u.tip[i - u.indexed.length]
 
       if (node.version > this.system.version) versionUpgrade = true
+
+      if (node.writer.closed) {
+        node.writer = await this._ensureWriter(node.writer.core.key, node.length
+      }
 
       if (node.writer === this.localWriter) {
         this._resetAckTick()
