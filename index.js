@@ -1925,6 +1925,8 @@ module.exports = class Autobase extends ReadyResource {
       throw new Error('Not allowed to remove the last indexer')
     }
 
+    this._applying.writers.add(key)
+
     await this.system.remove(key)
 
     if (b4a.equals(key, this.local.key)) {
