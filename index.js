@@ -1910,8 +1910,6 @@ module.exports = class Autobase extends ReadyResource {
     const writer = (await this._getWriterByKey(key, -1, 0, false, true, null)) || this._makeWriter(key, 0, true, false)
     await writer.ready()
 
-    writer.isRemoved = false // never removed now
-
     if (!this.activeWriters.has(key)) {
       this.activeWriters.add(writer)
       this._checkWriters.push(writer)
