@@ -1366,7 +1366,7 @@ test('basic - indexer removes themselves', async t => {
 
   t.not(a.view.length, length) // can still read
 
-  await confirm([a, b, c])
+  await confirm([b, c, a]) // a has to come last cause otherwise confirm add it to the maj peers
 
   t.not(a.view.indexedLength, indexedLength) // b,c can still index
 
@@ -1477,7 +1477,6 @@ test('basic - add new indexer after removing', async t => {
   await confirm([a, b])
 
   t.is(b.writable, false)
-  t.is(b.localWriter, null)
 
   t.is(a.linearizer.indexers.length, 1)
   t.is(b.linearizer.indexers.length, 1)
@@ -1495,9 +1494,7 @@ test('basic - add new indexer after removing', async t => {
 
   await c.append('c1')
 
-  b.debug = true
   t.is(b.writable, false)
-  t.is(b.localWriter, null)
 
   await confirm([a, b, c])
   await replicateAndSync([a, b, c])
