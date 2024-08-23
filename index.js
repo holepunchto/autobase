@@ -94,7 +94,6 @@ module.exports = class Autobase extends ReadyResource {
     this._addCheckpoints = false
     this._firstCheckpoint = true
     this._hasPendingCheckpoint = false
-    this._pendingLocalRemoval = false
     this._completeRemovalAt = null
     this._systemPointer = 0
     this._maybeStaticFastForward = false // writer bumps this
@@ -1074,7 +1073,6 @@ module.exports = class Autobase extends ReadyResource {
     } else if (!localIndexer && wasActiveIndexer) {
       this._unsetLocalIndexer()
       this._clearLocalIndexer()
-      if (this._pendingLocalRemoval) this._unsetLocalWriter()
     }
 
     this._updateLinearizer(indexers, sys.heads)
@@ -1144,7 +1142,6 @@ module.exports = class Autobase extends ReadyResource {
     if (this.localWriter.isActiveIndexer) this._clearLocalIndexer()
 
     this.localWriter = null
-    this._pendingLocalRemoval = false
 
     this.emit('unwritable')
   }
@@ -1295,8 +1292,6 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       if (this.opened) await this._updateBootRecordHeads(this.system.heads)
-
-      if (this._pendingLocalRemoval && !this.localWriter.isActiveIndexer) this._unsetLocalWriter()
 
       if (this._interrupting) return
 
@@ -1942,7 +1937,6 @@ module.exports = class Autobase extends ReadyResource {
     await this.system.remove(key)
 
     if (b4a.equals(key, this.local.key)) {
-      this._pendingLocalRemoval = true
       if (this.isIndexer) this._unsetLocalIndexer()
     }
 
