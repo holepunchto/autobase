@@ -181,7 +181,11 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   get writable () {
-    return this.localWriter !== null
+    return this.localWriter !== null && !this.localWriter.isRemoved
+  }
+
+  get ackable () {
+    return this.localWriter !== null // prop should add .isIndexer but keeping it simple for now
   }
 
   get key () {
@@ -779,7 +783,7 @@ module.exports = class Autobase extends ReadyResource {
     const unflushed = this._hasPendingCheckpoint || this.hasUnflushedIndexers()
     if (!this._interrupting && (isPendingIndexer || this.linearizer.shouldAck(this.localWriter, unflushed))) {
       try {
-        await this.append(null)
+        if (this.localWriter) await this.append(null)
       } catch (err) {
         if (!this._interrupting) throw err
       }
@@ -800,7 +804,8 @@ module.exports = class Autobase extends ReadyResource {
     // if a reset is scheduled await those
     while (this._queueViewReset && !this._interrupting) await this._bump()
 
-    if (this.localWriter === null) {
+    // we wanna allow acks so interdexers can flush
+    if (this.localWriter === null || (this.localWriter.isRemoved && value !== null)) {
       throw new Error('Not writable')
     }
 
@@ -1024,7 +1029,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _bootstrapLinearizer () {
-    const bootstrap = this._makeWriter(this.bootstrap, 0, true)
+    const bootstrap = this._makeWriter(this.bootstrap, 0, true, false)
 
     this.activeWriters.add(bootstrap)
     this._checkWriters.push(bootstrap)
@@ -1079,10 +1084,30 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  async _refreshSystemState () {
+    if (!(await this.system.update())) return
+
+    for (const w of this.activeWriters) {
+      const data = await this.system.get(w.core.key)
+
+      if (data) {
+        w.isRemoved = data.isRemoved
+        w.isIndexer = data.isIndexer
+      } else {
+        w.isRemoved = true
+        w.isIndexer = false
+      }
+
+      if (!w.isIndexer) {
+        w.isActiveIndexer = false
+      }
+    }
+  }
+
   async _reindex () {
     if (this._updates.length) {
       this._undoAll()
-      await this.system.update()
+      await this._refreshSystemState()
     }
 
     const sameIndexers = this.system.sameIndexers(this.linearizer.indexers)
@@ -1466,7 +1491,7 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._closeAllActiveWriters(false)
 
-    await this.system.update()
+    await this._refreshSystemState()
     await this._makeLinearizer(this.system)
   }
 
@@ -1810,7 +1835,7 @@ module.exports = class Autobase extends ReadyResource {
       else if (migrated) await view.migrateTo(indexers, 0)
     }
 
-    await this.system.update()
+    await this._refreshSystemState()
 
     if (this.localWriter) {
       if (localLength < 0) this._unsetLocalWriter()
@@ -1882,7 +1907,7 @@ module.exports = class Autobase extends ReadyResource {
     assert(this._applying !== null, 'System changes are only allowed in apply')
     await this.system.add(key, { isIndexer })
 
-    const writer = (await this._getWriterByKey(key, -1, 0, false, true, null)) || this._makeWriter(key, 0, true)
+    const writer = (await this._getWriterByKey(key, -1, 0, false, true, null)) || this._makeWriter(key, 0, true, false)
     await writer.ready()
 
     if (!this.activeWriters.has(key)) {
@@ -1990,7 +2015,7 @@ module.exports = class Autobase extends ReadyResource {
     if (u.indexed.length) this._resetAckTick()
 
     // make sure the latest changes is reflected on the system...
-    await this.system.update()
+    await this._refreshSystemState()
 
     // todo: refresh the active writer set in case any were removed
 
