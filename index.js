@@ -99,6 +99,7 @@ module.exports = class Autobase extends ReadyResource {
     this._maybeStaticFastForward = false // writer bumps this
 
     this._updates = []
+    this._pendingFlush = []
     this._handlers = handlers || {}
     this._warn = emitWarning.bind(this)
 
@@ -511,6 +512,8 @@ module.exports = class Autobase extends ReadyResource {
   async _catchup (nodes) {
     if (!nodes.length) return
 
+    const sys = await this.system.checkout(this._systemPointer)
+
     const visited = new Set()
     const writers = new Map()
 
@@ -525,7 +528,7 @@ module.exports = class Autobase extends ReadyResource {
 
       let w = writers.get(hex)
       if (!w) {
-        const writer = await this._getWriterByKey(key, -1, 0, true, false, null)
+        const writer = await this._getWriterByKey(key, -1, 0, true, false, sys)
 
         w = { writer, end: writer.length }
 
@@ -545,6 +548,8 @@ module.exports = class Autobase extends ReadyResource {
         nodes.push(dep)
       }
     }
+
+    await sys.close()
 
     while (writers.size) {
       for (const [hex, info] of writers) {
@@ -567,7 +572,11 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
-    await this._drain() // runs for one tick
+    const u = this.linearizer.update()
+    if (!u || !u.indexed.length) return
+
+    this._queueIndexFlush(u.indexed.length)
+    await this._flushIndexes()
   }
 
   _reindexersIdle () {
@@ -926,6 +935,14 @@ module.exports = class Autobase extends ReadyResource {
       if (w !== null) {
         if (isAdded && w.core.writable && this.localWriter === null) this._setLocalWriter(w)
         if (w.isRemoved && isAdded) w.isRemoved = false
+
+        if (system) {
+          const info = await system.get(key)
+          const length = info ? info.length : 0
+          if (w.length !== length) w.reset(length)
+          w.resume()
+        }
+
         w.seen(seen)
         return w
       }
