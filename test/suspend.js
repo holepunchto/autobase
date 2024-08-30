@@ -220,10 +220,10 @@ test('suspend - reopen with sync in middle', async t => {
 
   // sync next views
   for (const ac of [a.system.core, a.view]) {
-    const remote = ac.getBackingCore().session
+    const remote = ac.getBackingCore()
     const local = bstore.get({ key: remote.key, compat: false })
     await local.ready()
-    await local.download({ start: 0, end: remote.length }).done()
+    await local.download({ start: 0, end: remote.flushedLength }).done()
   }
 
   // sync writers
@@ -787,7 +787,7 @@ test('suspend - migrations', async t => {
   await a.append('a1')
 
   t.is(a.view.indexedLength, 2)
-  t.is(a.view.signedLength, 2)
+  t.is(a.view.getBackingCore().flushedLength, 2)
 
   await b.ready()
 
@@ -798,15 +798,15 @@ test('suspend - migrations', async t => {
   await b.append('b0')
   await confirm([a, b])
 
-  await a.append('a1')
+  await a.append('a2')
   await replicateAndSync([a, b])
 
   t.is(a.view.indexedLength, 3)
-  t.is(a.view.signedLength, 3)
+  t.is(a.view.getBackingCore().flushedLength, 3)
 
   t.is(b.activeWriters.size, 2)
   t.is(b.view.indexedLength, 3)
-  t.is(b.view.signedLength, 3)
+  t.is(b.view.getBackingCore().flushedLength, 3)
 
   const order = []
   for (let i = 0; i < b.view.length; i++) {
@@ -819,8 +819,7 @@ test('suspend - migrations', async t => {
   await b2.ready()
 
   t.is(b2.view.indexedLength, 3)
-  t.is(b2.view.signedLength, 3)
-  t.is(b2.view.getBackingCore().indexedLength, 3)
+  t.is(b2.view.getBackingCore().flushedLength, 3)
 
   await b2.update()
 
@@ -880,7 +879,7 @@ test('suspend - incomplete migrate', async t => {
   await a.append('a1')
 
   t.is(a.view.indexedLength, 2)
-  t.is(a.view.signedLength, 2)
+  t.is(a.view.getBackingCore().flushedLength, 2)
 
   await addWriter(a, b)
 
@@ -896,7 +895,7 @@ test('suspend - incomplete migrate', async t => {
   await b.append('b1') // this indexes a1
 
   t.is(b.view.indexedLength, 4)
-  t.is(b.view.signedLength, 2)
+  t.is(b.view.getBackingCore().flushedLength, 2)
 
   await b.close()
 
@@ -906,12 +905,10 @@ test('suspend - incomplete migrate', async t => {
   await b2.update() // needed cause we arent persisting the tip
 
   t.is(a.view.indexedLength, 3)
-  t.is(a.view.signedLength, 2)
-  t.is(a.view.getBackingCore().indexedLength, 2)
+  t.is(a.view.getBackingCore().flushedLength, 2)
 
   t.is(b2.view.indexedLength, 4)
-  t.is(b2.view.signedLength, 2)
-  t.is(b2.view.getBackingCore().indexedLength, 2)
+  t.is(b2.view.getBackingCore().flushedLength, 2)
 
   await b2.update()
 
@@ -940,11 +937,11 @@ test('suspend - recover from bad sys core', async t => {
   const record = c.decode(BootRecord, raw)
 
   const core = stores[1].get(record.indexed.key)
-  await core.ready()
+  const batch = await core.session({ name: 'batch' })
+  await batch.ready()
 
-  for (let i = 6; i < record.indexed.length; i++) {
-    core.core.bitfield.set(i, false)
-  }
+  await batch.state.clear(6, record.indexed.length)
+  await batch.close()
 
   const b1 = createBase(stores[1], null, t)
   await b1.ready()

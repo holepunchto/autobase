@@ -355,15 +355,15 @@ test('fast-forward - force reset then ff', async t => {
     await a.append('a' + i)
   }
 
-  t.ok(b.system.core.getBackingCore().indexedLength < 40)
+  t.ok(b.system.core.getBackingCore().flushedLength < 40)
 
   await confirm([a, c])
 
-  t.ok(a.system.core.getBackingCore().indexedLength > 4000)
+  t.ok(a.system.core.getBackingCore().flushedLength > 4000)
 
   const truncate = new Promise(resolve => b.system.core.on('truncate', resolve))
 
-  t.not(b.system.core.getBackingCore().indexedLength, a.system.core.getBackingCore().indexedLength)
+  t.not(b.system.core.getBackingCore().flushedLength, a.system.core.getBackingCore().flushedLength)
 
   await b.forceResetViews()
 
@@ -371,7 +371,7 @@ test('fast-forward - force reset then ff', async t => {
 
   await t.execution(truncate)
 
-  t.is(b.system.core.getBackingCore().indexedLength, a.system.core.getBackingCore().indexedLength)
+  t.is(b.system.core.getBackingCore().flushedLength, a.system.core.getBackingCore().flushedLength)
 
   await replicateAndSync([a, c])
 
@@ -668,7 +668,7 @@ test('fast-forward - initial ff upgrade available', async t => {
 
   const fastForward = {
     key: a1.system.core.key,
-    length: a1.system.core.getBackingCore().indexedLength
+    length: a1.system.core.getBackingCore().flushedLength
   }
 
   const c0 = createBase(s3, a.bootstrap, t, { fastForward })
