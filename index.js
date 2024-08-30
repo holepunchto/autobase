@@ -403,6 +403,16 @@ module.exports = class Autobase extends ReadyResource {
       this._initialViews = null
     }
 
+    try {
+      const updates = await this.local.getUserData('autobase/updates')
+      if (updates) await this._inflateUpdates(updates)
+    } catch (err) {
+      safetyCatch(err)
+      await this.local.setUserData('autobase/last-error', b4a.from(err.stack + ''))
+      this.store.close().catch(safetyCatch)
+      throw err
+    }
+
     // check if this is a v0 base
     const record = await this.local.getUserData('autobase/system')
     if (record !== null && (await this.local.getUserData('autobase/reindexed')) === null) {
@@ -1256,6 +1266,11 @@ module.exports = class Autobase extends ReadyResource {
 
     this._systemPointer = length
 
+    while (this._pendingFlush.length) {
+      if (this._pendingFlush[0].systemLength > length) break
+      this._pendingFlush.shift()
+    }
+
     const views = this._viewStore.indexedViewsByName()
 
     await this._setBootRecord(this.system.core.key, length, this.system.heads, views)
@@ -1277,6 +1292,34 @@ module.exports = class Autobase extends ReadyResource {
     })
 
     await this.local.setUserData('autobase/boot', pointer)
+  }
+
+  async _persistUpdates () {
+    const updates = []
+
+    for (const u of this._pendingFlush.concat(this._updates)) {
+      const views = []
+      for (const view of u.views) {
+        views.push({ core: view.core.systemIndex, appending: view.appending })
+      }
+
+      updates.push({ ...u, views })
+    }
+
+    return this.local.setUserData('autobase/updates', c.encode(messages.UpdateArray, updates))
+  }
+
+  async _inflateUpdates (record) {
+    const updates = c.decode(messages.UpdateArray, record)
+
+    for (const u of updates) {
+      for (const view of u.views) {
+        const i = view.core
+        view.core = i === -1 ? this._viewStore.getSystemCore() : this._viewStore.getByIndex(i)
+      }
+    }
+
+    this._updates = updates
   }
 
   async _drain () {
@@ -1304,6 +1347,8 @@ module.exports = class Autobase extends ReadyResource {
       const u = this.linearizer.update()
       const changed = u ? await this._applyUpdate(u) : null
       const indexed = !!this._updatingCores
+
+      await this._persistUpdates()
 
       if (this._interrupting) return
 
@@ -2115,7 +2160,8 @@ module.exports = class Autobase extends ReadyResource {
         batch,
         indexers: false,
         views: [],
-        version: this.system.version
+        version: this.system.version,
+        systemLength: -1
       }
 
       this._updates.push(update)
@@ -2141,6 +2187,8 @@ module.exports = class Autobase extends ReadyResource {
         u.appending = u.core.appending
         u.core.appending = 0
       }
+
+      update.systemLength = this.system.core.length
 
       if (!indexed) continue
 
@@ -2259,6 +2307,7 @@ module.exports = class Autobase extends ReadyResource {
 
     while (indexed > 0) {
       const u = this._updates.shift()
+      this._pendingFlush.push(u)
 
       indexed -= u.batch
 
