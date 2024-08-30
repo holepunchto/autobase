@@ -1,4 +1,5 @@
 const test = require('brittle')
+const tmpDir = require('test-tmp')
 const ram = require('random-access-memory')
 const Corestore = require('corestore')
 const b4a = require('b4a')
@@ -6,7 +7,8 @@ const b4a = require('b4a')
 const Autobase = require('..')
 
 test('encryption - basic', async t => {
-  const store = new Corestore(ram.reusable())
+  const tmp = await tmpDir(t)
+  const store = new Corestore(tmp)
   const base = new Autobase(store, { apply, open, ackInterval: 0, ackThreshold: 0, encryptionKey: b4a.alloc(32).fill('secret') })
 
   t.ok(base.encryptionKey)
@@ -34,8 +36,8 @@ test('encryption - basic', async t => {
 })
 
 test('encryption - restart', async t => {
-  const storage = ram.reusable()
-  const store = new Corestore(storage)
+  const tmp = await tmpDir(t)
+  const store = new Corestore(tmp)
   const base = new Autobase(store, { apply, open, ackInterval: 0, ackThreshold: 0, encryptionKey: b4a.alloc(32).fill('secret') })
 
   t.ok(base.encryptionKey)
@@ -45,8 +47,9 @@ test('encryption - restart', async t => {
 
   t.is(store.cores.size, 0)
 
-  const store2 = new Corestore(storage)
+  const store2 = new Corestore(tmp)
   const base2 = new Autobase(store2, { apply, open, ackInterval: 0, ackThreshold: 0 })
+  await base2.ready()
 
   t.alike(await base2.view.get(0), 'you should still not see me')
   t.ok(base2.encryptionKey)
