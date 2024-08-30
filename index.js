@@ -1744,7 +1744,7 @@ module.exports = class Autobase extends ReadyResource {
 
       for (const { key, core, length } of indexers) {
         if (core.length === 0 && length > 0) promises.push(core.get(length - 1, { timeout }))
-        promises.push(system.get(key))
+        promises.push(system.get(key, { timeout }))
       }
 
       for (const { core, length } of pendingViews) {
