@@ -300,7 +300,10 @@ module.exports = class Autobase extends ReadyResource {
     this._initialSystem = system
     this._initialHeads = heads
 
-    await this._makeLinearizer(system)
+    const sys = system && await system.checkout(this._systemPointer)
+    await this._makeLinearizer(sys)
+
+    if (sys) await sys.close()
   }
 
   async _loadSystemInfo () {
@@ -320,29 +323,29 @@ module.exports = class Autobase extends ReadyResource {
 
     await actualCore.ready()
 
-    const core = actualCore.batch({ checkout: length, session: false })
+    const core = actualCore.session({ name: 'batch' })
+    await core.ready()
 
     // safety check the batch is not corrupt
-    if (length === 0 || !(await core.has(length - 1))) {
+    if (core.length === 0 || !(await core.has(core.length - 1))) {
       await this.local.setUserData('autobase/boot', null)
       this._systemPointer = 0
       return { bootstrap, system: null, heads: [] }
     }
 
-    const system = new SystemView(core, {
-      checkout: length
-    })
-
+    const system = new SystemView(core)
     await system.ready()
 
     if (system.version > this.maxSupportedVersion) {
       throw new Error('Autobase upgrade required')
     }
 
+    const info = await system.getIndexedInfo(length)
+
     this._initialViews = [{ name: '_system', key, length }]
 
-    for (let i = 0; i < system.views.length; i++) {
-      this._initialViews.push({ name: views[i], ...system.views[i] })
+    for (let i = 0; i < info.views.length; i++) {
+      this._initialViews.push({ name: views[i], ...info.views[i] })
     }
 
     return {
