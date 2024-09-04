@@ -390,6 +390,7 @@ module.exports = class Autobase extends ReadyResource {
       if (err.code === 'ELOCKED') throw err
       await this.local.setUserData('autobase/last-error', b4a.from(err.stack + ''))
       await this.local.setUserData('autobase/boot', null)
+      await this.local.setUserData('autobase/updates', null)
       this.store.close().catch(safetyCatch)
       throw err
     }
