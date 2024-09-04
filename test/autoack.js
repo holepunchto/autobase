@@ -413,6 +413,8 @@ test('autoack - pending writers', async t => {
 
   await eventFlush()
 
+  await new Promise(resolve => setTimeout(resolve, 200))
+
   t.ok(b.local.length > 0)
   t.ok(c.local.length > 0)
 

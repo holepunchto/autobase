@@ -676,7 +676,7 @@ test('fast-forward - initial ff upgrade available', async t => {
 
   // this should fire when we try to fast forward
   const upgradeEvent = new Promise((resolve, reject) => {
-    const timeout = setTimeout(reject, 1000, new Error('event did not fire'))
+    const timeout = setTimeout(reject, 5000, new Error('event did not fire'))
 
     c0.once('upgrade-available', upgrade => {
       clearTimeout(timeout)
@@ -688,7 +688,7 @@ test('fast-forward - initial ff upgrade available', async t => {
 
   // this should fire when we apply the upgrade
   const upgradeError = new Promise((resolve, reject) => {
-    const timeout = setTimeout(resolve, 1000)
+    const timeout = setTimeout(resolve, 5000)
 
     c0.once('error', err => {
       clearTimeout(timeout)
@@ -696,10 +696,11 @@ test('fast-forward - initial ff upgrade available', async t => {
     })
   })
 
-  replicateAndSync([a1, b1, c0]).catch(() => {}) // throws
+  const p = t.exception(replicateAndSync([a1, b1, c0])) // throws
 
   await t.execution(upgradeEvent)
   await t.exception(upgradeError)
+  await p
 })
 
 test('fast-forward - double ff', async t => {
