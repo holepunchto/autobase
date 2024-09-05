@@ -802,7 +802,7 @@ test('fast-forward - unindexed cores should migrate', async t => {
   await confirm([a, b, c])
   await replicateAndSync([a, b, c, d])
 
-  t.is(a.system.core.signedLength, c.system.core.signedLength)
+  t.is(a.system.core.getBackingCore().flushedLength, c.system.core.getBackingCore().flushedLength)
 })
 
 test('fast-forward - initial fast forward with in between writer', async t => {
