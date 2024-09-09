@@ -7,10 +7,12 @@
 ## Usage
 
 ```js
+const RAM = require('random-access-memory')
 const Corestore = require('corestore')
 const Autobase = require('autobase')
 
-const local = new Autobase(new Corestore, remote.key, { apply, open })
+const store = new Corestore(RAM.reusable())
+const local = new Autobase(store, remote.key, { apply, open })
 await local.ready()
 
 // on remote base
@@ -49,7 +51,7 @@ async function apply (nodes, view, base) {
     }
 
     await view.append(value)
-  }  
+  }
 }
 ```
 
@@ -59,7 +61,7 @@ Autobase nodes explicitly reference previous nodes in the graph. The nodes are l
 
 ### Reordering
 
-As new causal information comes in, existing nodes may be reordered. Any changes to the view will be undone and reapplied ontop of the new ordering.
+As new causal information comes in, existing nodes may be reordered. Any changes to the view will be undone and reapplied on top of the new ordering.
 
 ### Indexed Length
 
@@ -83,7 +85,7 @@ async function apply (nodes, view, base) {
 }
 ```
 
-*IMPORTANT*: Autobase messages may be reordered as new data becomes available. Updates will undone and reapplied internally, but this can _only_ work if the view is an instance of a `LinearizedCore`. It is important that any data structures touched by the `apply` function have been derived from the `store` object passed to the `open` handler. If any external data structures are used, these updates will not be correctly undone.
+*IMPORTANT*: Autobase messages may be reordered as new data becomes available. Updates will be undone and reapplied internally, but this can _only_ work if the view is built with an instance of an `Autocore`. It is important that any data structures touched by the `apply` function have been derived from the `store` object passed to the `open` handler. If any external data structures are used, these updates will not be correctly undone.
 
 ## API
 
@@ -131,7 +133,7 @@ Setting `wait` option will wait for latest writer blocks to be fetched.
 
 Fetch a static checkpoint of the autobase state.
 
-#### `const core = Autobase.getLocalCore(store)`
+#### `const core = Autobase.getLocalCore(store, handlers, encryptionKey)`
 
 Generate a local core to be used for an Autobase.
 
@@ -139,27 +141,23 @@ Generate a local core to be used for an Autobase.
 
 Get user data associated with the autobase core.
 
-### `LinearizedStore`
+### `AutoStore`
 
-Each autobase creates a `LinearizedStore` which is used to create views. The store is passed to the `open` function.
+Each autobase creates a `AutoStore` which is used to create views. The store is passed to the `open` function.
 
 #### `const core = await store.get(name || { name, valueEncoding })`
 
-Get a new `LinearizedCore` from the store. `name` shuold be passed as a string.
+Load a `Autocore` by name (passed as `name`) and return a `AutocoreSession` for it. `name` should be passed as a string.
 
-#### `const core = await store.update()`
+#### `await store.ready()`
 
 Wait until all cores are ready.
 
-### `LinearizedCore`
+### `AutocoreSession`
 
 #### `const core = await store.get(name || { name, valueEncoding })`
 
-Instantiate a new core. A string may be passed directly or otherwise an object can be passed to define `valueEncoding`
-
-#### `core.name`
-
-The name of the core.
+Create or load a core and return a session for it. A string may be passed directly or otherwise an object can be passed to define `valueEncoding`
 
 #### `core.indexedLength`
 
