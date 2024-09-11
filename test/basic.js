@@ -328,7 +328,6 @@ test('basic - rotating majority', async t => {
   await b.append('b8')
   await c.append('c8')
 
-  b.debug = true
   await confirm(bases)
 
   t.not(a.view.indexedLength, indexed)
@@ -1715,10 +1714,6 @@ test.skip('basic - writer adds a writer while being removed', async t => {
   t.is(d.view.indexedLength, 1)
   t.is(d.view.length, 3)
   t.is(d.system.members, 4)
-
-  console.log('clen', c.local.length)
-  // d.debug = true
-  a.debug = true
 
   await replicateAndSync([a, d])
   t.is(a.system.members, 2)
