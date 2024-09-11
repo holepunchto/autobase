@@ -169,7 +169,6 @@ test('core - indexed view', async t => {
   normal.on('append', () => { normals++ })
   indexed.on('append', () => { indexeds++ })
 
-  a.view._source.debug = true
   await a.append('hello, world!')
 
   await new Promise(resolve => setImmediate(resolve))

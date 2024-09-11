@@ -837,7 +837,7 @@ test('fast-forward - initial fast forward with in between writer', async t => {
 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
 
-  const c = createBase(store.session(), a.bootstrap, t, { fastForward, debug: true })
+  const c = createBase(store.session(), a.bootstrap, t, { fastForward })
   await c.ready()
 
   t.teardown(replicate([a, c]))
