@@ -41,7 +41,7 @@ test('simple 2', async t => {
   t.alike(a.view.indexedLength, 2)
   t.alike(b.view.indexedLength, 2)
 
-  compareViews([a, b], t)
+  await compareViews([a, b], t)
 
   t.is(a.linearizer.tails.size, 1)
 })
@@ -90,7 +90,7 @@ test('simple 3', async t => {
   t.alike(c.view.indexedLength, b.view.indexedLength)
   t.alike(a.view.indexedLength, c.view.indexedLength)
 
-  compareViews([a, b, c], t)
+  await compareViews([a, b, c], t)
 
   t.is(a.linearizer.tails.size, 1)
 })
@@ -176,7 +176,7 @@ test.skip('convergence', async t => {
 
   t.is(a.linearizer.tails.size, 1)
 
-  compareViews([a, b, c], t)
+  await compareViews([a, b, c], t)
 })
 
 /*
@@ -296,7 +296,7 @@ test('majority alone - convergence', async t => {
   await d.append('d' + di++)
   await replicateAndSync([b, c, d])
 
-  compareViews([b, c, d], t)
+  await compareViews([b, c, d], t)
 
   t.is(b.view.indexedLength, 2)
   t.is(c.view.indexedLength, 2)
@@ -320,7 +320,7 @@ test('add writer', async t => {
   t.is(a.view.indexedLength, 1)
   t.is(b.view.indexedLength, 1)
 
-  compareViews([a, b], t)
+  await compareViews([a, b], t)
 
   await addWriterAndSync(a, b)
   await replicateAndSync([a, b])
@@ -328,13 +328,13 @@ test('add writer', async t => {
   t.is(a.view.indexedLength, 1)
   t.is(b.view.indexedLength, 1)
 
-  compareViews([a, b], t)
+  await compareViews([a, b], t)
 
   await replicateAndSync([a, b, c])
 
   t.is(c.view.indexedLength, 1)
 
-  compareViews([a, c], t)
+  await compareViews([a, c], t)
 
   await addWriterAndSync(a, c)
 
@@ -355,8 +355,8 @@ test('add writer', async t => {
   t.is(a.view.indexedLength, b.view.indexedLength)
   t.is(b.view.indexedLength, c.view.indexedLength)
 
-  compareViews([a, b], t)
-  compareViews([a, c], t)
+  await compareViews([a, b], t)
+  await compareViews([a, c], t)
 
   t.is(a.linearizer.tails.size, b.linearizer.tails.size)
   t.is(b.linearizer.tails.size, c.linearizer.tails.size)
@@ -421,11 +421,11 @@ test('majority alone - non-convergence', async t => {
   t.is(b.system.core.indexedLength, c.system.core.indexedLength)
   t.is(b.system.core.indexedLength, d.system.core.indexedLength)
 
-  compareViews([b, c, d], t)
+  await compareViews([b, c, d], t)
 
   await replicateAndSync(bases)
 
-  compareViews([a, b, c, d, e], t)
+  await compareViews([a, b, c, d, e], t)
 
   t.is(a.linearizer.tails.size, b.linearizer.tails.size)
   t.is(b.linearizer.tails.size, c.linearizer.tails.size)

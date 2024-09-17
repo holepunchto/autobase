@@ -16,8 +16,8 @@ test('encryption - basic', async t => {
   await base.append('you should not see me')
 
   t.alike(await base.view.get(0), 'you should not see me')
-  t.is(base.view.signedLength, 1)
-  t.is(base.system.core.signedLength, 4)
+  t.is(base.view.getBackingCore().flushedLength, 1)
+  t.is(base.system.core.getBackingCore().flushedLength, 4)
 
   let found = false
   for (const core of store.cores.values()) {
@@ -72,7 +72,7 @@ test('encryption - restart', async t => {
 })
 
 test('encryption - expect encryption key', async t => {
-  const storage = ram.reusable()
+  const storage = await tmpDir(t)
   const store = new Corestore(storage)
   const base = new Autobase(store, { apply, open, ackInterval: 0, ackThreshold: 0, encrypted: true })
 

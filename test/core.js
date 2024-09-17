@@ -1,5 +1,5 @@
 const test = require('brittle')
-const ram = require('random-access-memory')
+const tmpDir = require('test-tmp')
 const Hypercore = require('hypercore')
 
 const {
@@ -11,10 +11,12 @@ const {
 } = require('./helpers')
 
 test('core -  no new session if closed (hypercore compat)', async t => {
+  const dir = await tmpDir(t)
   const { bases } = await create(1, t)
+
   const [base] = bases
 
-  const normalCore = new Hypercore(ram)
+  const normalCore = new Hypercore(dir)
   const linearizedSessionCore = base.view
   const snapshotSession = linearizedSessionCore.snapshot()
 

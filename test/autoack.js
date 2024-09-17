@@ -70,7 +70,7 @@ test('autoack - 5 writers', async t => {
   t.is(d.view.indexedLength, 0)
   t.is(e.view.indexedLength, 0)
 
-  await new Promise(resolve => setTimeout(resolve, 1000))
+  await new Promise(resolve => setTimeout(resolve, 2000))
 
   let alen = a.local.length
   let blen = b.local.length
@@ -78,7 +78,7 @@ test('autoack - 5 writers', async t => {
   let dlen = d.local.length
   let elen = e.local.length
 
-  await new Promise(resolve => setTimeout(resolve, 300))
+  await new Promise(resolve => setTimeout(resolve, 1000))
 
   // check that acks stop
   t.is(a.local.length, alen)
@@ -93,7 +93,7 @@ test('autoack - 5 writers', async t => {
   dlen = d.local.length
   elen = e.local.length
 
-  await new Promise(resolve => setTimeout(resolve, 300))
+  await new Promise(resolve => setTimeout(resolve, 1000))
 
   // check that acks stop
   t.is(a.local.length, alen)
