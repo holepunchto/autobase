@@ -1,6 +1,5 @@
 const test = require('brittle')
 const tmpDir = require('test-tmp')
-const ram = require('random-access-memory')
 const Corestore = require('corestore')
 const b4a = require('b4a')
 
