@@ -1661,8 +1661,13 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
-    const target = await this._preFastForward(core, length, timeout)
-    await core.close()
+    let target = null
+
+    try {
+      target = await this._preFastForward(core, length, timeout)
+    } finally {
+      await core.close()
+    }
 
     // initial fast-forward failed
     if (target === null) {
@@ -1723,13 +1728,15 @@ module.exports = class Autobase extends ReadyResource {
     // pause writers
     for (const w of this.activeWriters) w.pause()
 
+    let sess = null
+
     try {
       // sys runs open with wait false, so get head block first for low complexity
       if (!(await core.has(length - 1))) {
         await core.get(length - 1, { timeout })
       }
 
-      const sess = core.session()
+      sess = core.session()
       await sess.ready()
 
       const system = new SystemView(sess, {
@@ -1822,6 +1829,8 @@ module.exports = class Autobase extends ReadyResource {
     } catch (err) {
       safetyCatch(err)
       return null
+    } finally {
+      if (sess) await sess.close()
     }
 
     return info
