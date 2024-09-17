@@ -813,8 +813,11 @@ module.exports = class Autobase extends ReadyResource {
       if (!this._interrupting) throw err
     }
 
+    if (this._interrupting) return
+
     // avoid lumping acks together due to the bump wait here
     if (this._ackTimer && bg) await this._ackTimer.asapStandalone()
+
     if (this._interrupting) return
 
     const unflushed = this._hasPendingCheckpoint || this.hasUnflushedIndexers()
@@ -1358,6 +1361,8 @@ module.exports = class Autobase extends ReadyResource {
       const changed = u ? await this._applyUpdate(u) : null
       const indexed = !!this._updatingCores
 
+      if (this._interrupting) return
+
       await this._persistUpdates()
 
       if (this._interrupting) return
@@ -1365,6 +1370,8 @@ module.exports = class Autobase extends ReadyResource {
       if (this.localWriter !== null && localNodes !== null) {
         await this._flushLocal(localNodes)
       }
+
+      if (this._interrupting) return
 
       if (this.opened) await this._updateBootRecordHeads(this.system.heads)
 
