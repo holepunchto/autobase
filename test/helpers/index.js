@@ -81,10 +81,14 @@ function createBase (store, key, t, opts = {}) {
   }
 
   t.teardown(async () => {
-    // this just cancels pending view gets, no need to await
-    setImmediate(() => base._viewStore.close().catch(() => {}))
+    const view = new Promise(resolve => {
+      setImmediate(() => base._viewStore.close().then(resolve, resolve))
+    })
 
-    await base.close().catch(() => {})
+    await Promise.all([
+      view,
+      base.close()
+    ])
   }, { order: 1 })
 
   return base

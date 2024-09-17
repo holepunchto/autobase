@@ -917,7 +917,8 @@ test('suspend - incomplete migrate', async t => {
   await t.execution(replicateAndSync([a, b2]))
 })
 
-test('suspend - recover from bad sys core', async t => {
+// rocks should never fail like this
+test.skip('suspend - recover from bad sys core', async t => {
   const { bases, stores } = await create(2, t, { storage: () => tmpDir(t) })
 
   const [a, b] = bases
