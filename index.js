@@ -1055,7 +1055,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const indexers = []
     let localIndexer = false
-    const wasActiveIndexer = !!this._isActiveIndexer
+    const wasActiveIndexer = this._isActiveIndexer
 
     // only current active indexers are reset to true below
     for (const w of this.activeWriters) w.isActiveIndexer = false
