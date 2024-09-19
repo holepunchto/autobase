@@ -195,7 +195,7 @@ module.exports = class Autobase extends ReadyResource {
     return this._primaryBootstrap === null ? this.local.discoveryKey : this._primaryBootstrap.discoveryKey
   }
 
-  get isActiveIndexer () {
+  _isActiveIndexer () {
     return this.localWriter ? this.localWriter.isActiveIndexer : false
   }
 
@@ -908,6 +908,7 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  // no guarantees about writer.isActiveIndexer property here
   async _getWriterByKey (key, len, seen, allowGC, isAdded, system) {
     assert(this._draining === true || (this.opening && !this.opened))
 
@@ -1012,6 +1013,19 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _updateLinearizer (indexers, heads) {
+    // only current active indexers are reset to true below
+    const wasActiveIndexer = this._isActiveIndexer()
+
+    for (const w of this.activeWriters) w.isActiveIndexer = false
+    for (const writer of indexers) writer.isActiveIndexer = true
+
+    if (this._isActiveIndexer() && !wasActiveIndexer) {
+      this._setLocalIndexer()
+    } else if (!this._isActiveIndexer() && wasActiveIndexer) {
+      this._unsetLocalIndexer()
+      this._clearLocalIndexer()
+    }
+
     this.linearizer = new Linearizer(indexers, { heads, writers: this.activeWriters })
     this._addCheckpoints = !!(this.localWriter && (this.localWriter.isActiveIndexer || this._isPending()))
     this._updateAckThreshold()
@@ -1032,8 +1046,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this.activeWriters.add(bootstrap)
     this._checkWriters.push(bootstrap)
-    if (bootstrap === this.localWriter) this._setLocalIndexer()
-    bootstrap.isActiveIndexer = true
     bootstrap.inflateBackground()
     await bootstrap.ready()
     this._resumeWriter(bootstrap)
@@ -1053,26 +1065,20 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const indexers = []
-    let localIndexer = false
-    const wasActiveIndexer = !!this.isActiveIndexer
 
     for (const head of sys.indexers) {
       const writer = await this._getWriterByKey(head.key, head.length, 0, false, false, sys)
-      if (writer === this.localWriter) localIndexer = true
-      writer.isActiveIndexer = true
       writer.inflateBackground()
       indexers.push(writer)
     }
 
-    for (const key of sys.pendingIndexers) {
-      if (b4a.equals(key, this.local.key)) localIndexer = true
-    }
-
-    if (localIndexer && !wasActiveIndexer) {
-      this._setLocalIndexer()
-    } else if (!localIndexer && wasActiveIndexer) {
-      this._unsetLocalIndexer()
-      this._clearLocalIndexer()
+    if (!this._isActiveIndexer()) {
+      for (const key of sys.pendingIndexers) {
+        if (b4a.equals(key, this.local.key)) {
+          this._setLocalIndexer()
+          break
+        }
+      }
     }
 
     this._updateLinearizer(indexers, sys.heads)
@@ -1087,18 +1093,7 @@ module.exports = class Autobase extends ReadyResource {
 
     for (const w of this.activeWriters) {
       const data = await this.system.get(w.core.key)
-
-      if (data) {
-        w.isRemoved = data.isRemoved
-        w.isIndexer = data.isIndexer
-      } else {
-        w.isRemoved = true
-        w.isIndexer = false
-      }
-
-      if (!w.isIndexer) {
-        w.isActiveIndexer = false
-      }
+      w.isRemoved = data ? data.isRemoved : false
     }
   }
 

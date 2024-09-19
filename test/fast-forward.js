@@ -895,51 +895,61 @@ test('fast-forward - writer removed', async t => {
 })
 
 test('fast-forward - is indexer set correctly', async t => {
-  t.plan(9)
+  t.plan(11)
 
-  const { bases } = await create(3, t, {
+  const { bases } = await create(4, t, {
     fastForward: true,
     storage: () => tmpDir(t)
   })
 
-  const [a, b, c] = bases
+  const [a, b, c, d] = bases
 
   for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
   // add writer
-  await addWriter(a, b, false)
-  await replicateAndSync([a, b])
+  await addWriterAndSync(a, b)
+  await replicateAndSync([a, b, c, d])
 
-  await b.append(null)
-  await replicateAndSync([a, b])
+  await addWriter(a, c, false)
+  await replicateAndSync([a, c])
+
+  await c.append(null)
+  await replicateAndSync([a, b, c, d])
 
   // promote writer
-  await addWriter(a, b, true)
+  await addWriter(a, c, true)
+  await confirm([a, b])
 
-  t.is(a.linearizer.indexers.length, 2)
-  t.is(b.linearizer.indexers.length, 1)
+  t.is(a.linearizer.indexers.length, 3)
+  t.is(b.linearizer.indexers.length, 3)
+  t.is(c.linearizer.indexers.length, 2)
 
-  t.absent(b.isIndexer)
-  t.absent(b.isActiveIndexer)
+  t.absent(c.isIndexer)
+  t.absent(c.localWriter.isActiveIndexer)
 
   for (let i = 200; i < 400; i++) {
     await a.append('a' + i)
   }
 
   // c has ff'd past addWriter
-  await replicateAndSync([a, c])
+  await confirm([a, b])
+
+  await replicateAndSync([a, d])
+
+  t.is(a.view.getBackingCore().session.length, 400)
 
   t.is(c.linearizer.indexers.length, 2)
 
-  const event = new Promise(resolve => b.on('is-indexer', resolve))
+  const event = new Promise(resolve => c.on('is-indexer', resolve))
 
-  await replicateAndSync([b, c])
+  await replicateAndSync([c, d])
 
-  t.is(b.linearizer.indexers.length, 2)
-  t.ok(b.isIndexer)
-  t.ok(b.isActiveIndexer)
+  t.is(c.linearizer.indexers.length, 3)
+  t.ok(c.isIndexer)
+  t.ok(c.localWriter.isActiveIndexer)
+
   await t.execution(event)
 })
 
