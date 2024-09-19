@@ -908,6 +908,7 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  // no guarantees about writer.isActiveIndexer property here
   async _getWriterByKey (key, len, seen, allowGC, isAdded, system) {
     assert(this._draining === true || (this.opening && !this.opened))
 
@@ -1056,6 +1057,9 @@ module.exports = class Autobase extends ReadyResource {
     let localIndexer = false
     const wasActiveIndexer = !!this._isActiveIndexer
 
+    // only current active indexers are reset to true below
+    for (const w of this.activeWriters) w.isActiveIndexer = false
+
     for (const head of sys.indexers) {
       const writer = await this._getWriterByKey(head.key, head.length, 0, false, false, sys)
       if (writer === this.localWriter) localIndexer = true
@@ -1087,14 +1091,7 @@ module.exports = class Autobase extends ReadyResource {
 
     for (const w of this.activeWriters) {
       const data = await this.system.get(w.core.key)
-
-      if (data) {
-        w.isRemoved = data.isRemoved
-        w.isActiveIndexer = !!data.isIndexer
-      } else {
-        w.isRemoved = true
-        w.isActiveIndexer = false
-      }
+      w.isRemoved = data ? data.isRemoved : false
     }
   }
 
