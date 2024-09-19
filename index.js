@@ -1090,13 +1090,9 @@ module.exports = class Autobase extends ReadyResource {
 
       if (data) {
         w.isRemoved = data.isRemoved
-        w.isIndexer = data.isIndexer
+        w.isActiveIndexer = !!data.isIndexer
       } else {
         w.isRemoved = true
-        w.isIndexer = false
-      }
-
-      if (!w.isIndexer) {
         w.isActiveIndexer = false
       }
     }
