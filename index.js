@@ -1825,7 +1825,7 @@ module.exports = class Autobase extends ReadyResource {
       else if (migrated) await view.migrateTo(indexers, 0)
     }
 
-    await this.system.update()
+    await this._refreshSystemState()
 
     if (this.localWriter) {
       if (localLength < 0) this._unsetLocalWriter()
@@ -1834,7 +1834,6 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._makeLinearizer(this.system)
     await this._advanceBootRecord(length)
-    await this._refreshSystemState()
 
     // manually set the digest
     if (migrated) {
