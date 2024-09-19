@@ -1440,7 +1440,7 @@ test('basic - promote writer to indexer', async t => {
   t.is(b.linearizer.indexers.length, 1)
 
   t.absent(b.isIndexer)
-  t.absent(b.isActiveIndexer)
+  t.absent(b.localWriter.isActiveIndexer)
 
   await b.append(null)
   await replicateAndSync([a, b])
@@ -1457,7 +1457,7 @@ test('basic - promote writer to indexer', async t => {
   await t.execution(event)
   t.is(b.linearizer.indexers.length, 2)
   t.ok(b.isIndexer)
-  t.ok(b.isActiveIndexer)
+  t.ok(b.localWriter.isActiveIndexer)
 })
 
 test('basic - demote indexer to writer', async t => {
@@ -1474,7 +1474,7 @@ test('basic - demote indexer to writer', async t => {
   t.is(b.linearizer.indexers.length, 2)
 
   t.ok(b.isIndexer)
-  t.ok(b.isActiveIndexer)
+  t.ok(b.localWriter.isActiveIndexer)
 
   await b.append('message')
   await confirm([a, b])
@@ -1498,7 +1498,7 @@ test('basic - demote indexer to writer', async t => {
 
   t.is(b.linearizer.indexers.length, 1)
   t.absent(b.isIndexer)
-  t.absent(b.isActiveIndexer)
+  t.absent(b.localWriter.isActiveIndexer)
 
   // flush active writer set
   await a.append(null)

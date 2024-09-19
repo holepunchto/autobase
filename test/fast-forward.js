@@ -927,7 +927,7 @@ test('fast-forward - is indexer set correctly', async t => {
   t.is(c.linearizer.indexers.length, 2)
 
   t.absent(c.isIndexer)
-  t.absent(c.isActiveIndexer)
+  t.absent(c.localWriter.isActiveIndexer)
 
   for (let i = 200; i < 400; i++) {
     await a.append('a' + i)
@@ -948,7 +948,7 @@ test('fast-forward - is indexer set correctly', async t => {
 
   t.is(c.linearizer.indexers.length, 3)
   t.ok(c.isIndexer)
-  t.ok(c.isActiveIndexer)
+  t.ok(c.localWriter.isActiveIndexer)
 
   await t.execution(event)
 })

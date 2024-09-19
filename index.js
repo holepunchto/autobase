@@ -195,7 +195,7 @@ module.exports = class Autobase extends ReadyResource {
     return this._primaryBootstrap === null ? this.local.discoveryKey : this._primaryBootstrap.discoveryKey
   }
 
-  get isActiveIndexer () {
+  get _isActiveIndexer () {
     return this.localWriter ? this.localWriter.isActiveIndexer : false
   }
 
@@ -1054,7 +1054,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const indexers = []
     let localIndexer = false
-    const wasActiveIndexer = !!this.isActiveIndexer
+    const wasActiveIndexer = !!this._isActiveIndexer
 
     for (const head of sys.indexers) {
       const writer = await this._getWriterByKey(head.key, head.length, 0, false, false, sys)
