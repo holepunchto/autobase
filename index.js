@@ -1053,20 +1053,19 @@ module.exports = class Autobase extends ReadyResource {
       await this._loadLocalWriter(sys)
     }
 
-    const indexers = new Set()
+    const indexers = []
     let localIndexer = false
     const wasActiveIndexer = this._isActiveIndexer
+
+    // only current active indexers are reset to true below
+    for (const w of this.activeWriters) w.isActiveIndexer = false
 
     for (const head of sys.indexers) {
       const writer = await this._getWriterByKey(head.key, head.length, 0, false, false, sys)
       if (writer === this.localWriter) localIndexer = true
       writer.isActiveIndexer = true
       writer.inflateBackground()
-      indexers.add(writer)
-    }
-
-    for (const w of this.activeWriters) {
-      if (!indexers.has(w)) w.isActiveIndexer = false
+      indexers.push(writer)
     }
 
     for (const key of sys.pendingIndexers) {
@@ -1080,7 +1079,7 @@ module.exports = class Autobase extends ReadyResource {
       this._clearLocalIndexer()
     }
 
-    this._updateLinearizer(Array.from(indexers), sys.heads)
+    this._updateLinearizer(indexers, sys.heads)
 
     for (const { key, length } of sys.heads) {
       await this._getWriterByKey(key, length, 0, false, false, sys)
