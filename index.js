@@ -195,7 +195,7 @@ module.exports = class Autobase extends ReadyResource {
     return this._primaryBootstrap === null ? this.local.discoveryKey : this._primaryBootstrap.discoveryKey
   }
 
-  get _isActiveIndexer () {
+  _isActiveIndexer () {
     return this.localWriter ? this.localWriter.isActiveIndexer : false
   }
 
@@ -1014,14 +1014,14 @@ module.exports = class Autobase extends ReadyResource {
 
   _updateLinearizer (indexers, heads) {
     // only current active indexers are reset to true below
-    const wasActiveIndexer = this._isActiveIndexer
+    const wasActiveIndexer = this._isActiveIndexer()
 
     for (const w of this.activeWriters) w.isActiveIndexer = false
     for (const writer of indexers) writer.isActiveIndexer = true
 
-    if (this._isActiveIndexer && !wasActiveIndexer) {
+    if (this._isActiveIndexer() && !wasActiveIndexer) {
       this._setLocalIndexer()
-    } else if (!this._isActiveIndexer && wasActiveIndexer) {
+    } else if (!this._isActiveIndexer() && wasActiveIndexer) {
       this._unsetLocalIndexer()
       this._clearLocalIndexer()
     }
@@ -1072,7 +1072,7 @@ module.exports = class Autobase extends ReadyResource {
       indexers.push(writer)
     }
 
-    if (!this._isActiveIndexer) {
+    if (!this._isActiveIndexer()) {
       for (const key of sys.pendingIndexers) {
         if (b4a.equals(key, this.local.key)) {
           this._setLocalIndexer()
