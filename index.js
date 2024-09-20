@@ -1358,8 +1358,12 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _wakeupWriter (key) {
-    const w = await this._getWriterByKey(key, -1, 0, true, false, null)
-    if (w === null || w.isBootstrap === false) return
+    this._ensureWakeup(await this._getWriterByKey(key, -1, 0, true, false, null))
+  }
+
+  // ensure wakeup on an existing writer (the writer calls this in addition to above)
+  _ensureWakeup (w) {
+    if (w === null || w.isBootstrap === true) return
     if (!w.core.opened) w.core.ready()
     w.setBootstrap(true) // even if turn false at end of drain, hypercore makes them linger a bit so no churn
     this._bootstrapWriters.push(w)
