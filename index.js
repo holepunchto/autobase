@@ -76,6 +76,9 @@ module.exports = class Autobase extends ReadyResource {
       this.fastForwardTo = handlers.fastForward
     }
 
+    this._bootstrapWriters = [] // might contain dups, but thats ok
+    this._bootstrapWritersChanged = false
+
     this._checkWriters = []
     this._appending = null
     this._wakeup = new AutoWakeup(this)
@@ -375,6 +378,24 @@ module.exports = class Autobase extends ReadyResource {
     this._coupler = new CoreCoupler(core.session, this._wakeupPeerBound)
   }
 
+  _updateBootstrapWriters () {
+    const writers = this.linearizer.getBootstrapWriters()
+
+    // first clear all, but without applying it for churn reasons
+    for (const writer of this._bootstrapWriters) writer.isBootstrap = false
+
+    // all passed are bootstraps
+    for (const writer of writers) writer.setBootstrap(true)
+
+    // reset activity on old ones, all should be in sync now
+    for (const writer of this._bootstrapWriters) {
+      if (writer.isBootstrap === false) writer.setBootstrap(false)
+    }
+
+    this._bootstrapWriters = writers
+    this._bootstrapWritersChanged = false
+  }
+
   async _openPreBump () {
     this._presystem = this._openPreSystem()
 
@@ -503,6 +524,7 @@ module.exports = class Autobase extends ReadyResource {
     if (this.reindexing) this._setReindexed()
 
     this.queueFastForward()
+    this._updateBootstrapWriters()
   }
 
   async _catchup (nodes) {
@@ -654,23 +676,13 @@ module.exports = class Autobase extends ReadyResource {
     while (this._checkWriters.length > 0) {
       const w = this._checkWriters.pop()
 
-      if (!w.flushed()) {
-        w.core.setActive(true)
-        continue
-      }
+      if (!w.flushed()) continue
 
       const unqueued = this._wakeup.unqueue(w.core.key, w.core.length)
       this._coupler.remove(w.core)
 
-      if (!unqueued || w.isActiveIndexer) {
-        w.core.setActive(true)
-        continue
-      }
-
-      if (this.localWriter === w) {
-        this.localWriter.core.setActive(false)
-        continue
-      }
+      if (!unqueued || w.isActiveIndexer) continue
+      if (this.localWriter === w) continue
 
       await this._closeWriter(w, false)
     }
@@ -991,7 +1003,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const core = local
       ? this.local.session({ valueEncoding: messages.OplogMessage, encryptionKey: this.encryptionKey, active: false })
-      : this.store.get({ key, compat: false, writable: false, valueEncoding: messages.OplogMessage, encryptionKey: this.encryptionKey })
+      : this.store.get({ key, compat: false, writable: false, valueEncoding: messages.OplogMessage, encryptionKey: this.encryptionKey, active: false })
 
     return core
   }
@@ -1345,19 +1357,28 @@ module.exports = class Autobase extends ReadyResource {
     this.system.sendWakeup(peer.remotePublicKey)
   }
 
+  async _wakeupWriter (key) {
+    const w = await this._getWriterByKey(key, -1, 0, true, false, null)
+    if (w === null || w.isBootstrap === false) return
+    if (!w.core.opened) w.core.ready()
+    w.setBootstrap(true) // even if turn false at end of drain, hypercore makes them linger a bit so no churn
+    this._bootstrapWriters.push(w)
+    this._bootstrapWritersChanged = true
+  }
+
   async _drainWakeup () { // TODO: parallel load the writers here later
     if (this._needsWakeup === true) {
       this._needsWakeup = false
 
       for (const { key } of this._wakeup) {
-        await this._getWriterByKey(key, -1, 0, true, false, null)
+        await this._wakeupWriter(key)
       }
 
       if (this._needsWakeupHeads === true) {
         this._needsWakeupHeads = false
 
         for (const { key } of await this._getLocallyStoredHeads()) {
-          await this._getWriterByKey(key, -1, 0, true, false, null)
+          await this._wakeupWriter(key)
         }
       }
     }
@@ -1369,7 +1390,7 @@ module.exports = class Autobase extends ReadyResource {
         if (info && length < info.length) continue // stale hint
       }
 
-      await this._getWriterByKey(key, -1, 0, true, false, null)
+      await this._wakeupWriter(key)
     }
 
     this._wakeupHints.clear()
@@ -1402,6 +1423,11 @@ module.exports = class Autobase extends ReadyResource {
     if (!this._interrupting && this.localWriter && this._ackIsNeeded()) {
       if (this._ackTimer) this._ackTimer.asap()
       else this.ack()
+    }
+
+    // keep bootstraps in sync with linearizer
+    if (this.updating === true || this._bootstrapWritersChanged === true) {
+      this._updateBootstrapWriters()
     }
 
     if (this.updating === true) {
@@ -2335,7 +2361,6 @@ module.exports = class Autobase extends ReadyResource {
       if (this._addCheckpoints) this._localDigest.pointer++
     }
 
-    this.localWriter.core.setActive(true)
     await this.local.append(blocks)
 
     if (this._addCheckpoints) {
