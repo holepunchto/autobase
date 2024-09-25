@@ -1139,7 +1139,6 @@ module.exports = class Autobase extends ReadyResource {
   _setLocalWriter (w) {
     this.localWriter = w
     if (this._ackInterval) this._startAckTimer()
-    this.emit('writable')
   }
 
   _unsetLocalWriter () {
@@ -1149,8 +1148,6 @@ module.exports = class Autobase extends ReadyResource {
     if (this.localWriter.isActiveIndexer) this._clearLocalIndexer()
 
     this.localWriter = null
-
-    this.emit('unwritable')
   }
 
   _setLocalIndexer () {
@@ -1267,6 +1264,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _drain () {
+    const writable = this.writable
+
     while (!this._interrupting && !this.paused) {
       if (this.opened && this.fastForwardTo !== null) {
         await this._applyFastForward()
@@ -1330,6 +1329,9 @@ module.exports = class Autobase extends ReadyResource {
       await this._gcWriters()
       await this._reindex()
     }
+
+    // emit state changes post drain
+    if (writable !== this.writable) this.emit(writable ? 'unwritable' : 'writable')
   }
 
   progress () {
