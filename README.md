@@ -141,6 +141,39 @@ Generate a local core to be used for an Autobase.
 
 Get user data associated with the autobase core.
 
+### `SystemView`
+
+The view of the autobase system.
+
+#### `system.createApplyTickHistoryStream(opts)`
+
+Returns a stream of `apply` 'ticks' history for debugging how apply changed
+the view(s) and what writer wrote the batch of blocks processed. Each update has
+the following structure:
+
+```js
+{
+  index: Number, // the index of the 'info' block in the `system.db`
+  views: [{ key, appends }], // A list of changed views with the number of blocks appended
+  writer: { key, length } // Which writer appended the blocks and what its new length is
+}
+```
+
+Supported options are the same as `hyperbee`'s
+[`.createHistoryStream()`](https://github.com/holepunchto/hyperbee?tab=readme-ov-file#const-stream--dbcreatehistorystreamoptions)
+with two exceptions being `reverse` & `encoding`, so:
+
+```js
+{
+  live: false, // If true the stream will wait for new data and never end
+  gte: seq, // Start with this seq (inclusive)
+  gt: seq, // Start after this index
+  lte: seq, // Stop after this index
+  lt: seq, // Stop before this index
+  limit: -1 // Set to the max number of entries you want
+}
+```
+
 ### `AutoStore`
 
 Each autobase creates a `AutoStore` which is used to create views. The store is passed to the `open` function.
