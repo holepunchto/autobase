@@ -624,6 +624,9 @@ module.exports = class Autobase extends ReadyResource {
   async _close () {
     this._interrupting = true
     await Promise.resolve() // defer one tick
+
+    if (this._coupler) this._coupler.destroy()
+    this._coupler = null
     this._waiting.notify(null)
 
     const closing = this._advancing.catch(safetyCatch)
