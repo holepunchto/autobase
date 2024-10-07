@@ -254,7 +254,14 @@ async function compareViews (bases, t) {
         continue
       }
 
-      if (!b4a.equals(await left.core.treeHash(), await right.core.treeHash())) {
+      const length = left.core.flushedLength
+
+      if (right.core.flushedLength !== length) {
+        t.fail(`view flushedLength: ${name}`)
+        continue
+      }
+
+      if (!b4a.equals(await left.core.treeHash(length), await right.core.treeHash(length))) {
         t.fail(`view treeHash: ${name}`)
         continue
       }

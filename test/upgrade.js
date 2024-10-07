@@ -579,7 +579,7 @@ test('autobase upgrade - downgrade', async t => {
 
   await a1.close()
 
-  t.not(await a1.local.getUserData('autobase/boot'), null)
+  t.not(await getUserData(a1.local.core.header.userData, 'autobase/boot'), null)
 
   // go back to previous version
   const fail = createBase(s1, a0.bootstrap, t)
@@ -618,7 +618,7 @@ test('autobase upgrade - downgrade then restart', async t => {
 
   await a1.close()
 
-  t.not(await a1.local.getUserData('autobase/boot'), null)
+  t.not(await getUserData(a1.local.core.header.userData, 'autobase/boot'), null)
 
   // go back to previous version
   const fail = createBase(s1, a0.bootstrap, t)
@@ -627,19 +627,20 @@ test('autobase upgrade - downgrade then restart', async t => {
 
   t.is(await fail.local.getUserData('autobase/boot'), null)
 
-  // go back to previous version
-  const failAgain = createBase(s1, a0.bootstrap, t)
+  // TODO: reenable/remove this if we restore/remove boot recovery
+  // // go back to previous version
+  // const failAgain = createBase(s1, a0.bootstrap, t)
 
-  // ready passes since we unset pointer
-  await t.execution(failAgain.ready())
+  // // ready passes since we unset pointer
+  // await t.exception(failAgain.ready())
 
-  const updateFail = new Promise((resolve, reject) => {
-    failAgain.on('error', reject)
-    failAgain.update().then(resolve, reject)
-  })
+  // const updateFail = new Promise((resolve, reject) => {
+  //   failAgain.on('error', reject)
+  //   failAgain.update().then(resolve, reject)
+  // })
 
-  // update should fail as we get to version upgrade
-  await t.exception(updateFail)
+  // // update should fail as we get to version upgrade
+  // await t.exception(updateFail)
 
   // restore version
   const succeed = createBase(s1, a0.bootstrap, t, { maxSupportedVersion: version + 1 })
@@ -1058,6 +1059,12 @@ async function applyv1 (batch, view, base) {
     }
 
     await view.data.append({ version: 'v1', data: value.data })
+  }
+}
+
+function getUserData (userData, target) {
+  for (const { key, value } of userData) {
+    if (key === target) return value
   }
 }
 

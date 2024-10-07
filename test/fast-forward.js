@@ -940,7 +940,7 @@ test('fast-forward - is indexer set correctly', async t => {
 
   await replicateAndSync([a, d])
 
-  t.is(a.view.getBackingCore().session.length, 400)
+  t.is(a.view.getBackingCore().flushedLength, 400)
 
   t.is(c.linearizer.indexers.length, 2)
 
