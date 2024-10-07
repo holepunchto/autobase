@@ -523,4 +523,5 @@ test('apply - uncaught exception', async t => {
 
   // can reopen
   await t.execution(a2.ready())
+  await a2.close()
 })

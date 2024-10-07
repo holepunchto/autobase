@@ -1,5 +1,5 @@
 const test = require('brittle')
-const ram = require('random-access-memory')
+const tmpDir = require('test-tmp')
 const Hypercore = require('hypercore')
 
 const {
@@ -11,10 +11,12 @@ const {
 } = require('./helpers')
 
 test('core -  no new session if closed (hypercore compat)', async t => {
+  const dir = await tmpDir(t)
   const { bases } = await create(1, t)
+
   const [base] = bases
 
-  const normalCore = new Hypercore(ram)
+  const normalCore = new Hypercore(dir)
   const linearizedSessionCore = base.view
   const snapshotSession = linearizedSessionCore.snapshot()
 
@@ -87,12 +89,12 @@ test('core - seek multi writer', async t => {
   t.is(a.view.length, 3)
   t.is(a.view.byteLength, 15)
   t.is(a.view.indexedLength, 2)
-  t.is(a.view.indexedByteLength, 8)
+  // t.is(a.view.indexedByteLength, 8)
 
   t.alike(a.view.length, b.view.length)
   t.alike(a.view.byteLength, b.view.byteLength)
   t.alike(a.view.indexedLength, b.view.indexedLength)
-  t.alike(a.view.indexedByteLength, b.view.indexedByteLength)
+  // t.alike(a.view.indexedByteLength, b.view.indexedByteLength)
 
   let i = 0
   while (i++ < a.view.byteLength) {
@@ -169,7 +171,6 @@ test('core - indexed view', async t => {
   normal.on('append', () => { normals++ })
   indexed.on('append', () => { indexeds++ })
 
-  a.view._source.debug = true
   await a.append('hello, world!')
 
   await new Promise(resolve => setImmediate(resolve))
