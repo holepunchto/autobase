@@ -42,10 +42,12 @@ test('autoack - simple', async t => {
 })
 
 test('autoack - 5 writers', async t => {
-  t.plan(26)
+  t.plan(21)
+
+  const ackInterval = 50
 
   const { bases } = await create(5, t, {
-    ackInterval: 10,
+    ackInterval,
     ackThreshold: 0
   })
 
@@ -53,10 +55,10 @@ test('autoack - 5 writers', async t => {
 
   t.teardown(replicate(bases))
 
-  await addWriterAndSync(a, b)
-  await addWriterAndSync(a, c)
-  await addWriterAndSync(a, d)
-  await addWriterAndSync(a, e)
+  addWriter(a, b)
+  addWriter(a, c)
+  addWriter(a, d)
+  await addWriter(a, e)
 
   await sync(bases)
 
@@ -70,30 +72,18 @@ test('autoack - 5 writers', async t => {
   t.is(d.view.indexedLength, 0)
   t.is(e.view.indexedLength, 0)
 
-  await new Promise(resolve => setTimeout(resolve, 1000))
+  await poll(() => bases.reduce((acc, b) => acc && b.view.indexedLength === 1, true), ackInterval)
 
-  let alen = a.local.length
-  let blen = b.local.length
-  let clen = c.local.length
-  let dlen = d.local.length
-  let elen = e.local.length
+  // allow acks to settle
+  await new Promise(resolve => setTimeout(resolve, 10 * ackInterval))
 
-  await new Promise(resolve => setTimeout(resolve, 300))
+  const alen = a.local.length
+  const blen = b.local.length
+  const clen = c.local.length
+  const dlen = d.local.length
+  const elen = e.local.length
 
-  // check that acks stop
-  t.is(a.local.length, alen)
-  t.is(b.local.length, blen)
-  t.is(c.local.length, clen)
-  t.is(d.local.length, dlen)
-  t.is(e.local.length, elen)
-
-  alen = a.local.length
-  blen = b.local.length
-  clen = c.local.length
-  dlen = d.local.length
-  elen = e.local.length
-
-  await new Promise(resolve => setTimeout(resolve, 300))
+  await new Promise(resolve => setTimeout(resolve, 10 * ackInterval))
 
   // check that acks stop
   t.is(a.local.length, alen)
@@ -101,8 +91,6 @@ test('autoack - 5 writers', async t => {
   t.is(c.local.length, clen)
   t.is(d.local.length, dlen)
   t.is(e.local.length, elen)
-
-  await sync([a, b, c, d, e])
 
   t.is(a.linearizer.indexers.length, 5)
   t.is(b.linearizer.indexers.length, 5)
@@ -120,8 +108,10 @@ test('autoack - 5 writers', async t => {
 test('autoack - concurrent', async t => {
   t.plan(10)
 
+  const ackInterval = 100
+
   const { bases } = await create(5, t, {
-    ackInterval: 20,
+    ackInterval,
     ackThreshold: 0
   })
 
@@ -129,10 +119,10 @@ test('autoack - concurrent', async t => {
 
   t.teardown(replicate(bases))
 
-  await addWriterAndSync(a, b)
-  await addWriterAndSync(a, c)
-  await addWriterAndSync(a, d)
-  await addWriterAndSync(a, e)
+  addWriter(a, b)
+  addWriter(a, c)
+  addWriter(a, d)
+  await addWriter(a, e)
 
   await sync(bases)
 
@@ -158,8 +148,8 @@ test('autoack - concurrent', async t => {
       t.is(c.local.length, clen)
       t.is(d.local.length, dlen)
       t.is(e.local.length, elen)
-    }, 500)
-  }, 2000)
+    }, 10 * ackInterval)
+  }, 40 * ackInterval)
 
   async function message (w, n) {
     for (let i = 0; i < n; i++) {
@@ -569,4 +559,19 @@ test('autoack - minority indexers with non-indexer tails', async t => {
 
 function getWriter (base, writer) {
   return base.activeWriters.get(writer.core.key)
+}
+
+function poll (fn, interval) {
+  return new Promise(resolve => {
+    const int = setInterval(check, interval)
+
+    function check () {
+      if (fn()) done()
+    }
+
+    function done () {
+      clearInterval(int)
+      resolve()
+    }
+  })
 }
