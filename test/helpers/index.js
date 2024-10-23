@@ -1,4 +1,4 @@
-const ram = require('random-access-memory')
+const tmpDir = require('test-tmp')
 const Corestore = require('corestore')
 const helpers = require('autobase-test-helpers')
 const same = require('same-data')
@@ -25,14 +25,15 @@ module.exports = {
 }
 
 async function createStores (n, t, opts = {}) {
-  const storage = opts.storage || (() => ram.reusable())
+  const storage = opts.storage || (() => tmpDir(t))
   const offset = opts.offset || 0
 
   const stores = []
   for (let i = offset; i < n + offset; i++) {
     const primaryKey = Buffer.alloc(32, i)
     const globalCache = opts.globalCache || null
-    stores.push(new Corestore(await storage(), { primaryKey, encryptionKey, globalCache }))
+    const dir = await storage()
+    stores.push(new Corestore(dir, { primaryKey, encryptionKey, globalCache }))
   }
 
   t.teardown(() => Promise.all(stores.map(s => s.close())), { order: 2 })
@@ -80,10 +81,14 @@ function createBase (store, key, t, opts = {}) {
   }
 
   t.teardown(async () => {
-    // this just cancels pending view gets, no need to await
-    setImmediate(() => base._viewStore.close().catch(() => {}))
+    const view = new Promise(resolve => {
+      setImmediate(() => base._viewStore.close().then(resolve, resolve))
+    })
 
-    await base.close().catch(() => {})
+    await Promise.all([
+      view,
+      base.close()
+    ])
   }, { order: 1 })
 
   return base
@@ -231,7 +236,7 @@ async function apply (batch, view, base) {
   }
 }
 
-function compareViews (bases, t) {
+async function compareViews (bases, t) {
   const missing = bases.slice()
 
   const a = missing.shift()
@@ -249,12 +254,14 @@ function compareViews (bases, t) {
         continue
       }
 
-      if (left.core.indexedLength !== right.core.indexedLength) {
-        t.fail(`view length: ${name}`)
+      const length = left.core.flushedLength
+
+      if (right.core.flushedLength !== length) {
+        t.fail(`view flushedLength: ${name}`)
         continue
       }
 
-      if (!b4a.equals(left.core.treeHash(), right.core.treeHash())) {
+      if (!b4a.equals(await left.core.treeHash(length), await right.core.treeHash(length))) {
         t.fail(`view treeHash: ${name}`)
         continue
       }

@@ -355,15 +355,15 @@ test('fast-forward - force reset then ff', async t => {
     await a.append('a' + i)
   }
 
-  t.ok(b.system.core.getBackingCore().indexedLength < 40)
+  t.ok(b.system.core.getBackingCore().flushedLength < 40)
 
   await confirm([a, c])
 
-  t.ok(a.system.core.getBackingCore().indexedLength > 4000)
+  t.ok(a.system.core.getBackingCore().flushedLength > 4000)
 
   const truncate = new Promise(resolve => b.system.core.on('truncate', resolve))
 
-  t.not(b.system.core.getBackingCore().indexedLength, a.system.core.getBackingCore().indexedLength)
+  t.not(b.system.core.getBackingCore().flushedLength, a.system.core.getBackingCore().flushedLength)
 
   await b.forceResetViews()
 
@@ -371,7 +371,7 @@ test('fast-forward - force reset then ff', async t => {
 
   await t.execution(truncate)
 
-  t.is(b.system.core.getBackingCore().indexedLength, a.system.core.getBackingCore().indexedLength)
+  t.is(b.system.core.getBackingCore().flushedLength, a.system.core.getBackingCore().flushedLength)
 
   await replicateAndSync([a, c])
 
@@ -616,10 +616,11 @@ test('fast-forward - upgrade available', async t => {
 
   await c0.ready()
 
-  replicateAndSync([a1, b1, c0]).catch(() => {}) // throws
+  const done = replicateAndSync([a1, b1, c0]).catch(() => {}) // throws
 
   await upgrade
   await exception
+  await done
 })
 
 test('fast-forward - initial ff upgrade available', async t => {
@@ -668,7 +669,7 @@ test('fast-forward - initial ff upgrade available', async t => {
 
   const fastForward = {
     key: a1.system.core.key,
-    length: a1.system.core.getBackingCore().indexedLength
+    length: a1.system.core.getBackingCore().flushedLength
   }
 
   const c0 = createBase(s3, a.bootstrap, t, { fastForward })
@@ -676,7 +677,7 @@ test('fast-forward - initial ff upgrade available', async t => {
 
   // this should fire when we try to fast forward
   const upgradeEvent = new Promise((resolve, reject) => {
-    const timeout = setTimeout(reject, 1000, new Error('event did not fire'))
+    const timeout = setTimeout(reject, 5000, new Error('event did not fire'))
 
     c0.once('upgrade-available', upgrade => {
       clearTimeout(timeout)
@@ -688,7 +689,7 @@ test('fast-forward - initial ff upgrade available', async t => {
 
   // this should fire when we apply the upgrade
   const upgradeError = new Promise((resolve, reject) => {
-    const timeout = setTimeout(resolve, 1000)
+    const timeout = setTimeout(resolve, 5000)
 
     c0.once('error', err => {
       clearTimeout(timeout)
@@ -696,10 +697,11 @@ test('fast-forward - initial ff upgrade available', async t => {
     })
   })
 
-  replicateAndSync([a1, b1, c0]).catch(() => {}) // throws
+  const done = t.exception(replicateAndSync([a1, b1, c0])) // throws
 
   await t.execution(upgradeEvent)
   await t.exception(upgradeError)
+  await done
 })
 
 test('fast-forward - double ff', async t => {
@@ -801,7 +803,7 @@ test('fast-forward - unindexed cores should migrate', async t => {
   await confirm([a, b, c])
   await replicateAndSync([a, b, c, d])
 
-  t.is(a.system.core.signedLength, c.system.core.signedLength)
+  t.is(a.system.core.getBackingCore().flushedLength, c.system.core.getBackingCore().flushedLength)
 })
 
 test('fast-forward - initial fast forward with in between writer', async t => {
@@ -836,7 +838,7 @@ test('fast-forward - initial fast forward with in between writer', async t => {
 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
 
-  const c = createBase(store.session(), a.bootstrap, t, { fastForward, debug: true })
+  const c = createBase(store.session(), a.bootstrap, t, { fastForward })
   await c.ready()
 
   t.teardown(replicate([a, c]))
@@ -938,7 +940,7 @@ test('fast-forward - is indexer set correctly', async t => {
 
   await replicateAndSync([a, d])
 
-  t.is(a.view.getBackingCore().session.length, 400)
+  t.is(a.view.getBackingCore().flushedLength, 400)
 
   t.is(c.linearizer.indexers.length, 2)
 
