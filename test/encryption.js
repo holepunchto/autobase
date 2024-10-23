@@ -67,7 +67,7 @@ test('encryption - restart', async t => {
 
   t.absent(found)
 
-  await base.close()
+  await base2.close()
 })
 
 test('encryption - expect encryption key', async t => {
@@ -81,6 +81,8 @@ test('encryption - expect encryption key', async t => {
   } catch (err) {
     t.is(err.message, 'Encryption key is expected')
   }
+
+  await base.close()
 })
 
 function open (store) {
