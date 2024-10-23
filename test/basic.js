@@ -481,6 +481,8 @@ test('basic - restarting sets bootstrap correctly', async t => {
 
     await base.close()
   }
+
+  await store.close()
 })
 
 test('batch append', async t => {
