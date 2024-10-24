@@ -20,6 +20,29 @@ const {
   compareViews
 } = require('./helpers')
 
+test('basic - single writer', async t => {
+  const { bases } = await create(1, t)
+  const [base] = bases
+
+  const append = new Promise(resolve => { base.view.on('append', resolve) })
+
+  await base.append('hello')
+  await base.append('world')
+
+  t.is(base.system.members, 1)
+  t.ok(base.isIndexer)
+
+  t.is(base.view.length, 2)
+  t.is(base.view.getBackingCore().flushedLength, 2)
+
+  t.is(base.system.core.length, 6)
+  t.is(base.system.core.getBackingCore().flushedLength, 6)
+
+  await t.execution(append)
+
+  t.not(base.system.core.manifest, null)
+})
+
 test('basic - two writers', async t => {
   const { bases } = await create(3, t, { open: null })
   const [base1, base2, base3] = bases
