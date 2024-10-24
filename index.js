@@ -1162,11 +1162,11 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _refreshSystemState () {
-    if (!(await this.system.update())) return
+  async _refreshSystemState (system) {
+    if (!(await system.update())) return
 
     for (const w of this.activeWriters) {
-      const data = await this.system.get(w.core.key)
+      const data = await system.get(w.core.key)
       w.isRemoved = data ? data.isRemoved : false
     }
   }
@@ -2040,9 +2040,11 @@ module.exports = class Autobase extends ReadyResource {
   // triggered from apply
   async addWriter (key, { indexer = true, isIndexer = indexer } = {}) { // just compat for old version
     assert(this._applying !== null, 'System changes are only allowed in apply')
-    await this.system.add(key, { isIndexer })
 
-    const writer = (await this._getWriterByKey(key, -1, 0, false, true, null)) || this._makeWriter(key, 0, true, false)
+    const sys = this._applySystem
+    await sys.add(key, { isIndexer })
+
+    const writer = (await this._getWriterByKey(key, -1, 0, false, true, sys)) || this._makeWriter(key, 0, true, false)
     await writer.ready()
 
     if (!this.activeWriters.has(key)) {
@@ -2061,20 +2063,20 @@ module.exports = class Autobase extends ReadyResource {
     this._queueBump()
   }
 
-  removeable (key) {
-    if (this.system.indexers.length !== 1) return true
-    return !b4a.equals(this.system.indexers[0].key, key)
+  removeable (key, sys = this.system) {
+    if (sys.indexers.length !== 1) return true
+    return !b4a.equals(sys.indexers[0].key, key)
   }
 
   // triggered from apply
   async removeWriter (key) { // just compat for old version
     assert(this._applying !== null, 'System changes are only allowed in apply')
 
-    if (!this.removeable(key)) {
+    if (!this.removeable(key, this._applySystem)) {
       throw new Error('Not allowed to remove the last indexer')
     }
 
-    await this.system.remove(key)
+    await this._applySystem.remove(key)
 
     if (b4a.equals(key, this.local.key)) {
       if (this.isIndexer) this._unsetLocalIndexer()
@@ -2095,7 +2097,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _undo (popped) {
-    const truncating = []
+    const checkout = new Map()
 
     while (popped > 0) {
       const u = this._updates.pop()
@@ -2103,20 +2105,13 @@ module.exports = class Autobase extends ReadyResource {
       popped -= u.batch
 
       for (const { core, appending } of u.views) {
-        if (core.truncating === 0) truncating.push(core)
-        core.truncating += appending
+        if (core.truncating === 0) checkout.set(core, core.length)
+        const length = checkout.get(core)
+        checkout.set(core, length - appending)
       }
     }
 
-    const p = []
-
-    for (const core of truncating) {
-      const truncating = core.truncating
-      core.truncating = 0
-      p.push(core._onundo(truncating))
-    }
-
-    return Promise.all(p)
+    return checkout
   }
 
   async _getManifest (indexer, len) {
@@ -2129,8 +2124,8 @@ module.exports = class Autobase extends ReadyResource {
     return null
   }
 
-  _bootstrap () {
-    return this.system.add(this.bootstrap, { isIndexer: true, isPending: false })
+  _bootstrap (sys) {
+    return sys.add(this.bootstrap, { isIndexer: true, isPending: false })
   }
 
   _updateAckThreshold () {
@@ -2144,16 +2139,31 @@ module.exports = class Autobase extends ReadyResource {
     if (this._ackTimer) this._ackTimer.bau()
   }
 
+  openMemoryView (store) {
+    const system = new SystemView(store.get({ name: '_system' }))
+    const view = this._hasOpen ? this._handlers.open(store, this) : null
+
+    return {
+      view,
+      system
+    }
+  }
+
   async _applyUpdate (u) {
     assert(await this._viewStore.flush(), 'Views failed to open')
 
-    if (u.undo) await this._undo(u.undo)
+    const checkout = this._undo(u.undo)
+
+    const store = this._viewStore.memorySession(checkout)
+    const { view, system } = this.openMemoryView(store)
+
+    this._applySystem = system
 
     // if anything was indexed reset the ticks
     if (u.indexed.length) this._resetAckTick()
 
     // make sure the latest changes is reflected on the system...
-    await this._refreshSystemState()
+    await this._refreshSystemState(system)
 
     // todo: refresh the active writer set in case any were removed
 
@@ -2191,14 +2201,14 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     for (i = u.shared; i < u.length; i++) {
-      if (this.fastForwardTo !== null && this.fastForwardTo.length > this.system.core.length && b4a.equals(this.fastForwardTo.key, this.system.core.key)) {
+      if (this.fastForwardTo !== null && this.fastForwardTo.length > system.core.length && b4a.equals(this.fastForwardTo.key, system.core.key)) {
         return false
       }
 
       const indexed = i < u.indexed.length
       const node = indexed ? u.indexed[i] : u.tip[i - u.indexed.length]
 
-      if (node.version > this.system.version) versionUpgrade = true
+      if (node.version > system.version) versionUpgrade = true
 
       if (node.writer === this.localWriter) {
         this._resetAckTick()
@@ -2208,7 +2218,7 @@ module.exports = class Autobase extends ReadyResource {
 
       batch++
 
-      this.system.addHead(node)
+      system.addHead(node)
 
       if (node.value !== null && !node.writer.isRemoved) {
         applyBatch.push({
@@ -2224,31 +2234,37 @@ module.exports = class Autobase extends ReadyResource {
 
       if (versionUpgrade) {
         const version = await this._checkVersion()
-        this.system.version = version === -1 ? node.version : version
+        system.version = version === -1 ? node.version : version
       }
 
       const update = {
         batch,
         indexers: false,
         views: [],
-        version: this.system.version,
+        version: system.version,
         systemLength: -1
       }
 
       this._updates.push(update)
       this._applying = update
 
-      if (this.system.bootstrapping) await this._bootstrap()
+      if (system.bootstrapping) await this._bootstrap(system)
 
       if (applyBatch.length && this._hasApply === true) {
-        await this._handlers.apply(applyBatch, this.view, this)
+        await this._handlers.apply(applyBatch, view, this)
       }
 
-      update.indexers = !!this.system.indexerUpdate
+      update.indexers = !!system.indexerUpdate
 
-      await this.system.flush(await this._getViewInfo(update.indexers))
+      await system.flush(await this._getViewInfo(update.indexers))
+
+      // flush apply changes
+      await store.flush()
+
+      await this.system.update()
 
       this._applying = null
+      this._applySystem = null
 
       batch = 0
       applyBatch = []
@@ -2259,7 +2275,7 @@ module.exports = class Autobase extends ReadyResource {
         u.core.appending = 0
       }
 
-      update.systemLength = this.system.core.length
+      update.systemLength = system.core.length
 
       if (!indexed) continue
 
