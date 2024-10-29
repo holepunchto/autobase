@@ -931,7 +931,8 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this._interrupting) {
       release()
-      throw new Error('Autobase is closing')
+      if (this.closing) throw new Error('Autobase is closing')
+      throw INTERRUPT
     }
 
     try {
