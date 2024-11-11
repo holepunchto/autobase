@@ -1,4 +1,5 @@
 const test = require('brittle')
+const b4a = require('b4a')
 const Hyperbee = require('hyperbee')
 
 const {
@@ -138,6 +139,8 @@ test('no inconsistent entries when using snapshot core in bee (bee snapshot)', a
   const [base1, base2, base3] = bases
 
   await base1.append({ add: base2.local.key.toString('hex') })
+  await confirm(bases)
+
   await base1.append({ add: base3.local.key.toString('hex') })
   await confirm(bases)
 
@@ -179,10 +182,16 @@ test('no inconsistent entries when using snapshot core in bee (bee snapshot)', a
   t.alike(keys2PreMerge, keys2PostMerge)
 
   t.is(hasTruncated, true) // Sanity check
-  t.is(bee1.core.indexedLength, 3, 'indexedLength increased')
   t.is(bee1.version, 3, 'version did not change')
 
-  t.is(bee2.core.indexedLength, 2, 'indexedLength did not change')
+  if (b4a.compare(base1.local.key, base2.local.key) < 0) {
+    t.is(bee1.core.indexedLength, 3, 'indexedLength increased')
+    t.is(bee2.core.indexedLength, 2, 'indexedLength did not change')
+  } else {
+    t.is(bee1.core.indexedLength, 2, 'indexedLength did not change')
+    t.is(bee2.core.indexedLength, 4, 'indexedLength increased')
+  }
+
   t.is(bee2.version, 4, 'version did not change')
 
   await bee1.close()

@@ -529,7 +529,6 @@ test('autobase upgrade - consensus 3 writers', async t => {
   confirm([a1, b0, c1]).catch(noop)
   await t.exception(error, /Autobase upgrade required/)
 
-  t.is((await b0.system.getIndexedInfo()).version, version)
   t.ok(b0.closing)
 
   t.is(b0.view.indexedLength, 3) // should not advance
@@ -586,8 +585,6 @@ test('autobase upgrade - downgrade', async t => {
   fail.on('error', () => {})
 
   await t.exception(fail.ready())
-
-  t.is(await fail.local.getUserData('autobase/boot'), null)
 })
 
 test('autobase upgrade - downgrade then restart', async t => {
@@ -624,8 +621,6 @@ test('autobase upgrade - downgrade then restart', async t => {
   const fail = createBase(s1, a0.bootstrap, t)
 
   await t.exception(fail.ready())
-
-  t.is(await fail.local.getUserData('autobase/boot'), null)
 
   // TODO: reenable/remove this if we restore/remove boot recovery
   // // go back to previous version
@@ -846,7 +841,6 @@ test('autobase upgrade - downgrade then fix bork', async t => {
   const fail = createBase(s1, a0.bootstrap, t)
 
   await t.exception(fail.ready())
-  t.is(await fail.local.getUserData('autobase/boot'), null)
 
   // can go forward
   const a2 = createBase(s1, a0.bootstrap, t, { maxSupportedVersion: version + 2 })

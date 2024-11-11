@@ -19,7 +19,7 @@ test('encryption - basic', async t => {
   t.is(base.system.core.getBackingCore().flushedLength, 4)
 
   let found = false
-  for (const core of store.cores.values()) {
+  for (const core of store.sessions) {
     for (let i = 0; i < core.length; i++) {
       const session = core.session()
       await session.setEncryptionKey(null) // ensure no auto decryption
@@ -55,7 +55,7 @@ test('encryption - restart', async t => {
 
   let found = false
 
-  for (const core of store2.cores.values()) {
+  for (const core of store2.sessions) {
     for (let i = 0; i < core.length; i++) {
       const session = core.session()
       await session.setEncryptionKey(null) // ensure no auto decryption
