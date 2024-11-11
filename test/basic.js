@@ -975,6 +975,10 @@ test('autobase should not detach the original store', async t => {
   const bootstrap = b4a.alloc(32)
 
   const base = new Autobase(store, bootstrap)
+
+  // await here otherwise the opening will throw before we get to close the store
+  await base.ready()
+
   t.ok(store !== base.store) // New session with the original attached to it
 
   await base.close()

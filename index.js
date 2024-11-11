@@ -334,6 +334,7 @@ module.exports = class Autobase extends ReadyResource {
     if (core.length === 0 || !(await core.has(core.length - 1))) {
       await this.local.setUserData('autobase/boot', null)
       this._systemPointer = 0
+      await core.close()
       return { bootstrap, system: null, heads: [] }
     }
 
@@ -341,6 +342,7 @@ module.exports = class Autobase extends ReadyResource {
     await system.ready()
 
     if (system.version > this.maxSupportedVersion) {
+      await core.close()
       throw new Error('Autobase upgrade required')
     }
 
@@ -412,6 +414,7 @@ module.exports = class Autobase extends ReadyResource {
       await this.local.setUserData('autobase/last-error', b4a.from(err.stack + ''))
       await this.local.setUserData('autobase/boot', null)
       await this.local.setUserData('autobase/updates', null)
+      this._closeLocalCores().catch(safetyCatch)
       this.store.close().catch(safetyCatch)
       throw err
     }
@@ -431,6 +434,7 @@ module.exports = class Autobase extends ReadyResource {
     } catch (err) {
       safetyCatch(err)
       await this.local.setUserData('autobase/last-error', b4a.from(err.stack + ''))
+      this._closeLocalCores().catch(safetyCatch)
       this.store.close().catch(safetyCatch)
       throw err
     }
@@ -445,7 +449,14 @@ module.exports = class Autobase extends ReadyResource {
 
     // load previous digest if available
     if (this.localWriter && !this.system.bootstrapping) {
-      await this._restoreLocalState()
+      try {
+        await this._restoreLocalState()
+      } catch (err) {
+        await this.local.setUserData('autobase/last-error', b4a.from(err.stack + ''))
+        this._closeLocalCores().catch(safetyCatch)
+        this.store.close().catch(safetyCatch)
+        throw err
+      }
     }
 
     this.recouple()
@@ -644,6 +655,16 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  async _closeLocalCores () {
+    const closing = []
+    if (this.system) closing.push(this.system.close())
+    if (this._primaryBootstrap) closing.push(this._primaryBootstrap.close())
+    if (this.localWriter) closing.push(this._unsetLocalWriter())
+    closing.push(this._closeAllActiveWriters())
+    closing.push(this.local.close())
+    return Promise.all(closing)
+  }
+
   async _close () {
     this._interrupting = true
     await Promise.resolve() // defer one tick
@@ -653,6 +674,7 @@ module.exports = class Autobase extends ReadyResource {
     this._waiting.notify(null)
 
     const closing = this._advancing.catch(safetyCatch)
+    await this._closeLocalCores()
 
     if (this._ackTimer) {
       this._ackTimer.stop()
@@ -663,7 +685,6 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this._hasClose) await this._handlers.close(this.view)
     await this._viewStore.close()
-    if (this._primaryBootstrap) await this._primaryBootstrap.close()
     await this.activeWriters.clear()
     await this.corePool.clear()
     await this.store.close()
@@ -1031,6 +1052,9 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _makeWriterCore (key) {
+    if (this.closing) throw new Error('Autobase is closing')
+    if (this._interrupting) throw INTERRUPT()
+
     const pooled = this.corePool.get(key)
     if (pooled) {
       pooled.valueEncoding = messages.OplogMessage
