@@ -38,7 +38,7 @@ for (let i = 0; i < base1.view.length; i++) {
 }
 
 // create the view
-async function open (store) {
+function open (store) {
   return store.get('test')
 }
 
