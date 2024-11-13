@@ -1174,7 +1174,7 @@ module.exports = class Autobase extends ReadyResource {
   async _reindex () {
     if (this._updates.length) {
       await this._undoAll()
-      await this._refreshSystemState()
+      await this._refreshSystemState(this.system)
     }
 
     const sameIndexers = this.system.sameIndexers(this.linearizer.indexers)
@@ -2098,6 +2098,9 @@ module.exports = class Autobase extends ReadyResource {
 
   _undo (popped) {
     const checkout = new Map()
+    for (const core of this._viewStore.opened.values()) {
+      checkout.set(core, core.length)
+    }
 
     while (popped > 0) {
       const u = this._updates.pop()
@@ -2105,7 +2108,6 @@ module.exports = class Autobase extends ReadyResource {
       popped -= u.batch
 
       for (const { core, appending } of u.views) {
-        if (core.truncating === 0) checkout.set(core, core.length)
         const length = checkout.get(core)
         checkout.set(core, length - appending)
       }
@@ -2139,8 +2141,11 @@ module.exports = class Autobase extends ReadyResource {
     if (this._ackTimer) this._ackTimer.bau()
   }
 
-  openMemoryView (store) {
-    const system = new SystemView(store.get({ name: '_system' }))
+  async openMemoryView (store) {
+    const sysCore = store.get({ name: '_system' })
+    await sysCore.ready()
+
+    const system = new SystemView(sysCore)
     const view = this._hasOpen ? this._handlers.open(store, this) : null
 
     return {
@@ -2155,7 +2160,10 @@ module.exports = class Autobase extends ReadyResource {
     const checkout = this._undo(u.undo)
 
     const store = this._viewStore.memorySession(checkout)
-    const { view, system } = this.openMemoryView(store)
+    const { view, system } = await this.openMemoryView(store)
+
+    await system.ready()
+    await store.opened()
 
     this._applySystem = system
 
@@ -2197,6 +2205,7 @@ module.exports = class Autobase extends ReadyResource {
       // flushed to local appends in same iteration
       await this._updateDigest()
 
+      await store.close()
       return true
     }
 
@@ -2259,9 +2268,8 @@ module.exports = class Autobase extends ReadyResource {
       await system.flush(await this._getViewInfo(update.indexers))
 
       // flush apply changes
-      await store.flush()
 
-      await this.system.update()
+      await system.update()
 
       this._applying = null
       this._applySystem = null
@@ -2290,12 +2298,22 @@ module.exports = class Autobase extends ReadyResource {
 
       if (!update.indexers && !upgraded) continue
 
+      await store.flush()
+      await store.close()
+
+      await this.system.update()
+
       // indexer set has updated
       this._queueIndexFlush(i + 1)
       await this._updateDigest() // see above
 
       return true
     }
+
+    await store.flush()
+    await store.close()
+
+    await this.system.update()
 
     if (u.indexed.length) {
       this._queueIndexFlush(u.indexed.length)
@@ -2305,7 +2323,7 @@ module.exports = class Autobase extends ReadyResource {
     return false
   }
 
-  async _getViewInfo (indexerUpdate) {
+  async _getViewInfo (system, store, indexerUpdate) {
     const indexers = []
 
     for (const { key, length } of this.system.indexers) {
@@ -2314,25 +2332,23 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     // construct view keys to be passed to system
-    const views = []
-    for (const view of this._viewStore.opened.values()) {
-      if (!view.length || view._isSystem()) continue // system is omitted
+    const info = []
+    for (const view of store) {
+      const ac = view._source
 
-      const length = view.systemIndex !== -1
-        ? this.system.views[view.systemIndex].length
-        : 0
+      if (!view.length || ac._isSystem()) continue // system is omitted
 
       // TODO: the first part of this condition could be make clearer with a !this._isBootstrapping() condition instead
       const key = (indexers.length > 1 || this.linearizer.indexers.length > indexers.length) && indexerUpdate
-        ? await view.deriveKey(indexers, length + view.appending)
-        : view.systemIndex === -1
+        ? await ac.deriveKey(indexers, ac.length)
+        : ac.systemIndex === -1
           ? view.key
           : null
 
-      views.push({ view, key })
+      info.push({ view: ac, key })
     }
 
-    return views
+    return info
   }
 
   async _checkVersion () {
