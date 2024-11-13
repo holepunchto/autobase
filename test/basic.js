@@ -222,6 +222,37 @@ test('basic - view/writer userdata is set', async t => {
   }
 })
 
+test('basic - simple reorg', async t => {
+  const { bases } = await create(2, t)
+
+  const [a, b] = bases
+
+  a.system.core._source.originalCore.core.debug = true
+
+  await addWriterAndSync(a, b, false)
+
+  await a.append('a0')
+
+  await replicateAndSync([a, b])
+
+  await a.append('a1')
+
+  await b.append('b0')
+  await b.append('b1')
+
+  t.is(await b.view.get(0), 'a0')
+  t.is(await b.view.get(1), 'b0')
+  t.is(await b.view.get(2), 'b1')
+
+  // trigger reorg
+  await replicateAndSync([a, b])
+
+  t.is(await b.view.get(0), 'a0')
+  t.is(await b.view.get(1), 'a1')
+  t.is(await b.view.get(2), 'b0')
+  t.is(await b.view.get(3), 'b1')
+})
+
 test('basic - compare views', async t => {
   const { bases } = await create(2, t)
 
