@@ -2342,7 +2342,7 @@ module.exports = class Autobase extends ReadyResource {
           ? view.key
           : null
 
-      info.push({ view: ac, key })
+      info.push({ view: ac, length: view.length,  key })
     }
 
     return info
