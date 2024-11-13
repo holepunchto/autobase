@@ -2265,7 +2265,7 @@ module.exports = class Autobase extends ReadyResource {
 
       update.indexers = !!system.indexerUpdate
 
-      await system.flush(await this._getViewInfo(update.indexers))
+      await system.flush(await this._getViewInfo(system, store, update.indexers))
 
       // flush apply changes
 
