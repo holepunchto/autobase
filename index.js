@@ -2157,21 +2157,8 @@ module.exports = class Autobase extends ReadyResource {
   async _applyUpdate (u) {
     assert(await this._viewStore.flush(), 'Views failed to open')
 
-    const checkout = this._undo(u.undo)
-
-    const store = this._viewStore.memorySession(checkout)
-    const { view, system } = await this.openMemoryView(store)
-
-    await system.ready()
-    await store.opened()
-
-    this._applySystem = system
-
     // if anything was indexed reset the ticks
     if (u.indexed.length) this._resetAckTick()
-
-    // make sure the latest changes is reflected on the system...
-    await this._refreshSystemState(system)
 
     // todo: refresh the active writer set in case any were removed
 
@@ -2205,9 +2192,21 @@ module.exports = class Autobase extends ReadyResource {
       // flushed to local appends in same iteration
       await this._updateDigest()
 
-      await store.close()
       return true
     }
+
+    const checkout = this._undo(u.undo)
+
+    const store = this._viewStore.memorySession(checkout)
+    const { view, system } = await this.openMemoryView(store)
+
+    await system.ready()
+    await store.opened()
+
+    this._applySystem = system
+
+    // make sure the latest changes is reflected on the system...
+    await this._refreshSystemState(system)
 
     for (i = u.shared; i < u.length; i++) {
       if (this.fastForwardTo !== null && this.fastForwardTo.length > system.core.length && b4a.equals(this.fastForwardTo.key, system.core.key)) {
@@ -2299,7 +2298,6 @@ module.exports = class Autobase extends ReadyResource {
       if (!update.indexers && !upgraded) continue
 
       await store.flush()
-      await store.close()
 
       await this.system.update()
 
@@ -2311,7 +2309,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     await store.flush()
-    await store.close()
 
     await this.system.update()
 
