@@ -2093,7 +2093,13 @@ module.exports = class Autobase extends ReadyResource {
     for (const u of this._updates) {
       count += u.batch
     }
-    return this._undo(count)
+
+    const p = []
+    for (const [ac, length] of this._undo(count)) {
+      p.push(ac.truncate(length))
+    }
+
+    return Promise.all(p)
   }
 
   _undo (popped) {
