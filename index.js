@@ -1000,7 +1000,7 @@ module.exports = class Autobase extends ReadyResource {
         return w
       }
 
-      const sys = system || this.system
+      const sys = system || this._applySystem || this.system
       const writerInfo = await sys.get(key)
 
       if (len === -1) {
@@ -1971,7 +1971,7 @@ module.exports = class Autobase extends ReadyResource {
       else if (migrated) await view.migrateTo(indexers, 0)
     }
 
-    await this._refreshSystemState()
+    await this._refreshSystemState(this.system)
 
     if (this.localWriter) {
       if (localLength < 0) this._unsetLocalWriter()
@@ -2332,7 +2332,7 @@ module.exports = class Autobase extends ReadyResource {
   async _getViewInfo (system, store, indexerUpdate) {
     const indexers = []
 
-    for (const { key, length } of this.system.indexers) {
+    for (const { key, length } of system.indexers) {
       const indexer = await this._getWriterByKey(key, length, 0, false, false, null)
       indexers.push(indexer)
     }
