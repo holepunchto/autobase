@@ -90,6 +90,7 @@ module.exports = class Autobase extends ReadyResource {
     this._lock = mutexify()
 
     this._applying = null
+    this._applySystem = null
     this._updatingCores = false
     this._localDigest = null
     this._needsWakeup = true
@@ -2273,11 +2274,7 @@ module.exports = class Autobase extends ReadyResource {
       await system.flush(await this._getViewInfo(system, store, update.indexers))
 
       // flush apply changes
-
       await system.update()
-
-      this._applying = null
-      this._applySystem = null
 
       batch = 0
       applyBatch = []
@@ -2305,6 +2302,9 @@ module.exports = class Autobase extends ReadyResource {
 
       await store.flush()
 
+      this._applying = null
+      this._applySystem = null
+
       await this.system.update()
 
       // indexer set has updated
@@ -2315,6 +2315,9 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     await store.flush()
+
+    this._applying = null
+    this._applySystem = null
 
     await this.system.update()
 
