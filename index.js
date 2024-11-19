@@ -2053,7 +2053,7 @@ module.exports = class Autobase extends ReadyResource {
     const sys = this._applySystem
     await sys.add(key, { isIndexer })
 
-    const writer = (await this._getWriterByKey(key, -1, 0, false, true, sys)) || this._makeWriter(key, 0, true, false)
+    const writer = (await this._getWriterByKey(key, -1, 0, false, true, null)) || this._makeWriter(key, 0, true, false)
     await writer.ready()
 
     if (!this.activeWriters.has(key)) {
