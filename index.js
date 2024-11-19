@@ -1765,7 +1765,7 @@ module.exports = class Autobase extends ReadyResource {
       sess = core.session()
       await sess.ready()
 
-      const system = new SystemView(sess, {
+      let system = new SystemView(sess, {
         checkout: length,
         maxCacheSize: this.maxCacheSize
       })
@@ -1810,11 +1810,33 @@ module.exports = class Autobase extends ReadyResource {
         }
       }
 
+      // handle system migration
+      if (systemShouldMigrate) {
+        const hash = system.core.core.tree.hash()
+        const name = this.system.core._source.name
+        const prologue = { hash, length }
+
+        info.key = this.deriveKey(name, indexers, prologue)
+
+        await system.close()
+        await sess.close()
+
+        sess = this.store.get(info.key)
+        await sess.get(length - 1, { timeout })
+
+        system = new SystemView(sess, {
+          checkout: length,
+          maxCacheSize: this.maxCacheSize
+        })
+
+        await system.ready()
+      }
+
       const promises = []
 
       for (const { key, core, length } of indexers) {
         if (core.length === 0 && length > 0) promises.push(core.get(length - 1, { timeout }))
-        promises.push(system.get(key, { timeout }))
+        promises.push(system.get(key, { debug: true, timeout }))
       }
 
       for (const { core, length } of pendingViews) {
@@ -1830,20 +1852,6 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const closing = []
-
-      // handle system migration
-      if (systemShouldMigrate) {
-        const hash = system.core.core.tree.hash()
-        const name = this.system.core._source.name
-        const prologue = { hash, length }
-
-        info.key = this.deriveKey(name, indexers, prologue)
-
-        const core = this.store.get(info.key)
-        await core.get(length - 1, { timeout })
-
-        closing.push(core.close())
-      }
 
       for (const { core } of pendingViews) {
         closing.push(core.close())
