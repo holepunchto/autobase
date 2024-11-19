@@ -2354,9 +2354,11 @@ module.exports = class Autobase extends ReadyResource {
 
       if (!view.length || ac._isSystem()) continue // system is omitted
 
+      const prologue = indexerUpdate ? await view.getPrologue(view.length) : null
+
       // TODO: the first part of this condition could be make clearer with a !this._isBootstrapping() condition instead
       const key = (indexers.length > 1 || this.linearizer.indexers.length > indexers.length) && indexerUpdate
-        ? await ac.deriveKey(indexers, ac.length)
+        ? this.deriveKey(ac.name, indexers, prologue)
         : ac.systemIndex === -1
           ? view.key
           : null
@@ -2477,8 +2479,8 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const indexers = await p
-      const sys = this._viewStore.getSystemCore()
-      key = await sys.deriveKey(indexers, pending)
+      const prologue = await this.system.core.getPrologue(pending)
+      key = this.deriveKey(this.system.core.name, indexers, prologue)
     }
 
     if (this._localDigest.key && b4a.equals(key, this._localDigest.key)) return
