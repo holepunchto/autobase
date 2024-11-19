@@ -2219,7 +2219,6 @@ module.exports = class Autobase extends ReadyResource {
     await store.opened()
 
     this._applySystem = system
-    print(system.heads)
 
     // make sure the latest changes is reflected on the system...
     await this._refreshSystemState(system)
