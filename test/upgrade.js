@@ -1027,7 +1027,7 @@ function open (store) {
 
 async function applyv0 (batch, view, base) {
   for (const { value } of batch) {
-    await view.version.append(value.version)
+    await view.version.append(value.version || 0)
 
     if (value.version > 0) {
       throw new Error('Upgrade required')
