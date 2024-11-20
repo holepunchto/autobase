@@ -1024,15 +1024,15 @@ function open (store) {
 
 async function applyv0 (batch, view, base) {
   for (const { value } of batch) {
+    if (value.add) {
+      await base.addWriter(b4a.from(value.add, 'hex'), { indexer: value.indexer })
+      continue
+    }
+
     await view.version.append(value.version)
 
     if (value.version > 0) {
       throw new Error('Upgrade required')
-    }
-
-    if (value.add) {
-      await base.addWriter(b4a.from(value.add, 'hex'), { indexer: value.indexer })
-      continue
     }
 
     await view.data.append({ version: 'v0', data: value.data })

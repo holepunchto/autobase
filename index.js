@@ -1414,7 +1414,7 @@ module.exports = class Autobase extends ReadyResource {
       if (this._queueViewReset && this._appending === null) {
         this._queueViewReset = false
         const sysCore = this.system.core.getBackingCore()
-        await this._forceResetViews(sysCore.indexedLength)
+        await this._forceResetViews(sysCore.flushedLength)
         continue
       }
 
@@ -2257,7 +2257,7 @@ module.exports = class Autobase extends ReadyResource {
         if (node.batch > 1) continue
 
         if (versionUpgrade) {
-          const version = await this._checkVersion()
+          const version = await this._checkVersion(system)
           system.version = version === -1 ? node.version : version
         }
 
@@ -2370,15 +2370,15 @@ module.exports = class Autobase extends ReadyResource {
     return info
   }
 
-  async _checkVersion () {
-    if (!this.system.indexers.length) return -1
+  async _checkVersion (system) {
+    if (!system.indexers.length) return -1
 
-    const maj = (this.system.indexers.length >> 1) + 1
+    const maj = (system.indexers.length >> 1) + 1
 
     const fetch = []
 
     let localUnflushed = false
-    for (const { key, length } of this.system.indexers) {
+    for (const { key, length } of system.indexers) {
       const w = await this._getWriterByKey(key, length, 0, false, false, null)
 
       if (length > w.core.length) localUnflushed = true // local writer has nodes in mem
