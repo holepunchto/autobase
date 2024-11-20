@@ -1614,7 +1614,7 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._closeAllActiveWriters(false)
 
-    await this._refreshSystemState()
+    await this._refreshSystemState(this.system)
     await this._makeLinearizer(this.system)
   }
 
