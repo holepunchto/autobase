@@ -735,14 +735,14 @@ test('autobase upgrade - fix borked version', async t => {
   t.is(a1.view.length, 3)
   t.is(b1.view.length, 3)
 
-  const aerr = new Promise((resolve, reject) => a1.once('error', reject))
-  const berr = new Promise((resolve, reject) => b1.once('error', reject))
+  const aerr = t.exception(new Promise((resolve, reject) => a1.once('error', reject)), /Block/)
+  const berr = t.exception(new Promise((resolve, reject) => b1.once('error', reject)), /Block/)
 
   a1.append('three')
   b1.append('three')
 
-  await t.exception(aerr, /Block/)
-  await t.exception(berr, /Block/)
+  await aerr
+  await berr
 
   await a1.close()
   await b1.close()
@@ -825,14 +825,15 @@ test('autobase upgrade - downgrade then fix bork', async t => {
   t.is(a1.view.length, 3)
   t.is(b1.view.length, 3)
 
-  const aerr = new Promise((resolve, reject) => a1.once('error', reject))
-  const berr = new Promise((resolve, reject) => b1.once('error', reject))
 
-  a1.append('three', /Block/)
-  b1.append('three', /Block/)
+  const aerr = t.exception(new Promise((resolve, reject) => a1.once('error', reject)), /Block/)
+  const berr = t.exception(new Promise((resolve, reject) => b1.once('error', reject)), /Block/)
 
-  await t.exception(aerr)
-  await t.exception(berr)
+  a1.append('three')
+  b1.append('three')
+
+  await aerr
+  await berr
 
   await a1.close()
   await b1.close()
