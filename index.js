@@ -2223,119 +2223,121 @@ module.exports = class Autobase extends ReadyResource {
     // make sure the latest changes is reflected on the system...
     await this._refreshSystemState(system)
 
-    for (i = u.shared; i < u.length; i++) {
-      if (this.fastForwardTo !== null && this.fastForwardTo.length > system.core.length && b4a.equals(this.fastForwardTo.key, system.core.key)) {
-        await store.close()
-        return false
+    try {
+      for (i = u.shared; i < u.length; i++) {
+        if (this.fastForwardTo !== null && this.fastForwardTo.length > system.core.length && b4a.equals(this.fastForwardTo.key, system.core.key)) {
+          return false
+        }
+
+        const indexed = i < u.indexed.length
+        const node = indexed ? u.indexed[i] : u.tip[i - u.indexed.length]
+
+        if (node.version > system.version) versionUpgrade = true
+
+        if (node.writer === this.localWriter) {
+          this._resetAckTick()
+        } else if (!indexed) {
+          this._ackTick++
+        }
+
+        batch++
+
+        system.addHead(node)
+
+        if (node.value !== null && !node.writer.isRemoved) {
+          applyBatch.push({
+            indexed,
+            from: node.writer.core,
+            length: node.length,
+            value: node.value,
+            heads: node.actualHeads
+          })
+        }
+
+        if (node.batch > 1) continue
+
+        if (versionUpgrade) {
+          const version = await this._checkVersion()
+          system.version = version === -1 ? node.version : version
+        }
+
+        const update = {
+          batch,
+          indexers: false,
+          views: [],
+          version: system.version,
+          systemLength: -1
+        }
+
+        this._updates.push(update)
+        this._applying = update
+
+        if (system.bootstrapping) await this._bootstrap(system)
+
+        if (applyBatch.length && this._hasApply === true) {
+          await this._handlers.apply(applyBatch, view, this)
+        }
+
+        update.indexers = !!system.indexerUpdate
+
+        await system.flush(await this._getViewInfo(system, store, update.indexers))
+
+        // flush apply changes
+        await system.update()
+
+        batch = 0
+        applyBatch = []
+
+        for (let k = 0; k < update.views.length; k++) {
+          const u = update.views[k]
+          u.appending = u.core.appending
+          u.core.appending = 0
+        }
+
+        update.systemLength = system.core.length
+
+        if (!indexed) continue
+
+        this._shiftWriter(node.writer)
+
+        // autobase version was bumped
+        let upgraded = false
+        if (update.version > this.version) {
+          this._onUpgrade(update.version) // throws if not supported
+          upgraded = true
+        }
+
+        if (!update.indexers && !upgraded) continue
+
+        await store.flush()
+
+        this._applying = null
+
+        await this.system.update()
+
+        // indexer set has updated
+        this._queueIndexFlush(i + 1)
+        await this._updateDigest() // see above
+
+        return true
       }
-
-      const indexed = i < u.indexed.length
-      const node = indexed ? u.indexed[i] : u.tip[i - u.indexed.length]
-
-      if (node.version > system.version) versionUpgrade = true
-
-      if (node.writer === this.localWriter) {
-        this._resetAckTick()
-      } else if (!indexed) {
-        this._ackTick++
-      }
-
-      batch++
-
-      system.addHead(node)
-
-      if (node.value !== null && !node.writer.isRemoved) {
-        applyBatch.push({
-          indexed,
-          from: node.writer.core,
-          length: node.length,
-          value: node.value,
-          heads: node.actualHeads
-        })
-      }
-
-      if (node.batch > 1) continue
-
-      if (versionUpgrade) {
-        const version = await this._checkVersion()
-        system.version = version === -1 ? node.version : version
-      }
-
-      const update = {
-        batch,
-        indexers: false,
-        views: [],
-        version: system.version,
-        systemLength: -1
-      }
-
-      this._updates.push(update)
-      this._applying = update
-
-      if (system.bootstrapping) await this._bootstrap(system)
-
-      if (applyBatch.length && this._hasApply === true) {
-        await this._handlers.apply(applyBatch, view, this)
-      }
-
-      update.indexers = !!system.indexerUpdate
-
-      await system.flush(await this._getViewInfo(system, store, update.indexers))
-
-      // flush apply changes
-      await system.update()
-
-      batch = 0
-      applyBatch = []
-
-      for (let k = 0; k < update.views.length; k++) {
-        const u = update.views[k]
-        u.appending = u.core.appending
-        u.core.appending = 0
-      }
-
-      update.systemLength = system.core.length
-
-      if (!indexed) continue
-
-      this._shiftWriter(node.writer)
-
-      // autobase version was bumped
-      let upgraded = false
-      if (update.version > this.version) {
-        this._onUpgrade(update.version) // throws if not supported
-        upgraded = true
-      }
-
-      if (!update.indexers && !upgraded) continue
 
       await store.flush()
 
       this._applying = null
-      this._applySystem = null
 
       await this.system.update()
 
-      // indexer set has updated
-      this._queueIndexFlush(i + 1)
-      await this._updateDigest() // see above
+      if (u.indexed.length) {
+        this._queueIndexFlush(u.indexed.length)
+        await this._updateDigest() // see above
+      }
 
-      return true
+      return false
+    } finally {
+      this._applySystem = null
+      await store.close()
     }
-
-    await store.flush()
-
-    this._applying = null
-    this._applySystem = null
-
-    await this.system.update()
-
-    if (u.indexed.length) {
-      this._queueIndexFlush(u.indexed.length)
-      await this._updateDigest() // see above
-    }
-
-    return false
   }
 
   async _getViewInfo (system, store, indexerUpdate) {
@@ -2362,7 +2364,7 @@ module.exports = class Autobase extends ReadyResource {
           ? view.key
           : null
 
-      info.push({ view: ac, length: view.length,  key })
+      info.push({ view: ac, length: view.length, key })
     }
 
     return info
