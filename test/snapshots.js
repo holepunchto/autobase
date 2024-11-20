@@ -12,22 +12,22 @@ const {
 const beeOpts = { extension: false, keyEncoding: 'binary', valueEncoding: 'binary' }
 
 test('check snapshot of snapshot after rebase', async t => {
-  const { bases } = await create(3, t)
-  const [base1, base2, base3] = bases
+  const { bases } = await create(2, t)
+  const [base1, base2] = bases
 
   await addWriter(base1, base2)
-  await addWriter(base1, base3)
   await confirm(bases)
 
   await base1.append('1-1')
   await base1.append('1-2')
+
+  const orig1 = base1.view.snapshot()
+  const origValue1 = await orig1.get(1)
+
   await base2.append('2-1')
   await base2.append('2-2')
 
-  const orig1 = base1.view.snapshot()
   const orig2 = base2.view.snapshot()
-
-  const origValue1 = await orig1.get(1)
   const origValue2 = await orig2.get(1)
 
   await confirm(bases)
