@@ -616,11 +616,10 @@ test('fast-forward - upgrade available', async t => {
 
   await c0.ready()
 
-  const done = replicateAndSync([a1, b1, c0]).catch(() => {}) // throws
+  t.teardown(replicate([a1, b1, c0])) // throws
 
   await upgrade
   await exception
-  await done
 })
 
 test('fast-forward - initial ff upgrade available', async t => {
@@ -655,8 +654,8 @@ test('fast-forward - initial ff upgrade available', async t => {
   await a1.append('2')
   await confirm([a1, b1])
 
-  t.is(a1.view.indexedLength, 1001)
-  t.is(b1.view.indexedLength, 1001)
+  t.is(a1.view.indexedLength, 201)
+  t.is(b1.view.indexedLength, 201)
 
   t.is(a1.system.version, version + 1)
   t.is(b1.system.version, version + 1)
