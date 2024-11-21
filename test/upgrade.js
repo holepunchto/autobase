@@ -825,7 +825,6 @@ test('autobase upgrade - downgrade then fix bork', async t => {
   t.is(a1.view.length, 3)
   t.is(b1.view.length, 3)
 
-
   const aerr = t.exception(new Promise((resolve, reject) => a1.once('error', reject)), /Block/)
   const berr = t.exception(new Promise((resolve, reject) => b1.once('error', reject)), /Block/)
 
