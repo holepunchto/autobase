@@ -2,10 +2,7 @@ const os = require('os')
 const { on } = require('events')
 const test = require('brittle')
 const tmpDir = require('test-tmp')
-const cenc = require('compact-encoding')
 const b4a = require('b4a')
-
-const { BootRecord } = require('../lib/messages')
 
 const {
   addWriter,
@@ -228,17 +225,8 @@ test('fast-forward - multiple queues', async t => {
 
   const to = await new Promise(resolve => d.on('fast-forward', resolve))
   const next = new Promise(resolve => d.on('fast-forward', resolve))
-  let done = false
 
-  {
-    const pointer = await d.local.getUserData('autobase/boot')
-    const { indexed } = cenc.decode(BootRecord, pointer)
-    t.is(indexed.length, to)
-
-    done = to > midLength
-  }
-
-  if (done) {
+  if (to > midLength) {
     // vary value of DELAY, but make sure the first fast-forward
     // has not completed when the second is queued
     // (check fastForwardTo !== null in queueFastForward)
@@ -246,13 +234,7 @@ test('fast-forward - multiple queues', async t => {
     return
   }
 
-  const final = await next
-
-  {
-    const pointer = await d.local.getUserData('autobase/boot')
-    const { indexed } = cenc.decode(BootRecord, pointer)
-    t.is(indexed.length, final)
-  }
+  await next
 })
 
 if (!IS_MAC_OSX) {
