@@ -2220,10 +2220,10 @@ module.exports = class Autobase extends ReadyResource {
 
     this._applySystem = system
 
-    // make sure the latest changes is reflected on the system...
-    await this._refreshSystemState(system)
-
     try {
+      // make sure the latest changes is reflected on the system...
+      await this._refreshSystemState(system)
+
       for (i = u.shared; i < u.length; i++) {
         if (this.fastForwardTo !== null && this.fastForwardTo.length > system.core.length && b4a.equals(this.fastForwardTo.key, system.core.key)) {
           return false
