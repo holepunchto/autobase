@@ -316,8 +316,7 @@ module.exports = class Autobase extends ReadyResource {
     const bootstrap = this.bootstrap || (await this.local.getUserData('referrer')) || this.local.key
     if (!pointer) return { bootstrap, system: null, views: [] }
 
-    const { indexed, views } = c.decode(messages.BootRecord, pointer)
-    const { key } = indexed
+    const { key, views } = c.decode(messages.BootRecord, pointer)
 
     const encryptionKey = AutoStore.getBlockKey(bootstrap, this.encryptionKey, '_system')
     const actualCore = this.store.get({ key, exclusive: false, compat: false, encryptionKey, isBlockKey: true })
@@ -1285,35 +1284,13 @@ module.exports = class Autobase extends ReadyResource {
     return added
   }
 
-  async _flushPendingUpdates (length) {
-    this._systemPointer = length
-
-    while (this._pendingFlush.length) {
-      if (this._pendingFlush[0].systemLength > length) break
-      this._pendingFlush.shift()
-    }
-  }
-
   async _advanceBootRecord () {
     const views = this._viewStore.indexedViewsByName()
-    await this._setBootRecord(this.system.core.key, 0, [], views)
+    await this._setBootRecord(this.system.core.key, views)
   }
 
-  async _updateBootRecordViews (heads) {
-    if (this._systemPointer === 0) return // first tick
-
-    const views = this._viewStore.indexedViewsByName()
-
-    await this._setBootRecord(this.system.core.key, 0, [], views)
-  }
-
-  async _setBootRecord (key, length, heads, views) {
-    const pointer = c.encode(messages.BootRecord, {
-      indexed: { key, length },
-      heads,
-      views
-    })
-
+  async _setBootRecord (key, views) {
+    const pointer = c.encode(messages.BootRecord, { key, views })
     await this.local.setUserData('autobase/boot', pointer)
   }
 
@@ -1330,6 +1307,15 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return this.local.setUserData('autobase/updates', c.encode(messages.UpdateArray, updates))
+  }
+
+  async _flushPendingUpdates (length) {
+    this._systemPointer = length
+
+    while (this._pendingFlush.length) {
+      if (this._pendingFlush[0].systemLength > length) break
+      this._pendingFlush.shift()
+    }
   }
 
   async _inflateUpdates (record) {
@@ -1582,7 +1568,7 @@ module.exports = class Autobase extends ReadyResource {
     const pointer = await this.local.getUserData('autobase/boot')
     const { views } = c.decode(messages.BootRecord, pointer)
 
-    await this._setBootRecord(this.system.core.key, length, info.heads, views)
+    await this._setBootRecord(this.system.core.key, views)
 
     for (const { key, length } of info.views) {
       const core = this._viewStore.getByKey(key)
