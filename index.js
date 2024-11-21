@@ -340,6 +340,8 @@ module.exports = class Autobase extends ReadyResource {
       return { bootstrap, system: null, views: [] }
     }
 
+    await actualCore.close()
+
     const system = new SystemView(core)
     await system.ready()
 
