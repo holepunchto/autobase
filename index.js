@@ -153,9 +153,8 @@ module.exports = class Autobase extends ReadyResource {
     this._ackTimer = null
     this._acking = false
 
-    this._initialHeads = []
-    this._initialSystem = null
     this._initialViews = null
+    this._initialSystem = null
 
     this._waiting = new SignalPromise()
 
@@ -292,7 +291,7 @@ module.exports = class Autobase extends ReadyResource {
       this.local.setUserData('autobase/local', this.local.key)
     }
 
-    const { bootstrap, system, heads } = await this._loadSystemInfo()
+    const { bootstrap, system, views } = await this._loadSystemInfo()
 
     this.version = system
       ? system.version
@@ -302,8 +301,9 @@ module.exports = class Autobase extends ReadyResource {
 
     this.bootstrap = bootstrap
 
+    this._systemPointer = system ? system.core.flushedLength : 0
     this._initialSystem = system
-    this._initialHeads = heads
+    this._initialViews = views
 
     const sys = system && await system.checkout(this._systemPointer)
     await this._makeLinearizer(sys)
@@ -314,19 +314,20 @@ module.exports = class Autobase extends ReadyResource {
   async _loadSystemInfo () {
     const pointer = await this.local.getUserData('autobase/boot')
     const bootstrap = this.bootstrap || (await this.local.getUserData('referrer')) || this.local.key
-    if (!pointer) return { bootstrap, system: null, heads: [] }
+    if (!pointer) return { bootstrap, system: null, views: [] }
 
-    const { indexed, views, heads } = c.decode(messages.BootRecord, pointer)
-    const { key, length } = indexed
-
-    this._systemPointer = length
-
-    if (!length) return { bootstrap, system: null, heads: [] }
+    const { indexed, views } = c.decode(messages.BootRecord, pointer)
+    const { key } = indexed
 
     const encryptionKey = AutoStore.getBlockKey(bootstrap, this.encryptionKey, '_system')
     const actualCore = this.store.get({ key, exclusive: false, compat: false, encryptionKey, isBlockKey: true })
 
     await actualCore.ready()
+
+    if (!actualCore.length) {
+      await actualCore.close()
+      return { bootstrap, system: null, views: [] }
+    }
 
     const core = actualCore.session({ name: 'batch' })
     await core.ready()
@@ -334,9 +335,9 @@ module.exports = class Autobase extends ReadyResource {
     // safety check the batch is not corrupt
     if (core.length === 0 || !(await core.has(core.length - 1))) {
       await this.local.setUserData('autobase/boot', null)
-      this._systemPointer = 0
+      await actualCore.close()
       await core.close()
-      return { bootstrap, system: null, heads: [] }
+      return { bootstrap, system: null, views: [] }
     }
 
     const system = new SystemView(core)
@@ -347,18 +348,10 @@ module.exports = class Autobase extends ReadyResource {
       throw new Error('Autobase upgrade required')
     }
 
-    const info = await system.getIndexedInfo(length)
-
-    this._initialViews = [{ name: '_system', key, length }]
-
-    for (let i = 0; i < info.views.length; i++) {
-      this._initialViews.push({ name: views[i], ...info.views[i] })
-    }
-
     return {
       bootstrap,
       system,
-      heads
+      views
     }
   }
 
@@ -538,7 +531,7 @@ module.exports = class Autobase extends ReadyResource {
     this._prebump = this._openPreBump()
     await this._prebump
 
-    await this._catchup(this._initialHeads)
+    await this._catchup()
 
     await this._wakeup.ready()
 
@@ -554,9 +547,10 @@ module.exports = class Autobase extends ReadyResource {
     this._updateBootstrapWriters()
   }
 
-  async _catchup (nodes) {
-    if (!nodes.length) return
+  async _catchup () {
+    if (!this.system.heads.length) return // new base
 
+    const nodes = this.system.heads.slice()
     const sys = await this.system.checkout(this._systemPointer)
 
     const visited = new Set()
@@ -1289,36 +1283,26 @@ module.exports = class Autobase extends ReadyResource {
     return added
   }
 
-  async _advanceBootRecord (length) {
-    if (length) { // TODO: remove when we are 100% we never hit the return in this if
-      const { views } = await this.system.getIndexedInfo(length)
-      for (const { key, length } of views) {
-        const view = this._viewStore.getByKey(key)
-        if (!view || (view.core.flushedLength < length)) {
-          // TODO: this fires in some FF scenarios cause the core above is another core, should be fine
-          return
-        }
-      }
-    }
-
+  async _flushPendingUpdates (length) {
     this._systemPointer = length
 
     while (this._pendingFlush.length) {
       if (this._pendingFlush[0].systemLength > length) break
       this._pendingFlush.shift()
     }
-
-    const views = this._viewStore.indexedViewsByName()
-
-    await this._setBootRecord(this.system.core.key, length, this.system.heads, views)
   }
 
-  async _updateBootRecordHeads (heads) {
+  async _advanceBootRecord () {
+    const views = this._viewStore.indexedViewsByName()
+    await this._setBootRecord(this.system.core.key, 0, [], views)
+  }
+
+  async _updateBootRecordViews (heads) {
     if (this._systemPointer === 0) return // first tick
 
     const views = this._viewStore.indexedViewsByName()
 
-    await this._setBootRecord(this.system.core.key, this._systemPointer, heads, views)
+    await this._setBootRecord(this.system.core.key, 0, [], views)
   }
 
   async _setBootRecord (key, length, heads, views) {
@@ -1399,12 +1383,8 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this._interrupting) return
 
-      if (this.opened) await this._updateBootRecordHeads(this.system.heads)
-
-      if (this._interrupting) return
-
-      const flushed = (await this._flushIndexes()) ? this.system.core.getBackingCore().flushedLength : this._systemPointer
-      if (this.updating || flushed > this._systemPointer) await this._advanceBootRecord(flushed)
+      const flushed = (await this._flushIndexes()) ? this.system.core.signedLength : this._systemPointer
+      if (this.updatiing || flushed > this._systemPointer) this._flushPendingUpdates(flushed)
 
       if (indexed) await this.onindex(this)
 
@@ -1430,6 +1410,7 @@ module.exports = class Autobase extends ReadyResource {
 
       await this._gcWriters()
       await this._reindex()
+      await this._advanceBootRecord()
     }
 
     // emit state changes post drain
@@ -1449,12 +1430,6 @@ module.exports = class Autobase extends ReadyResource {
       processed,
       total
     }
-  }
-
-  async _getLocallyStoredHeads () {
-    const buffer = await this.local.getUserData('autobase/boot')
-    if (!buffer) return []
-    return c.decode(messages.BootRecord, buffer).heads
   }
 
   _wakeupPeer (peer) {
@@ -1484,7 +1459,7 @@ module.exports = class Autobase extends ReadyResource {
       if (this._needsWakeupHeads === true) {
         this._needsWakeupHeads = false
 
-        for (const { key } of await this._getLocallyStoredHeads()) {
+        for (const { key } of await this.system.heads) {
           await this._wakeupWriter(key)
         }
       }
@@ -1987,7 +1962,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     await this._makeLinearizer(this.system)
-    await this._advanceBootRecord(length)
+    await this._advanceBootRecord()
 
     // manually set the digest
     if (migrated) {
