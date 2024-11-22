@@ -1750,8 +1750,7 @@ test.skip('basic - sessions use globalCache from corestore if it is set', async 
   t.is(base.system.core.globalCache, globalCache, 'passed to system')
 })
 
-// memview failing: close while open
-test.skip('basic - interrupt', async t => {
+test('basic - interrupt', async t => {
   t.plan(2)
 
   const { bases } = await create(1, t, { apply: applyWithInterupt })
