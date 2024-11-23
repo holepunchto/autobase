@@ -19,6 +19,8 @@ const ActiveWriters = require('./lib/active-writers')
 const CorePool = require('./lib/core-pool')
 const AutoWakeup = require('./lib/wakeup')
 
+const WakeupExtension = require('./lib/extension')
+
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 const INTERRUPT = new Error('Apply interrupted')
 
@@ -56,6 +58,7 @@ module.exports = class Autobase extends ReadyResource {
     this._primaryBootstrap = null
     if (this.bootstrap) {
       this._primaryBootstrap = this.store.get({ key: this.bootstrap, compat: false, active: false, encryptionKey: this.encryptionKey })
+      this.wakeupExtension = new WakeupExtension(this, this._primaryBootstrap, true)
       this.store = this.store.namespace(this._primaryBootstrap, { detach: false })
     }
 
@@ -277,6 +280,7 @@ module.exports = class Autobase extends ReadyResource {
     const ref = await this.local.getUserData('referrer')
     if (ref && !b4a.equals(ref, this.local.key) && !this._primaryBootstrap) {
       this._primaryBootstrap = this.store.get({ key: ref, compat: false, active: false, encryptionKey: this.encryptionKey })
+      this.wakeupExtension = new WakeupExtension(this, this._primaryBootstrap, true)
       this.store = this.store.namespace(this._primaryBootstrap, { detach: false })
     }
 
@@ -288,6 +292,7 @@ module.exports = class Autobase extends ReadyResource {
       if (this.encryptionKey) await this._primaryBootstrap.setUserData('autobase/encryption', this.encryptionKey)
     } else {
       this.local.setUserData('autobase/local', this.local.key)
+      this.wakeupExtension = new WakeupExtension(this, this.local, true)
     }
 
     const { bootstrap, system, heads } = await this._loadSystemInfo()
