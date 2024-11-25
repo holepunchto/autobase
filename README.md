@@ -26,8 +26,8 @@ await local.append('local 0')
 await local.update()
 await local.append('local 1')
 
-for (let i = 0; i < base1.view.length; i++) {
-  console.log(await base1.view.get(i))
+for (let i = 0; i < local.view.length; i++) {
+  console.log(await local.view.get(i))
 
   /*
   local 0
@@ -38,7 +38,7 @@ for (let i = 0; i < base1.view.length; i++) {
 }
 
 // create the view
-async function open (store) {
+function open (store) {
   return store.get('test')
 }
 
