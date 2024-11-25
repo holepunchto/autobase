@@ -65,11 +65,11 @@ As new causal information comes in, existing nodes may be reordered. Any changes
 
 ### Indexed Length
 
-The linearizing algorithm is able to define a point at which the ordering of the graph below will never change.
+The linearizing algorithm is able to define a point at which the ordering of the graph below will never change. This point advances continually, so long as a majority set of indexers are writing messages.
 
 ### Views
 
-An indexed view may be created on top of an Autobase. This view can be updated to reflect the messages of within the base.
+A linearized view may be created on top of an Autobase. This view can be updated to reflect the messages of within the base.
 
 Autobase accepts an `open` function for creating views and an `apply` function that can be used to update a view.
 
