@@ -1,4 +1,5 @@
 const test = require('brittle')
+const b4a = require('b4a')
 const Hyperbee = require('hyperbee')
 
 const {
@@ -45,6 +46,12 @@ test('check snapshot of snapshot after rebase', async t => {
 
   t.alike(origValue1, resnapValue1)
   t.alike(origValue2, resnapValue2)
+
+  await orig1.close()
+  await orig2.close()
+
+  await resnap1.close()
+  await resnap2.close()
 })
 
 test('no inconsistent snapshot entries when truncated', async t => {
@@ -74,6 +81,9 @@ test('no inconsistent snapshot entries when truncated', async t => {
 
   t.alike(origValue1, newValue1)
   t.alike(origValue2, newValue2)
+
+  await orig1.close()
+  await orig2.close()
 })
 
 test('no inconsistent snapshot-of-snapshot entries when truncated', async t => {
@@ -90,8 +100,11 @@ test('no inconsistent snapshot-of-snapshot entries when truncated', async t => {
   await base2.append('2-1')
   await base2.append('2-2')
 
-  const orig1 = base1.view.snapshot().snapshot()
-  const orig2 = base2.view.snapshot().snapshot()
+  const orig1 = base1.view.snapshot()
+  const orig2 = base1.view.snapshot()
+
+  const snap1 = orig1.snapshot()
+  const snap2 = orig2.snapshot()
 
   const origValues1 = [await orig1.get(0), await orig1.get(1)]
   const origValues2 = [await orig2.get(0), await orig2.get(1)]
@@ -108,6 +121,12 @@ test('no inconsistent snapshot-of-snapshot entries when truncated', async t => {
 
   t.alike(origValues1, newValues1)
   t.alike(origValues2, newValues2)
+
+  await orig1.close()
+  await orig2.close()
+
+  await snap1.close()
+  await snap2.close()
 })
 
 test('no inconsistent entries when using snapshot core in bee (bee snapshot)', async t => {
@@ -120,6 +139,8 @@ test('no inconsistent entries when using snapshot core in bee (bee snapshot)', a
   const [base1, base2, base3] = bases
 
   await base1.append({ add: base2.local.key.toString('hex') })
+  await confirm(bases)
+
   await base1.append({ add: base3.local.key.toString('hex') })
   await confirm(bases)
 
@@ -161,11 +182,20 @@ test('no inconsistent entries when using snapshot core in bee (bee snapshot)', a
   t.alike(keys2PreMerge, keys2PostMerge)
 
   t.is(hasTruncated, true) // Sanity check
-  t.is(bee1.core.indexedLength, 3, 'indexedLength increased')
   t.is(bee1.version, 3, 'version did not change')
 
-  t.is(bee2.core.indexedLength, 2, 'indexedLength did not change')
+  if (b4a.compare(base1.local.key, base2.local.key) < 0) {
+    t.is(bee1.core.indexedLength, 3, 'indexedLength increased')
+    t.is(bee2.core.indexedLength, 2, 'indexedLength did not change')
+  } else {
+    t.is(bee1.core.indexedLength, 2, 'indexedLength did not change')
+    t.is(bee2.core.indexedLength, 4, 'indexedLength increased')
+  }
+
   t.is(bee2.version, 4, 'version did not change')
+
+  await bee1.close()
+  await bee2.close()
 })
 
 test('check cloning detached snapshot', async t => {
@@ -197,8 +227,9 @@ test('check cloning detached snapshot', async t => {
   await resnap.close()
   await confirm([base1, base3])
 
-  // todo: this test throws uncaught error
   await t.execution(confirm(bases))
+
+  await orig.close()
 })
 
 async function applyForBee (t, batch, view, base) {

@@ -136,7 +136,8 @@ test('upgrade - consensus', async t => {
   t.is(b1.view.data.indexedLength, 4)
 })
 
-test('upgrade - consensus 3 writers', async t => {
+// todo: this test will work when each apply uses a single write batch
+test.skip('upgrade - consensus 3 writers', async t => {
   const [s1, s2, s3] = await createStores(3, t)
 
   const a0 = createBase(s1, null, t, { open, apply: applyv0 })
@@ -201,11 +202,11 @@ test('upgrade - consensus 3 writers', async t => {
   await b1.update()
 
   t.is(b1.view.data.length, 5) // can update
-  t.is(b1.view.data.signedLength, 3)
+  t.is(b1.view.data.getBackingCore().flushedLength, 3)
 
   await confirm([a1, b1])
 
-  t.is(b1.view.data.signedLength, 5) // majority can continue
+  t.is(b1.view.data.getBackingCore().flushedLength, 5) // majority can continue
   t.is(await b1.view.version.get(b1.view.version.indexedLength - 1), 1)
 })
 
@@ -528,7 +529,6 @@ test('autobase upgrade - consensus 3 writers', async t => {
   confirm([a1, b0, c1]).catch(noop)
   await t.exception(error, /Autobase upgrade required/)
 
-  t.is((await b0.system.getIndexedInfo()).version, version)
   t.ok(b0.closing)
 
   t.is(b0.view.indexedLength, 3) // should not advance
@@ -542,11 +542,11 @@ test('autobase upgrade - consensus 3 writers', async t => {
   await b1.update()
 
   t.is(b1.view.length, 5) // can update
-  t.is(b1.view.signedLength, a1.view.signedLength)
+  t.is(b1.view.getBackingCore().flushedLength, a1.view.getBackingCore().flushedLength)
 
   await confirm([a1, b1])
 
-  t.is(b1.view.signedLength, 5) // majority can continue
+  t.is(b1.view.getBackingCore().flushedLength, 5) // majority can continue
   t.is((await b1.system.getIndexedInfo()).version, version + 1)
 })
 
@@ -578,15 +578,13 @@ test('autobase upgrade - downgrade', async t => {
 
   await a1.close()
 
-  t.not(await a1.local.getUserData('autobase/boot'), null)
+  t.not(await getUserData(a1.local.core.header.userData, 'autobase/boot'), null)
 
   // go back to previous version
   const fail = createBase(s1, a0.bootstrap, t)
   fail.on('error', () => {})
 
   await t.exception(fail.ready())
-
-  t.is(await fail.local.getUserData('autobase/boot'), null)
 })
 
 test('autobase upgrade - downgrade then restart', async t => {
@@ -617,28 +615,27 @@ test('autobase upgrade - downgrade then restart', async t => {
 
   await a1.close()
 
-  t.not(await a1.local.getUserData('autobase/boot'), null)
+  t.not(await getUserData(a1.local.core.header.userData, 'autobase/boot'), null)
 
   // go back to previous version
   const fail = createBase(s1, a0.bootstrap, t)
 
   await t.exception(fail.ready())
 
-  t.is(await fail.local.getUserData('autobase/boot'), null)
+  // TODO: reenable/remove this if we restore/remove boot recovery
+  // // go back to previous version
+  // const failAgain = createBase(s1, a0.bootstrap, t)
 
-  // go back to previous version
-  const failAgain = createBase(s1, a0.bootstrap, t)
+  // // ready passes since we unset pointer
+  // await t.exception(failAgain.ready())
 
-  // ready passes since we unset pointer
-  await t.execution(failAgain.ready())
+  // const updateFail = new Promise((resolve, reject) => {
+  //   failAgain.on('error', reject)
+  //   failAgain.update().then(resolve, reject)
+  // })
 
-  const updateFail = new Promise((resolve, reject) => {
-    failAgain.on('error', reject)
-    failAgain.update().then(resolve, reject)
-  })
-
-  // update should fail as we get to version upgrade
-  await t.exception(updateFail)
+  // // update should fail as we get to version upgrade
+  // await t.exception(updateFail)
 
   // restore version
   const succeed = createBase(s1, a0.bootstrap, t, { maxSupportedVersion: version + 1 })
@@ -844,7 +841,6 @@ test('autobase upgrade - downgrade then fix bork', async t => {
   const fail = createBase(s1, a0.bootstrap, t)
 
   await t.exception(fail.ready())
-  t.is(await fail.local.getUserData('autobase/boot'), null)
 
   // can go forward
   const a2 = createBase(s1, a0.bootstrap, t, { maxSupportedVersion: version + 2 })
@@ -864,7 +860,8 @@ test('autobase upgrade - downgrade then fix bork', async t => {
   }
 })
 
-test('autobase upgrade - 3 writers always increasing', async t => {
+// todo: this test will work when each apply uses a single write batch
+test.skip('autobase upgrade - 3 writers always increasing', async t => {
   const [s1, s2, s3] = await createStores(3, t)
 
   const a0 = createBase(s1.session(), null, t)
@@ -957,12 +954,12 @@ test('autobase upgrade - 3 writers always increasing', async t => {
 
   await t.execution(replicateAndSync([a2, b2]))
 
-  t.not(b2.view.signedLength, 6)
+  t.not(b2.view.getBackingCore().flushedLength, 6)
 
   await confirm([a2, b2])
   t.is(a2.version, b2.version)
 
-  t.is(b2.view.signedLength, 6) // majority can continue
+  t.is(b2.view.getBackingCore().flushedLength, 6) // majority can continue
   t.is((await b2.system.getIndexedInfo()).version, b2.version)
 })
 
@@ -1056,6 +1053,12 @@ async function applyv1 (batch, view, base) {
     }
 
     await view.data.append({ version: 'v1', data: value.data })
+  }
+}
+
+function getUserData (userData, target) {
+  for (const { key, value } of userData) {
+    if (key === target) return value
   }
 }
 

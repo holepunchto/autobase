@@ -1,7 +1,7 @@
 const test = require('brittle')
-const ram = require('random-access-memory')
 const Corestore = require('corestore')
 const b4a = require('b4a')
+const tmpDir = require('test-tmp')
 const crypto = require('hypercore-crypto')
 const Rache = require('rache')
 
@@ -214,7 +214,7 @@ test('basic - compare views', async t => {
   t.is(a.system.members, b.system.members)
   t.is(a.view.indexedLength, b.view.indexedLength)
 
-  compareViews([a, b], t)
+  await compareViews([a, b], t)
 })
 
 test('basic - online majority', async t => {
@@ -248,13 +248,13 @@ test('basic - online majority', async t => {
   t.is(c.view.indexedLength, indexed)
   t.is(a.view.indexedLength, b.view.indexedLength)
 
-  compareViews([a, b], t)
+  await compareViews([a, b], t)
 
   await replicateAndSync([b, c])
 
   t.is(a.view.indexedLength, c.view.indexedLength)
 
-  compareViews([a, b, c], t)
+  await compareViews([a, b, c], t)
 })
 
 test('basic - rotating majority', async t => {
@@ -327,14 +327,13 @@ test('basic - rotating majority', async t => {
   await b.append('b8')
   await c.append('c8')
 
-  b.debug = true
   await confirm(bases)
 
   t.not(a.view.indexedLength, indexed)
   t.is(a.view.indexedLength, b.view.indexedLength)
   t.is(a.view.indexedLength, c.view.indexedLength)
 
-  compareViews([a, b, c], t)
+  await compareViews([a, b, c], t)
 })
 
 test('basic - throws', async t => {
@@ -434,8 +433,8 @@ test('basic - online minorities', async t => {
   t.not(c.view.length, a.view.length)
   t.is(c.view.length, d.view.length)
 
-  compareViews([a, b], t)
-  compareViews([c, d], t)
+  await compareViews([a, b], t)
+  await compareViews([c, d], t)
 
   await t.execution(compare(a, b, true))
   await t.execution(compare(c, d, true))
@@ -445,7 +444,7 @@ test('basic - online minorities', async t => {
   t.is(a.view.length, c.view.length)
   t.is(a.view.indexedLength, c.view.indexedLength)
 
-  compareViews(bases, t)
+  await compareViews(bases, t)
 
   await t.execution(compare(a, b, true))
   await t.execution(compare(a, c, true))
@@ -454,7 +453,8 @@ test('basic - online minorities', async t => {
 })
 
 test('basic - restarting sets bootstrap correctly', async t => {
-  const store = new Corestore(ram.reusable())
+  const tmp = await tmpDir(t)
+  const store = new Corestore(tmp)
 
   let bootstrapKey = null
   let localKey = null
@@ -481,6 +481,8 @@ test('basic - restarting sets bootstrap correctly', async t => {
 
     await base.close()
   }
+
+  await store.close()
 })
 
 test('batch append', async t => {
@@ -641,7 +643,7 @@ test('reindex', async t => {
   // trigger reindex for a
   await replicateAndSync([a, b, c, d, e])
 
-  compareViews(bases, t)
+  await compareViews(bases, t)
 
   t.is((await a.system.getIndexedInfo()).heads.length, 1, 'only one indexed head')
   t.is(a.system.members, bases.length)
@@ -718,7 +720,7 @@ test('sequential restarts', async t => {
 
   await replicateAndSync(bases)
 
-  compareViews(bases, t)
+  await compareViews(bases, t)
 })
 
 test('two writers write many messages, third writer joins', async t => {
@@ -738,7 +740,7 @@ test('two writers write many messages, third writer joins', async t => {
   await confirm([base1, base2, base3])
   t.pass('Confirming did not throw')
 
-  compareViews([base1, base2, base3], t)
+  await compareViews([base1, base2, base3], t)
 })
 
 test('basic - gc indexed nodes', async t => {
@@ -834,7 +836,7 @@ test('basic - non-indexed writer', async t => {
   t.ok(await Autobase.isAutobase(a.local))
   t.ok(await Autobase.isAutobase(b.local))
 
-  compareViews([a, b], t)
+  await compareViews([a, b], t)
 
   for await (const block of a.local.createReadStream()) {
     t.ok(block.checkpoint.length !== 0)
@@ -927,7 +929,7 @@ test('basic - non-indexed writers 3-of-5', async t => {
   t.is(a1, 'd0')
   t.is(a2, 'a0')
 
-  compareViews([a, b, c, d, e], t)
+  await compareViews([a, b, c, d, e], t)
 
   t.ok(await Autobase.isAutobase(a.local))
   t.ok(await Autobase.isAutobase(b.local))
@@ -968,10 +970,15 @@ test('basic - non-indexed writers 3-of-5', async t => {
 })
 
 test('autobase should not detach the original store', async t => {
-  const store = new Corestore(ram)
+  const tmp = await tmpDir(t)
+  const store = new Corestore(tmp)
   const bootstrap = b4a.alloc(32)
 
   const base = new Autobase(store, bootstrap)
+
+  // await here otherwise the opening will throw before we get to close the store
+  await base.ready()
+
   t.ok(store !== base.store) // New session with the original attached to it
 
   await base.close()
@@ -1015,13 +1022,15 @@ test('basic - close during apply', async t => {
           continue
         }
 
-        const core = view._source.core.session
+        const core = view._source.core
         await core.get(core.length) // can never resolve
       }
     },
     open: store => store.get('test'),
     valueEncoding: 'json'
   })
+
+  await a.ready()
 
   const promise = a.append('trigger')
   setImmediate(() => a.close())
@@ -1055,7 +1064,7 @@ test('basic - never sign past pending migration', async t => {
 
   await a.append('trigger')
 
-  const session = a.system.core.getBackingCore().session
+  const session = a.system.core.getBackingCore()
   const info = await a.system.getIndexedInfo(session.length)
   const signers = session.manifest.signers
 
@@ -1181,7 +1190,7 @@ test('basic - remove indexer and continue indexing', async t => {
 
   await confirm([a, b, c])
 
-  t.is(b.view.getBackingCore().session.manifest.signers.length, 3)
+  t.is(b.view.getBackingCore().manifest.signers.length, 3)
 
   await a.append({ remove: b4a.toString(c.local.key, 'hex') })
   await confirm([a, b, c])
@@ -1197,7 +1206,7 @@ test('basic - remove indexer and continue indexing', async t => {
   t.not(a.view.indexedLength, length)
 
   t.is(b.linearizer.indexers.length, 2)
-  t.is(b.view.getBackingCore().session.manifest.signers.length, 2)
+  t.is(b.view.getBackingCore().manifest.signers.length, 2)
 })
 
 test('basic - remove indexer back to previously used indexer set', async t => {
@@ -1211,7 +1220,7 @@ test('basic - remove indexer back to previously used indexer set', async t => {
   await confirm([a, b, c])
 
   t.is(b.view.indexedLength, 1)
-  t.is(b.view.getBackingCore().session.manifest.signers.length, 2)
+  t.is(b.view.getBackingCore().manifest.signers.length, 2)
 
   await addWriterAndSync(b, c)
 
@@ -1221,7 +1230,7 @@ test('basic - remove indexer back to previously used indexer set', async t => {
 
   t.is(b.view.indexedLength, 2)
 
-  const manifest1 = b.system.core.getBackingCore().session.manifest
+  const manifest1 = b.system.core.getBackingCore().manifest
   t.is(manifest1.signers.length, 3)
   t.is(b.system.indexers.length, 3)
 
@@ -1238,7 +1247,7 @@ test('basic - remove indexer back to previously used indexer set', async t => {
   t.is(b.view.indexedLength, 3)
   t.is(c.view.indexedLength, 3)
 
-  const manifest2 = b.system.core.getBackingCore().session.manifest
+  const manifest2 = b.system.core.getBackingCore().manifest
   t.is(manifest2.signers.length, 2)
 
   t.not(manifest1.prologue.length, manifest2.prologue.length)
@@ -1256,9 +1265,9 @@ test('basic - remove an indexer when 2-of-2', async t => {
   await confirm([a, b])
 
   t.is(b.view.indexedLength, 1)
-  t.is(b.view.getBackingCore().session.manifest.signers.length, 2)
+  t.is(b.view.getBackingCore().manifest.signers.length, 2)
 
-  const manifest = b.system.core.getBackingCore().session.manifest
+  const manifest = b.system.core.getBackingCore().manifest
 
   t.is(manifest.signers.length, 2)
   t.is(b.system.indexers.length, 2)
@@ -1279,7 +1288,7 @@ test('basic - remove an indexer when 2-of-2', async t => {
   t.is(b.linearizer.indexers.length, 1)
   t.is(b.view.indexedLength, 2)
 
-  const finalManifest = b.system.core.getBackingCore().session.manifest
+  const finalManifest = b.system.core.getBackingCore().manifest
 
   t.is(finalManifest.signers.length, 1)
   t.not(finalManifest.prologue.length, 0)
@@ -1296,7 +1305,7 @@ test('basic - remove multiple indexers concurrently', async t => {
 
   await confirm([a, b, c])
 
-  t.is(b.view.getBackingCore().session.manifest.signers.length, 3)
+  t.is(b.view.getBackingCore().manifest.signers.length, 3)
 
   a.append({ remove: b4a.toString(b.local.key, 'hex') })
   await a.append({ remove: b4a.toString(c.local.key, 'hex') })
@@ -1315,7 +1324,7 @@ test('basic - remove multiple indexers concurrently', async t => {
   t.not(a.view.indexedLength, length) // 1 indexer
 
   t.is(b.linearizer.indexers.length, 1)
-  t.is(b.view.getBackingCore().session.manifest.signers.length, 1)
+  t.is(b.view.getBackingCore().manifest.signers.length, 1)
 
   async function apply (batch, view, base) {
     for (const { value } of batch) {
@@ -1345,14 +1354,14 @@ test('basic - indexer removes themselves', async t => {
 
   await confirm([a, b, c])
 
-  t.is(b.view.getBackingCore().session.manifest.signers.length, 3)
+  t.is(b.view.getBackingCore().manifest.signers.length, 3)
 
   await a.append({ remove: b4a.toString(a.local.key, 'hex') })
 
   await confirm([a, b, c])
 
   t.is(a.writable, false)
-  t.is(a.view.getBackingCore().session.manifest.signers.length, 2)
+  t.is(a.view.getBackingCore().manifest.signers.length, 2)
 
   await t.exception(a.append('fail'), /Not writable/)
 
@@ -1403,8 +1412,8 @@ test('basic - cannot remove last indexer', async t => {
   t.is(a.view.indexedLength, 1)
   t.is(b.view.indexedLength, 1)
 
-  t.is(a.view.getBackingCore().session.manifest.signers.length, 1)
-  t.is(b.view.getBackingCore().session.manifest.signers.length, 1)
+  t.is(a.view.getBackingCore().manifest.signers.length, 1)
+  t.is(b.view.getBackingCore().manifest.signers.length, 1)
 
   await a.append({ remove: b4a.toString(a.local.key, 'hex') })
 
@@ -1517,7 +1526,7 @@ test('basic - add new indexer after removing', async t => {
   await confirm([a, b])
 
   t.is(b.view.indexedLength, 1)
-  t.is(b.view.getBackingCore().session.manifest.signers.length, 2)
+  t.is(b.view.getBackingCore().manifest.signers.length, 2)
 
   await a.append({ remove: b4a.toString(b.local.key, 'hex') })
   await confirm([a, b])
@@ -1527,8 +1536,8 @@ test('basic - add new indexer after removing', async t => {
   t.is(a.linearizer.indexers.length, 1)
   t.is(b.linearizer.indexers.length, 1)
 
-  t.is(a.system.core.getBackingCore().session.manifest.signers.length, 1)
-  t.is(b.system.core.getBackingCore().session.manifest.signers.length, 1)
+  t.is(a.system.core.getBackingCore().manifest.signers.length, 1)
+  t.is(b.system.core.getBackingCore().manifest.signers.length, 1)
 
   await t.execution(a.append('hello'))
   await replicateAndSync([a, b])
@@ -1553,9 +1562,9 @@ test('basic - add new indexer after removing', async t => {
   t.is(b.linearizer.indexers.length, 2)
   t.is(c.linearizer.indexers.length, 2)
 
-  t.is(a.system.core.getBackingCore().session.manifest.signers.length, 2)
-  t.is(b.system.core.getBackingCore().session.manifest.signers.length, 2)
-  t.is(c.system.core.getBackingCore().session.manifest.signers.length, 2)
+  t.is(a.system.core.getBackingCore().manifest.signers.length, 2)
+  t.is(b.system.core.getBackingCore().manifest.signers.length, 2)
+  t.is(c.system.core.getBackingCore().manifest.signers.length, 2)
 })
 
 test('basic - readd removed indexer', async t => {
@@ -1576,7 +1585,7 @@ test('basic - readd removed indexer', async t => {
   await confirm([a, b])
 
   t.is(b.view.indexedLength, 1)
-  t.is(b.view.getBackingCore().session.manifest.signers.length, 2)
+  t.is(b.view.getBackingCore().manifest.signers.length, 2)
 
   await a.append({ remove: b4a.toString(b.local.key, 'hex') })
 
@@ -1593,8 +1602,8 @@ test('basic - readd removed indexer', async t => {
   t.is(a.linearizer.indexers.length, 1)
   t.is(b.linearizer.indexers.length, 1)
 
-  t.is(a.system.core.getBackingCore().session.manifest.signers.length, 1)
-  t.is(b.system.core.getBackingCore().session.manifest.signers.length, 1)
+  t.is(a.system.core.getBackingCore().manifest.signers.length, 1)
+  t.is(b.system.core.getBackingCore().manifest.signers.length, 1)
 
   await t.execution(a.append('hello'))
   await replicateAndSync([a, b])
@@ -1618,8 +1627,8 @@ test('basic - readd removed indexer', async t => {
   t.is(a.linearizer.indexers.length, 2)
   t.is(b.linearizer.indexers.length, 2)
 
-  t.is(a.system.core.getBackingCore().session.manifest.signers.length, 2)
-  t.is(b.system.core.getBackingCore().session.manifest.signers.length, 2)
+  t.is(a.system.core.getBackingCore().manifest.signers.length, 2)
+  t.is(b.system.core.getBackingCore().manifest.signers.length, 2)
 })
 
 // todo: this test is hard, probably have to rely on ff to fix
@@ -1634,7 +1643,7 @@ test('basic - writer adds a writer while being removed', async t => {
   await confirm([a, b])
 
   t.is(b.view.indexedLength, 1)
-  t.is(b.view.getBackingCore().session.manifest.signers.length, 1)
+  t.is(b.view.getBackingCore().manifest.signers.length, 1)
 
   await a.append({ remove: b4a.toString(b.local.key, 'hex') })
 
@@ -1732,7 +1741,7 @@ test.skip('basic - writer adds a writer while being removed', async t => {
   await confirm([a, b])
 
   t.is(b.view.indexedLength, 1)
-  t.is(b.view.getBackingCore().session.manifest.signers.length, 1)
+  t.is(b.view.getBackingCore().manifest.signers.length, 1)
 
   await addWriterAndSync(a, d, false)
   await a.append({ remove: b4a.toString(b.local.key, 'hex') })
@@ -1756,10 +1765,6 @@ test.skip('basic - writer adds a writer while being removed', async t => {
   t.is(d.view.indexedLength, 1)
   t.is(d.view.length, 3)
   t.is(d.system.members, 4)
-
-  console.log('clen', c.local.length)
-  // d.debug = true
-  a.debug = true
 
   await replicateAndSync([a, d])
   t.is(a.system.members, 2)

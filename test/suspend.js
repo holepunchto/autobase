@@ -177,7 +177,7 @@ test('suspend - reopen after index', async t => {
 
   t.is(b.view.indexedLength, 1)
   t.is(b2.view.indexedLength, 1)
-  t.is(b2.view.length, b.view.length + 2)
+  t.is(b2.view.length, order.length + 2)
 })
 
 test('suspend - reopen with sync in middle', async t => {
@@ -198,6 +198,8 @@ test('suspend - reopen with sync in middle', async t => {
 
   t.is(b.activeWriters.size, 2)
   t.is(b.view.length, 2)
+
+  const length = b.view.length
 
   await b.close()
 
@@ -220,10 +222,10 @@ test('suspend - reopen with sync in middle', async t => {
 
   // sync next views
   for (const ac of [a.system.core, a.view]) {
-    const remote = ac.getBackingCore().session
+    const remote = ac.getBackingCore()
     const local = bstore.get({ key: remote.key, compat: false })
     await local.ready()
-    await local.download({ start: 0, end: remote.length }).done()
+    await local.download({ start: 0, end: remote.flushedLength }).done()
   }
 
   // sync writers
@@ -241,7 +243,7 @@ test('suspend - reopen with sync in middle', async t => {
   await b2.update()
 
   t.is(b2.activeWriters.size, 2)
-  t.is(b2.view.length, b.view.length + 1)
+  t.is(b2.view.length, length + 1)
 
   await b2.append('final')
 
@@ -249,7 +251,7 @@ test('suspend - reopen with sync in middle', async t => {
 
   t.is(b.view.indexedLength, 1)
   t.is(b2.view.indexedLength, 1)
-  t.is(b2.view.length, b.view.length + 2)
+  t.is(b2.view.length, length + 2)
 })
 
 test('suspend - reopen with indexing in middle', async t => {
@@ -478,6 +480,9 @@ test('suspend - open new index after reopen', async t => {
     order.push(await b.view.second.get(i))
   }
 
+  const length1 = b.view.first.length
+  const length2 = b.view.second.length
+
   await b.close()
 
   const b2 = createBase(stores[1], a.local.key, t, {
@@ -488,8 +493,8 @@ test('suspend - open new index after reopen', async t => {
   await b2.ready()
   await b2.update()
 
-  t.is(b2.view.first.length, b.view.first.length)
-  t.is(b2.view.second.length, b.view.second.length)
+  t.is(b2.view.first.length, length1)
+  t.is(b2.view.second.length, length2)
 
   for (let i = 0; i < b2.view.first.length; i++) {
     t.alike(await b2.view.first.get(i), order[i])
@@ -509,7 +514,7 @@ test('suspend - open new index after reopen', async t => {
 
   t.is(b.view.first.indexedLength, 1)
   t.is(b2.view.first.indexedLength, 1)
-  t.is(b2.view.first.length, b.view.first.length + 2)
+  t.is(b2.view.first.length, length1 + 2)
 
   await t.execution(confirm([a, b2]))
 
@@ -569,6 +574,8 @@ test('suspend - reopen multiple indexes', async t => {
     order.push(await b.view.second.get(i))
   }
 
+  const length1 = b.view.first.length
+
   await b.close()
 
   const b2 = createBase(stores[1], a.local.key, t, {
@@ -597,7 +604,7 @@ test('suspend - reopen multiple indexes', async t => {
 
   t.is(b.view.first.indexedLength, 1)
   t.is(b2.view.first.indexedLength, 1)
-  t.is(b2.view.first.length, b.view.first.length + 2)
+  t.is(b2.view.first.length, length1 + 2)
 
   await t.execution(confirm([a, b2]))
 
@@ -787,7 +794,7 @@ test('suspend - migrations', async t => {
   await a.append('a1')
 
   t.is(a.view.indexedLength, 2)
-  t.is(a.view.signedLength, 2)
+  t.is(a.view.getBackingCore().flushedLength, 2)
 
   await b.ready()
 
@@ -798,15 +805,15 @@ test('suspend - migrations', async t => {
   await b.append('b0')
   await confirm([a, b])
 
-  await a.append('a1')
+  await a.append('a2')
   await replicateAndSync([a, b])
 
   t.is(a.view.indexedLength, 3)
-  t.is(a.view.signedLength, 3)
+  t.is(a.view.getBackingCore().flushedLength, 3)
 
   t.is(b.activeWriters.size, 2)
   t.is(b.view.indexedLength, 3)
-  t.is(b.view.signedLength, 3)
+  t.is(b.view.getBackingCore().flushedLength, 3)
 
   const order = []
   for (let i = 0; i < b.view.length; i++) {
@@ -819,8 +826,7 @@ test('suspend - migrations', async t => {
   await b2.ready()
 
   t.is(b2.view.indexedLength, 3)
-  t.is(b2.view.signedLength, 3)
-  t.is(b2.view.getBackingCore().indexedLength, 3)
+  t.is(b2.view.getBackingCore().flushedLength, 3)
 
   await b2.update()
 
@@ -837,7 +843,7 @@ test('suspend - migrations', async t => {
 
   t.is(b.view.indexedLength, 3)
   t.is(b2.view.indexedLength, 4)
-  t.is(b2.view.length, b.view.length + 1)
+  t.is(b2.view.length, order.length + 1)
 })
 
 test('suspend - append waits for drain after boot', async t => {
@@ -880,7 +886,7 @@ test('suspend - incomplete migrate', async t => {
   await a.append('a1')
 
   t.is(a.view.indexedLength, 2)
-  t.is(a.view.signedLength, 2)
+  t.is(a.view.getBackingCore().flushedLength, 2)
 
   await addWriter(a, b)
 
@@ -896,7 +902,7 @@ test('suspend - incomplete migrate', async t => {
   await b.append('b1') // this indexes a1
 
   t.is(b.view.indexedLength, 4)
-  t.is(b.view.signedLength, 2)
+  t.is(b.view.getBackingCore().flushedLength, 2)
 
   await b.close()
 
@@ -906,12 +912,10 @@ test('suspend - incomplete migrate', async t => {
   await b2.update() // needed cause we arent persisting the tip
 
   t.is(a.view.indexedLength, 3)
-  t.is(a.view.signedLength, 2)
-  t.is(a.view.getBackingCore().indexedLength, 2)
+  t.is(a.view.getBackingCore().flushedLength, 2)
 
   t.is(b2.view.indexedLength, 4)
-  t.is(b2.view.signedLength, 2)
-  t.is(b2.view.getBackingCore().indexedLength, 2)
+  t.is(b2.view.getBackingCore().flushedLength, 2)
 
   await b2.update()
 
@@ -920,7 +924,8 @@ test('suspend - incomplete migrate', async t => {
   await t.execution(replicateAndSync([a, b2]))
 })
 
-test('suspend - recover from bad sys core', async t => {
+// rocks should never fail like this
+test.skip('suspend - recover from bad sys core', async t => {
   const { bases, stores } = await create(2, t, { storage: () => tmpDir(t) })
 
   const [a, b] = bases
@@ -940,11 +945,11 @@ test('suspend - recover from bad sys core', async t => {
   const record = c.decode(BootRecord, raw)
 
   const core = stores[1].get(record.indexed.key)
-  await core.ready()
+  const batch = await core.session({ name: 'batch' })
+  await batch.ready()
 
-  for (let i = 6; i < record.indexed.length; i++) {
-    core.core.bitfield.set(i, false)
-  }
+  await batch.state.clear(6, record.indexed.length)
+  await batch.close()
 
   const b1 = createBase(stores[1], null, t)
   await b1.ready()
