@@ -251,7 +251,6 @@ async function applyForBee (t, batch, view, base) {
 function openForBee (linStore) {
   const core = linStore.get('simple-bee', { valueEncoding: 'binary' })
   const view = new Hyperbee(core, beeOpts)
-  view.ready()
   return view
 }
 

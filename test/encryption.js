@@ -48,7 +48,6 @@ test('encryption - restart', async t => {
 
   const store2 = new Corestore(tmp)
   const base2 = new Autobase(store2, { apply, open, ackInterval: 0, ackThreshold: 0 })
-  await base2.ready()
 
   t.alike(await base2.view.get(0), 'you should still not see me')
   t.ok(base2.encryptionKey)
