@@ -56,7 +56,7 @@ module.exports = class Autobase extends ReadyResource {
     this._primaryBootstrap = null
     if (this.bootstrap) {
       this._primaryBootstrap = this.store.get({ key: this.bootstrap, compat: false, active: false, encryptionKey: this.encryptionKey })
-      this.store = this.store.namespace(this._primaryBootstrap, { detach: false })
+      this.store.setNamespace(this._primaryBootstrap)
     }
 
     this.local = null
