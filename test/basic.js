@@ -1024,7 +1024,7 @@ test('basic - non-indexed writers 3-of-5', async t => {
 })
 
 // memview failing: corestore has no detach option
-test.skip('autobase should not detach the original store', async t => {
+test('autobase should not detach the original store', async t => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
   const bootstrap = b4a.alloc(32)
@@ -1034,7 +1034,7 @@ test.skip('autobase should not detach the original store', async t => {
   // await here otherwise the opening will throw before we get to close the store
   await base.ready()
 
-  t.ok(store !== base.store) // New session with the original attached to it
+  t.ok(store === base.store) // set namespace on original session
 
   await base.close()
   t.ok(store.closed)
@@ -1739,7 +1739,7 @@ test('basic - writer adds a writer while being removed', async t => {
 })
 
 // memview failing: globalCache disabled in corestore
-test.skip('basic - sessions use globalCache from corestore if it is set', async t => {
+test('basic - sessions use globalCache from corestore if it is set', async t => {
   const globalCache = new Rache()
 
   const [store] = await createStores(1, t, { globalCache })
