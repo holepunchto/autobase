@@ -55,8 +55,7 @@ module.exports = class Autobase extends ReadyResource {
     this._tryLoadingLocal = true
     this._primaryBootstrap = null
     if (this.bootstrap) {
-      this._primaryBootstrap = this.store.get({ key: this.bootstrap, compat: false, active: false, encryptionKey: this.encryptionKey })
-      this.store.setNamespace(this._primaryBootstrap)
+      this._primaryBootstrap = this.store.get({ key: this.bootstrap, active: false, encryptionKey: this.encryptionKey })
     }
 
     this.local = null
@@ -248,6 +247,11 @@ module.exports = class Autobase extends ReadyResource {
   async _openPreSystem () {
     if (this._handlers.wait) await this._handlers.wait()
     await this.store.ready()
+
+    if (this._primaryBootstrap) {
+      this.store.setNamespace(this._primaryBootstrap)
+      await this.store._setBootstrapNamespace(this._primaryBootstrap)
+    }
 
     const opts = {
       valueEncoding: this.valueEncoding,
