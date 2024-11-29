@@ -20,6 +20,29 @@ const {
   compareViews
 } = require('./helpers')
 
+test('basic - single writer', async t => {
+  const { bases } = await create(1, t)
+  const [base] = bases
+
+  const append = new Promise(resolve => { base.view.on('append', resolve) })
+
+  await base.append('hello')
+  await base.append('world')
+
+  t.is(base.system.members, 1)
+  t.ok(base.isIndexer)
+
+  t.is(base.view.length, 2)
+  t.is(base.view.getBackingCore().flushedLength, 2)
+
+  t.is(base.system.core.length, 6)
+  t.is(base.system.core.getBackingCore().flushedLength, 6)
+
+  await t.execution(append)
+
+  t.not(base.system.core.manifest, null)
+})
+
 test('basic - two writers', async t => {
   const { bases } = await create(3, t, { open: null })
   const [base1, base2, base3] = bases
@@ -197,6 +220,37 @@ test('basic - view/writer userdata is set', async t => {
       t.alike(writerData.referrer, base.bootstrap)
     }
   }
+})
+
+test('basic - simple reorg', async t => {
+  const { bases } = await create(2, t)
+
+  const [a, b] = bases
+
+  a.system.core._source.originalCore.core.debug = true
+
+  await addWriterAndSync(a, b, false)
+
+  await a.append('a0')
+
+  await replicateAndSync([a, b])
+
+  await a.append('a1')
+
+  await b.append('b0')
+  await b.append('b1')
+
+  t.is(await b.view.get(0), 'a0')
+  t.is(await b.view.get(1), 'b0')
+  t.is(await b.view.get(2), 'b1')
+
+  // trigger reorg
+  await replicateAndSync([a, b])
+
+  t.is(await b.view.get(0), 'a0')
+  t.is(await b.view.get(1), 'a1')
+  t.is(await b.view.get(2), 'b0')
+  t.is(await b.view.get(3), 'b1')
 })
 
 test('basic - compare views', async t => {
@@ -969,6 +1023,7 @@ test('basic - non-indexed writers 3-of-5', async t => {
   }
 })
 
+// memview failing: corestore has no detach option
 test('autobase should not detach the original store', async t => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
@@ -979,7 +1034,7 @@ test('autobase should not detach the original store', async t => {
   // await here otherwise the opening will throw before we get to close the store
   await base.ready()
 
-  t.ok(store !== base.store) // New session with the original attached to it
+  t.ok(store === base.store) // set namespace on original session
 
   await base.close()
   t.ok(store.closed)
@@ -1683,6 +1738,7 @@ test('basic - writer adds a writer while being removed', async t => {
   t.is(binfo.isRemoved, true)
 })
 
+// memview failing: globalCache disabled in corestore
 test('basic - sessions use globalCache from corestore if it is set', async t => {
   const globalCache = new Rache()
 

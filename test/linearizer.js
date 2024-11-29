@@ -111,6 +111,14 @@ test('linearizer - simple', async t => {
   t.is(a.linearizer.tails.size, 1)
 })
 
+/*
+
+c - b - a - c - a
+              \
+                b
+
+*/
+
 test('linearizer - compete', async t => {
   const { bases } = await create(3, t)
 
@@ -187,17 +195,17 @@ test('linearizer - compete', async t => {
   bval = await b.view.get(4)
   cval = await c.view.get(4)
 
-  t.is(aval, 'a1')
-  t.is(bval, 'a1')
-  t.is(cval, 'a1')
+  t.is(aval, 'b1')
+  t.is(bval, 'b1')
+  t.is(cval, 'b1')
 
   aval = await a.view.get(5)
   bval = await b.view.get(5)
   cval = await c.view.get(5)
 
-  t.is(aval, 'b1')
-  t.is(bval, 'b1')
-  t.is(cval, 'b1')
+  t.is(aval, 'a1')
+  t.is(bval, 'a1')
+  t.is(cval, 'a1')
 
   await t.exception(a.view.get(6))
   await t.exception(b.view.get(6))
@@ -205,6 +213,14 @@ test('linearizer - compete', async t => {
 
   t.is(a.linearizer.tails.size, 2)
 })
+
+/*
+
+c - b - a - c - a
+              \
+                b - c
+
+*/
 
 test('linearizer - count ordering', async t => {
   const { bases } = await create(3, t)
@@ -307,17 +323,17 @@ test('linearizer - count ordering', async t => {
   bval = await b.view.get(4)
   cval = await c.view.get(4)
 
-  t.is(aval, 'a1')
-  t.is(bval, 'a1')
-  t.is(cval, 'a1')
+  t.is(aval, 'b1')
+  t.is(bval, 'b1')
+  t.is(cval, 'b1')
 
   aval = await a.view.get(5)
   bval = await b.view.get(5)
   cval = await c.view.get(5)
 
-  t.is(aval, 'b1')
-  t.is(bval, 'b1')
-  t.is(cval, 'b1')
+  t.is(aval, 'a1')
+  t.is(bval, 'a1')
+  t.is(cval, 'a1')
 
   aval = await a.view.get(6)
   bval = await b.view.get(6)

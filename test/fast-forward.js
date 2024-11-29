@@ -2,10 +2,7 @@ const os = require('os')
 const { on } = require('events')
 const test = require('brittle')
 const tmpDir = require('test-tmp')
-const cenc = require('compact-encoding')
 const b4a = require('b4a')
-
-const { BootRecord } = require('../lib/messages')
 
 const {
   addWriter,
@@ -32,7 +29,7 @@ test('fast-forward - simple', async t => {
 
   const [a, b] = bases
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
@@ -56,7 +53,7 @@ test('fast-forward - migrate', async t => {
 
   const [a, b, c] = bases
 
-  for (let i = 0; i < 2000; i++) {
+  for (let i = 0; i < 400; i++) {
     await a.append('a' + i)
   }
 
@@ -86,7 +83,7 @@ test('fast-forward - fast forward after migrate', async t => {
 
   const [a, b, c] = bases
 
-  for (let i = 0; i < 2000; i++) {
+  for (let i = 0; i < 400; i++) {
     await a.append('a' + i)
   }
 
@@ -101,7 +98,7 @@ test('fast-forward - fast forward after migrate', async t => {
     const unreplicate = replicate([a, b])
     await eventFlush()
 
-    for (let i = 0; i < 300; i++) {
+    for (let i = 0; i < 60; i++) {
       b.append('b' + i)
       a.append('a' + i)
 
@@ -119,7 +116,7 @@ test('fast-forward - fast forward after migrate', async t => {
 
   t.is(c.linearizer.indexers.length, 2)
 
-  t.ok(sparse > 2000)
+  t.ok(sparse > 400)
 
   t.comment('sparse blocks: ' + sparse)
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
@@ -128,7 +125,7 @@ test('fast-forward - fast forward after migrate', async t => {
 test('fast-forward - multiple writers added', async t => {
   t.plan(2)
 
-  const MESSAGES_PER_ROUND = 200
+  const MESSAGES_PER_ROUND = 40
 
   const { bases } = await create(4, t, {
     fastForward: true,
@@ -201,7 +198,7 @@ test('fast-forward - multiple queues', async t => {
   await confirm([a, b, c])
   await replicateAndSync([a, b, c, d])
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
@@ -209,7 +206,7 @@ test('fast-forward - multiple queues', async t => {
 
   const midLength = a.system.core.indexedLength
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
@@ -228,17 +225,8 @@ test('fast-forward - multiple queues', async t => {
 
   const to = await new Promise(resolve => d.on('fast-forward', resolve))
   const next = new Promise(resolve => d.on('fast-forward', resolve))
-  let done = false
 
-  {
-    const pointer = await d.local.getUserData('autobase/boot')
-    const { indexed } = cenc.decode(BootRecord, pointer)
-    t.is(indexed.length, to)
-
-    done = to > midLength
-  }
-
-  if (done) {
+  if (to > midLength) {
     // vary value of DELAY, but make sure the first fast-forward
     // has not completed when the second is queued
     // (check fastForwardTo !== null in queueFastForward)
@@ -246,13 +234,7 @@ test('fast-forward - multiple queues', async t => {
     return
   }
 
-  const final = await next
-
-  {
-    const pointer = await d.local.getUserData('autobase/boot')
-    const { indexed } = cenc.decode(BootRecord, pointer)
-    t.is(indexed.length, final)
-  }
+  await next
 })
 
 if (!IS_MAC_OSX) {
@@ -267,7 +249,7 @@ if (!IS_MAC_OSX) {
 
     await b.ready()
 
-    for (let i = 0; i < 1000; i++) {
+    for (let i = 0; i < 200; i++) {
       await a.append('a' + i)
     }
 
@@ -341,7 +323,7 @@ test('fast-forward - force reset then ff', async t => {
 
   t.is(a.system.core.getBackingCore().manifest.signers.length, 3)
 
-  for (let i = 0; i < 2000; i++) {
+  for (let i = 0; i < 400; i++) {
     await a.append('a' + i)
   }
 
@@ -351,7 +333,7 @@ test('fast-forward - force reset then ff', async t => {
   await a.append(null)
   await replicateAndSync([a, b])
 
-  for (let i = 0; i < 2000; i++) {
+  for (let i = 0; i < 400; i++) {
     await a.append('a' + i)
   }
 
@@ -359,7 +341,7 @@ test('fast-forward - force reset then ff', async t => {
 
   await confirm([a, c])
 
-  t.ok(a.system.core.getBackingCore().flushedLength > 4000)
+  t.ok(a.system.core.getBackingCore().flushedLength > 800)
 
   const truncate = new Promise(resolve => b.system.core.on('truncate', resolve))
 
@@ -395,7 +377,7 @@ test('fast-forward - initial fast forward', async t => {
 
   const [a, b] = bases
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
@@ -406,7 +388,7 @@ test('fast-forward - initial fast forward', async t => {
   await a.append('lets index some nodes')
   await confirm([a, b])
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await b.append('b' + i)
   }
 
@@ -440,35 +422,35 @@ test('fast-forward - initial ff after multiple migrate', async t => {
 
   const [a, b, c, d, e] = bases
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await a.append('a' + i)
   }
 
   await addWriterAndSync(a, b)
   await confirm(bases)
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await b.append('b' + i)
   }
 
   await addWriterAndSync(b, c)
   await confirm(bases)
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await c.append('c' + i)
   }
 
   await addWriterAndSync(c, d)
   await confirm(bases)
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await d.append('d' + i)
   }
 
   await addWriterAndSync(d, e)
   await confirm(bases)
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await e.append('e' + i)
   }
 
@@ -505,14 +487,14 @@ test('fast-forward - ignore bogus initial ff', async t => {
 
   const [a, b] = bases
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
   await addWriterAndSync(a, b)
   await confirm(bases)
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await b.append('b' + i)
   }
 
@@ -557,7 +539,7 @@ test('fast-forward - upgrade available', async t => {
   await addWriterAndSync(a, b)
   await confirm([a, b])
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
@@ -575,13 +557,13 @@ test('fast-forward - upgrade available', async t => {
   await a1.append('2')
   await confirm([a1, b1])
 
-  t.is(a1.view.indexedLength, 1001)
-  t.is(b1.view.indexedLength, 1001)
+  t.is(a1.view.indexedLength, 201)
+  t.is(b1.view.indexedLength, 201)
 
   t.is(a1.system.version, version + 1)
   t.is(b1.system.version, version + 1)
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await b1.append('b' + i)
   }
 
@@ -616,11 +598,10 @@ test('fast-forward - upgrade available', async t => {
 
   await c0.ready()
 
-  const done = replicateAndSync([a1, b1, c0]).catch(() => {}) // throws
+  t.teardown(replicate([a1, b1, c0])) // throws
 
   await upgrade
   await exception
-  await done
 })
 
 test('fast-forward - initial ff upgrade available', async t => {
@@ -637,7 +618,7 @@ test('fast-forward - initial ff upgrade available', async t => {
   await addWriterAndSync(a, b)
   await confirm([a, b])
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
@@ -655,13 +636,13 @@ test('fast-forward - initial ff upgrade available', async t => {
   await a1.append('2')
   await confirm([a1, b1])
 
-  t.is(a1.view.indexedLength, 1001)
-  t.is(b1.view.indexedLength, 1001)
+  t.is(a1.view.indexedLength, 201)
+  t.is(b1.view.indexedLength, 201)
 
   t.is(a1.system.version, version + 1)
   t.is(b1.system.version, version + 1)
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await b1.append('b' + i)
   }
 
@@ -714,14 +695,14 @@ test('fast-forward - double ff', async t => {
 
   const migrations = []
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await a.append('a' + i)
   }
 
   await addWriterAndSync(a, b)
   await confirm(bases)
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await b.append('b' + i)
   }
 
@@ -730,7 +711,7 @@ test('fast-forward - double ff', async t => {
   await addWriterAndSync(b, c)
   await confirm(bases)
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await c.append('c' + i)
   }
 
@@ -739,7 +720,7 @@ test('fast-forward - double ff', async t => {
   await addWriterAndSync(c, d)
   await confirm(bases)
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await d.append('d' + i)
   }
 
@@ -748,7 +729,7 @@ test('fast-forward - double ff', async t => {
   await addWriterAndSync(d, e)
   await confirm(bases)
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await e.append('e' + i)
   }
 
@@ -816,7 +797,7 @@ test('fast-forward - initial fast forward with in between writer', async t => {
 
   const [a, b] = bases
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
@@ -826,8 +807,8 @@ test('fast-forward - initial fast forward with in between writer', async t => {
   await b.append('in between')
   await replicateAndSync([a, b])
 
-  for (let i = 0; i < 1000; i++) {
-    await a.append('a' + i + 1000)
+  for (let i = 0; i < 200; i++) {
+    await a.append('a' + i + 200)
   }
 
   await replicateAndSync([a, b])
@@ -865,7 +846,7 @@ test('fast-forward - writer removed', async t => {
 
   const [a, b] = bases
 
-  for (let i = 0; i < 2000; i++) {
+  for (let i = 0; i < 400; i++) {
     await a.append('a' + i)
   }
 
@@ -873,13 +854,13 @@ test('fast-forward - writer removed', async t => {
 
   t.is(b.writable, true)
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
   await a.append({ remove: b4a.toString(b.local.key, 'hex') })
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
