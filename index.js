@@ -31,6 +31,7 @@ const DEFAULT_ACK_INTERVAL = 10_000
 const DEFAULT_ACK_THRESHOLD = 4
 
 const FF_THRESHOLD = 16
+const FORCE_FF_THRESHOLD = 512
 const DEFAULT_FF_TIMEOUT = 10_000
 
 const REMOTE_ADD_BATCH = 64
@@ -1620,7 +1621,11 @@ module.exports = class Autobase extends ReadyResource {
 
     const core = this.system.core.getBackingCore()
 
-    if (core.session.length <= core.length + FF_THRESHOLD) return
+    if (core.session.length <= core.length + FF_THRESHOLD) {
+      if (core.session.length - core.indexedLength <= FORCE_FF_THRESHOLD) return
+      return this.initialFastForward(core.key, DEFAULT_FF_TIMEOUT)
+    }
+
     if (this.fastForwardTo !== null && core.session.length <= this.fastForwardTo.length + FF_THRESHOLD) return
     if (!core.session.length) return
 
