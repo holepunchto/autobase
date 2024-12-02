@@ -266,16 +266,15 @@ module.exports = class Autobase extends ReadyResource {
       await this.local.setUserData('autobase/encryption', this.encryptionKey)
     } else {
       this.encryptionKey = await this.local.getUserData('autobase/encryption')
+      if (this.encrypt && this.encryptionKey === null) {
+        this.encryptionKey = (await this.store.createKeyPair('autobase/encryption')).secretKey.subarray(0, 32)
+        await this.local.setUserData('autobase/encryption', this.encryptionKey)
+      }
       if (this.encryptionKey) {
         await this.local.setEncryptionKey(this.encryptionKey)
         // not needed but, just for good meassure
         if (this._primaryBootstrap) this._primaryBootstrap.setEncryptionKey(this.encryptionKey)
       }
-    }
-
-    if (this.encrypt && this.encryptionKey === null) {
-      this.encryptionKey = (await this.store.createKeyPair('autobase/encryption')).secretKey.subarray(0, 32)
-      await this.local.setUserData('autobase/encryption', this.encryptionKey)
     }
 
     if (this.encrypted) {
