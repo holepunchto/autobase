@@ -52,6 +52,7 @@ module.exports = class Autobase extends ReadyResource {
     this.store = store
     this.globalCache = store.globalCache || null
     this.encrypted = handlers.encrypted || !!handlers.encryptionKey
+    this.encrypt = !!handlers.encrypt
     this.encryptionKey = handlers.encryptionKey || null
 
     this._tryLoadingLocal = true
@@ -270,6 +271,11 @@ module.exports = class Autobase extends ReadyResource {
         // not needed but, just for good meassure
         if (this._primaryBootstrap) this._primaryBootstrap.setEncryptionKey(this.encryptionKey)
       }
+    }
+
+    if (this.encrypt && this.encryptionKey === null) {
+      this.encryptionKey = (await this.store.createKeyPair('autobase/encryption')).secretKey.subarray(0, 32)
+      await this.local.setUserData('autobase/encryption', this.encryptionKey)
     }
 
     if (this.encrypted) {
