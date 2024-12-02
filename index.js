@@ -248,11 +248,6 @@ module.exports = class Autobase extends ReadyResource {
     if (this._handlers.wait) await this._handlers.wait()
     await this.store.ready()
 
-    if (this._primaryBootstrap) {
-      this.store.setNamespace(this._primaryBootstrap)
-      await this.store._setBootstrapNamespace(this._primaryBootstrap)
-    }
-
     const opts = {
       valueEncoding: this.valueEncoding,
       keyPair: this.keyPair,
