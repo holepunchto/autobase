@@ -368,13 +368,12 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   getSystemKey () {
-    const core = this.system.core.getBackingCore()
-    return core ? core.key : null
+    return this.system.core.key
   }
 
   recouple () {
     if (this._coupler) this._coupler.destroy()
-    const core = this.system.core.getBackingCore()
+    const core = this._viewStore.getSystemCore().originalCore
     this._coupler = new CoreCoupler(core, this._wakeupPeerBound)
   }
 
@@ -2326,12 +2325,10 @@ module.exports = class Autobase extends ReadyResource {
 
     // construct view keys to be passed to system
     const info = []
-    for (const view of store) {
-      const ac = view._source
-
+    for (const [ac, view] of store.active) {
       if (!view.length || ac._isSystem()) continue // system is omitted
 
-      const prologue = indexerUpdate ? await view.getPrologue(view.length) : null
+      const prologue = indexerUpdate ? await getPrologue(view) : null
 
       // TODO: the first part of this condition could be make clearer with a !this._isBootstrapping() condition instead
       const key = (indexers.length > 1 || this.linearizer.indexers.length > indexers.length) && indexerUpdate
@@ -2456,7 +2453,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const indexers = await p
-      const prologue = await this.system.core.getPrologue(pending)
+      const prologue = await getPrologue(this.system.core, pending)
       key = this.deriveKey(this.system.core.name, indexers, prologue)
     }
 
@@ -2522,6 +2519,17 @@ module.exports = class Autobase extends ReadyResource {
       this.localWriter._addCheckpoints(checkpoint)
       this._hasPendingCheckpoint = false
     }
+  }
+}
+
+async function getPrologue (view, length = view.length) {
+  if (!length) return null
+
+  const batch = await view.restoreBatch(length)
+
+  return {
+    hash: batch.hash(),
+    length
   }
 }
 
