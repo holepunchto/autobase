@@ -535,7 +535,7 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._wakeup.ready()
 
-    this.system.requestWakeup()
+    this.requestWakeup()
 
     // queue a full bump that handles wakeup etc (not legal to wait for that here)
     this._queueBump()
@@ -1336,7 +1336,7 @@ module.exports = class Autobase extends ReadyResource {
     while (!this._interrupting && !this.paused) {
       if (this.opened && this.fastForwardTo !== null) {
         await this._applyFastForward()
-        this.system.requestWakeup()
+        this.requestWakeup()
       }
 
       if (this.localWriter === null && this._tryLoadingLocal === true) {
@@ -1420,7 +1420,21 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _wakeupPeer (peer) {
-    this.system.sendWakeup(peer.remotePublicKey)
+    if (this.wakeupExtension) {
+      this.wakeupExtension.sendWakeup(peer.remotePublicKey)
+    }
+  }
+
+  broadcastWakeup () {
+    if (this.wakeupExtension) {
+      this.wakeupExtension.broadcastWakeup()
+    }
+  }
+
+  requestWakeup () {
+    if (this.wakeupExtension) {
+      this.wakeupExtension.requestWakeup()
+    }
   }
 
   async _wakeupWriter (key) {
