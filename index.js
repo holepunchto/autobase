@@ -155,6 +155,8 @@ module.exports = class Autobase extends ReadyResource {
     this._initialViews = null
     this._initialSystem = null
 
+    this._indexedLength = -1
+
     this._waiting = new SignalPromise()
 
     const sysCore = this._viewStore.get({ name: '_system', exclusive: true })
@@ -1992,19 +1994,19 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _flushIndexes () {
-    let complete = true
+    if (this._indexedLength === -1) return true
+
+    const complete = true
     this._updatingCores = false
 
-    for (const core of this._viewStore.opened.values()) {
-      if (!await core.flush()) complete = false
-    }
+    const indexed = await this.system.getIndexedInfo(this._indexedLength)
 
-    // updates emitted sync
     for (const core of this._viewStore.opened.values()) {
-      if (core.indexing === 0) continue
-      const indexing = core.indexing
-      core.indexing = 0
-      core._onindex(indexing)
+      if (core._isSystem()) {
+        await core.flush(this._indexedLength)
+      } else if (core.systemIndex !== -1) {
+        await core.flush(indexed.views[core.systemIndex].length)
+      }
     }
 
     return complete
@@ -2400,16 +2402,15 @@ module.exports = class Autobase extends ReadyResource {
     assert(this._updatingCores === false, 'Updated cores not flushed')
     this._updatingCores = true
 
+    let u = null
     while (indexed > 0) {
-      const u = this._updates.shift()
+      u = this._updates.shift()
       this._pendingFlush.push(u)
 
       indexed -= u.batch
-
-      for (const { core, appending } of u.views) {
-        core.indexing += appending
-      }
     }
+
+    this._indexedLength = u.systemLength
   }
 
   deriveKey (name, indexers, prologue) {
@@ -2431,8 +2432,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     // we predict what the system key will be after flushing
-    const pending = this.system.core._source.pendingIndexedLength
-    const info = await this.system.getIndexedInfo(pending)
+    const info = await this.system.getIndexedInfo(this._indexedLength)
 
     let same = info.indexers.length === this.linearizer.indexers.length
     if (same) {
@@ -2490,16 +2490,22 @@ module.exports = class Autobase extends ReadyResource {
   async _flushLocal (localNodes) {
     if (!this._localDigest) await this._updateDigest()
 
-    const cores = this._addCheckpoints ? this._viewStore.getIndexedCores() : []
+    const indexed = this._indexedLength
+
+    // TODO: this is loaded in updateDigest as well, should find best place to call and pass down
+    const info = await this.system.getIndexedInfo(indexed)
+
+    const cores = this._addCheckpoints ? this._viewStore.getIndexedCores(info) : []
     const blocks = new Array(localNodes.length)
 
     for (let i = 0; i < blocks.length; i++) {
       const { value, heads, batch } = localNodes[i]
+      const checkpoint = this._addCheckpoints ? await generateCheckpoint(cores, indexed, info) : null
 
       blocks[i] = {
         version: 1,
         maxSupportedVersion: this.maxSupportedVersion,
-        checkpoint: this._addCheckpoints ? await generateCheckpoint(cores) : null,
+        checkpoint,
         digest: this._addCheckpoints ? this._generateDigest() : null,
         node: {
           heads,
@@ -2533,11 +2539,12 @@ async function getPrologue (view, length = view.length) {
   }
 }
 
-function generateCheckpoint (cores) {
+function generateCheckpoint (cores, systemLength, info) {
   const checkpoint = []
 
   for (const core of cores) {
-    checkpoint.push(core.checkpoint())
+    const length = core._isSystem() ? systemLength : info.views[core.systemIndex].length
+    checkpoint.push(core.checkpoint(length))
     core.checkpointer++
   }
 
