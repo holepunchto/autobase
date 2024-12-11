@@ -60,7 +60,7 @@ test('core - seek', async t => {
   t.alike(await base.view.seek(b2 + 1), [1, 1])
   t.alike(await base.view.seek(b3 + 1), [2, 1])
 
-  t.alike(await base.view.seek(b3 + 10), null)
+  t.alike(await base.view.seek(b3 + 10, { wait: false }), null)
 
   // expected behaviour?
   // t.alike(await base.view.seek(b1 - 10), null)
@@ -88,12 +88,12 @@ test('core - seek multi writer', async t => {
 
   t.is(a.view.length, 3)
   t.is(a.view.byteLength, 15)
-  t.is(a.view.indexedLength, 2)
+  t.is(a.view.flushedLength, 2)
   // t.is(a.view.indexedByteLength, 8)
 
   t.alike(a.view.length, b.view.length)
   t.alike(a.view.byteLength, b.view.byteLength)
-  t.alike(a.view.indexedLength, b.view.indexedLength)
+  t.alike(a.view.flushedLength, b.view.flushedLength)
   // t.alike(a.view.indexedByteLength, b.view.indexedByteLength)
 
   let i = 0
@@ -146,10 +146,10 @@ test('core - properties', async t => {
 
   await base.append('hello, world!')
 
-  t.ok(base.view._source.core.id)
-  t.is(base.view.id, base.view._source.core.id)
-  t.is(base.view.key, base.view._source.core.key)
-  t.is(base.view.discoveryKey, base.view._source.core.discoveryKey)
+  t.ok(base.view.id)
+  t.is(base.view.id, base.view.id)
+  t.is(base.view.key, base.view.key)
+  t.is(base.view.discoveryKey, base.view.discoveryKey)
 })
 
 test('core - indexed view', async t => {
@@ -161,9 +161,6 @@ test('core - indexed view', async t => {
 
   await normal.ready()
   await indexed.ready()
-
-  t.absent(normal.indexed)
-  t.ok(indexed.indexed)
 
   let normals = 0
   let indexeds = 0

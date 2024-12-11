@@ -22,12 +22,12 @@ test('apply - simple', async t => {
 
   t.is(a.system.members, 1)
   t.is(a.view.length, 1)
-  t.is(a.view.indexedLength, 1)
+  t.is(a.view.flushedLength, 1)
 
   await a.append('a2')
 
   t.is(a.view.length, 2)
-  t.is(a.view.indexedLength, 2)
+  t.is(a.view.flushedLength, 2)
 
   async function apply (nodes, view, base) {
     for (const node of nodes) {
@@ -58,13 +58,13 @@ test('apply - add writer', async t => {
   t.is(a.view.length, 2)
   t.is(b.view.length, 2)
 
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
+  t.is(a.view.flushedLength, 0)
+  t.is(b.view.flushedLength, 0)
 
   await confirm([a, b])
 
-  t.is(a.view.indexedLength, 2)
-  t.is(b.view.indexedLength, 2)
+  t.is(a.view.flushedLength, 2)
+  t.is(b.view.flushedLength, 2)
 
   async function apply (nodes, view, base) {
     for (const node of nodes) {
@@ -101,13 +101,13 @@ test('apply - multiple appends', async t => {
   t.is(a.view.length, 6)
   t.is(b.view.length, 6)
 
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
+  t.is(a.view.flushedLength, 0)
+  t.is(b.view.flushedLength, 0)
 
   await confirm([a, b])
 
-  t.is(a.view.indexedLength, 6)
-  t.is(b.view.indexedLength, 6)
+  t.is(a.view.flushedLength, 6)
+  t.is(b.view.flushedLength, 6)
 
   async function apply (nodes, view, base) {
     for (const node of nodes) {
@@ -146,13 +146,13 @@ test('apply - simultaneous appends', async t => {
   t.is(a.view.length, 20)
   t.is(b.view.length, 20)
 
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
+  t.is(a.view.flushedLength, 0)
+  t.is(b.view.flushedLength, 0)
 
   await confirm([a, b])
 
-  t.is(a.view.indexedLength, 20)
-  t.is(b.view.indexedLength, 20)
+  t.is(a.view.flushedLength, 20)
+  t.is(b.view.flushedLength, 20)
 
   async function apply (nodes, view, base) {
     for (const node of nodes) {
@@ -197,13 +197,13 @@ test('apply - add writer and append', async t => {
   t.is(a.view.length, 3)
   t.is(b.view.length, 3)
 
-  t.is(a.view.indexedLength, 1)
-  t.is(b.view.indexedLength, 1)
+  t.is(a.view.flushedLength, 1)
+  t.is(b.view.flushedLength, 1)
 
   await confirm([a, b])
 
-  t.is(a.view.indexedLength, 3)
-  t.is(b.view.indexedLength, 3)
+  t.is(a.view.flushedLength, 3)
+  t.is(b.view.flushedLength, 3)
 
   async function apply (nodes, view, base) {
     for (const node of nodes) {
@@ -243,13 +243,13 @@ test('apply - simultaneous add writer and append', async t => {
   t.is(a.view.length, 3)
   t.is(b.view.length, 3)
 
-  t.is(a.view.indexedLength, 1)
-  t.is(b.view.indexedLength, 1)
+  t.is(a.view.flushedLength, 1)
+  t.is(b.view.flushedLength, 1)
 
   await confirm([a, b])
 
-  t.is(a.view.indexedLength, 3)
-  t.is(b.view.indexedLength, 3)
+  t.is(a.view.flushedLength, 3)
+  t.is(b.view.flushedLength, 3)
 
   async function apply (nodes, view, base) {
     for (const node of nodes) {
@@ -288,20 +288,20 @@ test('apply - simultaneous append over entire batch', async t => {
   t.is(a.view.length, 20)
   t.is(b.view.length, 20)
 
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
+  t.is(a.view.flushedLength, 0)
+  t.is(b.view.flushedLength, 0)
 
   await confirm([a, b])
 
-  t.is(a.view.indexedLength, 20)
-  t.is(b.view.indexedLength, 20)
+  t.is(a.view.flushedLength, 20)
+  t.is(b.view.flushedLength, 20)
 
   await replicateAndSync([a, b, c])
 
-  t.is(c.view.indexedLength, 20)
+  t.is(c.view.flushedLength, 20)
   t.alike(
-    await c.view.getBackingCore().treeHash(),
-    await a.view.getBackingCore().treeHash()
+    await c.view.treeHash(),
+    await a.view.treeHash()
   )
 
   async function apply (nodes, view, base) {
@@ -343,20 +343,20 @@ test('apply - simultaneous append and add over entire batch', async t => {
   t.is(a.view.length, 20)
   t.is(b.view.length, 20)
 
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
+  t.is(a.view.flushedLength, 0)
+  t.is(b.view.flushedLength, 0)
 
   await confirm([a, b])
 
-  t.is(a.view.indexedLength, 20)
-  t.is(b.view.indexedLength, 20)
+  t.is(a.view.flushedLength, 20)
+  t.is(b.view.flushedLength, 20)
 
   await replicateAndSync([a, b, c])
 
-  t.is(c.view.indexedLength, 20)
+  t.is(c.view.flushedLength, 20)
   t.alike(
-    await c.view.getBackingCore().treeHash(),
-    await a.view.getBackingCore().treeHash()
+    await c.view.treeHash(),
+    await a.view.treeHash()
   )
 
   async function apply (nodes, view, base) {
@@ -417,20 +417,20 @@ test.skip('apply - simultaneous appends with large batch', async t => {
   t.is(a.view.length, 900)
   t.is(b.view.length, 900)
 
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
+  t.is(a.view.flushedLength, 0)
+  t.is(b.view.flushedLength, 0)
 
   await confirm(bases.slice(0, 9))
 
-  t.is(a.view.indexedLength, 900)
-  t.is(b.view.indexedLength, 900)
+  t.is(a.view.flushedLength, 900)
+  t.is(b.view.flushedLength, 900)
 
   await replicateAndSync(bases)
 
-  t.is(last.view.indexedLength, 900)
+  t.is(last.view.flushedLength, 900)
   t.alike(
-    await last.view.getBackingCore().treeHash(),
-    await a.view.getBackingCore().treeHash()
+    await last.view.treeHash(),
+    await a.view.treeHash()
   )
 
   async function apply (nodes, view, base) {
