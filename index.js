@@ -1371,7 +1371,7 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this._interrupting) return
 
-      const flushed = (await this._flushIndexes()) ? this.system.core.signedLength : this._systemPointer
+      const flushed = (await this._flushIndexes()) ? this.system.core.flushedLength : this._systemPointer
       if (this.updatiing || flushed > this._systemPointer) this._flushPendingUpdates(flushed)
 
       if (indexed) await this.onindex(this)
