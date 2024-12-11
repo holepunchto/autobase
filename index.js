@@ -302,6 +302,7 @@ module.exports = class Autobase extends ReadyResource {
     this.bootstrap = bootstrap
 
     this._systemPointer = system ? system.core.flushedLength : 0
+    this._indexedLength = this._systemPointer
     this._initialSystem = system
     this._initialViews = views
 
@@ -1961,6 +1962,8 @@ module.exports = class Autobase extends ReadyResource {
       if (localLength < 0) this._unsetLocalWriter()
       else this.localWriter.reset(localLength)
     }
+
+    this._indexedLength = length
 
     await this._makeLinearizer(this.system)
     await this._advanceBootRecord()
