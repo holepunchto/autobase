@@ -1381,7 +1381,7 @@ module.exports = class Autobase extends ReadyResource {
       // force reset state in worst case
       if (this._queueViewReset && this._appending === null) {
         this._queueViewReset = false
-        const sysCore = this.system.core.getBackingCore()
+        const sysCore = this._viewStore.getSystemCore()
         await this._forceResetViews(sysCore.flushedLength)
         continue
       }
@@ -1689,8 +1689,8 @@ module.exports = class Autobase extends ReadyResource {
     // if already FFing, let the finish. TODO: auto kill the attempt after a while and move to latest?
     if (!this.fastForwardEnabled || this.fastForwarding > 0) return
 
-    const core = this.system.core.getBackingCore()
-    const originalCore = this.system.core._source.originalCore
+    const core = this.system.core
+    const originalCore = this._viewStore.getSystemCore().originalCore
 
     if (originalCore.length <= core.length + FF_THRESHOLD) return
     if (this.fastForwardTo !== null && originalCore.length <= this.fastForwardTo.length + FF_THRESHOLD) return
@@ -1706,7 +1706,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     // if it migrated underneath us, ignore for now
-    if (core !== this.system.core.getBackingCore()) {
+    if (core !== this.system.core) {
       this.doneFastForwarding()
       return
     }
@@ -1790,7 +1790,7 @@ module.exports = class Autobase extends ReadyResource {
       // handle system migration
       if (systemShouldMigrate) {
         const hash = system.core.core.tree.hash()
-        const name = this.system.core._source.name
+        const name = this._viewStore.getSystemCore().name
         const prologue = { hash, length }
 
         info.key = this.deriveKey(name, indexers, prologue)
@@ -1867,7 +1867,7 @@ module.exports = class Autobase extends ReadyResource {
     const core = this.store.get({ key, encryptionKey, isBlockKey: true })
     await core.ready()
 
-    const from = this.system.core.getBackingCore().length
+    const from = this.system.core.length
 
     // just extra sanity check that we are not going back in time, nor that we cleared the storage needed for ff
     if (from >= length || core.length < length) {
@@ -1905,7 +1905,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const views = new Map()
 
-    const sysView = this.system.core._source
+    const sysView = this._viewStore.getSystemCore()
     const sysInfo = { key, length, systemIndex: -1 }
 
     views.set(sysView, sysInfo)
@@ -2455,8 +2455,9 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const indexers = await p
-      const prologue = await getPrologue(this.system.core, pending)
-      key = this.deriveKey(this.system.core.name, indexers, prologue)
+      const sys = this._viewStore.getSystemCore()
+      const prologue = await getPrologue(this.system.core, this._indexedLength)
+      key = this.deriveKey(sys.name, indexers, prologue)
     }
 
     if (this._localDigest.key && b4a.equals(key, this._localDigest.key)) return
