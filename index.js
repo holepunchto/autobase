@@ -279,7 +279,6 @@ module.exports = class Autobase extends ReadyResource {
     const ref = await this.local.getUserData('referrer')
     if (ref && !b4a.equals(ref, this.local.key) && !this._primaryBootstrap) {
       this._primaryBootstrap = this.store.get({ key: ref, compat: false, active: false, encryptionKey: this.encryptionKey })
-      this.store = this.store.namespace(this._primaryBootstrap, { detach: false })
     }
 
     await this.local.setUserData('referrer', this.key)
