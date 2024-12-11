@@ -1999,17 +1999,19 @@ module.exports = class Autobase extends ReadyResource {
   async _flushIndexes () {
     if (this._indexedLength === -1) return true
 
-    const complete = true
+    let complete = true
     this._updatingCores = false
 
-    const indexed = await this.system.getIndexedInfo(this._indexedLength)
+    const { views } = await this.system.getIndexedInfo(this._indexedLength)
 
     for (const core of this._viewStore.opened.values()) {
-      if (core._isSystem()) {
-        await core.flush(this._indexedLength)
-      } else if (core.systemIndex !== -1) {
-        await core.flush(indexed.views[core.systemIndex].length)
-      }
+      const index = core.systemIndex
+      if (!core._isSystem() && (index === -1 || index >= views.length)) continue
+
+      const length = core._isSystem() ? this._indexedLength : views[index].length
+
+      complete &= await core.flush(length)
+      await core._onindex(length)
     }
 
     return complete
