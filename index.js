@@ -2079,35 +2079,48 @@ module.exports = class Autobase extends ReadyResource {
     this._queueBump()
   }
 
-  _undoAll () {
+  async _undoAll () {
     let count = 0
     for (const u of this._updates) {
       count += u.batch
     }
 
     const p = []
-    for (const [ac, length] of this._undo(count)) {
+    for (const [ac, length] of await this._undo(count)) {
       p.push(ac.truncate(length))
     }
 
     return Promise.all(p)
   }
 
-  _undo (popped) {
+  async _undo (popped) {
     const checkout = new Map()
     for (const core of this._viewStore.opened.values()) {
       checkout.set(core, core.length)
     }
 
-    while (popped > 0) {
-      const u = this._updates.pop()
+    if (!popped) return checkout
 
-      popped -= u.batch
+    const updates = this._updates
 
-      for (const { core, appending } of u.views) {
-        const length = checkout.get(core)
-        checkout.set(core, length - appending)
+    while (popped > 0) popped -= updates.pop().batch
+
+    const u = updates[updates.length - 1]
+    const systemLength = u ? u.systemLength : this._indexedLength
+
+    const { views } = await this.system.getIndexedInfo(systemLength)
+
+    for (const [core, length] of checkout) {
+      if (length === 0) continue
+
+      if (core._isSystem()) {
+        checkout.set(core, systemLength)
+        continue
       }
+
+      const index = core.systemIndex
+
+      checkout.set(core, index < views.length ? views[index].length : 0)
     }
 
     return checkout
@@ -2192,7 +2205,7 @@ module.exports = class Autobase extends ReadyResource {
       return update.systemLength
     }
 
-    const checkout = this._undo(u.undo)
+    const checkout = await this._undo(u.undo)
 
     const store = this._viewStore.memorySession(checkout)
     const { view, system } = await this.openMemoryView(store)
