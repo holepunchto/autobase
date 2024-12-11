@@ -568,9 +568,6 @@ test('fast-forward - upgrade available', async t => {
 
   await confirm([a1, b1])
 
-  await a.append('a3') // flush sigs
-  await confirm([a1, b1])
-
   const c0 = createBase(s3, a.bootstrap, t, { fastForward: true })
   await c0.ready()
 
@@ -680,11 +677,10 @@ test('fast-forward - initial ff upgrade available', async t => {
     })
   })
 
-  const done = t.exception(replicateAndSync([a1, b1, c0])) // throws
+  t.teardown(replicate([a1, b1, c0])) // throws
 
   await t.execution(upgradeEvent)
   await t.exception(upgradeError)
-  await done
 })
 
 test('fast-forward - double ff', async t => {

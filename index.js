@@ -303,6 +303,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._systemPointer = system ? system.core.flushedLength : 0
     this._indexedLength = this._systemPointer
+
     this._initialSystem = system
     this._initialViews = views
 
@@ -1372,7 +1373,7 @@ module.exports = class Autobase extends ReadyResource {
       if (this._interrupting) return
 
       const flushed = (await this._flushIndexes()) ? this.system.core.flushedLength : this._systemPointer
-      if (this.updatiing || flushed > this._systemPointer) this._flushPendingUpdates(flushed)
+      if (this.updating || flushed > this._systemPointer) await this._flushPendingUpdates(flushed)
 
       if (indexed) await this.onindex(this)
 
@@ -2010,7 +2011,7 @@ module.exports = class Autobase extends ReadyResource {
 
       const length = core._isSystem() ? this._indexedLength : views[index].length
 
-      complete &= await core.flush(length)
+      complete &&= await core.flush(length)
       await core._onindex(length)
     }
 
