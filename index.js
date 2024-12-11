@@ -1176,7 +1176,7 @@ module.exports = class Autobase extends ReadyResource {
     const sameIndexers = this.system.sameIndexers(this.linearizer.indexers)
 
     await this._makeLinearizer(this.system)
-    if (!sameIndexers) await this._viewStore.migrate()
+    if (!sameIndexers) await this._viewStore.migrate(this._indexedLength)
 
     this.version = this.system.version
 
@@ -1356,7 +1356,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const u = this.linearizer.update()
-      const changed = u ? await this._applyUpdate(u) : null
+      const changed = u ? await this._applyUpdate(u) : -1
       const indexed = !!this._updatingCores
 
       if (this._interrupting) return
@@ -1386,7 +1386,7 @@ module.exports = class Autobase extends ReadyResource {
         continue
       }
 
-      if (!changed) {
+      if (changed === -1) {
         if (this._checkWriters.length > 0) {
           await this._gcWriters()
           if (!this.opened) break // at most one tick preready
@@ -1397,7 +1397,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       await this._gcWriters()
-      await this._reindex()
+      await this._reindex(changed)
       await this._advanceBootRecord()
     }
 
@@ -2186,7 +2186,7 @@ module.exports = class Autobase extends ReadyResource {
       // flushed to local appends in same iteration
       await this._updateDigest()
 
-      return true
+      return update.systemLength
     }
 
     const checkout = this._undo(u.undo)
@@ -2205,7 +2205,7 @@ module.exports = class Autobase extends ReadyResource {
 
       for (i = u.shared; i < u.length; i++) {
         if (this.fastForwardTo !== null && this.fastForwardTo.length > system.core.length && b4a.equals(this.fastForwardTo.key, system.core.key)) {
-          return false
+          return -1
         }
 
         const indexed = i < u.indexed.length
@@ -2298,7 +2298,7 @@ module.exports = class Autobase extends ReadyResource {
         this._queueIndexFlush(i + 1)
         await this._updateDigest() // see above
 
-        return true
+        return update.systemLength
       }
 
       await store.flush()
@@ -2312,7 +2312,7 @@ module.exports = class Autobase extends ReadyResource {
         await this._updateDigest() // see above
       }
 
-      return false
+      return -1
     } finally {
       this._applySystem = null
       await store.close()
