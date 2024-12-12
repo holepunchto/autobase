@@ -7,8 +7,6 @@ on:
         required: true
         type: string
 
-env:
-  BRITTLE_TIMEOUT: 60000
 jobs:
   deploy:
     runs-on: ${{ matrix.os }}
