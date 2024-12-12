@@ -155,7 +155,7 @@ module.exports = class Autobase extends ReadyResource {
     this._initialViews = null
     this._initialSystem = null
 
-    this._indexedLength = -1
+    this._indexedLength = 0
 
     this._waiting = new SignalPromise()
 
@@ -1998,7 +1998,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _flushIndexes () {
-    if (this._indexedLength === -1) return true
+    if (this._indexedLength === this.system.core.flushedLength) return true
 
     let complete = true
     this._updatingCores = false
