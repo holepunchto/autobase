@@ -1873,7 +1873,7 @@ module.exports = class Autobase extends ReadyResource {
     // just extra sanity check that we are not going back in time, nor that we cleared the storage needed for ff
     if (from >= length || core.length < length) {
       this._clearFastForward(true)
-      core.close().catch(safetyCatch)
+      await core.close()
       return
     }
 
@@ -1884,7 +1884,7 @@ module.exports = class Autobase extends ReadyResource {
 
     await system.ready()
 
-    const opened = []
+    const opened = [core]
     const indexers = [] // only used in migrate branch
     const prologues = [] // only used in migrate branch
 
