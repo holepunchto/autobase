@@ -203,7 +203,7 @@ test('fast-forward - multiple queues', async t => {
 
   await confirm([a, b, c])
 
-  const midLength = a.system.core.indexedLength
+  const midLength = a.system.core.flushedLength
 
   for (let i = 0; i < 200; i++) {
     await a.append('a' + i)

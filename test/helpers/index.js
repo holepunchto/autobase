@@ -211,8 +211,8 @@ async function confirm (bases, options = {}) {
 }
 
 async function compare (a, b, full = false) {
-  const alen = full ? a.view.length : a.view.indexedLength
-  const blen = full ? b.view.length : b.view.indexedLength
+  const alen = full ? a.view.length : a.view.flushedLength
+  const blen = full ? b.view.length : b.view.flushedLength
 
   if (alen !== blen) throw new Error('Views are different lengths')
 
