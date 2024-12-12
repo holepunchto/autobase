@@ -200,6 +200,10 @@ module.exports = class Autobase extends ReadyResource {
     return this._primaryBootstrap === null ? this.local.discoveryKey : this._primaryBootstrap.discoveryKey
   }
 
+  getIndexedInfo () {
+    return this.system.getIndexedInfo(this._indexedLength)
+  }
+
   _isActiveIndexer () {
     return this.localWriter ? this.localWriter.isActiveIndexer : false
   }
