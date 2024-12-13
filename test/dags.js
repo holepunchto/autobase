@@ -28,8 +28,8 @@ test('simple 2', async t => {
   await replicateAndSync(bases)
 
   // all indexers voted over a0
-  t.alike(a.view.indexedLength, 1)
-  t.alike(b.view.indexedLength, 1)
+  t.alike(await getIndexedViewLength(a), 1)
+  t.alike(await getIndexedViewLength(b), 1)
 
   await a.append('a' + ai++)
   await replicateAndSync(bases)
@@ -38,8 +38,8 @@ test('simple 2', async t => {
   await replicateAndSync(bases)
 
   // all indexers voted over b0
-  t.alike(a.view.indexedLength, 2)
-  t.alike(b.view.indexedLength, 2)
+  t.alike(await getIndexedViewLength(a), 2)
+  t.alike(await getIndexedViewLength(b), 2)
 
   await compareViews([a, b], t)
 
@@ -86,9 +86,9 @@ test('simple 3', async t => {
   await a.append('a' + ai++)
   await replicateAndSync(bases)
 
-  t.alike(a.view.indexedLength, b.view.indexedLength)
-  t.alike(c.view.indexedLength, b.view.indexedLength)
-  t.alike(a.view.indexedLength, c.view.indexedLength)
+  t.alike(await getIndexedViewLength(a), await getIndexedViewLength(b))
+  t.alike(await getIndexedViewLength(c), await getIndexedViewLength(b))
+  t.alike(await getIndexedViewLength(a), await getIndexedViewLength(c))
 
   await compareViews([a, b, c], t)
 
@@ -170,9 +170,9 @@ test.skip('convergence', async t => {
 
   // --- loop ---
 
-  t.alike(a.view.indexedLength, b.view.indexedLength)
-  t.alike(c.view.indexedLength, b.view.indexedLength)
-  t.alike(a.view.indexedLength, c.view.indexedLength)
+  t.alike(await getIndexedViewLength(a), await getIndexedViewLength(b))
+  t.alike(await getIndexedViewLength(c), await getIndexedViewLength(b))
+  t.alike(await getIndexedViewLength(a), await getIndexedViewLength(c))
 
   t.is(a.linearizer.tails.size, 1)
 
@@ -244,7 +244,7 @@ test.skip('inner majority', async t => {
 
   await b.append('b' + bi++)
 
-  t.is(b.view.indexedLength, 3)
+  t.is(await getIndexedViewLength(b), 3)
   t.is(b.linearizer.tails.size, 1)
 })
 
@@ -298,9 +298,9 @@ test('majority alone - convergence', async t => {
 
   await compareViews([b, c, d], t)
 
-  t.is(b.view.indexedLength, 2)
-  t.is(c.view.indexedLength, 2)
-  t.is(d.view.indexedLength, 2)
+  t.is(await getIndexedViewLength(b), 2)
+  t.is(await getIndexedViewLength(c), 2)
+  t.is(await getIndexedViewLength(d), 2)
 
   t.is(b.linearizer.tails.size, 1)
 })
@@ -317,22 +317,22 @@ test('add writer', async t => {
 
   await replicateAndSync([a, b])
 
-  t.is(a.view.indexedLength, 1)
-  t.is(b.view.indexedLength, 1)
+  t.is(await getIndexedViewLength(a), 1)
+  t.is(await getIndexedViewLength(b), 1)
 
   await compareViews([a, b], t)
 
   await addWriterAndSync(a, b)
   await replicateAndSync([a, b])
 
-  t.is(a.view.indexedLength, 1)
-  t.is(b.view.indexedLength, 1)
+  t.is(await getIndexedViewLength(a), 1)
+  t.is(await getIndexedViewLength(b), 1)
 
   await compareViews([a, b], t)
 
   await replicateAndSync([a, b, c])
 
-  t.is(c.view.indexedLength, 1)
+  t.is(await getIndexedViewLength(c), 1)
 
   await compareViews([a, c], t)
 
@@ -352,8 +352,8 @@ test('add writer', async t => {
 
   await replicateAndSync([a, b, c])
 
-  t.is(a.view.indexedLength, b.view.indexedLength)
-  t.is(b.view.indexedLength, c.view.indexedLength)
+  t.is(await getIndexedViewLength(a), await getIndexedViewLength(b))
+  t.is(await getIndexedViewLength(b), await getIndexedViewLength(c))
 
   await compareViews([a, b], t)
   await compareViews([a, c], t)
@@ -418,8 +418,8 @@ test('majority alone - non-convergence', async t => {
 
   await b.append('b' + bi++)
 
-  t.is(b.system.core.indexedLength, c.system.core.indexedLength)
-  t.is(b.system.core.indexedLength, d.system.core.indexedLength)
+  t.is(b.system.core.signedLength, c.system.core.signedLength)
+  t.is(b.system.core.signedLength, d.system.core.signedLength)
 
   await compareViews([b, c, d], t)
 
@@ -516,7 +516,7 @@ test('double fork', async t => {
 
   // --- done ---
 
-  const length = Math.min(a.view.indexedLength, b.view.indexedLength)
+  const length = Math.min(await getIndexedViewLength(a), await getIndexedViewLength(b))
 
   for (let i = 0; i < length; i++) {
     const left = await a.view.get(i)
@@ -528,3 +528,8 @@ test('double fork', async t => {
     break
   }
 })
+
+async function getIndexedViewLength (base) {
+  const info = await base.getIndexedInfo()
+  return info.views[0] ? info.views[0].length : 0
+}

@@ -1,5 +1,4 @@
 const test = require('brittle')
-const b4a = require('b4a')
 const Hyperbee = require('hyperbee')
 
 const {
@@ -100,8 +99,8 @@ test('no inconsistent snapshot-of-snapshot entries when truncated', async t => {
   await base2.append('2-1')
   await base2.append('2-2')
 
-  const orig1 = base1.view.snapshot()
-  const orig2 = base1.view.snapshot()
+  const orig1 = base1.view.snapshot({ valueEncoding: 'json' })
+  const orig2 = base1.view.snapshot({ valueEncoding: 'json' })
 
   const snap1 = orig1.snapshot()
   const snap2 = orig2.snapshot()
@@ -156,11 +155,9 @@ test('no inconsistent entries when using snapshot core in bee (bee snapshot)', a
   ])
 
   const bee1 = base1.view.snapshot()
-  t.is(bee1.core.indexedLength, 2) // Sanity check
   t.is(bee1.version, 3) // Sanity check
 
   const bee2 = base2.view.snapshot()
-  t.is(bee2.core.indexedLength, 2) // Sanity check
   t.is(bee2.version, 4) // Sanity check
 
   let hasTruncated = false
@@ -183,15 +180,6 @@ test('no inconsistent entries when using snapshot core in bee (bee snapshot)', a
 
   t.is(hasTruncated, true) // Sanity check
   t.is(bee1.version, 3, 'version did not change')
-
-  if (b4a.compare(base1.local.key, base2.local.key) < 0) {
-    t.is(bee1.core.indexedLength, 3, 'indexedLength increased')
-    t.is(bee2.core.indexedLength, 2, 'indexedLength did not change')
-  } else {
-    t.is(bee1.core.indexedLength, 2, 'indexedLength did not change')
-    t.is(bee2.core.indexedLength, 4, 'indexedLength increased')
-  }
-
   t.is(bee2.version, 4, 'version did not change')
 
   await bee1.close()
