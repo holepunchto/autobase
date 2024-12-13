@@ -2015,7 +2015,8 @@ module.exports = class Autobase extends ReadyResource {
 
       const length = core._isSystem() ? this._indexedLength : views[index].length
 
-      complete &&= await core.flush(length)
+      if (!(await core.flush(length))) complete = false
+
       await core._onindex(length)
     }
 
