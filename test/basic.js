@@ -399,8 +399,11 @@ test('basic - throws', async t => {
 
   await confirm([a, b])
 
+  const session = a.view.session({ writable: true })
+
   await t.exception(b.append('not writable'))
   await t.exception(a.view.append('append outside apply'))
+  await t.exception(session.append('cannot override'))
   await t.exception(() => a.addWriter(b.local.key))
 })
 
