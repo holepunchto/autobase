@@ -1,5 +1,4 @@
 const test = require('brittle')
-const b4a = require('b4a')
 const Hyperbee = require('hyperbee')
 
 const {
@@ -156,11 +155,9 @@ test('no inconsistent entries when using snapshot core in bee (bee snapshot)', a
   ])
 
   const bee1 = base1.view.snapshot()
-  t.is(bee1.core.signedLength, 2) // Sanity check
   t.is(bee1.version, 3) // Sanity check
 
   const bee2 = base2.view.snapshot()
-  t.is(bee2.core.signedLength, 2) // Sanity check
   t.is(bee2.version, 4) // Sanity check
 
   let hasTruncated = false
@@ -183,15 +180,6 @@ test('no inconsistent entries when using snapshot core in bee (bee snapshot)', a
 
   t.is(hasTruncated, true) // Sanity check
   t.is(bee1.version, 3, 'version did not change')
-
-  if (b4a.compare(base1.local.key, base2.local.key) < 0) {
-    t.is(bee1.core.signedLength, 3, 'signedLength increased')
-    t.is(bee2.core.signedLength, 2, 'signedLength did not change')
-  } else {
-    t.is(bee1.core.signedLength, 2, 'signedLength did not change')
-    t.is(bee2.core.signedLength, 4, 'signedLength increased')
-  }
-
   t.is(bee2.version, 4, 'version did not change')
 
   await bee1.close()

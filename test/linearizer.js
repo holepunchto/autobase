@@ -46,10 +46,10 @@ test('linearizer - simple', async t => {
   await a.append('a' + ai++)
   await replicateAndSync(bases)
 
-  t.alike(a.view.signedLength, 4)
-  t.alike(a.view.signedLength, b.view.signedLength)
-  t.alike(c.view.signedLength, b.view.signedLength)
-  t.alike(a.view.signedLength, c.view.signedLength)
+  t.alike(await getIndexedViewLength(a), 4)
+  t.alike(await getIndexedViewLength(a), await getIndexedViewLength(b))
+  t.alike(await getIndexedViewLength(c), await getIndexedViewLength(b))
+  t.alike(await getIndexedViewLength(a), await getIndexedViewLength(c))
 
   t.alike(a.view.length, 6)
   t.alike(a.view.length, b.view.length)
@@ -149,10 +149,10 @@ test('linearizer - compete', async t => {
   await a.append('a' + ai++)
   await replicateAndSync(bases)
 
-  t.alike(a.view.signedLength, 4)
-  t.alike(a.view.signedLength, b.view.signedLength)
-  t.alike(c.view.signedLength, b.view.signedLength)
-  t.alike(a.view.signedLength, c.view.signedLength)
+  t.alike(await getIndexedViewLength(a), 4)
+  t.alike(await getIndexedViewLength(a), await getIndexedViewLength(b))
+  t.alike(await getIndexedViewLength(c), await getIndexedViewLength(b))
+  t.alike(await getIndexedViewLength(a), await getIndexedViewLength(c))
 
   t.alike(a.view.length, 6)
   t.alike(a.view.length, b.view.length)
@@ -256,9 +256,9 @@ test('linearizer - count ordering', async t => {
 
   await replicateAndSync([b, c])
 
-  t.alike(a.view.signedLength, 3)
-  t.alike(c.view.signedLength, 4)
-  t.alike(b.view.signedLength, c.view.signedLength)
+  t.alike(await getIndexedViewLength(a), 3)
+  t.alike(await getIndexedViewLength(c), 4)
+  t.alike(await getIndexedViewLength(b), await getIndexedViewLength(c))
 
   t.alike(a.view.length, 5)
   t.alike(c.view.length, 6)
@@ -491,8 +491,8 @@ test.skip('linearizer - no loop', async t => {
     break
   }
 
-  t.is(a.view.signedLength, 0)
-  t.is(b.view.signedLength, 0)
+  t.is(await getIndexedViewLength(a), 0)
+  t.is(await getIndexedViewLength(b), 0)
 
   t.not(i, 20)
 })
@@ -528,3 +528,8 @@ test('linearizer - all voted', async t => {
   t.alike(binfo.views[0].length, 1)
   t.alike(cinfo.views[0].length, 1)
 })
+
+async function getIndexedViewLength (base) {
+  const info = await base.getIndexedInfo()
+  return info.views[0] ? info.views[0].length : 0
+}

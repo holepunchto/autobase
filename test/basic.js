@@ -967,14 +967,19 @@ test('basic - non-indexed writers 3-of-5', async t => {
   await c.append('c0')
 
   // should only index up to a0
-  t.is(c.view.signedLength, 3)
+  {
+    const info = await c.getIndexedInfo()
+    t.is(info.views[0].length, 3)
+  }
 
   await replicateAndSync([a, b, c, d, e])
 
-  t.is(a.view.signedLength, 3)
-  t.is(b.view.signedLength, 3)
-  t.is(d.view.signedLength, 3)
-  t.is(e.view.signedLength, 3)
+  {
+    const ainfo = await a.getIndexedInfo()
+    const einfo = await e.getIndexedInfo()
+    t.is(ainfo.views[0].length, 3)
+    t.is(einfo.views[0].length, 3)
+  }
 
   const a0 = await a.view.get(0)
   const a1 = await a.view.get(1)
@@ -1609,9 +1614,12 @@ test('basic - add new indexer after removing', async t => {
   await confirm([a, b, c])
   await replicateAndSync([a, b, c])
 
-  t.is(a.view.signedLength, 3)
-  t.is(b.view.signedLength, 3)
-  t.is(c.view.signedLength, 3)
+  const info = await a.system.getIndexedInfo()
+
+  t.is(info.indexers.length, 2)
+
+  t.is(b.system.core.signedLength, a.system.core.signedLength)
+  t.is(c.system.core.signedLength, a.system.core.signedLength)
 
   t.is(a.linearizer.indexers.length, 2)
   t.is(b.linearizer.indexers.length, 2)

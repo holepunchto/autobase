@@ -837,7 +837,8 @@ test('suspend - migrations', async t => {
 
   await t.execution(replicateAndSync([a, b2]))
 
-  t.is(b2.view.signedLength, 4)
+  const info = await b2.getIndexedInfo()
+  t.is(info.views[0].length, 4)
   t.is(b2.view.length, order.length + 1)
 })
 
