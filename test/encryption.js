@@ -81,7 +81,10 @@ test('encryption - expect encryption key', async t => {
     t.is(err.message, 'Encryption key is expected')
   }
 
-  await base.close()
+  const closing = base.close()
+  await store.close()
+
+  await closing
 })
 
 function open (store) {
