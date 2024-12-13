@@ -9,8 +9,7 @@ on:
   pull_request:
     branches:
       - main
-env:
-  BRITTLE_TIMEOUT: 60000
+
 jobs:
   test:
     if: ${{ !startsWith(github.ref, 'refs/tags/')}} # Already runs for the push of the commit, no need to run again for the tag

@@ -19,6 +19,8 @@ const ActiveWriters = require('./lib/active-writers')
 const CorePool = require('./lib/core-pool')
 const AutoWakeup = require('./lib/wakeup')
 
+const WakeupExtension = require('./lib/extension')
+
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 const INTERRUPT = new Error('Apply interrupted')
 
@@ -50,6 +52,7 @@ module.exports = class Autobase extends ReadyResource {
     this.store = store
     this.globalCache = store.globalCache || null
     this.encrypted = handlers.encrypted || !!handlers.encryptionKey
+    this.encrypt = !!handlers.encrypt
     this.encryptionKey = handlers.encryptionKey || null
 
     this._tryLoadingLocal = true
@@ -66,6 +69,7 @@ module.exports = class Autobase extends ReadyResource {
     this.corePool = new CorePool()
     this.linearizer = null
     this.updating = false
+    this.wakeupExtension = null
 
     this.fastForwardEnabled = handlers.fastForward !== false
     this.fastForwarding = 0
@@ -267,6 +271,10 @@ module.exports = class Autobase extends ReadyResource {
       await this.local.setUserData('autobase/encryption', this.encryptionKey)
     } else {
       this.encryptionKey = await this.local.getUserData('autobase/encryption')
+      if (this.encrypt && this.encryptionKey === null) {
+        this.encryptionKey = (await this.store.createKeyPair('autobase/encryption')).secretKey.subarray(0, 32)
+        await this.local.setUserData('autobase/encryption', this.encryptionKey)
+      }
       if (this.encryptionKey) {
         await this.local.setEncryptionKey(this.encryptionKey)
         // not needed but, just for good meassure
@@ -289,9 +297,11 @@ module.exports = class Autobase extends ReadyResource {
     if (this._primaryBootstrap) {
       await this._primaryBootstrap.ready()
       this._primaryBootstrap.setUserData('autobase/local', this.local.key)
+      this.wakeupExtension = new WakeupExtension(this, this._primaryBootstrap, true)
       if (this.encryptionKey) await this._primaryBootstrap.setUserData('autobase/encryption', this.encryptionKey)
     } else {
       this.local.setUserData('autobase/local', this.local.key)
+      this.wakeupExtension = new WakeupExtension(this, this.local, true)
     }
 
     const { bootstrap, system, views } = await this._loadSystemInfo()
