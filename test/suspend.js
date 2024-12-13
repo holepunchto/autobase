@@ -175,7 +175,7 @@ test('suspend - reopen after index', async t => {
 
   await t.execution(replicateAndSync([a, b2]))
 
-  t.is(b2.view.flushedLength, 1)
+  t.is(b2.view.signedLength, 1)
   t.is(b2.view.length, order.length + 2)
 })
 
@@ -226,7 +226,7 @@ test('suspend - reopen with sync in middle', async t => {
     const remote = ac
     const local = bstore.get({ key: remote.key, compat: false })
     await local.ready()
-    await local.download({ start: 0, end: remote.flushedLength }).done()
+    await local.download({ start: 0, end: remote.signedLength }).done()
     await local.close()
   }
 
@@ -252,7 +252,7 @@ test('suspend - reopen with sync in middle', async t => {
 
   await t.execution(replicateAndSync([b2, a]))
 
-  t.is(b2.view.flushedLength, 1)
+  t.is(b2.view.signedLength, 1)
   t.is(b2.view.length, length + 2)
 })
 
@@ -300,14 +300,14 @@ test('suspend - reopen with indexing in middle', async t => {
   }
 
   t.is(c2.activeWriters.size, 3)
-  t.is(c2.view.flushedLength, 0)
+  t.is(c2.view.signedLength, 0)
 
   await c2.append('final')
 
   await t.execution(replicateAndSync([c2, b]))
 
-  t.is(b.view.flushedLength, 3)
-  t.is(c2.view.flushedLength, 3)
+  t.is(b.view.signedLength, 3)
+  t.is(c2.view.signedLength, 3)
   t.is(c2.view.length, 5)
 })
 
@@ -389,14 +389,14 @@ test.skip('suspend - reopen with indexing + sync in middle', async t => {
 
   t.is(c2.activeWriters.size, 3)
   t.is(c2.view.length, order.length)
-  t.is(c2.view.flushedLength, 0)
+  t.is(c2.view.signedLength, 0)
 
   await c2.append('final')
 
   await t.execution(replicateAndSync([c2, b]))
 
-  t.is(b.view.flushedLength, 3)
-  t.is(c2.view.flushedLength, 3)
+  t.is(b.view.signedLength, 3)
+  t.is(c2.view.signedLength, 3)
   t.is(c2.view.length, 5)
 })
 
@@ -436,7 +436,7 @@ test('suspend - non-indexed writer', async t => {
   const b2 = createBase(stores[1], a.local.key, t)
   await b2.ready()
 
-  t.is(b2.view.flushedLength, a.view.flushedLength)
+  t.is(b2.view.signedLength, a.view.signedLength)
   t.is(b2.view.length, a.view.length)
 
   async function applyWriter (batch, view, base) {
@@ -514,7 +514,7 @@ test('suspend - open new index after reopen', async t => {
 
   await t.execution(replicateAndSync([a, b2]))
 
-  t.is(b2.view.first.flushedLength, 1)
+  t.is(b2.view.first.signedLength, 1)
   t.is(b2.view.first.length, length1 + 2)
 
   await t.execution(confirm([a, b2]))
@@ -603,7 +603,7 @@ test('suspend - reopen multiple indexes', async t => {
 
   await t.execution(replicateAndSync([a, b2]))
 
-  t.is(b2.view.first.flushedLength, 1)
+  t.is(b2.view.first.signedLength, 1)
   t.is(b2.view.first.length, length1 + 2)
 
   await t.execution(confirm([a, b2]))
@@ -793,7 +793,7 @@ test('suspend - migrations', async t => {
   await a.append('a0')
   await a.append('a1')
 
-  t.is(a.view.flushedLength, 2)
+  t.is(a.view.signedLength, 2)
 
   await b.ready()
 
@@ -807,10 +807,10 @@ test('suspend - migrations', async t => {
   await a.append('a2')
   await replicateAndSync([a, b])
 
-  t.is(a.view.flushedLength, 3)
+  t.is(a.view.signedLength, 3)
 
   t.is(b.activeWriters.size, 2)
-  t.is(b.view.flushedLength, 3)
+  t.is(b.view.signedLength, 3)
 
   const order = []
   for (let i = 0; i < b.view.length; i++) {
@@ -822,7 +822,7 @@ test('suspend - migrations', async t => {
   const b2 = createBase(stores[1], a.local.key, t)
   await b2.ready()
 
-  t.is(b2.view.flushedLength, 3)
+  t.is(b2.view.signedLength, 3)
 
   await b2.update()
 
@@ -837,7 +837,7 @@ test('suspend - migrations', async t => {
 
   await t.execution(replicateAndSync([a, b2]))
 
-  t.is(b2.view.flushedLength, 4)
+  t.is(b2.view.signedLength, 4)
   t.is(b2.view.length, order.length + 1)
 })
 
@@ -880,7 +880,7 @@ test('suspend - incomplete migrate', async t => {
   await a.append('a0')
   await a.append('a1')
 
-  t.is(a.view.flushedLength, 2)
+  t.is(a.view.signedLength, 2)
 
   await addWriter(a, b)
 
@@ -895,7 +895,7 @@ test('suspend - incomplete migrate', async t => {
 
   await b.append('b1') // this indexes a1
 
-  t.is(b.view.flushedLength, 2)
+  t.is(b.view.signedLength, 2)
 
   await b.close()
 
@@ -903,8 +903,8 @@ test('suspend - incomplete migrate', async t => {
 
   await b2.ready()
 
-  t.is(a.view.flushedLength, 2)
-  t.is(b2.view.flushedLength, 2)
+  t.is(a.view.signedLength, 2)
+  t.is(b2.view.signedLength, 2)
 
   await b2.update()
 

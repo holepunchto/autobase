@@ -88,12 +88,12 @@ test('core - seek multi writer', async t => {
 
   t.is(a.view.length, 3)
   t.is(a.view.byteLength, 15)
-  t.is(a.view.flushedLength, 2)
+  t.is(a.view.signedLength, 2)
   // t.is(a.view.indexedByteLength, 8)
 
   t.alike(a.view.length, b.view.length)
   t.alike(a.view.byteLength, b.view.byteLength)
-  t.alike(a.view.flushedLength, b.view.flushedLength)
+  t.alike(a.view.signedLength, b.view.signedLength)
   // t.alike(a.view.indexedByteLength, b.view.indexedByteLength)
 
   let i = 0

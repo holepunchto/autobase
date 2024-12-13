@@ -211,8 +211,8 @@ async function confirm (bases, options = {}) {
 }
 
 async function compare (a, b, full = false) {
-  const alen = full ? a.view.length : a.view.flushedLength
-  const blen = full ? b.view.length : b.view.flushedLength
+  const alen = full ? a.view.length : a.view.signedLength
+  const blen = full ? b.view.length : b.view.signedLength
 
   if (alen !== blen) throw new Error('Views are different lengths')
 
@@ -254,10 +254,10 @@ async function compareViews (bases, t) {
         continue
       }
 
-      const length = left.core.flushedLength
+      const length = left.core.signedLength
 
-      if (right.core.flushedLength !== length) {
-        t.fail(`view flushedLength: ${name}`)
+      if (right.core.signedLength !== length) {
+        t.fail(`view signedLength: ${name}`)
         continue
       }
 

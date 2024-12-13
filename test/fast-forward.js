@@ -203,7 +203,7 @@ test('fast-forward - multiple queues', async t => {
 
   await confirm([a, b, c])
 
-  const midLength = a.system.core.flushedLength
+  const midLength = a.system.core.signedLength
 
   for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
@@ -336,15 +336,15 @@ test('fast-forward - force reset then ff', async t => {
     await a.append('a' + i)
   }
 
-  t.ok(b.system.core.flushedLength < 40)
+  t.ok(b.system.core.signedLength < 40)
 
   await confirm([a, c])
 
-  t.ok(a.system.core.flushedLength > 800)
+  t.ok(a.system.core.signedLength > 800)
 
   const truncate = new Promise(resolve => b.system.core.on('truncate', resolve))
 
-  t.not(b.system.core.flushedLength, a.system.core.flushedLength)
+  t.not(b.system.core.signedLength, a.system.core.signedLength)
 
   await b.forceResetViews()
 
@@ -352,7 +352,7 @@ test('fast-forward - force reset then ff', async t => {
 
   await t.execution(truncate)
 
-  t.is(b.system.core.flushedLength, a.system.core.flushedLength)
+  t.is(b.system.core.signedLength, a.system.core.signedLength)
 
   await replicateAndSync([a, c])
 
@@ -556,8 +556,8 @@ test('fast-forward - upgrade available', async t => {
   await a1.append('2')
   await confirm([a1, b1])
 
-  t.is(a1.view.flushedLength, 201)
-  t.is(b1.view.flushedLength, 201)
+  t.is(a1.view.signedLength, 201)
+  t.is(b1.view.signedLength, 201)
 
   t.is(a1.system.version, version + 1)
   t.is(b1.system.version, version + 1)
@@ -635,8 +635,8 @@ test('fast-forward - initial ff upgrade available', async t => {
   await a1.append('a2')
   await confirm([a1, b1])
 
-  t.is(a1.view.flushedLength, 201)
-  t.is(b1.view.flushedLength, 201)
+  t.is(a1.view.signedLength, 201)
+  t.is(b1.view.signedLength, 201)
 
   t.is(a1.system.version, version + 1)
   t.is(b1.system.version, version + 1)
@@ -649,7 +649,7 @@ test('fast-forward - initial ff upgrade available', async t => {
 
   const fastForward = {
     key: a1.system.core.key,
-    length: a1.system.core.flushedLength
+    length: a1.system.core.signedLength
   }
 
   const c0 = createBase(s3, a.bootstrap, t, { fastForward })
@@ -782,7 +782,7 @@ test('fast-forward - unindexed cores should migrate', async t => {
   await confirm([a, b, c])
   await replicateAndSync([a, b, c, d])
 
-  t.is(a.system.core.flushedLength, c.system.core.flushedLength)
+  t.is(a.system.core.signedLength, c.system.core.signedLength)
 })
 
 test('fast-forward - initial fast forward with in between writer', async t => {
@@ -919,7 +919,7 @@ test('fast-forward - is indexer set correctly', async t => {
 
   await replicateAndSync([a, d])
 
-  t.is(a.view.flushedLength, 400)
+  t.is(a.view.signedLength, 400)
 
   t.is(c.linearizer.indexers.length, 2)
 

@@ -28,8 +28,8 @@ test('simple 2', async t => {
   await replicateAndSync(bases)
 
   // all indexers voted over a0
-  t.alike(a.view.flushedLength, 1)
-  t.alike(b.view.flushedLength, 1)
+  t.alike(a.view.signedLength, 1)
+  t.alike(b.view.signedLength, 1)
 
   await a.append('a' + ai++)
   await replicateAndSync(bases)
@@ -38,8 +38,8 @@ test('simple 2', async t => {
   await replicateAndSync(bases)
 
   // all indexers voted over b0
-  t.alike(a.view.flushedLength, 2)
-  t.alike(b.view.flushedLength, 2)
+  t.alike(a.view.signedLength, 2)
+  t.alike(b.view.signedLength, 2)
 
   await compareViews([a, b], t)
 
@@ -86,9 +86,9 @@ test('simple 3', async t => {
   await a.append('a' + ai++)
   await replicateAndSync(bases)
 
-  t.alike(a.view.flushedLength, b.view.flushedLength)
-  t.alike(c.view.flushedLength, b.view.flushedLength)
-  t.alike(a.view.flushedLength, c.view.flushedLength)
+  t.alike(a.view.signedLength, b.view.signedLength)
+  t.alike(c.view.signedLength, b.view.signedLength)
+  t.alike(a.view.signedLength, c.view.signedLength)
 
   await compareViews([a, b, c], t)
 
@@ -170,9 +170,9 @@ test.skip('convergence', async t => {
 
   // --- loop ---
 
-  t.alike(a.view.flushedLength, b.view.flushedLength)
-  t.alike(c.view.flushedLength, b.view.flushedLength)
-  t.alike(a.view.flushedLength, c.view.flushedLength)
+  t.alike(a.view.signedLength, b.view.signedLength)
+  t.alike(c.view.signedLength, b.view.signedLength)
+  t.alike(a.view.signedLength, c.view.signedLength)
 
   t.is(a.linearizer.tails.size, 1)
 
@@ -244,7 +244,7 @@ test.skip('inner majority', async t => {
 
   await b.append('b' + bi++)
 
-  t.is(b.view.flushedLength, 3)
+  t.is(b.view.signedLength, 3)
   t.is(b.linearizer.tails.size, 1)
 })
 
@@ -298,9 +298,9 @@ test('majority alone - convergence', async t => {
 
   await compareViews([b, c, d], t)
 
-  t.is(b.view.flushedLength, 2)
-  t.is(c.view.flushedLength, 2)
-  t.is(d.view.flushedLength, 2)
+  t.is(b.view.signedLength, 2)
+  t.is(c.view.signedLength, 2)
+  t.is(d.view.signedLength, 2)
 
   t.is(b.linearizer.tails.size, 1)
 })
@@ -317,22 +317,22 @@ test('add writer', async t => {
 
   await replicateAndSync([a, b])
 
-  t.is(a.view.flushedLength, 1)
-  t.is(b.view.flushedLength, 1)
+  t.is(a.view.signedLength, 1)
+  t.is(b.view.signedLength, 1)
 
   await compareViews([a, b], t)
 
   await addWriterAndSync(a, b)
   await replicateAndSync([a, b])
 
-  t.is(a.view.flushedLength, 1)
-  t.is(b.view.flushedLength, 1)
+  t.is(a.view.signedLength, 1)
+  t.is(b.view.signedLength, 1)
 
   await compareViews([a, b], t)
 
   await replicateAndSync([a, b, c])
 
-  t.is(c.view.flushedLength, 1)
+  t.is(c.view.signedLength, 1)
 
   await compareViews([a, c], t)
 
@@ -352,8 +352,8 @@ test('add writer', async t => {
 
   await replicateAndSync([a, b, c])
 
-  t.is(a.view.flushedLength, b.view.flushedLength)
-  t.is(b.view.flushedLength, c.view.flushedLength)
+  t.is(a.view.signedLength, b.view.signedLength)
+  t.is(b.view.signedLength, c.view.signedLength)
 
   await compareViews([a, b], t)
   await compareViews([a, c], t)
@@ -418,8 +418,8 @@ test('majority alone - non-convergence', async t => {
 
   await b.append('b' + bi++)
 
-  t.is(b.system.core.flushedLength, c.system.core.flushedLength)
-  t.is(b.system.core.flushedLength, d.system.core.flushedLength)
+  t.is(b.system.core.signedLength, c.system.core.signedLength)
+  t.is(b.system.core.signedLength, d.system.core.signedLength)
 
   await compareViews([b, c, d], t)
 
@@ -516,7 +516,7 @@ test('double fork', async t => {
 
   // --- done ---
 
-  const length = Math.min(a.view.flushedLength, b.view.flushedLength)
+  const length = Math.min(a.view.signedLength, b.view.signedLength)
 
   for (let i = 0; i < length; i++) {
     const left = await a.view.get(i)

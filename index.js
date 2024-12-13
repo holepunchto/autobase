@@ -305,7 +305,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this.bootstrap = bootstrap
 
-    this._systemPointer = system ? system.core.flushedLength : 0
+    this._systemPointer = system ? system.core.signedLength : 0
     this._indexedLength = this._systemPointer
 
     this._initialSystem = system
@@ -1376,7 +1376,7 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this._interrupting) return
 
-      const flushed = (await this._flushIndexes()) ? this.system.core.flushedLength : this._systemPointer
+      const flushed = (await this._flushIndexes()) ? this.system.core.signedLength : this._systemPointer
       if (this.updating || flushed > this._systemPointer) await this._flushPendingUpdates(flushed)
 
       if (indexed) await this.onindex(this)
@@ -1387,7 +1387,7 @@ module.exports = class Autobase extends ReadyResource {
       if (this._queueViewReset && this._appending === null) {
         this._queueViewReset = false
         const sysCore = this._viewStore.getSystemCore()
-        await this._forceResetViews(sysCore.flushedLength)
+        await this._forceResetViews(sysCore.signedLength)
         continue
       }
 
@@ -2002,7 +2002,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _flushIndexes () {
-    if (this._indexedLength === this.system.core.flushedLength) return true
+    if (this._indexedLength === this.system.core.signedLength) return true
 
     let complete = true
     this._updatingCores = false

@@ -29,15 +29,15 @@ test('autoack - simple', async t => {
 
   await b.append('b0')
 
-  t.is(a.view.flushedLength, 0)
-  t.is(b.view.flushedLength, 0)
+  t.is(a.view.signedLength, 0)
+  t.is(b.view.signedLength, 0)
 
   setTimeout(() => {
     t.not(a.local.length, 1)
     t.not(b.local.length, 1)
 
-    t.is(a.view.flushedLength, 1)
-    t.is(b.view.flushedLength, 1)
+    t.is(a.view.signedLength, 1)
+    t.is(b.view.signedLength, 1)
   }, 100)
 })
 
@@ -66,13 +66,13 @@ test('autoack - 5 writers', async t => {
 
   await b.append('b0')
 
-  t.is(a.view.flushedLength, 0)
-  t.is(b.view.flushedLength, 0)
-  t.is(c.view.flushedLength, 0)
-  t.is(d.view.flushedLength, 0)
-  t.is(e.view.flushedLength, 0)
+  t.is(a.view.signedLength, 0)
+  t.is(b.view.signedLength, 0)
+  t.is(c.view.signedLength, 0)
+  t.is(d.view.signedLength, 0)
+  t.is(e.view.signedLength, 0)
 
-  await poll(() => bases.reduce((acc, b) => acc && b.view.flushedLength === 1, true), ackInterval)
+  await poll(() => bases.reduce((acc, b) => acc && b.view.signedLength === 1, true), ackInterval)
 
   // allow acks to settle
   await new Promise(resolve => setTimeout(resolve, 10 * ackInterval))
@@ -98,11 +98,11 @@ test('autoack - 5 writers', async t => {
   t.is(d.linearizer.indexers.length, 5)
   t.is(e.linearizer.indexers.length, 5)
 
-  t.is(a.view.flushedLength, 1)
-  t.is(b.view.flushedLength, 1)
-  t.is(c.view.flushedLength, 1)
-  t.is(d.view.flushedLength, 1)
-  t.is(e.view.flushedLength, 1)
+  t.is(a.view.signedLength, 1)
+  t.is(b.view.signedLength, 1)
+  t.is(c.view.signedLength, 1)
+  t.is(d.view.signedLength, 1)
+  t.is(e.view.signedLength, 1)
 })
 
 test('autoack - concurrent', async t => {
@@ -129,11 +129,11 @@ test('autoack - concurrent', async t => {
   await Promise.all(bases.map(n => message(n, 10)))
 
   setTimeout(async () => {
-    t.is(a.view.flushedLength, 50)
-    t.is(b.view.flushedLength, 50)
-    t.is(c.view.flushedLength, 50)
-    t.is(d.view.flushedLength, 50)
-    t.is(e.view.flushedLength, 50)
+    t.is(a.view.signedLength, 50)
+    t.is(b.view.signedLength, 50)
+    t.is(c.view.signedLength, 50)
+    t.is(d.view.signedLength, 50)
+    t.is(e.view.signedLength, 50)
 
     const alen = a.local.length
     const blen = b.local.length
@@ -181,8 +181,8 @@ test('autoack - threshold', async t => {
   for (let i = 0; i < 4; i++) await b.append('b')
   await sync([a, b])
 
-  t.ok(a.view.flushedLength >= 4)
-  t.ok(b.view.flushedLength >= 4)
+  t.ok(a.view.signedLength >= 4)
+  t.ok(b.view.signedLength >= 4)
 })
 
 test('autoack - threshold with interval', async t => {
@@ -217,8 +217,8 @@ test('autoack - threshold with interval', async t => {
   await new Promise(resolve => setTimeout(resolve, 400)) // fast ack
 
   t.is(a._ackTimer.interval, ackInterval)
-  t.ok(a.view.flushedLength >= 4)
-  t.ok(b.view.flushedLength >= 4)
+  t.ok(a.view.signedLength >= 4)
+  t.ok(b.view.signedLength >= 4)
 })
 
 test('autoack - no null acks', async t => {
@@ -273,8 +273,8 @@ test('autoack - value beneath null values', async t => {
   setTimeout(() => {
     t.not(a.local.length, alen) // a should ack
     t.is(b.local.length, blen) // b0 is indexed by a's ack (all indexes acked)
-    t.is(b.view.length, b.view.flushedLength)
-    t.is(a.view.length, a.view.flushedLength)
+    t.is(b.view.length, b.view.signedLength)
+    t.is(a.view.length, a.view.signedLength)
   }, 100)
 })
 
