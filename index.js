@@ -88,7 +88,6 @@ module.exports = class Autobase extends ReadyResource {
     this._queueViewReset = false
     this._lock = mutexify()
 
-    this._applying = null
     this._applySystem = null
     this._updatingCores = false
     this._localDigest = null
@@ -363,7 +362,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   interrupt (reason) {
-    assert(this._applying !== null, 'Interrupt is only allowed in apply')
+    assert(this._applySystem !== null, 'Interrupt is only allowed in apply')
     this._interrupting = true
     if (reason) this.interrupted = reason
     throw INTERRUPT
@@ -1290,7 +1289,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _advanceBootRecord () {
-    const views = this._viewStore.indexedViewsByName()
+    const info = await this.getIndexedInfo()
+    const views = this._viewStore.indexedViewsByName(info)
     await this._setBootRecord(this.system.core.key, views)
   }
 
@@ -2023,20 +2023,9 @@ module.exports = class Autobase extends ReadyResource {
     return complete
   }
 
-  // triggered from linearized core
-  _onviewappend (core, blocks) {
-    assert(this._applying !== null, 'Append is only allowed in apply')
-
-    if (core.appending === 0) {
-      this._applying.views.push({ core, appending: 0 })
-    }
-
-    core.appending += blocks
-  }
-
   // triggered from apply
   async addWriter (key, { indexer = true, isIndexer = indexer } = {}) { // just compat for old version
-    assert(this._applying !== null, 'System changes are only allowed in apply')
+    assert(this._applySystem !== null, 'System changes are only allowed in apply')
 
     const sys = this._applySystem
     await sys.add(key, { isIndexer })
@@ -2067,7 +2056,7 @@ module.exports = class Autobase extends ReadyResource {
 
   // triggered from apply
   async removeWriter (key) { // just compat for old version
-    assert(this._applying !== null, 'System changes are only allowed in apply')
+    assert(this._applySystem !== null, 'System changes are only allowed in apply')
 
     if (!this.removeable(key, this._applySystem)) {
       throw new Error('Not allowed to remove the last indexer')
@@ -2271,7 +2260,6 @@ module.exports = class Autobase extends ReadyResource {
         }
 
         this._updates.push(update)
-        this._applying = update
 
         if (system.bootstrapping) await this._bootstrap(system)
 
@@ -2288,12 +2276,6 @@ module.exports = class Autobase extends ReadyResource {
 
         batch = 0
         applyBatch = []
-
-        for (let k = 0; k < update.views.length; k++) {
-          const u = update.views[k]
-          u.appending = u.core.appending
-          u.core.appending = 0
-        }
 
         update.systemLength = system.core.length
 
@@ -2312,8 +2294,6 @@ module.exports = class Autobase extends ReadyResource {
 
         await store.flush()
 
-        this._applying = null
-
         await this.system.update()
 
         // indexer set has updated
@@ -2324,8 +2304,6 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       await store.flush()
-
-      this._applying = null
 
       await this.system.update()
 
