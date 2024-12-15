@@ -1937,9 +1937,9 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // triggered from apply
-  async addWriter (key, { indexer = true, isIndexer = indexer } = {}) { // just compat for old version
+  async addWriter (key, { indexer = true, isIndexer = indexer, isBlind = false } = {}) { // just compat for old version
     assert(this._applying !== null, 'System changes are only allowed in apply')
-    await this.system.add(key, { isIndexer })
+    await this.system.add(key, { isIndexer, isBlind })
 
     const writer = (await this._getWriterByKey(key, -1, 0, false, true, null)) || this._makeWriter(key, 0, true, false)
     await writer.ready()
