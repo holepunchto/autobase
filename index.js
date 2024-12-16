@@ -2014,10 +2014,15 @@ module.exports = class Autobase extends ReadyResource {
   async _flushIndexes () {
     if (this._indexedLength === this.system.core.signedLength) return true
 
-    let complete = true
     this._updatingCores = false
 
     const { views } = await this.system.getIndexedInfo(this._indexedLength)
+
+    const atomizer = this.store.storage.atomizer()
+
+    atomizer.enter()
+
+    const flushing = []
 
     for (const core of this._viewStore.opened.values()) {
       const index = core.systemIndex
@@ -2025,12 +2030,18 @@ module.exports = class Autobase extends ReadyResource {
 
       const length = core._isSystem() ? this._indexedLength : views[index].length
 
-      if (!(await core.flush(length))) complete = false
+      flushing.push(core.flush(length, atomizer))
 
-      await core._onindex(length)
+      core._onindex(length)
     }
 
-    return complete
+    atomizer.exit()
+
+    for (const complete of await Promise.all(flushing)) {
+      if (!complete) return false
+    }
+
+    return true
   }
 
   // triggered from apply
