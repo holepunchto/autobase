@@ -1309,10 +1309,12 @@ module.exports = class Autobase extends ReadyResource {
     await this.local.setUserData('autobase/boot', pointer)
   }
 
-  async _persistUpdates () {
+  async _persistUpdates (length, atom) {
     const updates = []
 
     for (const u of this._pendingFlush.concat(this._updates)) {
+      if (length !== -1 && u.systemLength < length) continue
+
       const views = []
       for (const view of u.views) {
         views.push({ core: view.core.systemIndex, appending: view.appending })
@@ -1321,11 +1323,9 @@ module.exports = class Autobase extends ReadyResource {
       updates.push({ ...u, views })
     }
 
-    return this.local.setUserData('autobase/updates', c.encode(messages.UpdateArray, updates))
-  }
+    await this.local.setUserData('autobase/updates', c.encode(messages.UpdateArray, updates), { atom })
 
-  async _flushPendingUpdates (length) {
-    this._systemPointer = length
+    if (length === -1) return
 
     while (this._pendingFlush.length) {
       if (this._pendingFlush[0].systemLength > length) break
@@ -1376,18 +1376,13 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this._interrupting) return
 
-      await this._persistUpdates()
-
-      if (this._interrupting) return
-
       if (this.localWriter !== null && localNodes !== null) {
         await this._flushLocal(localNodes)
       }
 
       if (this._interrupting) return
 
-      const flushed = (await this._flushIndexes()) ? this.system.core.signedLength : this._systemPointer
-      if (this.updating || flushed > this._systemPointer) await this._flushPendingUpdates(flushed)
+      await this._flushIndexes()
 
       if (indexed) await this.onindex(this)
 
@@ -2012,7 +2007,9 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _flushIndexes () {
-    if (this._indexedLength === this.system.core.signedLength) return true
+    if (this._indexedLength === this.system.core.signedLength) {
+      return this._persistUpdates(this.system.core.signedLength)
+    }
 
     this._updatingCores = false
 
@@ -2022,26 +2019,31 @@ module.exports = class Autobase extends ReadyResource {
 
     atom.enter()
 
+    let systemLength = -1
     const flushing = []
 
     for (const core of this._viewStore.opened.values()) {
-      const index = core.systemIndex
-      if (!core._isSystem() && (index === -1 || index >= views.length)) continue
+      if (core._isSystem()) {
+        systemLength = await core.signer.getSignableLength(this.linearizer.indexers, this._indexedLength)
 
-      const length = core._isSystem() ? this._indexedLength : views[index].length
+        flushing.push(core.flush(this._indexedLength, atom))
+        core._onindex(this._indexedLength)
+        continue
+      }
 
-      flushing.push(core.flush(length, atom))
+      if (core.systemIndex === -1 || core.systemIndex >= views.length) continue
 
-      core._onindex(length)
+      const v = views[core.systemIndex]
+
+      flushing.push(core.flush(v.length, atom))
+      core._onindex(v.length)
     }
+
+    flushing.push(this._persistUpdates(systemLength, atom).catch(safetyCatch)) // throws when fails
 
     atom.exit()
 
-    for (const complete of await Promise.all(flushing)) {
-      if (!complete) return false
-    }
-
-    return true
+    return Promise.all(flushing)
   }
 
   // triggered from apply
@@ -2223,6 +2225,8 @@ module.exports = class Autobase extends ReadyResource {
 
     const checkout = await this._undo(u.undo)
 
+    const atom = this.store.storage.atom()
+
     const store = this._viewStore.memorySession(checkout)
     const { view, system } = await this.openMemoryView(store)
 
@@ -2313,7 +2317,10 @@ module.exports = class Autobase extends ReadyResource {
 
         if (!update.indexers && !upgraded) continue
 
-        await store.flush()
+        const flush = store.flush(atom)
+        const updates = this._persistUpdates(-1, atom)
+
+        await Promise.all([flush, updates])
 
         await this.system.update()
 
@@ -2324,7 +2331,10 @@ module.exports = class Autobase extends ReadyResource {
         return update.systemLength
       }
 
-      await store.flush()
+      const flush = store.flush(atom)
+      const updates = this._persistUpdates(-1, atom)
+
+      await Promise.all([flush, updates])
 
       await this.system.update()
 
