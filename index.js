@@ -2018,9 +2018,9 @@ module.exports = class Autobase extends ReadyResource {
 
     const { views } = await this.system.getIndexedInfo(this._indexedLength)
 
-    const atomizer = this.store.storage.atomizer()
+    const atom = this.store.storage.atom()
 
-    atomizer.enter()
+    atom.enter()
 
     const flushing = []
 
@@ -2030,12 +2030,12 @@ module.exports = class Autobase extends ReadyResource {
 
       const length = core._isSystem() ? this._indexedLength : views[index].length
 
-      flushing.push(core.flush(length, atomizer))
+      flushing.push(core.flush(length, atom))
 
       core._onindex(length)
     }
 
-    atomizer.exit()
+    atom.exit()
 
     for (const complete of await Promise.all(flushing)) {
       if (!complete) return false
