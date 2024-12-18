@@ -2098,13 +2098,10 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _undoAll () {
-    let count = 0
-    for (const u of this._updates) {
-      count += u.batch
-    }
+    this._updates = []
 
     const p = []
-    for (const [ac, length] of await this._undo(count)) {
+    for (const [ac, length] of await this._viewInfo(this._indexedLength)) {
       p.push(ac.truncate(length))
     }
 
@@ -2126,10 +2123,16 @@ module.exports = class Autobase extends ReadyResource {
     const u = updates[updates.length - 1]
     const systemLength = u ? u.systemLength : this._indexedLength
 
+    return this._viewInfo(systemLength)
+  }
+
+  async _viewInfo (systemLength) {
+    const checkout = new Map()
+
     const { views } = await this.system.getIndexedInfo(systemLength)
 
-    for (const [core, length] of checkout) {
-      if (length === 0) continue
+    for (const core of this._viewStore.opened.values()) {
+      if (core.length === 0) continue
 
       if (core._isSystem()) {
         checkout.set(core, systemLength)
