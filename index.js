@@ -1182,16 +1182,49 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _reindex () {
+    let store = null
+    let system = this.system
+
     if (this._updates.length) {
-      await this._undoAll()
-      await this._refreshSystemState(this.system)
+      this._updates = []
+
+      const checkout = await this._viewInfo(this._indexedLength)
+
+      store = this._viewStore.memorySession(checkout)
+      const truncated = await this.openMemoryView(store)
+
+      system = truncated.system
+
+      await store.opened()
+      await system.ready()
+
+      await this._refreshSystemState(system)
     }
 
-    const sameIndexers = this.system.sameIndexers(this.linearizer.indexers)
+    const sameIndexers = system.sameIndexers(this.linearizer.indexers)
 
-    await this._makeLinearizer(this.system)
-    if (!sameIndexers) await this._viewStore.migrate(this._indexedLength)
+    await this._makeLinearizer(system)
 
+    if (!sameIndexers) {
+      const name = this._viewStore.getSystemCore().name
+      const prologue = { hash: await system.core.treeHash(), length: system.core.length }
+      const key = this.deriveKey(name, this.linearizer.indexers, prologue)
+
+      const atom = this.store.storage.atom()
+
+      const actions = [
+        this._advanceBootRecord(key, atom),
+        this._viewStore.migrate(system, atom)
+      ]
+
+      await Promise.all(actions)
+    } else {
+      await this._advanceBootRecord(this.system.core.key)
+    }
+
+    if (store) await store.close()
+
+    await this._refreshSystemState(this.system)
     this.version = this.system.version
 
     this.queueFastForward()
@@ -1298,15 +1331,15 @@ module.exports = class Autobase extends ReadyResource {
     return added
   }
 
-  async _advanceBootRecord () {
+  async _advanceBootRecord (key, atom) {
     const info = await this.getIndexedInfo()
     const views = this._viewStore.indexedViewsByName(info)
-    await this._setBootRecord(this.system.core.key, views)
+    await this._setBootRecord(key, views, atom)
   }
 
-  async _setBootRecord (key, views) {
+  async _setBootRecord (key, views, atom) {
     const pointer = c.encode(messages.BootRecord, { key, views })
-    await this.local.setUserData('autobase/boot', pointer)
+    await this.local.setUserData('autobase/boot', pointer, { atom })
   }
 
   async _persistUpdates (length, atom) {
@@ -1408,7 +1441,6 @@ module.exports = class Autobase extends ReadyResource {
 
       await this._gcWriters()
       await this._reindex(changed)
-      await this._advanceBootRecord()
     }
 
     // emit state changes post drain
@@ -1977,7 +2009,9 @@ module.exports = class Autobase extends ReadyResource {
     this._indexedLength = length
 
     await this._makeLinearizer(this.system)
-    await this._advanceBootRecord()
+    await this._advanceBootRecord(this.system.core.key)
+
+    this.version = this.system.version
 
     // manually set the digest
     if (migrated) {
