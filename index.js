@@ -1219,7 +1219,7 @@ module.exports = class Autobase extends ReadyResource {
 
       await Promise.all(actions)
     } else {
-      await this._advanceBootRecord(this.system.core.key)
+      await this._advanceBootRecord(this.system.core.key, null)
     }
 
     if (store) await store.close()
@@ -1993,11 +1993,18 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._undoAll()
 
+    const atom = this.store.storage.atom()
+    const actions = []
+
+    if (migrated) actions.push(this._advanceBootRecord(key, atom))
+
     for (const view of this._viewStore.opened.values()) {
       const info = views.get(view)
-      if (info) await view.catchup(info)
-      else if (migrated) await view.migrateTo(indexers, 0)
+      if (info) actions.push(view.catchup(info, atom))
+      else if (migrated) actions.push(view.migrateTo(indexers, 0, atom))
     }
+
+    await Promise.all(actions)
 
     await this._refreshSystemState(this.system)
 
@@ -2009,7 +2016,6 @@ module.exports = class Autobase extends ReadyResource {
     this._indexedLength = length
 
     await this._makeLinearizer(this.system)
-    await this._advanceBootRecord(this.system.core.key)
 
     this.version = this.system.version
 
