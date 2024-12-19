@@ -786,6 +786,7 @@ test('fast-forward - unindexed cores should migrate', async t => {
   await replicateAndSync([a, b, c, d])
 
   t.is(a.system.core.signedLength, c.system.core.signedLength)
+  t.alike(a.system.core.key, c.system.core.key)
 })
 
 test('fast-forward - initial fast forward with in between writer', async t => {
