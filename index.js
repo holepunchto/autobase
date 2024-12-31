@@ -263,7 +263,22 @@ module.exports = class Autobase extends ReadyResource {
       key: this._primaryBootstrap ? await this._primaryBootstrap.getUserData('autobase/local') : null
     }
 
-    this.local = Autobase.getLocalCore(this.store, opts, this.encryptionKey)
+    if (this._primaryBootstrap) {
+      await this._primaryBootstrap.ready()
+      if (this._primaryBootstrap.writable) {
+        this.local = this._primaryBootstrap.session({
+          compat: false,
+          active: false,
+          exclusive: true,
+          valueEncoding: messages.OplogMessage,
+          encryptionKey: this.encryptionKey
+        })
+      }
+    }
+
+    if (!this.local) {
+      this.local = Autobase.getLocalCore(this.store, opts, this.encryptionKey)
+    }
 
     await this.local.ready()
 
