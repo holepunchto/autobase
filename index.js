@@ -2403,6 +2403,8 @@ module.exports = class Autobase extends ReadyResource {
 
       return -1
     } finally {
+      // incase we bailed midway through, teardown the batch
+      if (atom.batch) atom.batch.destroy()
       this._applySystem = null
       await store.close()
     }
