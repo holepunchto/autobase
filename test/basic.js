@@ -116,6 +116,25 @@ test('basic - no truncates when history is linear', async t => {
   t.is(base3.view.fork, 0)
 })
 
+test('basic - truncates when history is not linear', async t => {
+  const { bases } = await create(3, t)
+  const [base1, base2, base3] = bases
+
+  await addWriter(base1, base2, false)
+  await confirm([base1, base2, base3])
+
+  await addWriter(base2, base3, false)
+  await confirm([base1, base2, base3])
+
+  await base2.append('hello')
+  await base1.append('world')
+
+  await replicateAndSync([base1, base2, base3])
+  await confirm([base1, base2, base3])
+
+  t.ok(base2.view.fork > 0 || base1.view.fork > 0)
+})
+
 test('basic - writable event fires', async t => {
   t.plan(1)
   const { bases } = await create(2, t, { open: null })

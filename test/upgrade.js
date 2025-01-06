@@ -98,9 +98,9 @@ test('upgrade - consensus', async t => {
 
   await confirm([a0, b0])
 
-  await a0.append({ version: 0, data: '3' })
-  await a0.append({ version: 0, data: '3' })
-  await a0.append({ version: 0, data: '3' })
+  await a0.append({ version: 0, data: '0' })
+  await a0.append({ version: 0, data: '1' })
+  await a0.append({ version: 0, data: '2' })
 
   await confirm([a0, b0])
 
@@ -353,9 +353,9 @@ test('autobase upgrade - do not proceed', async t => {
   const b0 = createBase(s2, a0.bootstrap, t)
   await b0.ready()
 
-  await a0.append({ data: '3' })
-  await a0.append({ data: '3' })
-  await a0.append({ data: '3' })
+  await a0.append({ data: '0' })
+  await a0.append({ data: '1' })
+  await a0.append({ data: '2' })
 
   await replicateAndSync([a0, b0])
 
@@ -389,9 +389,9 @@ test('autobase upgrade - proceed', async t => {
   const b0 = createBase(s2, a0.bootstrap, t)
   await b0.ready()
 
-  await a0.append({ data: '3' })
-  await a0.append({ data: '3' })
-  await a0.append({ data: '3' })
+  await a0.append({ data: '0' })
+  await a0.append({ data: '1' })
+  await a0.append({ data: '2' })
 
   await replicateAndSync([a0, b0])
 
@@ -439,9 +439,9 @@ test('autobase upgrade - consensus', async t => {
 
   await confirm([a0, b0])
 
-  await a0.append({ data: '3' })
-  await a0.append({ data: '3' })
-  await a0.append({ data: '3' })
+  await a0.append({ data: '0' })
+  await a0.append({ data: '1' })
+  await a0.append({ data: '2' })
 
   await confirm([a0, b0])
 
