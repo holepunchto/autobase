@@ -1805,6 +1805,7 @@ module.exports = class Autobase extends ReadyResource {
       })
 
       await system.ready()
+      await this.system.ready()
 
       if (system.version > this.maxSupportedVersion) {
         const upgrade = {
