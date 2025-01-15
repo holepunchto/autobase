@@ -1197,49 +1197,31 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _reindex () {
-    let store = null
-    let system = this.system
-
-    if (this._updates.length) {
-      this._updates = []
-
-      const checkout = await this._viewInfo(this._indexedLength)
-
-      store = this._viewStore.memorySession(checkout)
-      const truncated = await this.openMemoryView(store)
-
-      system = truncated.system
-
-      await store.opened()
-      await system.ready()
-
-      await this._refreshSystemState(system)
-    }
-
-    const sameIndexers = system.sameIndexers(this.linearizer.indexers)
-
-    await this._makeLinearizer(system)
+    const sys = await this.system.getIndexedInfo(this._indexedLength)
+    const sameIndexers = SystemView.sameIndexers(sys.indexers, this.linearizer.indexers)
 
     if (!sameIndexers) {
       const name = this._viewStore.getSystemCore().name
-      const prologue = { hash: await system.core.treeHash(), length: system.core.length }
+      const length = this._indexedLength
+
+      const prologue = { hash: await this.system.core.treeHash(length), length }
       const key = this.deriveKey(name, this.linearizer.indexers, prologue)
 
-      const atom = this.store.storage.atom()
+      const atom = this.store.storage.createAtom()
 
-      const actions = [
-        this._advanceBootRecord(key, atom),
-        this._viewStore.migrate(system, atom)
-      ]
+      await this._advanceBootRecord(key, atom)
+      await this._viewStore.migrate(sys, atom)
 
-      await Promise.all(actions)
+      await atom.flush()
+
+      this.recouple()
     } else {
       await this._advanceBootRecord(this.system.core.key, null)
     }
 
-    if (store) await store.close()
-
     await this._refreshSystemState(this.system)
+    await this._makeLinearizer(this.system)
+
     this.version = this.system.version
 
     this.queueFastForward()
@@ -1354,7 +1336,12 @@ module.exports = class Autobase extends ReadyResource {
 
   async _setBootRecord (key, views, atom) {
     const pointer = c.encode(messages.BootRecord, { key, views })
-    await this.local.setUserData('autobase/boot', pointer, { atom })
+    if (!atom) return this.local.setUserData('autobase/boot', pointer)
+
+    const session = await this.local.session({ atom })
+    atom.onflush(() => session.close())
+
+    return session.setUserData('autobase/boot', pointer)
   }
 
   async _persistUpdates (length, atom) {
@@ -1371,7 +1358,10 @@ module.exports = class Autobase extends ReadyResource {
       updates.push({ ...u, views })
     }
 
-    await this.local.setUserData('autobase/updates', c.encode(messages.UpdateArray, updates), { atom })
+    const session = atom ? this.local.session({ atom }) : this.local
+    await session.setUserData('autobase/updates', c.encode(messages.UpdateArray, updates))
+
+    if (atom) atom.onflush(() => session.close())
 
     if (length === -1) return
 
@@ -2007,6 +1997,7 @@ module.exports = class Autobase extends ReadyResource {
     await system.close()
     await this._closeAllActiveWriters(false)
 
+    // todo => this undo should be atomic...
     await this._undoAll()
 
     const atom = this.store.storage.atom()
@@ -2074,7 +2065,6 @@ module.exports = class Autobase extends ReadyResource {
     const atom = this.store.storage.createAtom()
 
     let systemLength = -1
-    const flushing = []
 
     for (const core of this._viewStore.opened.values()) {
       if (core._isSystem()) {
@@ -2160,13 +2150,8 @@ module.exports = class Autobase extends ReadyResource {
     return Promise.all(p)
   }
 
-  async _undo (popped) {
-    const checkout = new Map()
-    for (const core of this._viewStore.opened.values()) {
-      checkout.set(core, core.length)
-    }
-
-    if (!popped) return checkout
+  async _undo (popped, store) {
+    if (!popped) return
 
     const updates = this._updates
 
@@ -2175,28 +2160,9 @@ module.exports = class Autobase extends ReadyResource {
     const u = updates[updates.length - 1]
     const systemLength = u ? u.systemLength : this._indexedLength
 
-    return this._viewInfo(systemLength)
-  }
-
-  async _viewInfo (systemLength) {
-    const checkout = new Map()
-
     const { views } = await this.system.getIndexedInfo(systemLength)
 
-    for (const core of this._viewStore.opened.values()) {
-      if (core.length === 0) continue
-
-      if (core._isSystem()) {
-        checkout.set(core, systemLength)
-        continue
-      }
-
-      const index = core.systemIndex
-
-      checkout.set(core, index < views.length ? views[index].length : 0)
-    }
-
-    return checkout
+    return store.truncate(systemLength, views)
   }
 
   async _getManifest (indexer, len) {
@@ -2278,15 +2244,17 @@ module.exports = class Autobase extends ReadyResource {
       return update.systemLength
     }
 
-    const checkout = await this._undo(u.undo)
+    const atom = this.store.storage.createAtom()
 
-    const atom = this.store.storage.atom()
-
-    const store = this._viewStore.memorySession(checkout)
+    const store = this._viewStore.memorySession(atom)
     const { view, system } = await this.openMemoryView(store)
 
     await system.ready()
     await store.opened()
+
+    await this._undo(u.undo, store)
+
+    await system.update()
 
     this._applySystem = system
 
