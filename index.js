@@ -2071,9 +2071,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const { views } = await this.system.getIndexedInfo(this._indexedLength)
 
-    const atom = this.store.storage.atom()
-
-    atom.enter()
+    const atom = this.store.storage.createAtom()
 
     let systemLength = -1
     const flushing = []
@@ -2082,7 +2080,7 @@ module.exports = class Autobase extends ReadyResource {
       if (core._isSystem()) {
         systemLength = await core.signer.getSignableLength(this.linearizer.indexers, this._indexedLength)
 
-        flushing.push(core.flush(this._indexedLength, atom))
+        await core.flush(this._indexedLength, atom)
         core._onindex(this._indexedLength)
         continue
       }
@@ -2091,15 +2089,13 @@ module.exports = class Autobase extends ReadyResource {
 
       const v = views[core.systemIndex]
 
-      flushing.push(core.flush(v.length, atom))
+      await core.flush(v.length, atom)
       core._onindex(v.length)
     }
 
-    flushing.push(this._persistUpdates(systemLength, atom).catch(safetyCatch)) // throws when fails
+    await this._persistUpdates(systemLength, atom) // throws when fails
 
-    atom.exit()
-
-    return Promise.all(flushing)
+    return atom.flush()
   }
 
   // triggered from apply
