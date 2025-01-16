@@ -237,6 +237,8 @@ test('fast-forward - multiple queues', async t => {
   }
 
   await next
+
+  t.pass()
 })
 
 if (!IS_MAC_OSX) {

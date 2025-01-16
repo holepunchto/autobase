@@ -1842,7 +1842,7 @@ module.exports = class Autobase extends ReadyResource {
 
       // handle system migration
       if (systemShouldMigrate) {
-        const hash = system.core.core.tree.hash()
+        const hash = system.core.core.state.hash()
         const name = this._viewStore.getSystemCore().name
         const prologue = { hash, length }
 
@@ -1959,8 +1959,10 @@ module.exports = class Autobase extends ReadyResource {
 
     const views = new Map()
 
+    const currentInfo = await this.system.getIndexedInfo(this._indexedLength)
+
     const sysView = this._viewStore.getSystemCore()
-    const sysInfo = { key, length, systemIndex: -1 }
+    const sysInfo = { key, length, treeLength: this._indexedLength, systemIndex: -1 }
 
     views.set(sysView, sysInfo)
 
@@ -1996,27 +1998,26 @@ module.exports = class Autobase extends ReadyResource {
         return
       }
 
-      views.set(view, { key: v.key, length: v.length, systemIndex: i })
+      const treeLength = i < currentInfo.views.length ? currentInfo.views[i].length : 0
+      views.set(view, { key: v.key, length: v.length, treeLength, systemIndex: i })
     }
 
     await system.close()
     await this._closeAllActiveWriters(false)
 
-    // todo => this undo should be atomic...
-    await this._undoAll()
+    const atom = this.store.storage.createAtom()
 
-    const atom = this.store.storage.atom()
-    const actions = []
-
-    if (migrated) actions.push(this._advanceBootRecord(key, atom))
+    await this._advanceBootRecord(key, atom)
 
     for (const view of this._viewStore.opened.values()) {
       const info = views.get(view)
-      if (info) actions.push(view.catchup(info, atom))
-      else if (migrated) actions.push(view.migrateTo(indexers, 0, atom))
+      if (info) await view.catchup(info, atom)
+      else if (migrated) await view.migrateTo(indexers, 0, atom)
     }
 
-    await Promise.all(actions)
+    await atom.flush()
+
+    this._updates = []
 
     await this._refreshSystemState(this.system)
 
@@ -2147,12 +2148,18 @@ module.exports = class Autobase extends ReadyResource {
   async _undoAll () {
     this._updates = []
 
-    const p = []
-    for (const [ac, length] of await this._viewInfo(this._indexedLength)) {
-      p.push(ac.truncate(length))
-    }
+    const { views } = await this.system.getIndexedInfo(this._indexedLength)
 
-    return Promise.all(p)
+    const sys = this._viewStore.getSystemCore()
+    await sys.truncate(this._indexedLength)
+
+    for (const ac of this._viewStore.opened.values()) {
+      const i = ac.systemIndex
+      if (i === -1) continue
+
+      const length = i < views.length ? views[i].length : 0
+      await ac.truncate(length)
+    }
   }
 
   async _undo (popped, store) {

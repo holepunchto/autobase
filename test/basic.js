@@ -288,7 +288,7 @@ test('basic - compare views', async t => {
   await compareViews([a, b], t)
 })
 
-test.solo('basic - online majority', async t => {
+test('basic - online majority', async t => {
   const { bases } = await create(3, t)
 
   const [a, b, c] = bases
