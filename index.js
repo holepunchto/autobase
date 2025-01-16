@@ -1197,8 +1197,12 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _reindex () {
-    const sys = await this.system.getIndexedInfo(this._indexedLength)
-    const sameIndexers = SystemView.sameIndexers(sys.indexers, this.linearizer.indexers)
+    this._updates = []
+
+    const system = await this.system.checkout(this._indexedLength)
+    const sameIndexers = SystemView.sameIndexers(system.indexers, this.linearizer.indexers)
+
+    await this._makeLinearizer(system)
 
     if (!sameIndexers) {
       const name = this._viewStore.getSystemCore().name
@@ -1210,7 +1214,7 @@ module.exports = class Autobase extends ReadyResource {
       const atom = this.store.storage.createAtom()
 
       await this._advanceBootRecord(key, atom)
-      await this._viewStore.migrate(sys, atom)
+      await this._viewStore.migrate(system, atom)
 
       await atom.flush()
 
@@ -1219,11 +1223,12 @@ module.exports = class Autobase extends ReadyResource {
       await this._advanceBootRecord(this.system.core.key, null)
     }
 
+    await this.system.update()
     await this._refreshSystemState(this.system)
-    await this._makeLinearizer(this.system)
 
     this.version = this.system.version
 
+    await system.close()
     this.queueFastForward()
 
     for (const w of this.activeWriters) {
