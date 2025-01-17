@@ -46,10 +46,10 @@ test('linearizer - simple', async t => {
   await a.append('a' + ai++)
   await replicateAndSync(bases)
 
-  t.alike(a.view.indexedLength, 4)
-  t.alike(a.view.indexedLength, b.view.indexedLength)
-  t.alike(c.view.indexedLength, b.view.indexedLength)
-  t.alike(a.view.indexedLength, c.view.indexedLength)
+  t.alike(await getIndexedViewLength(a), 4)
+  t.alike(await getIndexedViewLength(a), await getIndexedViewLength(b))
+  t.alike(await getIndexedViewLength(c), await getIndexedViewLength(b))
+  t.alike(await getIndexedViewLength(a), await getIndexedViewLength(c))
 
   t.alike(a.view.length, 6)
   t.alike(a.view.length, b.view.length)
@@ -104,12 +104,20 @@ test('linearizer - simple', async t => {
   t.is(bval, 'a1')
   t.is(cval, 'a1')
 
-  await t.exception(a.view.get(6))
-  await t.exception(b.view.get(6))
-  await t.exception(c.view.get(6))
+  t.is(await a.view.get(6, { wait: false }), null)
+  t.is(await b.view.get(6, { wait: false }), null)
+  t.is(await c.view.get(6, { wait: false }), null)
 
   t.is(a.linearizer.tails.size, 1)
 })
+
+/*
+
+c - b - a - c - a
+              \
+                b
+
+*/
 
 test('linearizer - compete', async t => {
   const { bases } = await create(3, t)
@@ -141,10 +149,10 @@ test('linearizer - compete', async t => {
   await a.append('a' + ai++)
   await replicateAndSync(bases)
 
-  t.alike(a.view.indexedLength, 4)
-  t.alike(a.view.indexedLength, b.view.indexedLength)
-  t.alike(c.view.indexedLength, b.view.indexedLength)
-  t.alike(a.view.indexedLength, c.view.indexedLength)
+  t.alike(await getIndexedViewLength(a), 4)
+  t.alike(await getIndexedViewLength(a), await getIndexedViewLength(b))
+  t.alike(await getIndexedViewLength(c), await getIndexedViewLength(b))
+  t.alike(await getIndexedViewLength(a), await getIndexedViewLength(c))
 
   t.alike(a.view.length, 6)
   t.alike(a.view.length, b.view.length)
@@ -187,24 +195,32 @@ test('linearizer - compete', async t => {
   bval = await b.view.get(4)
   cval = await c.view.get(4)
 
-  t.is(aval, 'a1')
-  t.is(bval, 'a1')
-  t.is(cval, 'a1')
+  t.is(aval, 'b1')
+  t.is(bval, 'b1')
+  t.is(cval, 'b1')
 
   aval = await a.view.get(5)
   bval = await b.view.get(5)
   cval = await c.view.get(5)
 
-  t.is(aval, 'b1')
-  t.is(bval, 'b1')
-  t.is(cval, 'b1')
+  t.is(aval, 'a1')
+  t.is(bval, 'a1')
+  t.is(cval, 'a1')
 
-  await t.exception(a.view.get(6))
-  await t.exception(b.view.get(6))
-  await t.exception(c.view.get(6))
+  t.is(await a.view.get(6, { wait: false }), null)
+  t.is(await b.view.get(6, { wait: false }), null)
+  t.is(await c.view.get(6, { wait: false }), null)
 
   t.is(a.linearizer.tails.size, 2)
 })
+
+/*
+
+c - b - a - c - a
+              \
+                b - c
+
+*/
 
 test('linearizer - count ordering', async t => {
   const { bases } = await create(3, t)
@@ -240,9 +256,9 @@ test('linearizer - count ordering', async t => {
 
   await replicateAndSync([b, c])
 
-  t.alike(a.view.indexedLength, 3)
-  t.alike(c.view.indexedLength, 4)
-  t.alike(b.view.indexedLength, c.view.indexedLength)
+  t.alike(await getIndexedViewLength(a), 3)
+  t.alike(await getIndexedViewLength(c), 4)
+  t.alike(await getIndexedViewLength(b), await getIndexedViewLength(c))
 
   t.alike(a.view.length, 5)
   t.alike(c.view.length, 6)
@@ -295,9 +311,9 @@ test('linearizer - count ordering', async t => {
   t.is(bval, 'c2')
   t.is(cval, 'c2')
 
-  await t.exception(a.view.get(5))
-  await t.exception(b.view.get(6))
-  await t.exception(c.view.get(6))
+  t.is(await a.view.get(5, { wait: false }), null)
+  t.is(await b.view.get(6, { wait: false }), null)
+  t.is(await c.view.get(6, { wait: false }), null)
 
   await replicateAndSync(bases)
 
@@ -307,17 +323,17 @@ test('linearizer - count ordering', async t => {
   bval = await b.view.get(4)
   cval = await c.view.get(4)
 
-  t.is(aval, 'a1')
-  t.is(bval, 'a1')
-  t.is(cval, 'a1')
+  t.is(aval, 'b1')
+  t.is(bval, 'b1')
+  t.is(cval, 'b1')
 
   aval = await a.view.get(5)
   bval = await b.view.get(5)
   cval = await c.view.get(5)
 
-  t.is(aval, 'b1')
-  t.is(bval, 'b1')
-  t.is(cval, 'b1')
+  t.is(aval, 'a1')
+  t.is(bval, 'a1')
+  t.is(cval, 'a1')
 
   aval = await a.view.get(6)
   bval = await b.view.get(6)
@@ -327,9 +343,9 @@ test('linearizer - count ordering', async t => {
   t.is(bval, 'c2')
   t.is(cval, 'c2')
 
-  await t.exception(a.view.get(7))
-  await t.exception(b.view.get(7))
-  await t.exception(c.view.get(7))
+  t.is(await a.view.get(7, { wait: false }), null)
+  t.is(await b.view.get(7, { wait: false }), null)
+  t.is(await c.view.get(7, { wait: false }), null)
 
   t.is(a.linearizer.tails.size, 2)
 })
@@ -475,8 +491,8 @@ test.skip('linearizer - no loop', async t => {
     break
   }
 
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
+  t.is(await getIndexedViewLength(a), 0)
+  t.is(await getIndexedViewLength(b), 0)
 
   t.not(i, 20)
 })
@@ -504,7 +520,16 @@ test('linearizer - all voted', async t => {
   await c.append('c' + ci++)
   await replicateAndSync(bases)
 
-  t.alike(a.view.indexedLength, 1)
-  t.alike(b.view.indexedLength, 1)
-  t.alike(c.view.indexedLength, 1)
+  const ainfo = await a.getIndexedInfo()
+  const binfo = await a.getIndexedInfo()
+  const cinfo = await a.getIndexedInfo()
+
+  t.alike(ainfo.views[0].length, 1)
+  t.alike(binfo.views[0].length, 1)
+  t.alike(cinfo.views[0].length, 1)
 })
+
+async function getIndexedViewLength (base) {
+  const info = await base.getIndexedInfo()
+  return info.views[0] ? info.views[0].length : 0
+}

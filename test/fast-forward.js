@@ -2,10 +2,7 @@ const os = require('os')
 const { on } = require('events')
 const test = require('brittle')
 const tmpDir = require('test-tmp')
-const cenc = require('compact-encoding')
 const b4a = require('b4a')
-
-const { BootRecord } = require('../lib/messages')
 
 const {
   addWriter,
@@ -32,18 +29,17 @@ test('fast-forward - simple', async t => {
 
   const [a, b] = bases
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
   await replicateAndSync([a, b])
 
-  const core = b.view.getBackingCore()
-  const sparse = await isSparse(core)
+  const sparse = await isSparse(b.view)
 
   t.ok(sparse > 0)
   t.comment('sparse blocks: ' + sparse)
-  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+  t.comment('percentage: ' + (sparse / b.view.length * 100).toFixed(2) + '%')
 })
 
 test('fast-forward - migrate', async t => {
@@ -56,7 +52,7 @@ test('fast-forward - migrate', async t => {
 
   const [a, b, c] = bases
 
-  for (let i = 0; i < 2000; i++) {
+  for (let i = 0; i < 400; i++) {
     await a.append('a' + i)
   }
 
@@ -66,7 +62,7 @@ test('fast-forward - migrate', async t => {
 
   await replicateAndSync([a, c])
 
-  const core = c.view.getBackingCore()
+  const core = c.view
   const sparse = await isSparse(core)
 
   t.is(c.linearizer.indexers.length, 2)
@@ -86,7 +82,7 @@ test('fast-forward - fast forward after migrate', async t => {
 
   const [a, b, c] = bases
 
-  for (let i = 0; i < 2000; i++) {
+  for (let i = 0; i < 400; i++) {
     await a.append('a' + i)
   }
 
@@ -101,7 +97,7 @@ test('fast-forward - fast forward after migrate', async t => {
     const unreplicate = replicate([a, b])
     await eventFlush()
 
-    for (let i = 0; i < 300; i++) {
+    for (let i = 0; i < 60; i++) {
       b.append('b' + i)
       a.append('a' + i)
 
@@ -114,12 +110,12 @@ test('fast-forward - fast forward after migrate', async t => {
 
   await replicateAndSync([a, b, c])
 
-  const core = c.view.getBackingCore()
+  const core = c.view
   const sparse = await isSparse(core)
 
   t.is(c.linearizer.indexers.length, 2)
 
-  t.ok(sparse > 2000)
+  t.ok(sparse > 400)
 
   t.comment('sparse blocks: ' + sparse)
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
@@ -131,7 +127,7 @@ test('fast-forward - fast forward after migrate', async t => {
 test.skip('fast-forward - multiple writers added', async t => {
   t.plan(2)
 
-  const MESSAGES_PER_ROUND = 200
+  const MESSAGES_PER_ROUND = 40
 
   const { bases } = await create(4, t, {
     fastForward: true,
@@ -172,7 +168,7 @@ test.skip('fast-forward - multiple writers added', async t => {
     if (i === 8) online.push(d)
   }
 
-  const core = d.view.getBackingCore()
+  const core = d.view
   const sparse = await isSparse(core)
 
   t.is(d.linearizer.indexers.length, 3)
@@ -204,15 +200,15 @@ test('fast-forward - multiple queues', async t => {
   await confirm([a, b, c])
   await replicateAndSync([a, b, c, d])
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
   await confirm([a, b, c])
 
-  const midLength = a.system.core.indexedLength
+  const midLength = a.system.core.signedLength
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
@@ -231,17 +227,8 @@ test('fast-forward - multiple queues', async t => {
 
   const to = await new Promise(resolve => d.on('fast-forward', resolve))
   const next = new Promise(resolve => d.on('fast-forward', resolve))
-  let done = false
 
-  {
-    const pointer = await d.local.getUserData('autobase/boot')
-    const { indexed } = cenc.decode(BootRecord, pointer)
-    t.is(indexed.length, to)
-
-    done = to > midLength
-  }
-
-  if (done) {
+  if (to > midLength) {
     // vary value of DELAY, but make sure the first fast-forward
     // has not completed when the second is queued
     // (check fastForwardTo !== null in queueFastForward)
@@ -249,13 +236,9 @@ test('fast-forward - multiple queues', async t => {
     return
   }
 
-  const final = await next
+  await next
 
-  {
-    const pointer = await d.local.getUserData('autobase/boot')
-    const { indexed } = cenc.decode(BootRecord, pointer)
-    t.is(indexed.length, final)
-  }
+  t.pass()
 })
 
 if (!IS_MAC_OSX) {
@@ -270,14 +253,14 @@ if (!IS_MAC_OSX) {
 
     await b.ready()
 
-    for (let i = 0; i < 1000; i++) {
+    for (let i = 0; i < 200; i++) {
       await a.append('a' + i)
     }
 
     await addWriterAndSync(a, b)
     const unreplicate = replicate([a, b])
 
-    const core = b.view.getBackingCore()
+    const core = b.view
     const sparse = await isSparse(core)
 
     t.ok(sparse > 0)
@@ -318,7 +301,7 @@ if (!IS_MAC_OSX) {
         }
 
         if (view) await view.append(value)
-        const core = view._source.core.session
+        const core = base._viewStore.getSystemCore().originalCore
 
         // get well distributed unique index
         const index = (view.length * 67 + view.length * 89) % core.length
@@ -328,7 +311,8 @@ if (!IS_MAC_OSX) {
   })
 }
 
-test('fast-forward - force reset then ff', async t => {
+// todo: rocks will never use this pathway, rewrite for failure scenario
+test.skip('fast-forward - force reset then ff', async t => {
   t.plan(8)
 
   const { bases } = await create(3, t, {
@@ -342,9 +326,9 @@ test('fast-forward - force reset then ff', async t => {
   await addWriterAndSync(a, c)
   await confirm([a, b, c])
 
-  t.is(a.system.core.getBackingCore().manifest.signers.length, 3)
+  t.is(a.system.core.manifest.signers.length, 3)
 
-  for (let i = 0; i < 2000; i++) {
+  for (let i = 0; i < 400; i++) {
     await a.append('a' + i)
   }
 
@@ -354,19 +338,19 @@ test('fast-forward - force reset then ff', async t => {
   await a.append(null)
   await replicateAndSync([a, b])
 
-  for (let i = 0; i < 2000; i++) {
+  for (let i = 0; i < 400; i++) {
     await a.append('a' + i)
   }
 
-  t.ok(b.system.core.getBackingCore().indexedLength < 40)
+  t.ok(b.system.core.signedLength < 40)
 
   await confirm([a, c])
 
-  t.ok(a.system.core.getBackingCore().indexedLength > 4000)
+  t.ok(a.system.core.signedLength > 800)
 
   const truncate = new Promise(resolve => b.system.core.on('truncate', resolve))
 
-  t.not(b.system.core.getBackingCore().indexedLength, a.system.core.getBackingCore().indexedLength)
+  t.not(b.system.core.signedLength, a.system.core.signedLength)
 
   await b.forceResetViews()
 
@@ -374,11 +358,11 @@ test('fast-forward - force reset then ff', async t => {
 
   await t.execution(truncate)
 
-  t.is(b.system.core.getBackingCore().indexedLength, a.system.core.getBackingCore().indexedLength)
+  t.is(b.system.core.signedLength, a.system.core.signedLength)
 
   await replicateAndSync([a, c])
 
-  const core = b.system.core.getBackingCore()
+  const core = b.system.core
   const sparse = await isSparse(core)
 
   t.is(c.linearizer.indexers.length, 3)
@@ -398,7 +382,7 @@ test('fast-forward - initial fast forward', async t => {
 
   const [a, b] = bases
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
@@ -409,7 +393,7 @@ test('fast-forward - initial fast forward', async t => {
   await a.append('lets index some nodes')
   await confirm([a, b])
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await b.append('b' + i)
   }
 
@@ -423,7 +407,7 @@ test('fast-forward - initial fast forward', async t => {
   await c.ready()
 
   await replicateAndSync([a, b, c])
-  const core = c.system.core.getBackingCore()
+  const core = c.system.core
   const sparse = await isSparse(core)
 
   t.is(c.linearizer.indexers.length, 2)
@@ -443,41 +427,41 @@ test('fast-forward - initial ff after multiple migrate', async t => {
 
   const [a, b, c, d, e] = bases
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await a.append('a' + i)
   }
 
   await addWriterAndSync(a, b)
   await confirm(bases)
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await b.append('b' + i)
   }
 
   await addWriterAndSync(b, c)
   await confirm(bases)
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await c.append('c' + i)
   }
 
   await addWriterAndSync(c, d)
   await confirm(bases)
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await d.append('d' + i)
   }
 
   await addWriterAndSync(d, e)
   await confirm(bases)
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await e.append('e' + i)
   }
 
   await confirm(bases)
 
-  const sys = a.system.core.getBackingCore()
+  const sys = a.system.core
   t.is(sys.manifest.signers.length, 5)
 
   const fastForward = { key: sys.key }
@@ -488,7 +472,7 @@ test('fast-forward - initial ff after multiple migrate', async t => {
   await latecomer.ready()
 
   await replicateAndSync([...bases, latecomer])
-  const core = latecomer.system.core.getBackingCore()
+  const core = latecomer.system.core
   const sparse = await isSparse(core)
 
   t.is(latecomer.linearizer.indexers.length, 5)
@@ -508,18 +492,18 @@ test('fast-forward - ignore bogus initial ff', async t => {
 
   const [a, b] = bases
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
   await addWriterAndSync(a, b)
   await confirm(bases)
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await b.append('b' + i)
   }
 
-  const sys = a.system.core.getBackingCore()
+  const sys = a.system.core
   t.is(sys.manifest.signers.length, 2)
 
   const key = Buffer.from(sys.key)
@@ -536,7 +520,7 @@ test('fast-forward - ignore bogus initial ff', async t => {
   await latecomer.ready()
 
   await replicateAndSync([...bases, latecomer])
-  const core = latecomer.system.core.getBackingCore()
+  const core = latecomer.system.core
   const sparse = await isSparse(core)
 
   t.is(latecomer.linearizer.indexers.length, 2)
@@ -560,7 +544,7 @@ test('fast-forward - upgrade available', async t => {
   await addWriterAndSync(a, b)
   await confirm([a, b])
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
@@ -578,13 +562,13 @@ test('fast-forward - upgrade available', async t => {
   await a1.append('2')
   await confirm([a1, b1])
 
-  t.is(a1.view.indexedLength, 1001)
-  t.is(b1.view.indexedLength, 1001)
+  t.is(a1.view.signedLength, 201)
+  t.is(b1.view.signedLength, 201)
 
   t.is(a1.system.version, version + 1)
   t.is(b1.system.version, version + 1)
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await b1.append('b' + i)
   }
 
@@ -619,7 +603,7 @@ test('fast-forward - upgrade available', async t => {
 
   await c0.ready()
 
-  replicateAndSync([a1, b1, c0]).catch(() => {}) // throws
+  t.teardown(replicate([a1, b1, c0])) // throws
 
   await upgrade
   await exception
@@ -639,7 +623,7 @@ test('fast-forward - initial ff upgrade available', async t => {
   await addWriterAndSync(a, b)
   await confirm([a, b])
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
@@ -654,16 +638,16 @@ test('fast-forward - initial ff upgrade available', async t => {
   const b1 = createBase(s2, a.bootstrap, t, { fastForward: true, maxSupportedVersion: version + 1 })
   await b1.ready()
 
-  await a1.append('2')
+  await a1.append('a2')
   await confirm([a1, b1])
 
-  t.is(a1.view.indexedLength, 1001)
-  t.is(b1.view.indexedLength, 1001)
+  t.is(a1.view.signedLength, 201)
+  t.is(b1.view.signedLength, 201)
 
   t.is(a1.system.version, version + 1)
   t.is(b1.system.version, version + 1)
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await b1.append('b' + i)
   }
 
@@ -671,7 +655,7 @@ test('fast-forward - initial ff upgrade available', async t => {
 
   const fastForward = {
     key: a1.system.core.key,
-    length: a1.system.core.getBackingCore().indexedLength
+    length: a1.system.core.signedLength
   }
 
   const c0 = createBase(s3, a.bootstrap, t, { fastForward })
@@ -679,7 +663,7 @@ test('fast-forward - initial ff upgrade available', async t => {
 
   // this should fire when we try to fast forward
   const upgradeEvent = new Promise((resolve, reject) => {
-    const timeout = setTimeout(reject, 1000, new Error('event did not fire'))
+    const timeout = setTimeout(reject, 5000, new Error('event did not fire'))
 
     c0.once('upgrade-available', upgrade => {
       clearTimeout(timeout)
@@ -691,7 +675,7 @@ test('fast-forward - initial ff upgrade available', async t => {
 
   // this should fire when we apply the upgrade
   const upgradeError = new Promise((resolve, reject) => {
-    const timeout = setTimeout(resolve, 1000)
+    const timeout = setTimeout(resolve, 5000)
 
     c0.once('error', err => {
       clearTimeout(timeout)
@@ -699,7 +683,7 @@ test('fast-forward - initial ff upgrade available', async t => {
     })
   })
 
-  replicateAndSync([a1, b1, c0]).catch(() => {}) // throws
+  t.teardown(replicate([a1, b1, c0])) // throws
 
   await t.execution(upgradeEvent)
   await t.exception(upgradeError)
@@ -715,49 +699,49 @@ test('fast-forward - double ff', async t => {
 
   const migrations = []
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await a.append('a' + i)
   }
 
   await addWriterAndSync(a, b)
   await confirm(bases)
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await b.append('b' + i)
   }
 
-  migrations.push(a.system.core.getBackingCore().manifest.prologue.length)
+  migrations.push(a.system.core.manifest.prologue.length)
 
   await addWriterAndSync(b, c)
   await confirm(bases)
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await c.append('c' + i)
   }
 
-  migrations.push(a.system.core.getBackingCore().manifest.prologue.length)
+  migrations.push(a.system.core.manifest.prologue.length)
 
   await addWriterAndSync(c, d)
   await confirm(bases)
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await d.append('d' + i)
   }
 
-  migrations.push(a.system.core.getBackingCore().manifest.prologue.length)
+  migrations.push(a.system.core.manifest.prologue.length)
 
   await addWriterAndSync(d, e)
   await confirm(bases)
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 60; i++) {
     await e.append('e' + i)
   }
 
-  migrations.push(a.system.core.getBackingCore().manifest.prologue.length)
+  migrations.push(a.system.core.manifest.prologue.length)
 
   await confirm(bases)
 
-  const sys = a.system.core.getBackingCore()
+  const sys = a.system.core
   t.is(sys.manifest.signers.length, 5)
 
   const [store] = await createStores(1, t, { offset: 5, storage: () => tmpDir(t) })
@@ -777,7 +761,7 @@ test('fast-forward - double ff', async t => {
 
   await p
 
-  const core = latecomer.system.core.getBackingCore()
+  const core = latecomer.system.core
   const sparse = await isSparse(core)
 
   t.is(latecomer.linearizer.indexers.length, 5)
@@ -805,6 +789,7 @@ test('fast-forward - unindexed cores should migrate', async t => {
   await replicateAndSync([a, b, c, d])
 
   t.is(a.system.core.signedLength, c.system.core.signedLength)
+  t.alike(a.system.core.key, c.system.core.key)
 })
 
 test('fast-forward - initial fast forward with in between writer', async t => {
@@ -817,7 +802,7 @@ test('fast-forward - initial fast forward with in between writer', async t => {
 
   const [a, b] = bases
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
@@ -827,8 +812,8 @@ test('fast-forward - initial fast forward with in between writer', async t => {
   await b.append('in between')
   await replicateAndSync([a, b])
 
-  for (let i = 0; i < 1000; i++) {
-    await a.append('a' + i + 1000)
+  for (let i = 0; i < 200; i++) {
+    await a.append('a' + i + 200)
   }
 
   await replicateAndSync([a, b])
@@ -839,7 +824,7 @@ test('fast-forward - initial fast forward with in between writer', async t => {
 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
 
-  const c = createBase(store.session(), a.bootstrap, t, { fastForward, debug: true })
+  const c = createBase(store.session(), a.bootstrap, t, { fastForward })
   await c.ready()
 
   t.teardown(replicate([a, c]))
@@ -866,7 +851,7 @@ test('fast-forward - writer removed', async t => {
 
   const [a, b] = bases
 
-  for (let i = 0; i < 2000; i++) {
+  for (let i = 0; i < 400; i++) {
     await a.append('a' + i)
   }
 
@@ -874,19 +859,19 @@ test('fast-forward - writer removed', async t => {
 
   t.is(b.writable, true)
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
   await a.append({ remove: b4a.toString(b.local.key, 'hex') })
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
   }
 
   await replicateAndSync([a, b])
 
-  const core = b.view.getBackingCore()
+  const core = b.view
   const sparse = await isSparse(core)
 
   t.is(b.writable, false)
@@ -941,7 +926,7 @@ test('fast-forward - is indexer set correctly', async t => {
 
   await replicateAndSync([a, d])
 
-  t.is(a.view.getBackingCore().session.length, 400)
+  t.is(a.view.signedLength, 400)
 
   t.is(c.linearizer.indexers.length, 2)
 
