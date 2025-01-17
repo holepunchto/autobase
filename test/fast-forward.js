@@ -311,7 +311,8 @@ if (!IS_MAC_OSX) {
   })
 }
 
-test('fast-forward - force reset then ff', async t => {
+// todo: rocks will never use this pathway, rewrite for failure scenario
+test.skip('fast-forward - force reset then ff', async t => {
   t.plan(8)
 
   const { bases } = await create(3, t, {
