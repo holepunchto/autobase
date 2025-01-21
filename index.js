@@ -499,12 +499,10 @@ module.exports = class Autobase extends ReadyResource {
   async _onreindexing (record) {
     const { key, length } = messages.Checkout.decode({ buffer: record, start: 0, end: record.byteLength })
     const encryption = this._viewStore.getBlockEncryption(this._viewStore.getSystemCore().name)
-    const core = this.store.get({ key, encryption }).batch({ checkout: length, session: false })
+    const core = this.store.get({ key, encryption })
 
     const base = this
-    const system = new SystemView(core, {
-      checkout: length
-    })
+    const system = new SystemView(core, { checkout: length })
 
     await system.ready()
 
