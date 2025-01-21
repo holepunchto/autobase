@@ -350,7 +350,7 @@ module.exports = class Autobase extends ReadyResource {
     const { key, views } = c.decode(messages.BootRecord, pointer)
 
     const encryptionKey = AutoStore.getBlockKey(bootstrap, this.encryptionKey, '_system')
-    const encryption = encryptionKey ? { key: encryptionKey, isBlockKey: true } : null
+    const encryption = encryptionKey ? { key: encryptionKey, block: true } : null
     const actualCore = this.store.get({ key, exclusive: false, compat: false, encryption })
 
     await actualCore.ready()
