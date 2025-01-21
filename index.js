@@ -54,11 +54,12 @@ module.exports = class Autobase extends ReadyResource {
     this.encrypted = handlers.encrypted || !!handlers.encryptionKey
     this.encrypt = !!handlers.encrypt
     this.encryptionKey = handlers.encryptionKey || null
+    this.encryption = this.encryptionKey === null ? null : { key: this.encryptionKey }
 
     this._tryLoadingLocal = true
     this._primaryBootstrap = null
     if (this.bootstrap) {
-      this._primaryBootstrap = this.store.get({ key: this.bootstrap, active: false, encryptionKey: this.encryptionKey })
+      this._primaryBootstrap = this.store.get({ key: this.bootstrap, active: false, encryption: this.encryption })
     }
 
     this.local = null
@@ -271,7 +272,7 @@ module.exports = class Autobase extends ReadyResource {
           active: false,
           exclusive: true,
           valueEncoding: messages.OplogMessage,
-          encryptionKey: this.encryptionKey
+          encryption: this.encryption
         })
       }
     }
@@ -304,7 +305,7 @@ module.exports = class Autobase extends ReadyResource {
     // stateless open
     const ref = await this.local.getUserData('referrer')
     if (ref && !b4a.equals(ref, this.local.key) && !this._primaryBootstrap) {
-      this._primaryBootstrap = this.store.get({ key: ref, compat: false, active: false, encryptionKey: this.encryptionKey })
+      this._primaryBootstrap = this.store.get({ key: ref, compat: false, active: false, encryption: this.encryption })
     }
 
     await this.local.setUserData('referrer', this.key)
@@ -349,7 +350,8 @@ module.exports = class Autobase extends ReadyResource {
     const { key, views } = c.decode(messages.BootRecord, pointer)
 
     const encryptionKey = AutoStore.getBlockKey(bootstrap, this.encryptionKey, '_system')
-    const actualCore = this.store.get({ key, exclusive: false, compat: false, encryptionKey, isBlockKey: true })
+    const encryption = encryptionKey ? { key: encryptionKey, block: true } : null
+    const actualCore = this.store.get({ key, exclusive: false, compat: false, encryption })
 
     await actualCore.ready()
 
@@ -496,19 +498,17 @@ module.exports = class Autobase extends ReadyResource {
 
   async _onreindexing (record) {
     const { key, length } = messages.Checkout.decode({ buffer: record, start: 0, end: record.byteLength })
-    const encryptionKey = this._viewStore.getBlockKey(this._viewStore.getSystemCore().name)
-    const core = this.store.get({ key, encryptionKey, isBlockKey: true }).batch({ checkout: length, session: false })
+    const encryption = this._viewStore.getBlockEncryption(this._viewStore.getSystemCore().name)
+    const core = this.store.get({ key, encryption })
 
     const base = this
-    const system = new SystemView(core, {
-      checkout: length
-    })
+    const system = new SystemView(core, { checkout: length })
 
     await system.ready()
 
     const indexerCores = []
     for (const { key } of system.indexers) {
-      const core = this.store.get({ key, compat: false, valueEncoding: messages.OplogMessage, encryptionKey: this.encryptionKey })
+      const core = this.store.get({ key, compat: false, valueEncoding: messages.OplogMessage, encryption: this.encryption })
       indexerCores.push(core)
     }
 
@@ -942,7 +942,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   static getLocalCore (store, handlers, encryptionKey) {
-    const opts = { ...handlers, compat: false, active: false, exclusive: true, valueEncoding: messages.OplogMessage, encryptionKey }
+    const encryption = encryptionKey === null ? null : { key: encryptionKey }
+    const opts = { ...handlers, compat: false, active: false, exclusive: true, valueEncoding: messages.OplogMessage, encryption }
     return opts.keyPair ? store.get(opts) : store.get({ ...opts, name: 'local' })
   }
 
@@ -1089,8 +1090,8 @@ module.exports = class Autobase extends ReadyResource {
     const local = b4a.equals(key, this.local.key)
 
     const core = local
-      ? this.local.session({ valueEncoding: messages.OplogMessage, encryptionKey: this.encryptionKey, active: false })
-      : this.store.get({ key, compat: false, writable: false, valueEncoding: messages.OplogMessage, encryptionKey: this.encryptionKey, active: false })
+      ? this.local.session({ valueEncoding: messages.OplogMessage, encryption: this.encryption, active: false })
+      : this.store.get({ key, compat: false, writable: false, valueEncoding: messages.OplogMessage, encryption: this.encryption, active: false })
 
     return core
   }
@@ -1687,9 +1688,9 @@ module.exports = class Autobase extends ReadyResource {
   async initialFastForward (key, timeout) {
     this.fastForwarding++
 
-    const encryptionKey = this._viewStore.getBlockKey(this._viewStore.getSystemCore().name)
+    const encryption = this._viewStore.getBlockEncryption(this._viewStore.getSystemCore().name)
 
-    const core = this.store.get({ key, encryptionKey, isBlockKey: true })
+    const core = this.store.get({ key, encryption })
     await core.ready()
 
     // get length from network
@@ -1915,9 +1916,9 @@ module.exports = class Autobase extends ReadyResource {
     const migrated = !b4a.equals(key, this.system.core.key)
 
     const name = this._viewStore.getSystemCore().name
-    const encryptionKey = this._viewStore.getBlockKey(name)
+    const encryption = this._viewStore.getBlockEncryption(name)
 
-    const core = this.store.get({ key, encryptionKey, isBlockKey: true })
+    const core = this.store.get({ key, encryption })
     await core.ready()
 
     const from = this.system.core.length
