@@ -1240,10 +1240,6 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  _onUpgrade (version) {
-    if (version > this.maxSupportedVersion) throw new Error('Autobase upgrade required')
-  }
-
   _setLocalWriter (w) {
     this.localWriter = w
     if (this._ackInterval) this._startAckTimer()
@@ -1379,13 +1375,6 @@ module.exports = class Autobase extends ReadyResource {
 
   async _inflateUpdates (record) {
     const updates = c.decode(messages.UpdateArray, record)
-
-    for (const u of updates) {
-      for (const view of u.views) {
-        const i = view.core
-        view.core = i === -1 ? this._viewStore.getSystemCore() : this._viewStore.getByIndex(i)
-      }
-    }
 
     this._updates = updates
   }
@@ -2226,7 +2215,6 @@ module.exports = class Autobase extends ReadyResource {
 
     let batch = 0
     let applyBatch = []
-    let versionUpgrade = false
 
     let j = 0
 
@@ -2239,14 +2227,7 @@ module.exports = class Autobase extends ReadyResource {
 
       const update = this._updates[j++]
 
-      // autobase version was bumped
-      let upgraded = false
-      if (update.version > this.version) {
-        this._onUpgrade(update.version) // throws if not supported
-        upgraded = true
-      }
-
-      if (!update.indexers && !upgraded) continue
+      if (!update.indexers) continue
 
       this._queueIndexFlush(i)
 
@@ -2283,8 +2264,6 @@ module.exports = class Autobase extends ReadyResource {
         const indexed = i < u.indexed.length
         const node = indexed ? u.indexed[i] : u.tip[i - u.indexed.length]
 
-        if (node.version > system.version) versionUpgrade = true
-
         if (node.writer === this.localWriter) {
           this._resetAckTick()
         } else if (!indexed) {
@@ -2307,16 +2286,10 @@ module.exports = class Autobase extends ReadyResource {
 
         if (node.batch > 1) continue
 
-        if (versionUpgrade) {
-          const version = await this._checkVersion(system)
-          system.version = version === -1 ? node.version : version
-        }
-
         const update = {
           batch,
           indexers: false,
           views: [],
-          version: system.version,
           systemLength: -1
         }
 
@@ -2344,14 +2317,7 @@ module.exports = class Autobase extends ReadyResource {
 
         this._shiftWriter(node.writer)
 
-        // autobase version was bumped
-        let upgraded = false
-        if (update.version > this.version) {
-          this._onUpgrade(update.version) // throws if not supported
-          upgraded = true
-        }
-
-        if (!update.indexers && !upgraded) continue
+        if (!update.indexers) continue
 
         const flush = store.flush(atom)
         const updates = this._persistUpdates(-1, atom)
@@ -2414,54 +2380,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return info
-  }
-
-  async _checkVersion (system) {
-    if (!system.indexers.length) return -1
-
-    const maj = (system.indexers.length >> 1) + 1
-
-    const fetch = []
-
-    let localUnflushed = false
-    for (const { key, length } of system.indexers) {
-      const w = await this._getWriterByKey(key, length, 0, false, false, null)
-
-      if (length > w.core.length) localUnflushed = true // local writer has nodes in mem
-      else fetch.push(w.core.get(length - 1))
-    }
-
-    const heads = await Promise.all(fetch)
-
-    const tally = new Map()
-    const versions = []
-
-    // count ourself
-    if (localUnflushed) {
-      const local = { version: this.maxSupportedVersion, n: 1 }
-      versions.push(local)
-      tally.set(this.maxSupportedVersion, local)
-    }
-
-    for (const { maxSupportedVersion: version } of heads) {
-      let v = tally.get(version)
-
-      if (!v) {
-        v = { version, n: 0 }
-
-        tally.set(version, v)
-        versions.push(v)
-      }
-
-      if (++v.n >= maj) return version
-    }
-
-    let count = 0
-    for (const { version, n } of versions.sort(descendingVersion)) {
-      if ((count += n) >= maj) return version
-    }
-
-    assert(false, 'Failed to determine version')
   }
 
   _shiftWriter (w) {
@@ -2633,10 +2551,6 @@ function isAutobaseMessage (msg) {
 
 function compareNodes (a, b) {
   return b4a.compare(a.key, b.key)
-}
-
-function descendingVersion (a, b) {
-  return b.version - a.version
 }
 
 function random2over1 (n) {
