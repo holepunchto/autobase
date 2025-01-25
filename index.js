@@ -2061,11 +2061,11 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _flushIndexes () {
+    this._updatingCores = false
+
     if (this._indexedLength === this.system.core.signedLength) {
       return this._persistUpdates(this.system.core.signedLength)
     }
-
-    this._updatingCores = false
 
     const { views } = await this.system.getIndexedInfo(this._indexedLength)
 
