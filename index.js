@@ -106,7 +106,6 @@ module.exports = class Autobase extends ReadyResource {
     this._maybeStaticFastForward = false // writer bumps this
 
     this._updates = []
-    this._pendingFlush = []
     this._handlers = handlers || {}
     this._warn = emitWarning.bind(this)
 
@@ -439,7 +438,6 @@ module.exports = class Autobase extends ReadyResource {
       if (err.code === 'ELOCKED') throw err
       await this.local.setUserData('autobase/last-error', b4a.from(err.stack + ''))
       await this.local.setUserData('autobase/boot', null)
-      await this.local.setUserData('autobase/updates', null)
       this._closeLocalCores().catch(safetyCatch)
       this.store.close().catch(safetyCatch)
       throw err
@@ -452,17 +450,6 @@ module.exports = class Autobase extends ReadyResource {
       await this._initialSystem.close()
       this._initialSystem = null
       this._initialViews = null
-    }
-
-    try {
-      const updates = await this.local.getUserData('autobase/updates')
-      if (updates) await this._inflateUpdates(updates)
-    } catch (err) {
-      safetyCatch(err)
-      await this.local.setUserData('autobase/last-error', b4a.from(err.stack + ''))
-      this._closeLocalCores().catch(safetyCatch)
-      this.store.close().catch(safetyCatch)
-      throw err
     }
 
     // check if this is a v0 base
@@ -615,7 +602,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (!u || !u.indexed.length) return
 
-    this._queueIndexFlush(u.indexed.length)
+    this._onindexed(u.indexed.length)
     await this._flushIndexes()
   }
 
@@ -1317,39 +1304,6 @@ module.exports = class Autobase extends ReadyResource {
     return session.setUserData('autobase/boot', pointer)
   }
 
-  async _persistUpdates (length, atom) {
-    const updates = []
-
-    for (const u of this._pendingFlush.concat(this._updates)) {
-      if (length !== -1 && u.systemLength < length) continue
-
-      const views = []
-      for (const view of u.views) {
-        views.push({ core: view.core.systemIndex, appending: view.appending })
-      }
-
-      updates.push({ ...u, views })
-    }
-
-    const session = atom ? this.local.session({ atom }) : this.local
-    await session.setUserData('autobase/updates', c.encode(messages.UpdateArray, updates))
-
-    if (atom) atom.onflush(() => session.close())
-
-    if (length === -1) return
-
-    while (this._pendingFlush.length) {
-      if (this._pendingFlush[0].systemLength > length) break
-      this._pendingFlush.shift()
-    }
-  }
-
-  async _inflateUpdates (record) {
-    // const updates = c.decode(messages.UpdateArray, record)
-
-    // this._updates = updates
-  }
-
   async _drain () {
     const writable = this.writable
 
@@ -2023,9 +1977,7 @@ module.exports = class Autobase extends ReadyResource {
   async _flushIndexes () {
     this._updatingCores = false
 
-    if (this._indexedLength === this.system.core.signedLength) {
-      return this._persistUpdates(this.system.core.signedLength)
-    }
+    if (this._indexedLength === this.system.core.signedLength) return
 
     const { views } = await this.system.getIndexedInfo(this._indexedLength)
 
@@ -2049,8 +2001,6 @@ module.exports = class Autobase extends ReadyResource {
       await core.flush(v.length, atom)
       core._onindex(v.length)
     }
-
-    await this._persistUpdates(systemLength, atom) // throws when fails
 
     return atom.flush()
   }
@@ -2200,7 +2150,7 @@ module.exports = class Autobase extends ReadyResource {
 
       if (!update.indexers) continue
 
-      this._queueIndexFlush(i)
+      this._onindexed(i)
 
       // we have to set the digest here so it is
       // flushed to local appends in same iteration
@@ -2290,29 +2240,21 @@ module.exports = class Autobase extends ReadyResource {
 
         if (!update.indexers) continue
 
-        const flush = store.flush(atom)
-        const updates = this._persistUpdates(-1, atom)
-
-        await Promise.all([flush, updates])
-
+        await store.flush(atom)
         await this.system.update()
 
         // indexer set has updated
-        this._queueIndexFlush(i + 1)
+        this._onindexed(i + 1)
         await this._updateDigest() // see above
 
         return update.systemLength
       }
 
-      const flush = store.flush(atom)
-      const updates = this._persistUpdates(-1, atom)
-
-      await Promise.all([flush, updates])
-
+      await store.flush(atom)
       await this.system.update()
 
       if (u.indexed.length) {
-        this._queueIndexFlush(u.indexed.length)
+        this._onindexed(u.indexed.length)
         await this._updateDigest() // see above
       }
 
@@ -2358,19 +2300,15 @@ module.exports = class Autobase extends ReadyResource {
     if (w.flushed()) this._checkWriters.push(w)
   }
 
-  _queueIndexFlush (indexed) {
+  _onindexed (indexed) {
     assert(this._updatingCores === false, 'Updated cores not flushed')
     this._updatingCores = true
 
-    let u = null
-    while (indexed > 0) {
-      u = this._updates.shift()
-      this._pendingFlush.push(u)
+    let shift = 0
+    while (indexed > 0) indexed -= this._updates[shift++].batch
 
-      indexed -= u.batch
-    }
-
-    this._indexedLength = u.systemLength
+    this._indexedLength = this._updates[shift - 1].systemLength
+    this._updates.splice(0, shift)
   }
 
   deriveKey (name, indexers, prologue) {
