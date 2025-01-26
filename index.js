@@ -582,10 +582,10 @@ module.exports = class Autobase extends ReadyResource {
 
     const writers = new Map()
 
-    const all = await this.system.nodes(this._systemPointer, { compress: true })
+    const { nodes, updates } = await this.system.history(this._systemPointer)
     const sys = await this.system.checkout(this._systemPointer)
 
-    for (const node of all) {
+    for (const node of nodes) {
       const hex = b4a.toString(node.key, 'hex')
 
       let w = writers.get(hex)
@@ -608,6 +608,8 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     await sys.close()
+
+    this._updates = updates
 
     const u = this.linearizer.update()
 
@@ -1343,9 +1345,9 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _inflateUpdates (record) {
-    const updates = c.decode(messages.UpdateArray, record)
+    // const updates = c.decode(messages.UpdateArray, record)
 
-    this._updates = updates
+    // this._updates = updates
   }
 
   async _drain () {
@@ -2257,8 +2259,8 @@ module.exports = class Autobase extends ReadyResource {
 
         const update = {
           batch,
-          indexers: false,
           views: [],
+          indexers: false,
           systemLength: -1
         }
 
