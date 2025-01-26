@@ -580,68 +580,37 @@ module.exports = class Autobase extends ReadyResource {
   async _catchup () {
     if (!this.system.heads.length) return // new base
 
-    const nodes = this.system.heads.slice()
-    const sys = await this.system.checkout(this._systemPointer)
-
-    const visited = new Set()
     const writers = new Map()
 
-    while (nodes.length) {
-      const { key, length } = nodes.pop()
+    const all = await this.system.nodes(this._systemPointer, { compress: true })
+    const sys = await this.system.checkout(this._systemPointer)
 
-      const hex = b4a.toString(key, 'hex')
-      const ref = hex + ':' + length
-
-      if (visited.has(ref)) continue
-      visited.add(ref)
+    for (const node of all) {
+      const hex = b4a.toString(node.key, 'hex')
 
       let w = writers.get(hex)
-      if (!w) {
-        const writer = await this._getWriterByKey(key, -1, 0, true, false, sys)
 
-        w = { writer, end: writer.length }
-
+      if (w === undefined) { // TODO: we actually have all the writer info already but our current methods make it hard to reuse that
+        w = await this._getWriterByKey(node.key, -1, 0, true, false, sys)
         writers.set(hex, w)
       }
 
-      if (w.writer.length >= length) continue
+      if (w === null) continue
 
-      if (length > w.end) w.end = length
+      while (w.length < node.length) {
+        await w.update(true)
 
-      // we should have all nodes locally
-      const block = await w.writer.core.get(length - 1, { wait: false })
-
-      assert(block !== null, 'Catchup failed: local block not available')
-
-      for (const dep of block.node.heads) {
-        nodes.push(dep)
-      }
-    }
-
-    await sys.close()
-
-    while (writers.size) {
-      for (const [hex, info] of writers) {
-        const { writer, end } = info
-
-        if (writer === null || writer.length === end) {
-          writers.delete(hex)
-          continue
-        }
-
-        if (writer.available <= writer.length) {
-          // force in case they are not indexed yet
-          await writer.update(true)
-        }
-
-        const node = writer.advance()
-        if (!node) continue
+        const node = w.advance()
+        if (!node) break
 
         this.linearizer.addHead(node)
       }
     }
 
+    await sys.close()
+
     const u = this.linearizer.update()
+
     if (!u || !u.indexed.length) return
 
     this._queueIndexFlush(u.indexed.length)
