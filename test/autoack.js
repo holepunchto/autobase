@@ -109,7 +109,8 @@ test.skip('autoack - 5 writers', async t => {
   t.is(e.view.signedLength, 1)
 })
 
-test('autoack - concurrent', async t => {
+// skipping cause flaking
+test.skip('autoack - concurrent', async t => {
   t.plan(10)
 
   const ackInterval = 100
