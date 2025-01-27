@@ -106,7 +106,6 @@ module.exports = class Autobase extends ReadyResource {
     this._maybeStaticFastForward = false // writer bumps this
 
     this._updates = []
-    this._pendingFlush = []
     this._handlers = handlers || {}
     this._warn = emitWarning.bind(this)
 
@@ -439,7 +438,6 @@ module.exports = class Autobase extends ReadyResource {
       if (err.code === 'ELOCKED') throw err
       await this.local.setUserData('autobase/last-error', b4a.from(err.stack + ''))
       await this.local.setUserData('autobase/boot', null)
-      await this.local.setUserData('autobase/updates', null)
       this._closeLocalCores().catch(safetyCatch)
       this.store.close().catch(safetyCatch)
       throw err
@@ -452,17 +450,6 @@ module.exports = class Autobase extends ReadyResource {
       await this._initialSystem.close()
       this._initialSystem = null
       this._initialViews = null
-    }
-
-    try {
-      const updates = await this.local.getUserData('autobase/updates')
-      if (updates) await this._inflateUpdates(updates)
-    } catch (err) {
-      safetyCatch(err)
-      await this.local.setUserData('autobase/last-error', b4a.from(err.stack + ''))
-      this._closeLocalCores().catch(safetyCatch)
-      this.store.close().catch(safetyCatch)
-      throw err
     }
 
     // check if this is a v0 base
@@ -580,71 +567,42 @@ module.exports = class Autobase extends ReadyResource {
   async _catchup () {
     if (!this.system.heads.length) return // new base
 
-    const nodes = this.system.heads.slice()
-    const sys = await this.system.checkout(this._systemPointer)
-
-    const visited = new Set()
     const writers = new Map()
 
-    while (nodes.length) {
-      const { key, length } = nodes.pop()
+    const { nodes, updates } = await this.system.history(this._systemPointer)
+    const sys = await this.system.checkout(this._systemPointer)
 
-      const hex = b4a.toString(key, 'hex')
-      const ref = hex + ':' + length
-
-      if (visited.has(ref)) continue
-      visited.add(ref)
+    for (const node of nodes) {
+      const hex = b4a.toString(node.key, 'hex')
 
       let w = writers.get(hex)
-      if (!w) {
-        const writer = await this._getWriterByKey(key, -1, 0, true, false, sys)
 
-        w = { writer, end: writer.length }
-
+      if (w === undefined) { // TODO: we actually have all the writer info already but our current methods make it hard to reuse that
+        w = await this._getWriterByKey(node.key, -1, 0, true, false, sys)
         writers.set(hex, w)
       }
 
-      if (w.writer.length >= length) continue
+      if (w === null) continue
 
-      if (length > w.end) w.end = length
+      while (w.length < node.length) {
+        await w.update(true)
 
-      // we should have all nodes locally
-      const block = await w.writer.core.get(length - 1, { wait: false })
-
-      assert(block !== null, 'Catchup failed: local block not available')
-
-      for (const dep of block.node.heads) {
-        nodes.push(dep)
-      }
-    }
-
-    await sys.close()
-
-    while (writers.size) {
-      for (const [hex, info] of writers) {
-        const { writer, end } = info
-
-        if (writer === null || writer.length === end) {
-          writers.delete(hex)
-          continue
-        }
-
-        if (writer.available <= writer.length) {
-          // force in case they are not indexed yet
-          await writer.update(true)
-        }
-
-        const node = writer.advance()
-        if (!node) continue
+        const node = w.advance()
+        if (!node) break
 
         this.linearizer.addHead(node)
       }
     }
 
+    await sys.close()
+
+    this._updates = updates
+
     const u = this.linearizer.update()
+
     if (!u || !u.indexed.length) return
 
-    this._queueIndexFlush(u.indexed.length)
+    this._onindexed(u.indexed.length)
     await this._flushIndexes()
   }
 
@@ -1240,10 +1198,6 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  _onUpgrade (version) {
-    if (version > this.maxSupportedVersion) throw new Error('Autobase upgrade required')
-  }
-
   _setLocalWriter (w) {
     this.localWriter = w
     if (this._ackInterval) this._startAckTimer()
@@ -1348,46 +1302,6 @@ module.exports = class Autobase extends ReadyResource {
     atom.onflush(() => session.close())
 
     return session.setUserData('autobase/boot', pointer)
-  }
-
-  async _persistUpdates (length, atom) {
-    const updates = []
-
-    for (const u of this._pendingFlush.concat(this._updates)) {
-      if (length !== -1 && u.systemLength < length) continue
-
-      const views = []
-      for (const view of u.views) {
-        views.push({ core: view.core.systemIndex, appending: view.appending })
-      }
-
-      updates.push({ ...u, views })
-    }
-
-    const session = atom ? this.local.session({ atom }) : this.local
-    await session.setUserData('autobase/updates', c.encode(messages.UpdateArray, updates))
-
-    if (atom) atom.onflush(() => session.close())
-
-    if (length === -1) return
-
-    while (this._pendingFlush.length) {
-      if (this._pendingFlush[0].systemLength > length) break
-      this._pendingFlush.shift()
-    }
-  }
-
-  async _inflateUpdates (record) {
-    const updates = c.decode(messages.UpdateArray, record)
-
-    for (const u of updates) {
-      for (const view of u.views) {
-        const i = view.core
-        view.core = i === -1 ? this._viewStore.getSystemCore() : this._viewStore.getByIndex(i)
-      }
-    }
-
-    this._updates = updates
   }
 
   async _drain () {
@@ -2063,20 +1977,14 @@ module.exports = class Autobase extends ReadyResource {
   async _flushIndexes () {
     this._updatingCores = false
 
-    if (this._indexedLength === this.system.core.signedLength) {
-      return this._persistUpdates(this.system.core.signedLength)
-    }
+    if (this._indexedLength === this.system.core.signedLength) return
 
     const { views } = await this.system.getIndexedInfo(this._indexedLength)
 
     const atom = this.store.storage.createAtom()
 
-    let systemLength = -1
-
     for (const core of this._viewStore.opened.values()) {
       if (core._isSystem()) {
-        systemLength = await core.signer.getSignableLength(this.linearizer.indexers, this._indexedLength)
-
         await core.flush(this._indexedLength, atom)
         core._onindex(this._indexedLength)
         continue
@@ -2089,8 +1997,6 @@ module.exports = class Autobase extends ReadyResource {
       await core.flush(v.length, atom)
       core._onindex(v.length)
     }
-
-    await this._persistUpdates(systemLength, atom) // throws when fails
 
     return atom.flush()
   }
@@ -2226,7 +2132,6 @@ module.exports = class Autobase extends ReadyResource {
 
     let batch = 0
     let applyBatch = []
-    let versionUpgrade = false
 
     let j = 0
 
@@ -2239,16 +2144,9 @@ module.exports = class Autobase extends ReadyResource {
 
       const update = this._updates[j++]
 
-      // autobase version was bumped
-      let upgraded = false
-      if (update.version > this.version) {
-        this._onUpgrade(update.version) // throws if not supported
-        upgraded = true
-      }
+      if (!update.indexers) continue
 
-      if (!update.indexers && !upgraded) continue
-
-      this._queueIndexFlush(i)
+      this._onindexed(i)
 
       // we have to set the digest here so it is
       // flushed to local appends in same iteration
@@ -2267,8 +2165,6 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._undo(u.undo, store)
 
-    await system.update()
-
     this._applySystem = system
 
     try {
@@ -2282,8 +2178,6 @@ module.exports = class Autobase extends ReadyResource {
 
         const indexed = i < u.indexed.length
         const node = indexed ? u.indexed[i] : u.tip[i - u.indexed.length]
-
-        if (node.version > system.version) versionUpgrade = true
 
         if (node.writer === this.localWriter) {
           this._resetAckTick()
@@ -2307,16 +2201,10 @@ module.exports = class Autobase extends ReadyResource {
 
         if (node.batch > 1) continue
 
-        if (versionUpgrade) {
-          const version = await this._checkVersion(system)
-          system.version = version === -1 ? node.version : version
-        }
-
         const update = {
           batch,
-          indexers: false,
           views: [],
-          version: system.version,
+          indexers: false,
           systemLength: -1
         }
 
@@ -2344,38 +2232,23 @@ module.exports = class Autobase extends ReadyResource {
 
         this._shiftWriter(node.writer)
 
-        // autobase version was bumped
-        let upgraded = false
-        if (update.version > this.version) {
-          this._onUpgrade(update.version) // throws if not supported
-          upgraded = true
-        }
+        if (!update.indexers) continue
 
-        if (!update.indexers && !upgraded) continue
-
-        const flush = store.flush(atom)
-        const updates = this._persistUpdates(-1, atom)
-
-        await Promise.all([flush, updates])
-
+        await store.flush(atom)
         await this.system.update()
 
         // indexer set has updated
-        this._queueIndexFlush(i + 1)
+        this._onindexed(i + 1)
         await this._updateDigest() // see above
 
         return update.systemLength
       }
 
-      const flush = store.flush(atom)
-      const updates = this._persistUpdates(-1, atom)
-
-      await Promise.all([flush, updates])
-
+      await store.flush(atom)
       await this.system.update()
 
       if (u.indexed.length) {
-        this._queueIndexFlush(u.indexed.length)
+        this._onindexed(u.indexed.length)
         await this._updateDigest() // see above
       }
 
@@ -2416,72 +2289,20 @@ module.exports = class Autobase extends ReadyResource {
     return info
   }
 
-  async _checkVersion (system) {
-    if (!system.indexers.length) return -1
-
-    const maj = (system.indexers.length >> 1) + 1
-
-    const fetch = []
-
-    let localUnflushed = false
-    for (const { key, length } of system.indexers) {
-      const w = await this._getWriterByKey(key, length, 0, false, false, null)
-
-      if (length > w.core.length) localUnflushed = true // local writer has nodes in mem
-      else fetch.push(w.core.get(length - 1))
-    }
-
-    const heads = await Promise.all(fetch)
-
-    const tally = new Map()
-    const versions = []
-
-    // count ourself
-    if (localUnflushed) {
-      const local = { version: this.maxSupportedVersion, n: 1 }
-      versions.push(local)
-      tally.set(this.maxSupportedVersion, local)
-    }
-
-    for (const { maxSupportedVersion: version } of heads) {
-      let v = tally.get(version)
-
-      if (!v) {
-        v = { version, n: 0 }
-
-        tally.set(version, v)
-        versions.push(v)
-      }
-
-      if (++v.n >= maj) return version
-    }
-
-    let count = 0
-    for (const { version, n } of versions.sort(descendingVersion)) {
-      if ((count += n) >= maj) return version
-    }
-
-    assert(false, 'Failed to determine version')
-  }
-
   _shiftWriter (w) {
     w.shift()
     if (w.flushed()) this._checkWriters.push(w)
   }
 
-  _queueIndexFlush (indexed) {
+  _onindexed (indexed) {
     assert(this._updatingCores === false, 'Updated cores not flushed')
     this._updatingCores = true
 
-    let u = null
-    while (indexed > 0) {
-      u = this._updates.shift()
-      this._pendingFlush.push(u)
+    let shift = 0
+    while (indexed > 0) indexed -= this._updates[shift++].batch
 
-      indexed -= u.batch
-    }
-
-    this._indexedLength = u.systemLength
+    this._indexedLength = this._updates[shift - 1].systemLength
+    this._updates.splice(0, shift)
   }
 
   deriveKey (name, indexers, prologue) {
@@ -2633,10 +2454,6 @@ function isAutobaseMessage (msg) {
 
 function compareNodes (a, b) {
   return b4a.compare(a.key, b.key)
-}
-
-function descendingVersion (a, b) {
-  return b.version - a.version
 }
 
 function random2over1 (n) {
