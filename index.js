@@ -90,7 +90,6 @@ module.exports = class Autobase extends ReadyResource {
     this._wakeupPeerBound = this._wakeupPeer.bind(this)
     this._coupler = null
 
-    this._queueViewReset = false
     this._lock = mutexify()
 
     this._applySystem = null
@@ -846,9 +845,6 @@ module.exports = class Autobase extends ReadyResource {
     if (!this.opened) await this.ready()
     if (this._interrupting) throw new Error('Autobase is closing')
 
-    // if a reset is scheduled await those
-    while (this._queueViewReset && !this._interrupting) await this._bump()
-
     // we wanna allow acks so interdexers can flush
     if (this.localWriter === null || (this.localWriter.isRemoved && value !== null)) {
       throw new Error('Not writable')
@@ -1346,14 +1342,6 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this._interrupting) return
 
-      // force reset state in worst case
-      if (this._queueViewReset && this._appending === null) {
-        this._queueViewReset = false
-        const sysCore = this._viewStore.getSystemCore()
-        await this._forceResetViews(sysCore.signedLength)
-        continue
-      }
-
       if (changed === -1) {
         if (this._checkWriters.length > 0) {
           await this._gcWriters()
@@ -1529,37 +1517,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return false
-  }
-
-  async forceResetViews () {
-    if (!this.opened) await this.ready()
-
-    this._queueViewReset = true
-    this._queueBump()
-    this._advanced = this._advancing
-    await this._advanced
-  }
-
-  async _forceResetViews (length) {
-    const info = await this.system.getIndexedInfo(length)
-
-    await this._undoAll()
-    this._systemPointer = length
-
-    const pointer = await this.local.getUserData('autobase/boot')
-    const { views } = c.decode(messages.BootRecord, pointer)
-
-    await this._setBootRecord(this.system.core.key, views)
-
-    for (const { key, length } of info.views) {
-      const core = this._viewStore.getByKey(key)
-      await core.reset(length)
-    }
-
-    await this._closeAllActiveWriters(false)
-
-    await this._refreshSystemState(this.system)
-    await this._makeLinearizer(this.system)
   }
 
   doneFastForwarding () {
