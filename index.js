@@ -1983,12 +1983,8 @@ module.exports = class Autobase extends ReadyResource {
 
     const atom = this.store.storage.createAtom()
 
-    let systemLength = -1
-
     for (const core of this._viewStore.opened.values()) {
       if (core._isSystem()) {
-        systemLength = await core.signer.getSignableLength(this.linearizer.indexers, this._indexedLength)
-
         await core.flush(this._indexedLength, atom)
         core._onindex(this._indexedLength)
         continue
