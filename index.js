@@ -2165,8 +2165,6 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._undo(u.undo, store)
 
-    await system.update()
-
     this._applySystem = system
 
     try {
