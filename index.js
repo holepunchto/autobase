@@ -90,7 +90,6 @@ module.exports = class Autobase extends ReadyResource {
     this._wakeupPeerBound = this._wakeupPeer.bind(this)
     this._coupler = null
 
-    this._queueViewReset = false
     this._lock = mutexify()
 
     this._applySystem = null
@@ -114,7 +113,6 @@ module.exports = class Autobase extends ReadyResource {
     this._advanced = null
     this._interrupting = false
 
-    this.reindexing = false
     this.paused = false
 
     this._bump = debounceify(() => {
@@ -299,6 +297,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this.encrypted) {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
+      if (!this.encryption) this.encryption = { key: this.encryptionKey }
     }
 
     // stateless open
@@ -435,7 +434,7 @@ module.exports = class Autobase extends ReadyResource {
       await this._viewStore.flush()
     } catch (err) {
       safetyCatch(err)
-      if (err.code === 'ELOCKED') throw err
+      if (err.code === 'ELOCKED' || this.store.closing) throw err
       await this.local.setUserData('autobase/last-error', b4a.from(err.stack + ''))
       await this.local.setUserData('autobase/boot', null)
       this._closeLocalCores().catch(safetyCatch)
@@ -450,14 +449,6 @@ module.exports = class Autobase extends ReadyResource {
       await this._initialSystem.close()
       this._initialSystem = null
       this._initialViews = null
-    }
-
-    // check if this is a v0 base
-    const record = await this.local.getUserData('autobase/system')
-    if (record !== null && (await this.local.getUserData('autobase/reindexed')) === null) {
-      this.reindexing = true
-      this.emit('reindexing')
-      this._onreindexing(record).catch(safetyCatch)
     }
 
     // load previous digest if available
@@ -483,57 +474,6 @@ module.exports = class Autobase extends ReadyResource {
     if (this.localWriter && this._ackInterval) this._startAckTimer()
   }
 
-  async _onreindexing (record) {
-    const { key, length } = messages.Checkout.decode({ buffer: record, start: 0, end: record.byteLength })
-    const encryption = this._viewStore.getBlockEncryption(this._viewStore.getSystemCore().name)
-    const core = this.store.get({ key, encryption })
-
-    const base = this
-    const system = new SystemView(core, { checkout: length })
-
-    await system.ready()
-
-    const indexerCores = []
-    for (const { key } of system.indexers) {
-      const core = this.store.get({ key, compat: false, valueEncoding: messages.OplogMessage, encryption: this.encryption })
-      indexerCores.push(core)
-    }
-
-    await system.close()
-
-    for (const core of indexerCores) tail(core).catch(safetyCatch)
-
-    async function onsyskey (key) {
-      for (const core of indexerCores) await core.close()
-      if (key === null || !base.reindexing || base._isFastForwarding()) return
-      base.initialFastForward(key, DEFAULT_FF_TIMEOUT * 2)
-    }
-
-    async function tail (core) {
-      await core.ready()
-
-      while (base.reindexing && !base._isFastForwarding()) {
-        const seq = core.length - 1
-        const blk = seq >= 0 ? await core.get(seq) : null
-        if (blk && blk.version >= 1) {
-          const sysKey = await getSystemKey(core, seq, blk)
-          if (sysKey) return onsyskey(sysKey)
-        }
-
-        await core.get(core.length) // force get next blk
-      }
-
-      return onsyskey(null)
-    }
-
-    async function getSystemKey (core, seq, blk) {
-      if (!blk.digest) return null
-      if (blk.digest.key) return blk.digest.key
-      const p = await core.get(seq - blk.digest.pointer)
-      return p.digest && p.digest.key
-    }
-  }
-
   async _restoreLocalState () {
     const version = await this.localWriter.getVersion()
     if (version > this.maxSupportedVersion) {
@@ -557,8 +497,6 @@ module.exports = class Autobase extends ReadyResource {
     // queue a full bump that handles wakeup etc (not legal to wait for that here)
     this._queueBump()
     this._advanced = this._advancing
-
-    if (this.reindexing) this._setReindexed()
 
     this.queueFastForward()
     this._updateBootstrapWriters()
@@ -604,38 +542,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this._onindexed(u.indexed.length)
     await this._flushIndexes()
-  }
-
-  _reindexersIdle () {
-    for (const idx of this.linearizer.indexers) {
-      if (idx.core.length !== idx.length) return false
-    }
-    return !this.localWriter || this.localWriter.core.length === this.localWriter.length
-  }
-
-  async _setReindexed () {
-    try {
-      while (true) {
-        await this._bump()
-
-        let p = this.progress()
-        if (p.processed === p.total && !(this.linearizer.indexers.length === 1 && this.linearizer.indexers[0].core.length === 0)) break
-
-        await this._waiting.wait(2000)
-        await this._advancing
-
-        p = this.progress()
-        if (p.processed === p.total) break
-
-        if (this._reindexersIdle()) break
-      }
-      if (this._interrupting) return
-      await this.local.setUserData('autobase/reindexed', b4a.from([0]))
-      this.reindexing = false
-      this.emit('reindexed')
-    } catch (err) {
-      safetyCatch(err)
-    }
   }
 
   async _closeLocalCores () {
@@ -733,16 +639,6 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _waitForIdle () {
-    let p = this.progress()
-    while (!this.closing && this.reindexing) {
-      if (p.processed === p.total && !(this.linearizer.indexers.length === 1 && this.linearizer.indexers[0].core.length === 0)) break
-      await this._waiting.wait(2000)
-      await this._advancing
-      const next = this.progress()
-      if (next.processed === p.processed && next.total === p.total) break
-      p = next
-    }
-
     if (this.localWriter) {
       await this.localWriter.ready()
       while (!this.closing && this.localWriter.core.length > this.localWriter.length) {
@@ -845,9 +741,6 @@ module.exports = class Autobase extends ReadyResource {
   async append (value) {
     if (!this.opened) await this.ready()
     if (this._interrupting) throw new Error('Autobase is closing')
-
-    // if a reset is scheduled await those
-    while (this._queueViewReset && !this._interrupting) await this._bump()
 
     // we wanna allow acks so interdexers can flush
     if (this.localWriter === null || (this.localWriter.isRemoved && value !== null)) {
@@ -1346,14 +1239,6 @@ module.exports = class Autobase extends ReadyResource {
 
       if (this._interrupting) return
 
-      // force reset state in worst case
-      if (this._queueViewReset && this._appending === null) {
-        this._queueViewReset = false
-        const sysCore = this._viewStore.getSystemCore()
-        await this._forceResetViews(sysCore.signedLength)
-        continue
-      }
-
       if (changed === -1) {
         if (this._checkWriters.length > 0) {
           await this._gcWriters()
@@ -1529,37 +1414,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return false
-  }
-
-  async forceResetViews () {
-    if (!this.opened) await this.ready()
-
-    this._queueViewReset = true
-    this._queueBump()
-    this._advanced = this._advancing
-    await this._advanced
-  }
-
-  async _forceResetViews (length) {
-    const info = await this.system.getIndexedInfo(length)
-
-    await this._undoAll()
-    this._systemPointer = length
-
-    const pointer = await this.local.getUserData('autobase/boot')
-    const { views } = c.decode(messages.BootRecord, pointer)
-
-    await this._setBootRecord(this.system.core.key, views)
-
-    for (const { key, length } of info.views) {
-      const core = this._viewStore.getByKey(key)
-      await core.reset(length)
-    }
-
-    await this._closeAllActiveWriters(false)
-
-    await this._refreshSystemState(this.system)
-    await this._makeLinearizer(this.system)
   }
 
   doneFastForwarding () {
