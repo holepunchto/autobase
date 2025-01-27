@@ -297,6 +297,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this.encrypted) {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
+      if (!this.encryption) this.encryption = { key: this.encryptionKey }
     }
 
     // stateless open
