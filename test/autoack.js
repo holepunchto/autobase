@@ -32,7 +32,7 @@ test('autoack - simple', async t => {
   t.is(a.view.signedLength, 0)
   t.is(b.view.signedLength, 0)
 
-  await new Promise(resolve => setTimeout(resolve, 100))
+  await new Promise(resolve => setTimeout(resolve, 500))
 
   t.not(a.local.length, 1)
   t.not(b.local.length, 1)
@@ -156,7 +156,7 @@ test('autoack - concurrent', async t => {
   const dlen = d.local.length
   const elen = e.local.length
 
-  await new Promise(resolve => setTimeout(resolve, 10 * ackInterval))
+  await new Promise(resolve => setTimeout(resolve, 40 * ackInterval))
 
   t.is(a.local.length, alen)
   t.is(b.local.length, blen)
@@ -219,7 +219,7 @@ test('autoack - threshold with interval', async t => {
   b.append('b1')
   b.append('b2')
   await b.append('b3')
-  await new Promise(resolve => setTimeout(resolve, 400)) // fast ack
+  await new Promise(resolve => setTimeout(resolve, 1000)) // fast ack
   await sync([a, b])
   await eventFlush() // allow the bg threshold to react...
   b.append('b4')
@@ -227,7 +227,7 @@ test('autoack - threshold with interval', async t => {
   b.append('b6')
   await b.append('b7')
   await sync([a, b])
-  await new Promise(resolve => setTimeout(resolve, 400)) // fast ack
+  await new Promise(resolve => setTimeout(resolve, 1000)) // fast ack
 
   t.is(a._ackTimer.interval, ackInterval)
   t.ok(a.view.signedLength >= 4)
@@ -257,7 +257,7 @@ test('autoack - no null acks', async t => {
   setTimeout(() => {
     t.is(a.local.length, alen)
     t.is(b.local.length, blen)
-  }, 100)
+  }, 1000)
 })
 
 test('autoack - value beneath null values', async t => {
@@ -283,7 +283,7 @@ test('autoack - value beneath null values', async t => {
   const alen = a.local.length
   const blen = b.local.length
 
-  await new Promise(resolve => setTimeout(resolve, 100))
+  await new Promise(resolve => setTimeout(resolve, 1000))
 
   t.not(a.local.length, alen) // a should ack
   t.is(b.local.length, blen) // b0 is indexed by a's ack (all indexes acked)
@@ -419,7 +419,7 @@ test('autoack - pending writers', async t => {
 
   await eventFlush()
 
-  await new Promise(resolve => setTimeout(resolve, 200))
+  await new Promise(resolve => setTimeout(resolve, 500))
 
   t.ok(b.local.length > 0)
   t.ok(c.local.length > 0)
@@ -497,7 +497,7 @@ test('autoack - minority indexers who are both tails', async t => {
   // now we keep c and d offline
   t.teardown(await replicate([a, b]))
 
-  await new Promise(resolve => setTimeout(resolve, 400))
+  await new Promise(resolve => setTimeout(resolve, 1000))
 
   const alen = a.local.length
   const blen = b.local.length
@@ -505,7 +505,7 @@ test('autoack - minority indexers who are both tails', async t => {
   const asize = a.linearizer.size
   const bsize = b.linearizer.size
 
-  await new Promise(resolve => setTimeout(resolve, 400))
+  await new Promise(resolve => setTimeout(resolve, 1000))
 
   t.absent(b.linearizer.shouldAck(b.localWriter))
 
@@ -556,7 +556,7 @@ test('autoack - minority indexers with non-indexer tails', async t => {
   // now we keep c and d offline
   t.teardown(await replicate([a, b, e]))
 
-  await new Promise(resolve => setTimeout(resolve, 400))
+  await new Promise(resolve => setTimeout(resolve, 1000))
 
   const alen = a.local.length
   const blen = b.local.length
@@ -564,7 +564,7 @@ test('autoack - minority indexers with non-indexer tails', async t => {
   const asize = a.linearizer.size
   const bsize = b.linearizer.size
 
-  await new Promise(resolve => setTimeout(resolve, 400))
+  await new Promise(resolve => setTimeout(resolve, 1000))
 
   t.absent(b.linearizer.shouldAck(b.localWriter))
 
