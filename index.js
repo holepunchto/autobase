@@ -345,11 +345,14 @@ module.exports = class Autobase extends ReadyResource {
     const bootstrap = this.bootstrap || (await this.local.getUserData('referrer')) || this.local.key
     if (!pointer) return { bootstrap, system: null, views: [] }
 
-    const { key, views } = c.decode(messages.BootRecord, pointer)
+    const { key, views, indexed } = c.decode(messages.BootRecord, pointer)
+    const compat = key === null
+
+    if (compat && !indexed) return { bootstrap, system: null, views: [] }
 
     const encryptionKey = AutoStore.getBlockKey(bootstrap, this.encryptionKey, '_system')
     const encryption = encryptionKey ? { key: encryptionKey, block: true } : null
-    const actualCore = this.store.get({ key, exclusive: false, compat: false, encryption })
+    const actualCore = this.store.get({ key: key || indexed.key, exclusive: false, compat: false, encryption })
 
     await actualCore.ready()
 
