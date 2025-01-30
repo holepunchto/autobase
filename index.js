@@ -318,7 +318,7 @@ module.exports = class Autobase extends ReadyResource {
       this.wakeupExtension = new WakeupExtension(this, this.local, true)
     }
 
-    const { bootstrap, system, views } = await this._loadSystemInfo()
+    const { bootstrap, indexedLength, system, views } = await this._loadSystemInfo()
 
     this.version = system
       ? system.version
@@ -328,7 +328,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this.bootstrap = bootstrap
 
-    this._systemPointer = system ? system.core.signedLength : 0
+    this._systemPointer = system ? indexedLength : 0
     this._indexedLength = this._systemPointer
 
     this._initialSystem = system
@@ -340,9 +340,9 @@ module.exports = class Autobase extends ReadyResource {
     if (sys) await sys.close()
   }
 
-  async _getIndexedInfo () {
+  async _getSystemBootInfo () {
     const result = await this._loadSystemInfo()
-    const info = result.system ? await result.system.getIndexedInfo() : null
+    const info = result.system ? await result.system.getIndexedInfo(result.indexedLength) : null
     if (result.system) await result.system.close()
     return { system: result.system ? result.system.core.manifest : null, views: result.views, info }
   }
@@ -352,7 +352,7 @@ module.exports = class Autobase extends ReadyResource {
     const bootstrap = this.bootstrap || (await this.local.getUserData('referrer')) || this.local.key
     if (!pointer) return { bootstrap, system: null, views: [] }
 
-    const { key, views, indexed } = c.decode(messages.BootRecord, pointer)
+    const { key, indexedLength, views, indexed, heads } = c.decode(messages.BootRecord, pointer)
     const compat = key === null
 
     if (compat && !indexed) return { bootstrap, system: null, views: [] }
@@ -363,9 +363,11 @@ module.exports = class Autobase extends ReadyResource {
 
     await actualCore.ready()
 
+    if (heads) this.hintWakeup(heads)
+
     if (!actualCore.length) {
       await actualCore.close()
-      return { bootstrap, system: null, views: [] }
+      return { bootstrap, indexedLength: 0, system: null, views: [] }
     }
 
     const core = actualCore.session({ name: 'batch' })
@@ -376,7 +378,7 @@ module.exports = class Autobase extends ReadyResource {
       await this.local.setUserData('autobase/boot', null)
       await actualCore.close()
       await core.close()
-      return { bootstrap, system: null, views: [] }
+      return { bootstrap, indexedLength: 0, system: null, views: [] }
     }
 
     await actualCore.close()
@@ -391,6 +393,7 @@ module.exports = class Autobase extends ReadyResource {
 
     return {
       bootstrap,
+      indexedLength: Math.max(core.signedLength, indexedLength),
       system,
       views
     }
@@ -1198,7 +1201,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _setBootRecord (key, views, atom) {
-    const pointer = c.encode(messages.BootRecord, { key, views })
+    const pointer = c.encode(messages.BootRecord, { key, indexedLength: this._indexedLength, views })
     if (!atom) return this.local.setUserData('autobase/boot', pointer)
 
     const session = await this.local.session({ atom })
