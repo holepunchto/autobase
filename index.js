@@ -340,6 +340,13 @@ module.exports = class Autobase extends ReadyResource {
     if (sys) await sys.close()
   }
 
+  async _getIndexedInfo () {
+    const result = await this._loadSystemInfo()
+    const info = result.system ? await result.system.getIndexedInfo() : null
+    if (result.system) await result.system.close()
+    return { system: result.system ? result.system.core.manifest : null, views: result.views, info }
+  }
+
   async _loadSystemInfo () {
     const pointer = await this.local.getUserData('autobase/boot')
     const bootstrap = this.bootstrap || (await this.local.getUserData('referrer')) || this.local.key
@@ -1747,7 +1754,7 @@ module.exports = class Autobase extends ReadyResource {
       // search for corresponding view
       if (!view) {
         for (view of this._viewStore.opened.values()) {
-          const key = this.deriveKey(view.name, indexers, prologues[i])
+          const key = this.deriveKey(view.name, indexers, i < prologues.length ? prologues[i] : null)
           if (b4a.equals(key, v.key)) break
           view = null
         }
