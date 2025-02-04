@@ -20,7 +20,7 @@ const {
   compareViews
 } = require('./helpers')
 
-test('basic - single writer', async t => {
+test.solo('basic - single writer', async t => {
   const { bases } = await create(1, t)
   const [base] = bases
 

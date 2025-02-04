@@ -81,14 +81,15 @@ function createBase (store, key, t, opts = {}) {
   }
 
   t.teardown(async () => {
-    const view = new Promise(resolve => {
-      setImmediate(() => base._viewStore.close().then(resolve, resolve))
-    })
+    return base.close()
+    // const view = new Promise(resolve => {
+    //   setImmediate(() => base._viewStore.close().then(resolve, resolve))
+    // })
 
-    await Promise.all([
-      view,
-      base.close()
-    ])
+    // await Promise.all([
+    //   view,
+    //   base.close()
+    // ])
   }, { order: 1 })
 
   return base

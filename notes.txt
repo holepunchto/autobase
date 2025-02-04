@@ -1,0 +1,2 @@
+corestore parent gots to go, thats internal and breaks stuff
+hypercore-storage map thing
