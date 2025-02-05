@@ -43,7 +43,7 @@ test('basic - single writer', async t => {
   t.not(base.system.core.manifest, null)
 })
 
-test.solo('basic - two writers', async t => {
+test('basic - two writers', async t => {
   const { bases } = await create(3, t, { open: null })
 
   const [base1, base2, base3] = bases
