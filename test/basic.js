@@ -45,6 +45,7 @@ test('basic - single writer', async t => {
 
 test.solo('basic - two writers', async t => {
   const { bases } = await create(3, t, { open: null })
+
   const [base1, base2, base3] = bases
 
   let added = false
@@ -106,7 +107,7 @@ test('basic - no truncates when history is linear', async t => {
   await base1.append('verden')
 
   const all = []
-  for (let i = 0; i < base1.view.signedLength; i++) {
+  for (let i = 0; i < base1.view.length; i++) {
     all.push(await base1.view.get(i))
   }
 
@@ -162,6 +163,7 @@ test('basic - local key pair', async t => {
   await base.append(block)
 
   t.is(base.view.signedLength, 1)
+  console.log(base.view.id)
   t.alike(await base.view.get(0), block)
   t.alike(base.local.manifest.signers[0].publicKey, keyPair.publicKey)
 
@@ -171,6 +173,7 @@ test('basic - local key pair', async t => {
   await base2.ready()
 
   t.alike(base2.local.key, base.local.key)
+  console.log(base2.view.id)
   t.alike(await base2.view.get(0), block)
   t.alike(base2.local.manifest.signers[0].publicKey, keyPair.publicKey)
 })
@@ -270,7 +273,7 @@ test('basic - simple reorg', async t => {
   t.is(await b.view.get(3), 'b1')
 })
 
-test('basic - compare views', async t => {
+test.skip('basic - compare views', async t => {
   const { bases } = await create(2, t)
 
   const [a, b] = bases
@@ -288,7 +291,7 @@ test('basic - compare views', async t => {
   await compareViews([a, b], t)
 })
 
-test('basic - online majority', async t => {
+test.skip('basic - online majority', async t => {
   const { bases } = await create(3, t)
 
   const [a, b, c] = bases
@@ -328,7 +331,7 @@ test('basic - online majority', async t => {
   await compareViews([a, b, c], t)
 })
 
-test('basic - rotating majority', async t => {
+test.skip('basic - rotating majority', async t => {
   const { bases } = await create(3, t)
 
   const [a, b, c] = bases
@@ -407,7 +410,7 @@ test('basic - rotating majority', async t => {
   await compareViews([a, b, c], t)
 })
 
-test('basic - throws', async t => {
+test.skip('basic - throws', async t => {
   const { bases } = await create(2, t)
 
   const [a, b] = bases

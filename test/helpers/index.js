@@ -51,7 +51,6 @@ async function create (n, t, opts = {}) {
   for (let i = 1; i < n; i++) {
     const base = createBase(stores[i], bases[0].local.key, t, opts)
     await base.ready()
-
     bases.push(base)
   }
 

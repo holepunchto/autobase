@@ -450,9 +450,9 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   recouple () {
-    // if (this._coupler) this._coupler.destroy()
-    // const core = this._viewStore.getSystemCore().originalCore
-    // this._coupler = new CoreCoupler(core, this._wakeupPeerBound)
+    if (this._coupler) this._coupler.destroy()
+    const core = this._viewStore.getSystemCore()
+    this._coupler = new CoreCoupler(core, this._wakeupPeerBound)
   }
 
   _updateBootstrapWriters () {
@@ -479,14 +479,9 @@ module.exports = class Autobase extends ReadyResource {
 
   async _bootApplyView () {
     if (await this._isBootstrapping()) {
-      const bootstrap = this._getBootstrapCore()
-      await bootstrap.ready()
-      const manifest = bootstrap.manifest
-      await bootstrap.close()
-
       // bootstrapping
       const pointer = c.encode(messages.BootRecord, {
-        key: await this._viewStore.getBootstrapSystemKey(manifest),
+        key: await this._viewStore.getBootstrapSystemKey(),
         indexedLength: 0,
         views: []
       })
@@ -506,18 +501,6 @@ module.exports = class Autobase extends ReadyResource {
   async _openPreBump () {
     this._presystem = this._openPreSystem()
     await this._presystem
-
-    if (await this._isBootstrapping()) {
-      const bootstrap = this._getBootstrapCore()
-      await bootstrap.ready()
-
-      if (!bootstrap.manifest) {
-        console.log('TODO: no manifest, need to swarm and wait...')
-        process.exit(1)
-      }
-
-      await bootstrap.close()
-    }
 
     await this._bootApplyView()
 
@@ -1132,6 +1115,10 @@ module.exports = class Autobase extends ReadyResource {
       await ref.atomicBatch.close()
       ref.atomicBatch = null
     }
+    if (ref.atomicCore) {
+      await ref.atomicCore.close()
+      ref.atomicCore = null
+    }
 
     return ref
   }
@@ -1325,7 +1312,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const u = this.linearizer.update()
-      const changed = u ? await this.applyView.update(u, localNodes) : false
+      const indexerUpdate = u ? await this.applyView.update(u, localNodes) : false
 
       // const indexed = !!this._updatingCores
 
@@ -1352,7 +1339,7 @@ module.exports = class Autobase extends ReadyResource {
       //   return
       // }
 
-      if (!changed) {
+      if (!indexerUpdate) {
         // await atom.flush()
         // await this.system.update()
 
@@ -1503,9 +1490,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _ackIsNeeded () {
-    return false
-
-    if (!this._addCheckpoints) return false // ack has no impact
+    // return false
+    // if (!this._addCheckpoints) return false // ack has no impact
 
     // flush any pending indexers
     if (this.system.pendingIndexers.length > 0) {
@@ -1515,6 +1501,8 @@ module.exports = class Autobase extends ReadyResource {
         }
       }
     }
+
+    return false
 
     // flush any pending migrates
     for (const view of this._viewStore.opened.values()) {
@@ -1982,9 +1970,7 @@ module.exports = class Autobase extends ReadyResource {
 
   // triggered from apply
   async addWriter (key, { indexer = true, isIndexer = indexer } = {}) { // just compat for old version
-    assert(this._applySystem !== null, 'System changes are only allowed in apply')
-
-    const sys = this._applySystem
+    const sys = this.applyView.system
     await sys.add(key, { isIndexer })
 
     const writer = (await this._getWriterByKey(key, -1, 0, false, true, null)) || this._makeWriter(key, 0, true, false)
