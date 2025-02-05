@@ -1109,41 +1109,50 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async migrate (length) {
+  async migrate () {
+    const length = this.applyView.indexedLength
     this._updates = []
 
     const system = this.applyView.system
     await this.applyView.truncate(length)
 
-    const indexers = await this._viewStore.getIndexersWithManifests(system.indexers)
+    const info = await system.getIndexedInfo(length)
+    const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
 
-    // can be triggered when bootstrapping
-    if (this.system.sameIndexers(indexers)) return this.applyView.flush([])
+    for (let i = 0; i < info.views.length; i++) {
+      // TODO: use the ns instead of the name here so we can support dropped views properly
+      const v = info.views[i]
+      const name = this.applyView.views[i].name
+      const ref = this._viewStore.byName.get(name)
 
-    const prologues = new Map()
+      let core = ref.atomicBatch || ref.batch || ref.core
+      if (!core) core = this.store.get(v.key)
 
-    for (const { name, core, length } of this.applyViews) {
-      prologues.set(name, { hash: await core.hash(), length })
-    }
+      const prologue = { length: v.length, hash: (await core.restoreBatch(v.length)).hash() }
 
-    await this.applyView.flush([]) // no local nodes
+      const next = this._viewStore.getNextCore(indexerManifests, name, prologue)
+      await next.ready()
 
-    for (const [name, view] of this._viewStore.byName) {
-      const prologue = prologues.get(name)
-      const core = await this._viewStore.getNextCore(indexers, name, prologue)
-      await core.ready()
-
-      // clone state from previous core
-      if (length > 0 && core.core !== view.core.core) {
-        await core.core.copyPrologue(view.core.state)
+      if (v.length > 0) {
+        await next.core.copyPrologue(core.state)
       }
 
-      view.core = core
+      await ref.batch.state.moveTo(next.core, prologue.length)
 
-      await view.batch.moveTo(view.core.core, prologue.length)
+      ref.core = next
+
+      if (ref.atomicBatch) {
+        await ref.atomicBatch.close()
+        ref.atomicBatch = null
+      }
+
+      // TODO: gc the cores eventually
     }
 
-    await this._makeLinearizer(this.applyView.system)
+    const sys = await this.applyView.getIndexedSystem()
+    await this._makeLinearizer(sys)
+    await sys.close()
+
     await this.applyView.close()
 
     this.applyView = new InternalView(this)
@@ -1308,6 +1317,7 @@ module.exports = class Autobase extends ReadyResource {
 
       const u = this.linearizer.update()
       const changed = u ? await this.applyView.update(u, localNodes) : false
+
       // const indexed = !!this._updatingCores
 
       // if (this._interrupting) {
@@ -1347,7 +1357,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       await this._gcWriters()
-      await this.migrate(this._indexedLength)
+      await this.migrate()
 
       // await atom.flush()
 
