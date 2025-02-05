@@ -168,7 +168,6 @@ module.exports = class Autobase extends ReadyResource {
     // })
 
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
-    this.applyView = new InternalView(this)
 
     this.ready().catch(safetyCatch)
   }
@@ -353,10 +352,12 @@ module.exports = class Autobase extends ReadyResource {
     const result = await this._loadSystemInfo()
 
     if (!result.system) {
+      const pointer = await this.local.getUserData('autobase/boot')
+      const dec = pointer && c.decode(messages.BootRecord, pointer)
       return {
         bootstrap: result.bootstrap,
         indexedLength: result.indexedLength,
-        system: null,
+        system: dec && dec.key,
         indexers: [],
         views: []
       }
@@ -383,7 +384,7 @@ module.exports = class Autobase extends ReadyResource {
   async _loadSystemInfo () {
     const pointer = await this.local.getUserData('autobase/boot')
     const bootstrap = this.bootstrap || (await this.local.getUserData('referrer')) || this.local.key
-    if (!pointer) return { bootstrap, system: null, views: [] }
+    if (!pointer) return { bootstrap, indexedLength: 0, system: null, views: [] }
 
     const { key, indexedLength, views, indexed, heads } = c.decode(messages.BootRecord, pointer)
     const compat = key === null
@@ -472,16 +473,61 @@ module.exports = class Autobase extends ReadyResource {
     this._bootstrapWritersChanged = false
   }
 
+  async _isBootstrapping () {
+    return (await this.local.getUserData('autobase/boot')) === null
+  }
+
+  async _bootApplyView () {
+    if (await this._isBootstrapping()) {
+      const bootstrap = this._getBootstrapCore()
+      await bootstrap.ready()
+      const manifest = bootstrap.manifest
+      await bootstrap.close()
+
+      // bootstrapping
+      const pointer = c.encode(messages.BootRecord, {
+        key: await this._viewStore.getBootstrapSystemKey(manifest),
+        indexedLength: 0,
+        views: []
+      })
+
+      await this.local.setUserData('autobase/boot', pointer)
+    }
+
+    this.applyView = new InternalView(this)
+    await this.applyView.ready()
+  }
+
+  _getBootstrapCore () {
+    if (this._primaryBootstrap) return this._primaryBootstrap.session({ active: false })
+    return this.store.get({ key: this.key, active: false })
+  }
+
   async _openPreBump () {
     this._presystem = this._openPreSystem()
     await this._presystem
 
-    const sys = await this.applyView.getIndexedSystem()
-    await this._makeLinearizer(sys)
-    await sys.close()
+    if (await this._isBootstrapping()) {
+      const bootstrap = this._getBootstrapCore()
+      await bootstrap.ready()
+
+      if (!bootstrap.manifest) {
+        console.log('TODO: no manifest, need to swarm and wait...')
+        process.exit(1)
+      }
+
+      await bootstrap.close()
+    }
+
+    await this._bootApplyView()
 
     if (this.applyView.system.bootstrapping) {
+      await this._makeLinearizer(null)
       this._bootstrapLinearizer()
+    } else {
+      const sys = await this.applyView.getIndexedSystem()
+      await this._makeLinearizer(sys)
+      await sys.close()
     }
 
     // try {
@@ -543,7 +589,9 @@ module.exports = class Autobase extends ReadyResource {
     this._prebump = this._openPreBump()
     await this._prebump
 
-    await this.applyView.catchup(this.linearizer)
+    if (this.applyView !== null) {
+      await this.applyView.catchup(this.linearizer)
+    }
 
     await this._wakeup.ready()
 
