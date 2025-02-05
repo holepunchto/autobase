@@ -1100,7 +1100,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const prologue = { length, hash: (await core.restoreBatch(length)).hash() }
 
-    const next = this._viewStore.getNextCore(indexerManifests, name, prologue)
+    const next = this._viewStore.getViewCore(indexerManifests, name, prologue)
     await next.ready()
 
     if (length > 0) {
@@ -2116,8 +2116,6 @@ module.exports = class Autobase extends ReadyResource {
 
     //   return true
     // }
-
-    // console.log('her')
 
     /*
     // assert(await this._viewStore.flush(), 'Views failed to open')

@@ -151,7 +151,7 @@ test('basic - writable event fires', async t => {
 })
 
 test('basic - local key pair', async t => {
-  const keyPair = crypto.keyPair()
+  const keyPair = crypto.keyPair(Buffer.alloc(32))
   const [store] = await createStores(1, t)
 
   const base = createBase(store, null, t, { keyPair })
@@ -163,7 +163,6 @@ test('basic - local key pair', async t => {
   await base.append(block)
 
   t.is(base.view.signedLength, 1)
-  console.log(base.view.id)
   t.alike(await base.view.get(0), block)
   t.alike(base.local.manifest.signers[0].publicKey, keyPair.publicKey)
 
@@ -173,7 +172,6 @@ test('basic - local key pair', async t => {
   await base2.ready()
 
   t.alike(base2.local.key, base.local.key)
-  console.log(base2.view.id)
   t.alike(await base2.view.get(0), block)
   t.alike(base2.local.manifest.signers[0].publicKey, keyPair.publicKey)
 })
