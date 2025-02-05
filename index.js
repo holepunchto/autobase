@@ -1061,33 +1061,47 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _reindex (atom) {
+  async migrate (length) {
     this._updates = []
 
-    const sys = this._applySystem || this.system
-    const system = await sys.checkout(this._indexedLength)
-    const sameIndexers = SystemView.sameIndexers(system.indexers, this.linearizer.indexers)
+    const system = this.applyView.system
+    await this.applyView.truncate(length)
 
-    await this._makeLinearizer(system)
+    const indexers = await this._viewStore.getIndexersWithManifests(system.indexers)
 
-    let recouple = false
+    // can be triggered when bootstrapping
+    if (this.system.sameIndexers(indexers)) return this.applyView.flush([])
 
-    if (!sameIndexers) {
-      const name = this._viewStore.getSystemCore().name
-      const length = this._indexedLength
+    const prologues = new Map()
 
-      const prologue = { hash: await sys.core.treeHash(length), length }
-      const key = this.deriveKey(name, this.linearizer.indexers, prologue)
-
-      await this._advanceBootRecord(key, atom)
-      await this._viewStore.migrate(system, atom)
-
-      recouple = true
-    } else {
-      await this._advanceBootRecord(sys.core.key, atom)
+    for (const { name, core, length } of this.applyViews) {
+      prologues.set(name, { hash: await core.hash(), length })
     }
 
-    return recouple
+    await this.applyView.flush([]) // no local nodes
+
+    for (const [name, view] of this._viewStore.byName) {
+      const prologue = prologues.get(name)
+      const core = await this._viewStore.getNextCore(indexers, name, prologue)
+      await core.ready()
+
+      // clone state from previous core
+      if (length > 0 && core.core !== view.core.core) {
+        await core.core.copyPrologue(view.core.state)
+      }
+
+      view.core = core
+
+      await view.batch.moveTo(view.core.core, prologue.length)
+    }
+
+    await this._makeLinearizer(this.applyView.system)
+    await this.applyView.close()
+
+    this.applyView = new InternalView(this)
+    await this.applyView.ready()
+
+    this.recouple()
   }
 
   async _postFlush () {
@@ -1285,7 +1299,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       await this._gcWriters()
-      // const recouple = await this._reindex(atom)
+      await this.migrate(this._indexedLength)
 
       // await atom.flush()
 
