@@ -1109,12 +1109,38 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  async _migrateView (indexerManifests, name, length) {
+    const ref = this._viewStore.byName.get(name)
+
+    let core = ref.atomicBatch || ref.batch || ref.core
+    if (!core) core = this.store.get(v.key)
+
+    const prologue = { length, hash: (await core.restoreBatch(length)).hash() }
+
+    const next = this._viewStore.getNextCore(indexerManifests, name, prologue)
+    await next.ready()
+
+    if (length > 0) {
+      await next.core.copyPrologue(core.state)
+    }
+
+    await ref.batch.state.moveTo(next.core, prologue.length)
+
+    ref.core = next
+
+    if (ref.atomicBatch) {
+      await ref.atomicBatch.close()
+      ref.atomicBatch = null
+    }
+
+    return ref
+  }
+
   async migrate () {
     const length = this.applyView.indexedLength
     this._updates = []
 
     const system = this.applyView.system
-    await this.applyView.truncate(length)
 
     const info = await system.getIndexedInfo(length)
     const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
@@ -1123,31 +1149,14 @@ module.exports = class Autobase extends ReadyResource {
       // TODO: use the ns instead of the name here so we can support dropped views properly
       const v = info.views[i]
       const name = this.applyView.views[i].name
-      const ref = this._viewStore.byName.get(name)
 
-      let core = ref.atomicBatch || ref.batch || ref.core
-      if (!core) core = this.store.get(v.key)
-
-      const prologue = { length: v.length, hash: (await core.restoreBatch(v.length)).hash() }
-
-      const next = this._viewStore.getNextCore(indexerManifests, name, prologue)
-      await next.ready()
-
-      if (v.length > 0) {
-        await next.core.copyPrologue(core.state)
-      }
-
-      await ref.batch.state.moveTo(next.core, prologue.length)
-
-      ref.core = next
-
-      if (ref.atomicBatch) {
-        await ref.atomicBatch.close()
-        ref.atomicBatch = null
-      }
-
-      // TODO: gc the cores eventually
+      await this._migrateView(indexerManifests, name, v.length)
     }
+
+    const ref = await this._migrateView(indexerManifests, '_system', length)
+
+    await this.applyView.truncate(length)
+    await this.applyView.finalize(ref.core.key)
 
     const sys = await this.applyView.getIndexedSystem()
     await this._makeLinearizer(sys)
