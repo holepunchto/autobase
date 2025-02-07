@@ -1103,9 +1103,7 @@ module.exports = class Autobase extends ReadyResource {
   async _migrateView (indexerManifests, name, length) {
     const ref = this._viewStore.byName.get(name)
 
-    let core = ref.atomicBatch || ref.batch || ref.core
-    if (!core) core = this.store.get(v.key)
-
+    const core = ref.atomicBatch || ref.batch || ref.core
     const prologue = { length, hash: (await core.restoreBatch(length)).hash() }
 
     const next = this._viewStore.getViewCore(indexerManifests, name, prologue)
