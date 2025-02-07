@@ -1,2 +1,6 @@
 corestore parent gots to go, thats internal and breaks stuff
 hypercore-storage map thing
+
+when we reboot the view, we might short circuit the applies of the current update
+that means that there might be nodes in there we did not process.
+we should ensure that those writers are re-"touched" on boot, ie store the heads of the dag at that stage
