@@ -358,13 +358,14 @@ module.exports = class Autobase extends ReadyResource {
 
   async _getBootInfo () {
     const result = await this._loadSystemInfo()
+    const pointer = await this.local.getUserData('autobase/boot')
+    const dec = pointer && c.decode(messages.BootRecord, pointer)
 
     if (!result.system) {
-      const pointer = await this.local.getUserData('autobase/boot')
-      const dec = pointer && c.decode(messages.BootRecord, pointer)
       return {
         bootstrap: result.bootstrap,
-        indexedLength: result.indexedLength,
+        indexedLength: dec ? dec.indexedLength : 0,
+        indexersUpdated: dec ? dec.indexersUpdated : false,
         system: dec && dec.key,
         indexers: [],
         views: []
@@ -375,7 +376,8 @@ module.exports = class Autobase extends ReadyResource {
 
     return {
       bootstrap: result.bootstrap,
-      indexedLength: result.indexedLength,
+      indexedLength: dec ? dec.indexedLength : 0,
+      indexersUpdated: dec ? dec.indexersUpdated : false,
       system: result.system.core.key,
       indexers: result.system.indexers,
       views: result.system.views
@@ -580,9 +582,7 @@ module.exports = class Autobase extends ReadyResource {
     this._prebump = this._openPreBump()
     await this._prebump
 
-    if (this.applyView !== null) {
-      await this.applyView.catchup(this.linearizer)
-    }
+    await this.applyView.catchup(this.linearizer)
 
     await this._wakeup.ready()
 
@@ -1100,21 +1100,35 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _migrateView (indexerManifests, name, length) {
+  async _migrateView (indexerManifests, name, indexedLength) {
     const ref = this._viewStore.byName.get(name)
 
-    const core = ref.atomicBatch || ref.batch || ref.core
-    const prologue = { length, hash: (await core.restoreBatch(length)).hash() }
+    const core = ref.batch || ref.core
+    const prologue = { length: indexedLength, hash: (await core.restoreBatch(indexedLength)).hash() }
 
     const next = this._viewStore.getViewCore(indexerManifests, name, prologue)
     await next.ready()
 
-    if (length > 0) {
+    if (indexedLength > 0) {
       await next.core.copyPrologue(core.state)
     }
 
-    await ref.batch.state.moveTo(next.core, prologue.length)
+    const batch = next.session({ name: 'batch', overwrite: true })
+    await batch.ready()
 
+    if (core.length > batch.length) {
+      await batch.ready()
+
+      for (let i = batch.length; i < core.length; i++) {
+        await batch.append(await core.get(i))
+      }
+    }
+
+    await ref.batch.state.moveTo(batch, core.length)
+    await batch.close()
+
+    // TODO: close old core, for now we just close when the autobase is closed indirectly
+    // atm its unsafe to do as moveTo has a bug due to a missing read lock in hc
     ref.core = next
 
     return ref
@@ -1122,49 +1136,34 @@ module.exports = class Autobase extends ReadyResource {
 
   async migrate () {
     const length = this.applyView.indexedLength
-    this._updates = []
-
     const system = this.applyView.system
 
     const refs = []
     const info = await system.getIndexedInfo(length)
     const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
 
-    for (let i = 0; i < info.views.length; i++) {
-      // TODO: use the ns instead of the name here so we can support dropped views properly
-      const v = info.views[i]
+    for (let i = 0; i < this.applyView.views.length; i++) {
       const name = this.applyView.views[i].name
+      const core = this.applyView.views[i].core
+      const indexedLength = info.views[i].length
 
-      const ref = await this._migrateView(indexerManifests, name, v.length)
+      const ref = await this._migrateView(indexerManifests, name, indexedLength)
       refs.push(ref)
     }
 
     const ref = await this._migrateView(indexerManifests, '_system', length)
     refs.push(ref)
 
-    await this.applyView.truncate(length)
-    await this.applyView.finalize(ref.core.key)
-
     const sys = await this.applyView.getIndexedSystem()
     await this._makeLinearizer(sys)
     await sys.close()
 
-    await this.applyView.close()
-
-    for (const ref of refs) {
-      if (ref.atomicBatch) {
-        await ref.atomicBatch.close()
-        ref.atomicBatch.yolo = true
-        ref.atomicBatch = null
-      }
-      if (ref.atomicCore) {
-        await ref.atomicCore.close()
-        ref.atomicCore = null
-      }
-    }
+    await this.applyView.finalize(ref.core.key)
 
     this.applyView = new InternalView(this)
+
     await this.applyView.ready()
+    await this.applyView.catchup(this.linearizer)
 
     this.recouple()
   }
