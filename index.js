@@ -202,6 +202,14 @@ module.exports = class Autobase extends ReadyResource {
     return this._primaryBootstrap === null ? this.local.discoveryKey : this._primaryBootstrap.discoveryKey
   }
 
+  get signedLength () {
+    return this.applyView ? this.applyView.system.core.signedLength : 0
+  }
+
+  get indexedLength () {
+    return this.applyView ? this.applyView.indexedLength : 0
+  }
+
   getIndexedInfo () {
     return this.system.getIndexedInfo(this._indexedLength)
   }
@@ -1111,15 +1119,6 @@ module.exports = class Autobase extends ReadyResource {
 
     ref.core = next
 
-    if (ref.atomicBatch) {
-      await ref.atomicBatch.close()
-      ref.atomicBatch = null
-    }
-    if (ref.atomicCore) {
-      await ref.atomicCore.close()
-      ref.atomicCore = null
-    }
-
     return ref
   }
 
@@ -1129,6 +1128,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const system = this.applyView.system
 
+    const refs = []
     const info = await system.getIndexedInfo(length)
     const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
 
@@ -1137,10 +1137,12 @@ module.exports = class Autobase extends ReadyResource {
       const v = info.views[i]
       const name = this.applyView.views[i].name
 
-      await this._migrateView(indexerManifests, name, v.length)
+      const ref = await this._migrateView(indexerManifests, name, v.length)
+      refs.push(ref)
     }
 
     const ref = await this._migrateView(indexerManifests, '_system', length)
+    refs.push(ref)
 
     await this.applyView.truncate(length)
     await this.applyView.finalize(ref.core.key)
@@ -1150,6 +1152,18 @@ module.exports = class Autobase extends ReadyResource {
     await sys.close()
 
     await this.applyView.close()
+
+    for (const ref of refs) {
+      if (ref.atomicBatch) {
+        await ref.atomicBatch.close()
+        ref.atomicBatch.yolo = true
+        ref.atomicBatch = null
+      }
+      if (ref.atomicCore) {
+        await ref.atomicCore.close()
+        ref.atomicCore = null
+      }
+    }
 
     this.applyView = new InternalView(this)
     await this.applyView.ready()

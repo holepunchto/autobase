@@ -331,7 +331,7 @@ test('basic - online majority', async t => {
   await compareViews([a, b, c], t)
 })
 
-test.skip('basic - rotating majority', async t => {
+test('basic - rotating majority', async t => {
   const { bases } = await create(3, t)
 
   const [a, b, c] = bases
