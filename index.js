@@ -1144,7 +1144,6 @@ module.exports = class Autobase extends ReadyResource {
 
     for (let i = 0; i < this.applyView.views.length; i++) {
       const name = this.applyView.views[i].name
-      const core = this.applyView.views[i].core
       const indexedLength = info.views[i].length
 
       const ref = await this._migrateView(indexerManifests, name, indexedLength)
