@@ -265,13 +265,15 @@ test('basic - simple reorg', async t => {
   // trigger reorg
   await replicateAndSync([a, b])
 
+  t.is(b.view.length, 4)
+
   t.is(await b.view.get(0), 'a0')
   t.is(await b.view.get(1), 'a1')
   t.is(await b.view.get(2), 'b0')
   t.is(await b.view.get(3), 'b1')
 })
 
-test.skip('basic - compare views', async t => {
+test('basic - compare views', async t => {
   const { bases } = await create(2, t)
 
   const [a, b] = bases
@@ -289,7 +291,7 @@ test.skip('basic - compare views', async t => {
   await compareViews([a, b], t)
 })
 
-test.skip('basic - online majority', async t => {
+test('basic - online majority', async t => {
   const { bases } = await create(3, t)
 
   const [a, b, c] = bases

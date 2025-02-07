@@ -242,8 +242,25 @@ async function compareViews (bases, t) {
   const a = missing.shift()
 
   for (const b of missing) {
-    for (const [name, left] of a._viewStore.opened) {
-      const right = b._viewStore.opened.get(name)
+    const views = []
+    // missing a sync mechanic for awaiting flushes here
+    // views.push({
+    //   name: '_system',
+    //   left: a.applyView.systemRef.core,
+    //   right: b.applyView.systemRef.core
+    // })
+    for (let i = 0; i < a.applyView.views.length; i++) {
+      const v = a.applyView.views[i]
+      const left = v.core
+      const right = b.applyView.views[i]?.core
+      views.push({
+        name: v.name,
+        left,
+        right
+      })
+    }
+
+    for (const { name, left, right } of views) {
       if (!right) {
         t.fail(`missing view ${name}`)
         continue
@@ -254,19 +271,19 @@ async function compareViews (bases, t) {
         continue
       }
 
-      const length = left.core.signedLength
+      const length = left.signedLength
 
-      if (right.core.signedLength !== length) {
+      if (right.signedLength !== length) {
         t.fail(`view signedLength: ${name}`)
         continue
       }
 
-      if (!b4a.equals(await left.core.treeHash(length), await right.core.treeHash(length))) {
+      if (!b4a.equals(await left.treeHash(length), await right.treeHash(length))) {
         t.fail(`view treeHash: ${name}`)
         continue
       }
 
-      t.pass(`consistent ${name}`)
+      t.pass(`consistent ${name} at signedLength ${length}`)
     }
   }
 }
