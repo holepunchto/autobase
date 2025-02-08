@@ -592,7 +592,7 @@ module.exports = class Autobase extends ReadyResource {
     this._queueBump()
     this._advanced = this._advancing
 
-    this.queueFastForward()
+    // this.queueFastForward()
     this._updateBootstrapWriters()
   }
 

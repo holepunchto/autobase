@@ -36,7 +36,7 @@
     "core-coupler": "^1.0.0",
     "debounceify": "^1.0.0",
     "hyperbee": "^2.15.0",
-    "hypercore": "^11.0.0",
+    "hypercore": "holepunchto/hypercore#move-to-takes-session",
     "hypercore-crypto": "^3.4.0",
     "hypercore-id-encoding": "^1.2.0",
     "mutexify": "^1.4.0",

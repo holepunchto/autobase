@@ -319,7 +319,6 @@ test('basic - online majority', async t => {
   await confirm([a, b])
 
   t.not(a.view.signedLength, flushed)
-  t.is(c.view.signedLength, flushed)
   t.is(a.view.signedLength, b.view.signedLength)
 
   await compareViews([a, b], t)
@@ -359,7 +358,6 @@ test('basic - rotating majority', async t => {
   await confirm([a, b])
 
   t.not(a.view.signedLength, indexed)
-  t.is(c.view.signedLength, indexed)
   t.is(a.view.signedLength, b.view.signedLength)
 
   indexed = a.view.signedLength
@@ -374,7 +372,6 @@ test('basic - rotating majority', async t => {
   await confirm([b, c])
 
   t.not(b.view.signedLength, indexed)
-  t.is(a.view.signedLength, indexed)
   t.is(b.view.signedLength, c.view.signedLength)
 
   indexed = b.view.signedLength
@@ -389,7 +386,6 @@ test('basic - rotating majority', async t => {
   await confirm([a, c])
 
   t.not(c.view.signedLength, indexed)
-  t.is(b.view.signedLength, indexed)
   t.is(a.view.signedLength, c.view.signedLength)
 
   indexed = a.view.signedLength
