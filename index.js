@@ -902,6 +902,10 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  _needsLocalWriter () {
+    return this.localWriter === null || this.localWriter.closed
+  }
+
   // no guarantees about writer.isActiveIndexer property here
   async _getWriterByKey (key, len, seen, allowGC, isAdded, system) {
     assert(this._draining === true || (this.opening && !this.opened))
@@ -916,7 +920,7 @@ module.exports = class Autobase extends ReadyResource {
     try {
       let w = this.activeWriters.get(key)
       if (w !== null) {
-        if (isAdded && w.core.writable && this.localWriter === null) this._setLocalWriter(w)
+        if (isAdded && w.core.writable && this._needsLocalWriter()) this._setLocalWriter(w)
         if (w.isRemoved && isAdded) w.isRemoved = false
 
         if (system) {
@@ -962,9 +966,10 @@ module.exports = class Autobase extends ReadyResource {
 
       this.activeWriters.add(w)
       this._checkWriters.push(w)
+      if (isAdded && w.core.writable && this._needsLocalWriter()) this._setLocalWriter(w)
 
       // will only add non-indexer writers
-      // if (this._coupler) this._coupler.add(w.core)
+      if (this._coupler) this._coupler.add(w.core)
 
       assert(w.opened)
       assert(!w.closed)
@@ -1040,10 +1045,10 @@ module.exports = class Autobase extends ReadyResource {
     if (!this._isFastForwarding()) w.resume()
   }
 
-  async _loadLocalWriter (sys) {
-    if (this.localWriter !== null) return
+  async _updateLocalWriter (sys) {
+    if (this.localWriter !== null && !this.localWriter.closed) return
     await this._getWriterByKey(this.local.key, -1, 0, false, false, sys)
-    this._tryLoadingLocal = false
+    if (this.localWriter !== null && this.localWriter.closed) this.localWriter = null
   }
 
   async _bootstrapLinearizer () {
@@ -1059,14 +1064,12 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _makeLinearizer (sys) {
-    this._tryLoadingLocal = true
-
     if (sys === null) {
       return this._bootstrapLinearizer()
     }
 
     if (this.opened || await sys.hasLocal(this.local.key)) {
-      await this._loadLocalWriter(sys)
+      await this._updateLocalWriter(sys)
     }
 
     const indexers = []
@@ -1140,7 +1143,6 @@ module.exports = class Autobase extends ReadyResource {
     const length = this.applyView.indexedLength
     const system = this.applyView.system
 
-    const refs = []
     const info = await system.getIndexedInfo(length)
     const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
 
@@ -1148,18 +1150,23 @@ module.exports = class Autobase extends ReadyResource {
       const name = this.applyView.views[i].name
       const indexedLength = info.views[i].length
 
-      const ref = await this._migrateView(indexerManifests, name, indexedLength)
-      refs.push(ref)
+      await this._migrateView(indexerManifests, name, indexedLength)
     }
 
     const ref = await this._migrateView(indexerManifests, '_system', length)
-    refs.push(ref)
+
+    // start soft shutdown
+
+    await this.activeWriters.clear()
+    this._checkWriters = []
 
     const sys = await this.applyView.getIndexedSystem()
     await this._makeLinearizer(sys)
     await sys.close()
 
     await this.applyView.finalize(ref.core.key)
+
+    // end soft shutdown
 
     this.applyView = new InternalView(this)
 
@@ -1306,11 +1313,6 @@ module.exports = class Autobase extends ReadyResource {
       if (this.opened && this.fastForwardTo !== null) {
         // await this._applyFastForward()
         this.requestWakeup()
-      }
-
-      if (this.localWriter === null && this._tryLoadingLocal === true) {
-        // in case we cleared system blocks we need to defer loading of the local writer
-        await this._loadLocalWriter(system)
       }
 
       const remoteAdded = this.opened ? await this._addRemoteHeads() : null
