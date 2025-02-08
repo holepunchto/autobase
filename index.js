@@ -211,7 +211,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   getIndexedInfo () {
-    return this.system.getIndexedInfo(this._indexedLength)
+    return this.system.getIndexedInfo(this.applyView.indexedLength)
   }
 
   _isActiveIndexer () {
@@ -1212,7 +1212,6 @@ module.exports = class Autobase extends ReadyResource {
     if (this.isIndexer) return
 
     this.isIndexer = true
-    this._addCheckpoints = true // unset once indexer is cleared
     this.emit('is-indexer')
   }
 
@@ -1984,6 +1983,8 @@ module.exports = class Autobase extends ReadyResource {
 
   // triggered from apply
   async addWriter (key, { indexer = true, isIndexer = indexer } = {}) { // just compat for old version
+    assert(this.applyView.applying, 'System changes are only allowed in apply')
+
     const sys = this.applyView.system
     await sys.add(key, { isIndexer })
 
@@ -2013,13 +2014,13 @@ module.exports = class Autobase extends ReadyResource {
 
   // triggered from apply
   async removeWriter (key) { // just compat for old version
-    assert(this._applySystem !== null, 'System changes are only allowed in apply')
+    assert(this.applyView.applying, 'System changes are only allowed in apply')
 
-    if (!this.removeable(key, this._applySystem)) {
+    if (!this.removeable(key, this.applyView.system)) {
       throw new Error('Not allowed to remove the last indexer')
     }
 
-    await this._applySystem.remove(key)
+    await this.applyView.system.remove(key)
 
     if (b4a.equals(key, this.local.key)) {
       if (this.isIndexer) this._unsetLocalIndexer()
