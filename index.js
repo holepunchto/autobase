@@ -210,6 +210,10 @@ module.exports = class Autobase extends ReadyResource {
     return this.applyView ? this.applyView.indexedLength : 0
   }
 
+  get length () {
+    return this.applyView ? this.applyView.system.core.length : 0
+  }
+
   getIndexedInfo () {
     return this.system.getIndexedInfo(this.applyView.indexedLength)
   }
@@ -1027,6 +1031,8 @@ module.exports = class Autobase extends ReadyResource {
     const wasActiveIndexer = this._isActiveIndexer()
 
     for (const w of this.activeWriters) w.isActiveIndexer = false
+    if (this.localWriter) this.localWriter.isActiveIndexer = false
+
     for (const writer of indexers) writer.isActiveIndexer = true
 
     if (this._isActiveIndexer() && !wasActiveIndexer) {
@@ -1233,7 +1239,7 @@ module.exports = class Autobase extends ReadyResource {
   _clearLocalIndexer () {
     assert(this.localWriter !== null)
 
-    this.localWriter.isActiveIndexer = false
+    // this.localWriter.isActiveIndexer = false
 
     if (this._ackTimer) this._ackTimer.stop()
     this._ackTimer = null
