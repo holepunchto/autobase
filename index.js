@@ -602,17 +602,20 @@ module.exports = class Autobase extends ReadyResource {
     if (this._primaryBootstrap) closing.push(this._primaryBootstrap.close())
     if (this.localWriter) closing.push(this._unsetLocalWriter())
     closing.push(this._closeAllActiveWriters())
-    closing.push(this.local.close())
-    return Promise.all(closing)
+    if (this.localWriter) await this.localWriter.close()
+    await Promise.all(closing)
+    await this.local.close()
   }
 
   async _close () {
     this._interrupting = true
     await Promise.resolve() // defer one tick
 
-    // if (this._coupler) this._coupler.destroy()
+    if (this._coupler) this._coupler.destroy()
     this._coupler = null
     this._waiting.notify(null)
+
+    await this.activeWriters.clear()
 
     const closing = this._advancing.catch(safetyCatch)
     await this._closeLocalCores()
@@ -626,7 +629,6 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this._hasClose) await this._handlers.close(this.view)
     await this._viewStore.close()
-    await this.activeWriters.clear()
     await this.corePool.clear()
     await this.store.close()
     await closing
