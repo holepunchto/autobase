@@ -1158,6 +1158,7 @@ module.exports = class Autobase extends ReadyResource {
     // start soft shutdown
 
     await this.activeWriters.clear()
+    if (this.localWriter !== null) await this.localWriter.close()
     this._checkWriters = []
 
     const sys = await this.applyView.getIndexedSystem()
@@ -1174,6 +1175,12 @@ module.exports = class Autobase extends ReadyResource {
     await this.applyView.catchup(this.linearizer)
 
     this.recouple()
+
+    // ensure we re-evalute our state
+    this._bootstrapWritersChanged = true
+    this.updated = true
+
+    this._queueBump()
   }
 
   async _postFlush () {
