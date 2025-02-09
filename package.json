@@ -48,7 +48,7 @@
     "tiny-buffer-map": "^1.1.1"
   },
   "devDependencies": {
-    "autobase-test-helpers": "^2.0.1",
+    "autobase-test-helpers": "holepunchto/autobase-test-helpers#check-hashes",
     "brittle": "^3.1.1",
     "corestore": "holepunchto/corestore#no-parent",
     "rache": "^1.0.0",
