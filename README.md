@@ -159,9 +159,9 @@ Wait until all cores are ready.
 
 Create or load a core and return a session for it. A string may be passed directly or otherwise an object can be passed to define `valueEncoding`
 
-#### `core.indexedLength`
+#### `core.signedLength`
 
-The ordering of blocks before this index is guaranteed to be consisted for all writers.
+The ordering of blocks before this value is guaranteed to be consisted for all writers.
 
 #### `core.length`
 
