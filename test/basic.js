@@ -278,7 +278,7 @@ test('basic - compare views', async t => {
 
   const [a, b] = bases
   await addWriter(a, b)
-
+  t.pass('added writer')
   await confirm(bases)
 
   for (let i = 0; i < 6; i++) await bases[i % 2].append('msg' + i)

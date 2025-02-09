@@ -566,6 +566,8 @@ module.exports = class Autobase extends ReadyResource {
     await this._wakeup.close()
 
     if (this._hasClose) await this._handlers.close(this.view)
+    if (this.applyView) await this.applyView.close()
+
     await this._viewStore.close()
     await this.corePool.clear()
     await this.store.close()
