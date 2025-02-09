@@ -1337,6 +1337,7 @@ module.exports = class Autobase extends ReadyResource {
       const u = this.linearizer.update()
       const indexerUpdate = u ? await this.applyView.update(u, localNodes) : false
 
+      if (this.applyView.dirty) await this.applyView.flush()
       // const indexed = !!this._updatingCores
 
       // if (this._interrupting) {
