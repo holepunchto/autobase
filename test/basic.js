@@ -728,7 +728,7 @@ test('reindex', async t => {
   }
 })
 
-test.skip('sequential restarts', async t => {
+test('sequential restarts', async t => {
   const { bases } = await create(9, t)
 
   const root = bases[0]
