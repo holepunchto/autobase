@@ -213,6 +213,10 @@ module.exports = class Autobase extends ReadyResource {
     return this.applyView ? this.applyView.system.core.length : 0
   }
 
+  hash () {
+    return this.applyView ? this.applyView.system.core.treeHash() : null
+  }
+
   getIndexedInfo () {
     return this.system.getIndexedInfo(this.applyView.indexedLength)
   }
