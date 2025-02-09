@@ -45,13 +45,15 @@ async function create (n, t, opts = {}) {
   const stores = await createStores(n, t, opts)
   const bases = [createBase(stores[0], null, t, opts)]
   await bases[0].ready()
-
+  bases[0].name = 'a'
   if (n === 1) return { stores, bases }
 
   for (let i = 1; i < n; i++) {
     const base = createBase(stores[i], bases[0].local.key, t, opts)
     await base.ready()
     bases.push(base)
+    // naming them makes debugging easier so why not
+    base.name = String.fromCharCode('a'.charCodeAt(0) + i)
   }
 
   return {
