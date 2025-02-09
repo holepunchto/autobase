@@ -1118,7 +1118,9 @@ module.exports = class Autobase extends ReadyResource {
     const ref = this._viewStore.byName.get(name)
 
     const core = ref.batch || ref.core
-    const prologue = { length: indexedLength, hash: (await core.restoreBatch(indexedLength)).hash() }
+    const prologue = indexedLength === 0
+      ? null
+      : { length: indexedLength, hash: (await core.restoreBatch(indexedLength)).hash() }
 
     const next = this._viewStore.getViewCore(indexerManifests, name, prologue)
     await next.ready()
@@ -1129,7 +1131,7 @@ module.exports = class Autobase extends ReadyResource {
 
     // remake the batch, reset from our prologue in case it replicated inbetween
     // TODO: we should really have an HC function for this
-    const batch = next.session({ name: 'batch', overwrite: true, checkout: prologue.length })
+    const batch = next.session({ name: 'batch', overwrite: true, checkout: indexedLength })
     await batch.ready()
 
     if (core.length > batch.length) {

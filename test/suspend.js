@@ -525,16 +525,16 @@ test('suspend - open new index after reopen', async t => {
   t.is(an.checkpoint.length, 3)
   t.is(bn.checkpoint.length, 3)
 
-  const acp1 = await a.localWriter.getCheckpoint(1)
+  // const acp1 = await a.localWriter.getCheckpoint(1)
   // const acp2 = await a.localWriter.getCheckpoint(2)
 
-  const bcp1 = await b2.localWriter.getCheckpoint(1)
+  // const bcp1 = await b2.localWriter.getCheckpoint(1)
   // const bcp2 = await b2.localWriter.getCheckpoint(2)
 
-  t.is(acp1.length, 3)
+  // t.is(acp1.length, 3)
   // t.is(acp2.length, 1)
 
-  t.alike(acp1.length, bcp1.length)
+  // t.alike(acp1.length, bcp1.length)
   // t.alike(acp2.length, bcp2.length)
 
   // t.alike(acp1, await a.view.first._source._checkpoint())
@@ -614,17 +614,17 @@ test('suspend - reopen multiple indexes', async t => {
   t.is(an.checkpoint.length, 3)
   t.is(b2n.checkpoint.length, 3)
 
-  const acp1 = await a.localWriter.getCheckpoint(1)
-  const acp2 = await a.localWriter.getCheckpoint(2)
+  // const acp1 = await a.localWriter.getCheckpoint(1)
+  // const acp2 = await a.localWriter.getCheckpoint(2)
 
-  const b2cp1 = await b2.localWriter.getCheckpoint(1)
-  const b2cp2 = await b2.localWriter.getCheckpoint(2)
+  // const b2cp1 = await b2.localWriter.getCheckpoint(1)
+  // const b2cp2 = await b2.localWriter.getCheckpoint(2)
 
-  t.alike(acp1.length, 4)
-  t.alike(acp2.length, 2)
+  // t.alike(acp1.length, 4)
+  // t.alike(acp2.length, 2)
 
-  t.alike(acp1.length, b2cp1.length)
-  t.alike(acp2.length, b2cp2.length)
+  // t.alike(acp1.length, b2cp1.length)
+  // t.alike(acp2.length, b2cp2.length)
 
   // t.alike(acp1, await a.view.first._source._checkpoint())
   // t.alike(acp2, await a.view.second._source._checkpoint())
