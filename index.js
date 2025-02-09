@@ -21,6 +21,7 @@ const AutoWakeup = require('./lib/wakeup')
 
 const WakeupExtension = require('./lib/extension')
 const InternalView = require('./lib/view.js')
+const boot = require('./lib/boot.js')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 const INTERRUPT = new Error('Apply interrupted')
@@ -52,16 +53,14 @@ module.exports = class Autobase extends ReadyResource {
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
     this.globalCache = store.globalCache || null
+
     this.encrypted = handlers.encrypted || !!handlers.encryptionKey
     this.encrypt = !!handlers.encrypt
     this.encryptionKey = handlers.encryptionKey || null
-    this.encryption = this.encryptionKey === null ? null : { key: this.encryptionKey }
+    this.encryption = null
 
     this._tryLoadingLocal = true
     this._primaryBootstrap = null
-    if (this.bootstrap) {
-      this._primaryBootstrap = this.store.get({ key: this.bootstrap, active: false, encryption: this.encryption })
-    }
 
     this.local = null
     this.localWriter = null
@@ -124,8 +123,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this.maxSupportedVersion = AUTOBASE_VERSION // working version
 
-    this._presystem = null
-    this._prebump = null
+    this._preopen = null
 
     this._hasApply = !!this._handlers.apply
     this._hasOpen = !!this._handlers.open
@@ -152,11 +150,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this._ackTimer = null
     this._acking = false
-
-    this._initialViews = null
-    this._initialSystem = null
-
-    this._indexedLength = 0
 
     this._waiting = new SignalPromise()
 
@@ -267,164 +260,67 @@ module.exports = class Autobase extends ReadyResource {
     this._bump().catch(safetyCatch)
   }
 
-  async _openPreSystem () {
+  async _runPreOpen () {
     if (this._handlers.wait) await this._handlers.wait()
+
     await this.store.ready()
 
-    const opts = {
-      valueEncoding: this.valueEncoding,
-      keyPair: this.keyPair,
-      key: this._primaryBootstrap ? await this._primaryBootstrap.getUserData('autobase/local') : null
-    }
+    const result = await boot(this.store, this.bootstrap, {
+      encryptionKey: this.encryptionKey,
+      encrypt: this.encrypt,
+      keyPair: this.keyPair
+    })
 
-    if (this._primaryBootstrap) {
-      await this._primaryBootstrap.ready()
-      if (this._primaryBootstrap.writable) {
-        this.local = this._primaryBootstrap.session({
-          compat: false,
-          active: false,
-          exclusive: true,
-          valueEncoding: messages.OplogMessage,
-          encryption: this.encryption
-        })
-      }
-    }
+    this.bootstrap = result.key
+    this.local = result.local
 
-    if (!this.local) {
-      this.local = Autobase.getLocalCore(this.store, opts, this.encryptionKey)
-    }
+    this._primaryBootstrap = result.bootstrap
 
-    await this.local.ready()
-
-    if (this.encryptionKey) {
-      await this.local.setUserData('autobase/encryption', this.encryptionKey)
-    } else {
-      this.encryptionKey = await this.local.getUserData('autobase/encryption')
-      if (this.encrypt && this.encryptionKey === null) {
-        this.encryptionKey = (await this.store.createKeyPair('autobase/encryption')).secretKey.subarray(0, 32)
-        await this.local.setUserData('autobase/encryption', this.encryptionKey)
-      }
-      if (this.encryptionKey) {
-        await this.local.setEncryptionKey(this.encryptionKey)
-        // not needed but, just for good meassure
-        if (this._primaryBootstrap) await this._primaryBootstrap.setEncryptionKey(this.encryptionKey)
-      }
-    }
+    this.wakeupExtension = new WakeupExtension(this, this._primaryBootstrap, true)
+    this.encryptionKey = result.encryptionKey
+    if (this.encryptionKey) this.encryption = { key: this.encryptionKey }
 
     if (this.encrypted) {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
-      if (!this.encryption) this.encryption = { key: this.encryptionKey }
-    }
-
-    // stateless open
-    const ref = await this.local.getUserData('referrer')
-    if (ref && !b4a.equals(ref, this.local.key) && !this._primaryBootstrap) {
-      this._primaryBootstrap = this.store.get({ key: ref, compat: false, active: false, encryption: this.encryption })
-    }
-
-    await this.local.setUserData('referrer', this.key)
-
-    if (this._primaryBootstrap) {
-      await this._primaryBootstrap.ready()
-      this._primaryBootstrap.setUserData('autobase/local', this.local.key)
-      this.wakeupExtension = new WakeupExtension(this, this._primaryBootstrap, true)
-      if (this.encryptionKey) await this._primaryBootstrap.setUserData('autobase/encryption', this.encryptionKey)
-    } else {
-      this.local.setUserData('autobase/local', this.local.key)
-      this.wakeupExtension = new WakeupExtension(this, this.local, true)
-    }
-
-    const boot = await this._getSystemBootInfo()
-    if (boot) {
-      this.bootstrap = boot.bootstrap
     }
   }
 
-  async _getBootInfo () {
-    const result = await this._loadSystemInfo()
-    const pointer = await this.local.getUserData('autobase/boot')
-    const dec = pointer && c.decode(messages.BootRecord, pointer)
+  // called by view-store for bootstrapping
+  async _getSystemInfo () {
+    const boot = await this._getBootRecord()
+    if (!boot) return null
 
-    if (!result.system) {
-      return {
-        bootstrap: result.bootstrap,
-        indexedLength: dec ? dec.indexedLength : 0,
-        indexersUpdated: dec ? dec.indexersUpdated : false,
-        system: dec && dec.key,
-        indexers: [],
-        views: []
-      }
-    }
+    const encryption = this.encryptionKey
+      ? { key: AutoStore.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
+      : null
 
-    await result.system.close()
-
-    return {
-      bootstrap: result.bootstrap,
-      indexedLength: dec ? dec.indexedLength : 0,
-      indexersUpdated: dec ? dec.indexersUpdated : false,
-      system: result.system.core.key,
-      indexers: result.system.indexers,
-      views: result.system.views
-    }
-  }
-
-  async _getSystemBootInfo () {
-    const result = await this._loadSystemInfo()
-    const info = result.system ? await result.system.getIndexedInfo(result.indexedLength) : null
-    if (result.system) await result.system.close()
-    return { bootstrap: result.bootstrap, system: result.system ? result.system.core.manifest : null, views: result.views, info }
-  }
-
-  async _loadSystemInfo () {
-    const pointer = await this.local.getUserData('autobase/boot')
-    const bootstrap = this.bootstrap || (await this.local.getUserData('referrer')) || this.local.key
-    if (!pointer) return { bootstrap, indexedLength: 0, system: null, views: [] }
-
-    const { key, indexedLength, views, indexed, heads } = c.decode(messages.BootRecord, pointer)
-    const compat = key === null
-
-    if (compat && !indexed) return { bootstrap, indexedLength: 0, system: null, views: [] }
-
-    const encryptionKey = AutoStore.getBlockKey(bootstrap, this.encryptionKey, '_system')
-    const encryption = encryptionKey ? { key: encryptionKey, block: true } : null
-    const actualCore = this.store.get({ key: key || indexed.key, exclusive: false, compat: false, encryption })
-
-    await actualCore.ready()
-
-    if (heads) this.hintWakeup(heads)
-
-    if (!actualCore.length) {
-      await actualCore.close()
-      return { bootstrap, indexedLength: 0, system: null, views: [] }
-    }
-
-    const core = actualCore.session({ name: 'batch' })
+    const core = this.store.get({ key: boot.key, encryption, active: false })
     await core.ready()
+    const batch = core.session({ name: 'batch' })
+    const info = await SystemView.getIndexedInfo(batch, boot.indexedLength)
+    await batch.close()
+    await core.close()
 
-    // safety check the batch is not corrupt
-    if (core.length === 0 || !(await core.has(core.length - 1))) {
-      await this.local.setUserData('autobase/boot', null)
-      await actualCore.close()
-      await core.close()
-      return { bootstrap, indexedLength: 0, system: null, views: [] }
+    if (info.version > AUTOBASE_VERSION) {
+      throw new Error('Autobase upgrade required.')
     }
 
-    await actualCore.close()
-
-    const system = new SystemView(core)
-    await system.ready()
-
-    if (system.version > this.maxSupportedVersion) {
-      await core.close()
-      throw new Error('Autobase upgrade required')
-    }
+    // just compat
+    if (boot.heads) this.hintWakeup(boot.heads)
 
     return {
-      bootstrap,
-      indexedLength: Math.max(core.signedLength, indexedLength),
-      system,
-      views
+      key: boot.key,
+      indexers: info.indexers,
+      views: info.views
     }
+  }
+
+  // called by the apply state for bootstrapping
+  async _getBootRecord () {
+    await this._preopen
+
+    const pointer = await this.local.getUserData('autobase/boot')
+    return pointer && c.decode(messages.BootRecord, pointer)
   }
 
   interrupt (reason) {
@@ -467,36 +363,12 @@ module.exports = class Autobase extends ReadyResource {
     this._bootstrapWritersChanged = false
   }
 
-  async _isBootstrapping () {
-    return (await this.local.getUserData('autobase/boot')) === null
-  }
-
-  async _bootApplyView () {
-    if (await this._isBootstrapping()) {
-      // bootstrapping
-      const pointer = c.encode(messages.BootRecord, {
-        key: await this._viewStore.getBootstrapSystemKey(),
-        indexedLength: 0,
-        views: []
-      })
-
-      await this.local.setUserData('autobase/boot', pointer)
-    }
+  async _open () {
+    this._preopen = this._runPreOpen()
+    await this._preopen
 
     this.applyView = new InternalView(this)
     await this.applyView.ready()
-  }
-
-  _getBootstrapCore () {
-    if (this._primaryBootstrap) return this._primaryBootstrap.session({ active: false })
-    return this.store.get({ key: this.key, active: false })
-  }
-
-  async _openPreBump () {
-    this._presystem = this._openPreSystem()
-    await this._presystem
-
-    await this._bootApplyView()
 
     if (this.applyView.system.bootstrapping) {
       await this._makeLinearizer(null)
@@ -506,19 +378,6 @@ module.exports = class Autobase extends ReadyResource {
       await this._makeLinearizer(sys)
       await sys.close()
     }
-
-    // if (this.fastForwardTo !== null) {
-    //   const { key, timeout } = this.fastForwardTo
-    //   this.fastForwardTo = null // will get reset once ready
-    //   this.initialFastForward(key, timeout || DEFAULT_FF_TIMEOUT * 2)
-    // }
-
-    // if (this.localWriter && this._ackInterval) this._startAckTimer()
-  }
-
-  async _open () {
-    this._prebump = this._openPreBump()
-    await this._prebump
 
     await this.applyView.catchup(this.linearizer)
 
@@ -532,6 +391,14 @@ module.exports = class Autobase extends ReadyResource {
 
     // this.queueFastForward()
     this._updateBootstrapWriters()
+
+    // if (this.fastForwardTo !== null) {
+    //   const { key, timeout } = this.fastForwardTo
+    //   this.fastForwardTo = null // will get reset once ready
+    //   this.initialFastForward(key, timeout || DEFAULT_FF_TIMEOUT * 2)
+    // }
+
+    // if (this.localWriter && this._ackInterval) this._startAckTimer()
   }
 
   async _closeLocalCores () {
@@ -797,14 +664,14 @@ module.exports = class Autobase extends ReadyResource {
 
   // no guarantees where the user data is stored, just that its associated with the base
   async setUserData (key, val) {
-    await this._presystem
+    await this._preopen
     const core = this._primaryBootstrap === null ? this.local : this._primaryBootstrap
 
     await core.setUserData(key, val)
   }
 
   async getUserData (key) {
-    await this._presystem
+    await this._preopen
     const core = this._primaryBootstrap === null ? this.local : this._primaryBootstrap
 
     return await core.getUserData(key)
