@@ -938,7 +938,7 @@ module.exports = class Autobase extends ReadyResource {
         return w
       }
 
-      const sys = system || this._applySystem || this.system
+      const sys = system || this.system
       const writerInfo = await sys.get(key)
 
       if (len === -1) {
@@ -1043,7 +1043,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     this.linearizer = new Linearizer(indexers, { heads, writers: this.activeWriters })
-    this._addCheckpoints = !!(this.localWriter && (this.localWriter.isActiveIndexer || this._isPending()))
+    // this._addCheckpoints = !!(this.localWriter && (this.localWriter.isActiveIndexer || this._isPending()))
     this._updateAckThreshold()
   }
 
