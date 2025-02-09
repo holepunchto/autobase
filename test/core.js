@@ -68,7 +68,7 @@ test('core - seek', async t => {
 test('core - seek multi writer', async t => {
   const { bases } = await create(2, t, {
     apply: scopedApply,
-    open: store => store.get('test')
+    open: store => store.get('test', { valueEncoding: 'utf-8' })
   })
 
   const [a, b] = bases
@@ -87,6 +87,9 @@ test('core - seek multi writer', async t => {
 
   t.is(a.view.length, 3)
   t.is(a.view.byteLength, 15)
+
+  t.is(b.view.length, 3)
+  t.is(b.view.byteLength, 15)
 
   t.alike(a.view.length, b.view.length)
   t.alike(a.view.byteLength, b.view.byteLength)
