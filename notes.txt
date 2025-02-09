@@ -1,25 +1,4 @@
 corestore parent gots to go, thats internal and breaks stuff
-hypercore-storage map thing
-
-when we reboot the view, we might short circuit the applies of the current update
-that means that there might be nodes in there we did not process.
-we should ensure that those writers are re-"touched" on boot, ie store the heads of the dag at that stage
-
-hit this bug:
-/Users/maf/dev/node_modules/autobase/node_modules/hypercore/lib/messages.js:213
-    c.uint.preencode(state, n.index)
-                              ^
-
-TypeError: Cannot read properties of null (reading 'index')
-    at Object.preencode (/Users/maf/dev/node_modules/autobase/node_modules/hypercore/lib/messages.js:213:31)
-    at Object.preencode (/Users/maf/dev/node_modules/autobase/node_modules/compact-encoding/index.js:452:49)
-    at Object.preencode (/Users/maf/dev/node_modules/autobase/node_modules/hypercore/lib/messages.js:363:15)
-    at Object.preencode (/Users/maf/dev/node_modules/autobase/node_modules/hypercore/lib/messages.js:448:32)
-    at Object.send (/Users/maf/dev/node_modules/autobase/node_modules/protomux/index.js:271:18)
-    at Peer._fulfillRequest (/Users/maf/dev/node_modules/autobase/node_modules/hypercore/lib/replicator.js:796:19)
-    at async Peer._handleRequest (/Users/maf/dev/node_modules/autobase/node_modules/hypercore/lib/replicator.js:766:5)
-    at async Peer.onrequest (/Users/maf/dev/node_modules/autobase/node_modules/hypercore/lib/replicator.js:726:5)
-
 
 resumeSession thing in moveto doesnt look right, prop needs a clone thing
 
@@ -38,3 +17,5 @@ corruption helper:
 // for (let i = 0; i < indexedLength; i++) {
 //   console.log(i, await core.get(i))
 // }
+
+dbl check extension, should prop move off cores to a protomux for simplicity btw
