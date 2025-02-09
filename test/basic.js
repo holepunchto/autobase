@@ -1356,6 +1356,8 @@ test('basic - remove an indexer when 2-of-2', async t => {
   t.is(b.linearizer.indexers.length, 2)
 
   await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+  t.pass('appended removal')
+
   await confirm([a, b])
 
   t.is(b.writable, false)
@@ -1552,7 +1554,7 @@ test('basic - promote writer to indexer', async t => {
 })
 
 test('basic - demote indexer to writer', async t => {
-  t.plan(13)
+  t.plan(14)
 
   const { bases } = await create(2, t)
 
@@ -1577,7 +1579,7 @@ test('basic - demote indexer to writer', async t => {
 
   // demote writer
   await addWriter(a, b, false)
-
+  t.pass('added writer')
   await confirm([a, b])
 
   t.is(a.linearizer.indexers.length, 1)
@@ -1611,6 +1613,8 @@ test('basic - add new indexer after removing', async t => {
   t.is(b.view.manifest.signers.length, 2)
 
   await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+
+  t.pass('appended removal')
   await confirm([a, b])
 
   t.is(b.writable, false)
