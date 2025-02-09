@@ -918,6 +918,7 @@ module.exports = class Autobase extends ReadyResource {
     // TODO: close old core, for now we just close when the autobase is closed indirectly
     // atm its unsafe to do as moveTo has a bug due to a missing read lock in hc
     ref.core = next
+    ref.registerExtension(this)
 
     return ref
   }
