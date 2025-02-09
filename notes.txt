@@ -19,3 +19,22 @@ TypeError: Cannot read properties of null (reading 'index')
     at Peer._fulfillRequest (/Users/maf/dev/node_modules/autobase/node_modules/hypercore/lib/replicator.js:796:19)
     at async Peer._handleRequest (/Users/maf/dev/node_modules/autobase/node_modules/hypercore/lib/replicator.js:766:5)
     at async Peer.onrequest (/Users/maf/dev/node_modules/autobase/node_modules/hypercore/lib/replicator.js:726:5)
+
+
+resumeSession thing in moveto doesnt look right, prop needs a clone thing
+
+corruption helper:
+
+// const roots = await core.state.tree.getRoots(indexedLength)
+// const flat = require('flat-tree')
+
+// for (const root of roots) {
+//   let [l, r] = flat.spans(root.index)
+//   for (; l <= r; l++) {
+//     console.log(l, !!(await core.state.tree.get(l, true, null, true)))
+//   }
+// }
+
+// for (let i = 0; i < indexedLength; i++) {
+//   console.log(i, await core.get(i))
+// }

@@ -93,7 +93,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this._lock = mutexify()
 
-    this._applySystem = null
     this._updatingCores = false
     this._localDigest = null
     this._needsWakeup = true
@@ -448,7 +447,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   interrupt (reason) {
-    assert(this._applySystem !== null, 'Interrupt is only allowed in apply')
+    assert(this.applyView.applying, 'Interrupt is only allowed in apply')
     this._interrupting = true
     if (reason) this.interrupted = reason
     throw INTERRUPT
@@ -1124,12 +1123,12 @@ module.exports = class Autobase extends ReadyResource {
       await next.core.copyPrologue(core.state)
     }
 
-    const batch = next.session({ name: 'batch', overwrite: true })
+    // remake the batch, reset from our prologue in case it replicated inbetween
+    // TODO: we should really have an HC function for this
+    const batch = next.session({ name: 'batch', overwrite: true, checkout: prologue.length })
     await batch.ready()
 
     if (core.length > batch.length) {
-      await batch.ready()
-
       for (let i = batch.length; i < core.length; i++) {
         await batch.append(await core.get(i))
       }
@@ -1311,12 +1310,6 @@ module.exports = class Autobase extends ReadyResource {
     return session.setUserData('autobase/boot', pointer)
   }
 
-  async _drainGC () {
-    if (this._applyStore) await this._applyStore.close()
-    this._applySystem = null
-    this._applyStore = null
-  }
-
   async _drain () {
     const writable = this.writable
     const system = this.applyView.system
@@ -1386,8 +1379,6 @@ module.exports = class Autobase extends ReadyResource {
       // await this._postFlush()
       // if (recouple) this.recouple()
     }
-
-    await this._drainGC()
 
     // emit state changes post drain
     if (writable !== this.writable) this.emit(writable ? 'unwritable' : 'writable')
