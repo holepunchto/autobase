@@ -845,7 +845,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this.activeWriters.add(bootstrap)
     this._checkWriters.push(bootstrap)
-    bootstrap.inflateBackground()
     await bootstrap.ready()
     this._ensureWakeup(bootstrap)
 
@@ -865,7 +864,6 @@ module.exports = class Autobase extends ReadyResource {
 
     for (const head of sys.indexers) {
       const writer = await this._getWriterByKey(head.key, head.length, 0, false, false, sys)
-      writer.inflateBackground()
       indexers.push(writer)
     }
 

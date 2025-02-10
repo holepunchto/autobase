@@ -406,7 +406,8 @@ test('basic - rotating majority', async t => {
   await compareViews([a, b, c], t)
 })
 
-test.skip('basic - throws', async t => {
+// hard in new hc
+test('basic - throws', async t => {
   const { bases } = await create(2, t)
 
   const [a, b] = bases
@@ -858,8 +859,7 @@ test('basic - isAutobase', async t => {
   t.is(await Autobase.isAutobase(base3.local), true)
 })
 
-// skipped until checkpoint refactor is finished
-test.skip('basic - non-indexed writer', async t => {
+test('basic - non-indexed writer', async t => {
   const { bases } = await create(2, t, { apply: applyWriter })
   const [a, b] = bases
 
@@ -931,8 +931,7 @@ test.skip('basic - non-indexed writer', async t => {
   }
 })
 
-// skipping cause of checkpoint, reenable
-test.skip('basic - non-indexed writers 3-of-5', async t => {
+test('basic - non-indexed writers 3-of-5', async t => {
   const { bases } = await create(5, t, { apply: applyWriter })
   const [a, b, c, d, e] = bases
 
