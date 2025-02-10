@@ -130,9 +130,10 @@ module.exports = class Autobase extends ReadyResource {
     this.onindex = handlers.onindex || noop
 
     this._viewStore = new AutoStore(this)
-    this._applyView = null
+    this._applyState = null
 
     this.view = null
+    this.core = null
     this.version = -1
     this.interrupted = null
 
@@ -152,6 +153,7 @@ module.exports = class Autobase extends ReadyResource {
     this._waiting = new SignalPromise()
 
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
+    this.core = this._viewStore.get({ name: '_system' })
 
     this.ready().catch(safetyCatch)
   }
@@ -187,24 +189,30 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   get signedLength () {
-    return this._applyView ? this._applyView.system.core.signedLength : 0
+    return this.core.signedLength
   }
 
   get indexedLength () {
-    return this._applyView ? this._applyView.indexedLength : 0
+    return this.core.indexedLength
   }
 
   get length () {
-    return this._applyView ? this._applyView.system.core.length : 0
+    return this.core.length
   }
 
   hash () {
-    return this._applyView ? this._applyView.system.core.treeHash() : null
+    return this.core.treeHash()
   }
 
+  // deprecated, use .core.key
+  getSystemKey () {
+    return this.system.core.key
+  }
+
+  // deprecated
   async getIndexedInfo () {
     if (this.opened === false) await this.ready()
-    return this.system.getIndexedInfo(this._applyView.indexedLength)
+    return this.system.getIndexedInfo(this._applyState.indexedLength)
   }
 
   _isActiveIndexer () {
@@ -317,7 +325,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   interrupt (reason) {
-    assert(this._applyView.applying, 'Interrupt is only allowed in apply')
+    assert(this._applyState.applying, 'Interrupt is only allowed in apply')
     this._interrupting = true
     if (reason) this.interrupted = reason
     throw INTERRUPT
@@ -326,10 +334,6 @@ module.exports = class Autobase extends ReadyResource {
   async flush () {
     if (this.opened === false) await this.ready()
     await this._advancing
-  }
-
-  getSystemKey () {
-    return this.system.core.key
   }
 
   recouple () {
@@ -360,23 +364,23 @@ module.exports = class Autobase extends ReadyResource {
     this._preopen = this._runPreOpen()
     await this._preopen
 
-    this._applyView = new ApplyState(this)
-    await this._applyView.ready()
+    this._applyState = new ApplyState(this)
+    await this._applyState.ready()
 
-    if (this._applyView.system.bootstrapping) {
+    if (this._applyState.system.bootstrapping) {
       await this._makeLinearizer(null)
       this._bootstrapLinearizer()
     } else {
-      const sys = await this._applyView.getIndexedSystem()
+      const sys = await this._applyState.getIndexedSystem()
       await this._makeLinearizer(sys)
       await sys.close()
     }
 
-    await this._applyView.catchup(this.linearizer)
+    await this._applyState.catchup(this.linearizer)
 
     await this._wakeup.ready()
 
-    this.system = this._applyView.system
+    this.system = this._applyState.system
 
     this.requestWakeup()
 
@@ -428,10 +432,11 @@ module.exports = class Autobase extends ReadyResource {
     await this._wakeup.close()
 
     if (this._hasClose) await this._handlers.close(this.view)
-    if (this._applyView) await this._applyView.close()
+    if (this._applyState) await this._applyState.close()
 
     await this._viewStore.close()
     await this.corePool.clear()
+    await this.core.close()
     await this.store.close()
     await closing
   }
@@ -615,11 +620,13 @@ module.exports = class Autobase extends ReadyResource {
       this._append(value)
     }
 
+    const appending = this._appending
+
     // await in case append is in current tick
     if (this._advancing) await this._advancing
 
-    // only bump if there are unflushed nodes
-    if (this._appending !== null) return this._bump()
+    // bump until we've flushed the nodes
+    while (this._appending === appending && !this._interrupting) await this._bump()
   }
 
   _append (value) {
@@ -674,19 +681,6 @@ module.exports = class Autobase extends ReadyResource {
     const core = this._primaryBootstrap === null ? this.local : this._primaryBootstrap
 
     return await core.getUserData(key)
-  }
-
-  getNamespace (key, core) {
-    const w = this.activeWriters.get(key)
-    if (!w) return null
-
-    const namespace = w.deriveNamespace(core.name)
-    const publicKey = w.core.manifest.signers[0].publicKey
-
-    return {
-      namespace,
-      publicKey
-    }
   }
 
   _needsLocalWriter () {
@@ -752,7 +746,7 @@ module.exports = class Autobase extends ReadyResource {
 
       this.activeWriters.add(w)
       this._checkWriters.push(w)
-      if (isAdded && w.core.writable && this._needsLocalWriter()) this._setLocalWriter(w)
+      if (w.core.writable && this._needsLocalWriter()) this._setLocalWriter(w)
 
       // will only add non-indexer writers
       if (this._coupler) this._coupler.add(w.core)
@@ -832,7 +826,6 @@ module.exports = class Autobase extends ReadyResource {
   async _updateLocalWriter (sys) {
     if (this.localWriter !== null && !this.localWriter.closed) return
     await this._getWriterByKey(this.local.key, -1, 0, false, false, sys)
-    if (this.localWriter !== null && this.localWriter.closed) this.localWriter = null
   }
 
   async _bootstrapLinearizer () {
@@ -916,14 +909,14 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async migrate () {
-    const length = this._applyView.indexedLength
-    const system = this._applyView.system
+    const length = this._applyState.indexedLength
+    const system = this._applyState.system
 
     const info = await system.getIndexedInfo(length)
     const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
 
-    for (let i = 0; i < this._applyView.views.length; i++) {
-      const name = this._applyView.views[i].name
+    for (let i = 0; i < this._applyState.views.length; i++) {
+      const name = this._applyState.views[i].name
       const indexedLength = info.views[i].length
 
       await this._migrateView(indexerManifests, name, indexedLength)
@@ -937,18 +930,18 @@ module.exports = class Autobase extends ReadyResource {
     if (this.localWriter !== null) await this.localWriter.close()
     this._checkWriters = []
 
-    const sys = await this._applyView.getIndexedSystem()
+    const sys = await this._applyState.getIndexedSystem()
     await this._makeLinearizer(sys)
     await sys.close()
 
-    await this._applyView.finalize(ref.core.key)
+    await this._applyState.finalize(ref.core.key)
 
-    this._applyView = new ApplyState(this)
+    this._applyState = new ApplyState(this)
 
-    await this._applyView.ready()
-    await this._applyView.catchup(this.linearizer)
+    await this._applyState.ready()
+    await this._applyState.catchup(this.linearizer)
 
-    this.system = this._applyView.system
+    this.system = this._applyState.system
 
     // end soft shutdown
 
@@ -994,8 +987,6 @@ module.exports = class Autobase extends ReadyResource {
   _clearLocalIndexer () {
     assert(this.localWriter !== null)
 
-    // this.localWriter.isActiveIndexer = false
-
     if (this._ackTimer) this._ackTimer.stop()
     this._ackTimer = null
     this._addCheckpoints = false
@@ -1003,7 +994,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _addLocalHeads () {
     // not writable atm, will prop be writable in a subsequent bump tho
-    if (!this.localWriter) return null
+    if (!this.localWriter || this.localWriter.closed) return null
     // safety, localwriter is still processing, should prop be an assertion
     if (!this.localWriter.idle()) return null
 
@@ -1073,10 +1064,10 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const u = this.linearizer.update()
-      const indexerUpdate = u ? await this._applyView.update(u, localNodes) : false
+      const indexerUpdate = u ? await this._applyState.update(u, localNodes) : false
 
-      if (this._applyView.dirty) {
-        await this._applyView.flush()
+      if (this._applyState.dirty) {
+        await this._applyState.flush()
         this.updating = true
       }
 
@@ -1138,7 +1129,7 @@ module.exports = class Autobase extends ReadyResource {
       if (this._needsWakeupHeads === true) {
         this._needsWakeupHeads = false
 
-        for (const { key } of await this._applyView.system.heads) {
+        for (const { key } of await this._applyState.system.heads) {
           await this._wakeupWriter(key)
         }
       }
@@ -1147,7 +1138,7 @@ module.exports = class Autobase extends ReadyResource {
     for (const [hex, length] of this._wakeupHints) {
       const key = b4a.from(hex, 'hex')
       if (length !== -1) {
-        const info = await this._applyView.system.get(key)
+        const info = await this._applyState.system.get(key)
         if (info && length < info.length) continue // stale hint
       }
 
@@ -1170,8 +1161,13 @@ module.exports = class Autobase extends ReadyResource {
     if (this.opened === false) await this.ready()
     if (this.paused) return
 
+    this._draining = true
+
+    if (this.localWriter && this.localWriter.closed) {
+      await this._updateLocalWriter(this._applyState.system)
+    }
+
     try {
-      this._draining = true
       // note: this might block due to network i/o
       if (this._needsWakeup === true || this._wakeupHints.size > 0) await this._drainWakeup()
       await this._drain()
@@ -1658,9 +1654,9 @@ module.exports = class Autobase extends ReadyResource {
 
   // triggered from apply
   async addWriter (key, { indexer = true, isIndexer = indexer } = {}) { // just compat for old version
-    assert(this._applyView.applying, 'System changes are only allowed in apply')
+    assert(this._applyState.applying, 'System changes are only allowed in apply')
 
-    const sys = this._applyView.system
+    const sys = this._applyState.system
     await sys.add(key, { isIndexer })
 
     const writer = (await this._getWriterByKey(key, -1, 0, false, true, null)) || this._makeWriter(key, 0, true, false)
@@ -1689,13 +1685,13 @@ module.exports = class Autobase extends ReadyResource {
 
   // triggered from apply
   async removeWriter (key) { // just compat for old version
-    assert(this._applyView.applying, 'System changes are only allowed in apply')
+    assert(this._applyState.applying, 'System changes are only allowed in apply')
 
-    if (!this.removeable(key, this._applyView.system)) {
+    if (!this.removeable(key, this._applyState.system)) {
       throw new Error('Not allowed to remove the last indexer')
     }
 
-    await this._applyView.system.remove(key)
+    await this._applyState.system.remove(key)
 
     if (b4a.equals(key, this.local.key)) {
       if (this.isIndexer) this._unsetLocalIndexer()
