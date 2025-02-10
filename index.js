@@ -54,6 +54,8 @@ module.exports = class Autobase extends ReadyResource {
     this.store = store
     this.globalCache = store.globalCache || null
 
+    this.system = null
+
     this.encrypted = handlers.encrypted || !!handlers.encryptionKey
     this.encrypt = !!handlers.encrypt
     this.encryptionKey = handlers.encryptionKey || null
@@ -92,15 +94,11 @@ module.exports = class Autobase extends ReadyResource {
 
     this._lock = mutexify()
 
-    this._updatingCores = false
-    this._localDigest = null
     this._needsWakeup = true
     this._needsWakeupHeads = true
     this._addCheckpoints = false
     this._firstCheckpoint = true
     this._hasPendingCheckpoint = false
-    this._completeRemovalAt = null
-    this._systemPointer = 0
     this._maybeStaticFastForward = false // writer bumps this
 
     this._updates = []
@@ -153,12 +151,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this._waiting = new SignalPromise()
 
-    // const sysCore = this._viewStore.get({ name: '_system', exclusive: true })
-
-    // this.system = new SystemView(sysCore, {
-    //   checkout: 0
-    // })
-
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
 
     this.ready().catch(safetyCatch)
@@ -210,7 +202,8 @@ module.exports = class Autobase extends ReadyResource {
     return this._applyView ? this._applyView.system.core.treeHash() : null
   }
 
-  getIndexedInfo () {
+  async getIndexedInfo () {
+    if (this.opened === false) await this.ready()
     return this.system.getIndexedInfo(this._applyView.indexedLength)
   }
 
@@ -382,6 +375,8 @@ module.exports = class Autobase extends ReadyResource {
     await this._applyView.catchup(this.linearizer)
 
     await this._wakeup.ready()
+
+    this.system = this._applyView.system
 
     this.requestWakeup()
 
@@ -604,7 +599,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async append (value) {
-    if (!this.opened) await this.ready()
+    if (this.opened === false) await this.ready()
     if (this._interrupting) throw new Error('Autobase is closing')
 
     // we wanna allow acks so interdexers can flush
@@ -948,12 +943,14 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._applyView.finalize(ref.core.key)
 
-    // end soft shutdown
-
     this._applyView = new ApplyState(this)
 
     await this._applyView.ready()
     await this._applyView.catchup(this.linearizer)
+
+    this.system = this._applyView.system
+
+    // end soft shutdown
 
     this.recouple()
 
@@ -1078,7 +1075,10 @@ module.exports = class Autobase extends ReadyResource {
       const u = this.linearizer.update()
       const indexerUpdate = u ? await this._applyView.update(u, localNodes) : false
 
-      if (this._applyView.dirty) await this._applyView.flush()
+      if (this._applyView.dirty) {
+        await this._applyView.flush()
+        this.updating = true
+      }
 
       if (!indexerUpdate) {
         if (this._checkWriters.length > 0) {
@@ -1164,10 +1164,6 @@ module.exports = class Autobase extends ReadyResource {
   resume () {
     this.paused = false
     this._queueBump()
-  }
-
-  get system () {
-    return this._applyView.system
   }
 
   async _advance () {
