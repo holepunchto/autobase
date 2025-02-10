@@ -9,18 +9,18 @@ const SignalPromise = require('signal-promise')
 const CoreCoupler = require('core-coupler')
 const mutexify = require('mutexify/promise')
 
-const Linearizer = require('./lib/linearizer')
-const AutoStore = require('./lib/view-store')
-const SystemView = require('./lib/system')
-const messages = require('./lib/messages')
-const Timer = require('./lib/timer')
-const Writer = require('./lib/writer')
-const ActiveWriters = require('./lib/active-writers')
-const CorePool = require('./lib/core-pool')
-const AutoWakeup = require('./lib/wakeup')
+const Linearizer = require('./lib/linearizer.js')
+const SystemView = require('./lib/system.js')
+const messages = require('./lib/messages.js')
+const Timer = require('./lib/timer.js')
+const Writer = require('./lib/writer.js')
+const ActiveWriters = require('./lib/active-writers.js')
+const CorePool = require('./lib/core-pool.js')
+const AutoWakeup = require('./lib/wakeup.js')
 
-const WakeupExtension = require('./lib/extension')
-const InternalView = require('./lib/view.js')
+const WakeupExtension = require('./lib/extension.js')
+const AutoStore = require('./lib/store.js')
+const ApplyState = require('./lib/apply-state.js')
 const boot = require('./lib/boot.js')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
@@ -132,9 +132,9 @@ module.exports = class Autobase extends ReadyResource {
     this.onindex = handlers.onindex || noop
 
     this._viewStore = new AutoStore(this)
+    this._applyView = null
 
     this.view = null
-    this.applyView = null
     this.version = -1
     this.interrupted = null
 
@@ -195,23 +195,23 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   get signedLength () {
-    return this.applyView ? this.applyView.system.core.signedLength : 0
+    return this._applyView ? this._applyView.system.core.signedLength : 0
   }
 
   get indexedLength () {
-    return this.applyView ? this.applyView.indexedLength : 0
+    return this._applyView ? this._applyView.indexedLength : 0
   }
 
   get length () {
-    return this.applyView ? this.applyView.system.core.length : 0
+    return this._applyView ? this._applyView.system.core.length : 0
   }
 
   hash () {
-    return this.applyView ? this.applyView.system.core.treeHash() : null
+    return this._applyView ? this._applyView.system.core.treeHash() : null
   }
 
   getIndexedInfo () {
-    return this.system.getIndexedInfo(this.applyView.indexedLength)
+    return this.system.getIndexedInfo(this._applyView.indexedLength)
   }
 
   _isActiveIndexer () {
@@ -324,7 +324,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   interrupt (reason) {
-    assert(this.applyView.applying, 'Interrupt is only allowed in apply')
+    assert(this._applyView.applying, 'Interrupt is only allowed in apply')
     this._interrupting = true
     if (reason) this.interrupted = reason
     throw INTERRUPT
@@ -367,19 +367,19 @@ module.exports = class Autobase extends ReadyResource {
     this._preopen = this._runPreOpen()
     await this._preopen
 
-    this.applyView = new InternalView(this)
-    await this.applyView.ready()
+    this._applyView = new ApplyState(this)
+    await this._applyView.ready()
 
-    if (this.applyView.system.bootstrapping) {
+    if (this._applyView.system.bootstrapping) {
       await this._makeLinearizer(null)
       this._bootstrapLinearizer()
     } else {
-      const sys = await this.applyView.getIndexedSystem()
+      const sys = await this._applyView.getIndexedSystem()
       await this._makeLinearizer(sys)
       await sys.close()
     }
 
-    await this.applyView.catchup(this.linearizer)
+    await this._applyView.catchup(this.linearizer)
 
     await this._wakeup.ready()
 
@@ -433,7 +433,7 @@ module.exports = class Autobase extends ReadyResource {
     await this._wakeup.close()
 
     if (this._hasClose) await this._handlers.close(this.view)
-    if (this.applyView) await this.applyView.close()
+    if (this._applyView) await this._applyView.close()
 
     await this._viewStore.close()
     await this.corePool.clear()
@@ -924,14 +924,14 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async migrate () {
-    const length = this.applyView.indexedLength
-    const system = this.applyView.system
+    const length = this._applyView.indexedLength
+    const system = this._applyView.system
 
     const info = await system.getIndexedInfo(length)
     const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
 
-    for (let i = 0; i < this.applyView.views.length; i++) {
-      const name = this.applyView.views[i].name
+    for (let i = 0; i < this._applyView.views.length; i++) {
+      const name = this._applyView.views[i].name
       const indexedLength = info.views[i].length
 
       await this._migrateView(indexerManifests, name, indexedLength)
@@ -945,18 +945,18 @@ module.exports = class Autobase extends ReadyResource {
     if (this.localWriter !== null) await this.localWriter.close()
     this._checkWriters = []
 
-    const sys = await this.applyView.getIndexedSystem()
+    const sys = await this._applyView.getIndexedSystem()
     await this._makeLinearizer(sys)
     await sys.close()
 
-    await this.applyView.finalize(ref.core.key)
+    await this._applyView.finalize(ref.core.key)
 
     // end soft shutdown
 
-    this.applyView = new InternalView(this)
+    this._applyView = new ApplyState(this)
 
-    await this.applyView.ready()
-    await this.applyView.catchup(this.linearizer)
+    await this._applyView.ready()
+    await this._applyView.catchup(this.linearizer)
 
     this.recouple()
 
@@ -1076,9 +1076,9 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const u = this.linearizer.update()
-      const indexerUpdate = u ? await this.applyView.update(u, localNodes) : false
+      const indexerUpdate = u ? await this._applyView.update(u, localNodes) : false
 
-      if (this.applyView.dirty) await this.applyView.flush()
+      if (this._applyView.dirty) await this._applyView.flush()
 
       if (!indexerUpdate) {
         if (this._checkWriters.length > 0) {
@@ -1138,7 +1138,7 @@ module.exports = class Autobase extends ReadyResource {
       if (this._needsWakeupHeads === true) {
         this._needsWakeupHeads = false
 
-        for (const { key } of await this.applyView.system.heads) {
+        for (const { key } of await this._applyView.system.heads) {
           await this._wakeupWriter(key)
         }
       }
@@ -1147,7 +1147,7 @@ module.exports = class Autobase extends ReadyResource {
     for (const [hex, length] of this._wakeupHints) {
       const key = b4a.from(hex, 'hex')
       if (length !== -1) {
-        const info = await this.applyView.system.get(key)
+        const info = await this._applyView.system.get(key)
         if (info && length < info.length) continue // stale hint
       }
 
@@ -1167,7 +1167,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   get system () {
-    return this.applyView.system
+    return this._applyView.system
   }
 
   async _advance () {
@@ -1662,9 +1662,9 @@ module.exports = class Autobase extends ReadyResource {
 
   // triggered from apply
   async addWriter (key, { indexer = true, isIndexer = indexer } = {}) { // just compat for old version
-    assert(this.applyView.applying, 'System changes are only allowed in apply')
+    assert(this._applyView.applying, 'System changes are only allowed in apply')
 
-    const sys = this.applyView.system
+    const sys = this._applyView.system
     await sys.add(key, { isIndexer })
 
     const writer = (await this._getWriterByKey(key, -1, 0, false, true, null)) || this._makeWriter(key, 0, true, false)
@@ -1693,13 +1693,13 @@ module.exports = class Autobase extends ReadyResource {
 
   // triggered from apply
   async removeWriter (key) { // just compat for old version
-    assert(this.applyView.applying, 'System changes are only allowed in apply')
+    assert(this._applyView.applying, 'System changes are only allowed in apply')
 
-    if (!this.removeable(key, this.applyView.system)) {
+    if (!this.removeable(key, this._applyView.system)) {
       throw new Error('Not allowed to remove the last indexer')
     }
 
-    await this.applyView.system.remove(key)
+    await this._applyView.system.remove(key)
 
     if (b4a.equals(key, this.local.key)) {
       if (this.isIndexer) this._unsetLocalIndexer()

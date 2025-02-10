@@ -245,16 +245,13 @@ async function compareViews (bases, t) {
 
   for (const b of missing) {
     const views = []
+    const aAutoViews = a._viewStore.getViews()
+    const bAutoViews = b._viewStore.getViews()
     // missing a sync mechanic for awaiting flushes here
-    // views.push({
-    //   name: '_system',
-    //   left: a.applyView.systemRef.core,
-    //   right: b.applyView.systemRef.core
-    // })
-    for (let i = 0; i < a.applyView.views.length; i++) {
-      const v = a.applyView.views[i]
+    for (let i = 0; i < aAutoViews.length; i++) {
+      const v = aAutoViews[i]
       const left = v.core
-      const right = b.applyView.views[i]?.core
+      const right = bAutoViews[i]?.core
       views.push({
         name: v.name,
         left,
