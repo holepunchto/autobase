@@ -474,6 +474,9 @@ module.exports = class Autobase extends ReadyResource {
     while (this._checkWriters.length > 0) {
       const w = this._checkWriters.pop()
 
+      // doesnt hurt
+      w.updateActivity()
+
       if (!w.flushed()) continue
 
       const unqueued = this._wakeup.unqueue(w.core.key, w.core.length)
@@ -1004,6 +1007,9 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _addLocalHeads () {
+    // not writable atm, will prop be writable in a subsequent bump tho
+    if (!this.localWriter) return null
+    // safety, localwriter is still processing, should prop be an assertion
     if (!this.localWriter.idle()) return null
 
     const nodes = new Array(this._appending.length)
