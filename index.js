@@ -546,9 +546,10 @@ module.exports = class Autobase extends ReadyResource {
     return false
   }
 
-  _isFastForwarding () {
-    if (this.fastForwardTo !== null) return true
-    return this.fastForwardEnabled && this.fastForwarding > 0
+  isFastForwarding () {
+    return false
+    // if (this.fastForwardTo !== null) return true
+    // return this.fastForwardEnabled && this.fastForwarding > 0
   }
 
   _backgroundAck () {
@@ -561,7 +562,7 @@ module.exports = class Autobase extends ReadyResource {
     const isPendingIndexer = this._isPending()
 
     // if no one is waiting for our index manifest, wait for FF before pushing an ack
-    if (!isPendingIndexer && this._isFastForwarding()) return
+    if (!isPendingIndexer && this.isFastForwarding()) return
 
     const isIndexer = this.localWriter.isActiveIndexer || isPendingIndexer
 
@@ -715,7 +716,6 @@ module.exports = class Autobase extends ReadyResource {
           const info = await system.get(key)
           const length = info ? info.length : 0
           if (w.length !== length) w.reset(length)
-          w.resume()
         }
 
         w.seen(seen)
@@ -762,7 +762,7 @@ module.exports = class Autobase extends ReadyResource {
       assert(w.opened)
       assert(!w.closed)
 
-      this._resumeWriter(w)
+      w.updateActivity()
       return w
     } finally {
       release()
@@ -831,10 +831,6 @@ module.exports = class Autobase extends ReadyResource {
     this._updateAckThreshold()
   }
 
-  _resumeWriter (w) {
-    if (!this._isFastForwarding()) w.resume()
-  }
-
   async _updateLocalWriter (sys) {
     if (this.localWriter !== null && !this.localWriter.closed) return
     await this._getWriterByKey(this.local.key, -1, 0, false, false, sys)
@@ -848,7 +844,7 @@ module.exports = class Autobase extends ReadyResource {
     this._checkWriters.push(bootstrap)
     bootstrap.inflateBackground()
     await bootstrap.ready()
-    this._resumeWriter(bootstrap)
+    this._ensureWakeup(bootstrap)
 
     this._updateLinearizer([bootstrap], [])
   }
@@ -1673,7 +1669,7 @@ module.exports = class Autobase extends ReadyResource {
     if (!this.activeWriters.has(key)) {
       this.activeWriters.add(writer)
       this._checkWriters.push(writer)
-      this._resumeWriter(writer)
+      this._ensureWakeup(writer)
     }
 
     // If we are getting added as indexer, already start adding checkpoints while we get confirmed...
