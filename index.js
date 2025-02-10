@@ -651,7 +651,7 @@ module.exports = class Autobase extends ReadyResource {
 
     return {
       referrer: await core.getUserData('referrer'),
-      view: (!view || view[0] !== 0) ? null : c.decode(messages.ViewRecord, view)
+      view: view ? b4a.toString(view) : null
     }
   }
 

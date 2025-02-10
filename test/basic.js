@@ -233,6 +233,7 @@ test('basic - view/writer userdata is set', async t => {
     const systemData = await Autobase.getUserData(base.system.core)
 
     t.alike(systemData.referrer, base.bootstrap)
+    t.alike(systemData.view, '_system')
 
     t.is(base.activeWriters.size, 2)
     for (const writer of base.activeWriters) {
