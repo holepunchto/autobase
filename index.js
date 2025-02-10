@@ -1197,7 +1197,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this.updating === true) {
       this.updating = false
-      this.emit('update')
+      if (!this._interrupting) this.emit('update')
       this._waiting.notify(null)
     }
 
