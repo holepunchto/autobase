@@ -1033,12 +1033,12 @@ module.exports = class Autobase extends ReadyResource {
       const u = this.linearizer.update()
       const indexerUpdate = u ? await this._applyState.update(u, localNodes) : false
 
-      if (this._applyState.shouldFlush()) {
-        await this._applyState.flush()
-        this.updating = true
-      }
-
       if (!indexerUpdate) {
+        if (this._applyState.shouldFlush()) {
+          await this._applyState.flush()
+          this.updating = true
+        }
+
         if (this._checkWriters.length > 0) {
           await this._gcWriters()
           continue // rerun the update loop as a writer might have been added
@@ -1126,7 +1126,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async _advance () {
     if (this.opened === false) await this.ready()
-    if (this.paused) return
+    if (this.paused || this._interrupting) return
 
     this._draining = true
 
@@ -1142,14 +1142,13 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
+    if (this._interrupting) return
+
     if (this.localWriter) {
       if (this.localWriter.closed) await this._updateLocalWriter(this._applyState.system)
       if (!this._interrupting && this.localWriter) {
         if (this._applyState.isLocalPendingIndexer()) this.ack()
-        else if (this._triggerAckAsap()) {
-          this._ackTimer.asap()
-          console.log('asap...')
-        }
+        else if (this._triggerAckAsap()) this._ackTimer.asap()
       }
     }
 
@@ -1168,7 +1167,7 @@ module.exports = class Autobase extends ReadyResource {
       this._waiting.notify(null)
     }
 
-    if (!this.closing) await this._gcWriters()
+    if (!this._interrupting) await this._gcWriters()
   }
 
   _triggerAckAsap () {
