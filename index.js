@@ -61,7 +61,6 @@ module.exports = class Autobase extends ReadyResource {
     this.encryptionKey = handlers.encryptionKey || null
     this.encryption = null
 
-    this._tryLoadingLocal = true
     this._primaryBootstrap = null
 
     this.local = null
@@ -96,8 +95,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this._needsWakeup = true
     this._needsWakeupHeads = true
-    this._addCheckpoints = false
-    this._hasPendingCheckpoint = false
     this._maybeStaticFastForward = false // writer bumps this
 
     this._updates = []
@@ -124,8 +121,6 @@ module.exports = class Autobase extends ReadyResource {
     this._hasApply = !!this._handlers.apply
     this._hasOpen = !!this._handlers.open
     this._hasClose = !!this._handlers.close
-
-    this.onindex = handlers.onindex || noop
 
     this._viewStore = new AutoStore(this)
     this._applyState = null
@@ -960,7 +955,6 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this._ackTimer) this._ackTimer.stop()
     this._ackTimer = null
-    this._addCheckpoints = false
   }
 
   _addLocalHeads () {
