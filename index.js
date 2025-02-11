@@ -501,9 +501,7 @@ module.exports = class Autobase extends ReadyResource {
 
     try {
       await this._bump()
-    } catch (err) {
-      if (!this._interrupting) throw err
-    }
+    } catch {}
   }
 
   _onwakeup () {
@@ -1147,7 +1145,7 @@ module.exports = class Autobase extends ReadyResource {
     if (this.localWriter) {
       if (this.localWriter.closed) await this._updateLocalWriter(this._applyState.system)
       if (!this._interrupting && this.localWriter) {
-        if (this._applyState.isLocalPendingIndexer()) this.ack()
+        if (this._applyState.isLocalPendingIndexer()) this.ack().catch(noop)
         else if (this._triggerAckAsap()) this._ackTimer.asap()
       }
     }
