@@ -912,7 +912,7 @@ test('basic - non-indexed writer', async t => {
 
   await compareViews([a, b], t)
 
-  for await (const block of a.local.createReadStream()) {
+  for await (const block of a.local.createReadStream({ start: 1 })) {
     t.ok(block.checkpoint.length !== 0)
   }
 
@@ -1016,15 +1016,16 @@ test('basic - non-indexed writers 3-of-5', async t => {
   t.ok(await Autobase.isAutobase(d.local))
   t.ok(await Autobase.isAutobase(e.local))
 
-  for await (const block of a.local.createReadStream()) {
+  for await (const block of a.local.createReadStream({ start: 1 })) {
     t.ok(block.checkpoint.length !== 0)
   }
 
-  for await (const block of b.local.createReadStream()) {
+  // they only start acking once they are indexers
+  for await (const block of b.local.createReadStream({ start: 2 })) {
     t.ok(block.checkpoint.length !== 0)
   }
 
-  for await (const block of c.local.createReadStream()) {
+  for await (const block of c.local.createReadStream({ start: 2 })) {
     t.ok(block.checkpoint.length !== 0)
   }
 

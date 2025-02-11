@@ -8,7 +8,7 @@ async function runTests () {
   test.pause()
 
   await import('./apply.js')
-  // await import('./autoack.js')
+  await import('./autoack.js')
   await import('./basic.js')
   await import('./core.js')
   await import('./dags.js')

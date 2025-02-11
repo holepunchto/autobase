@@ -97,7 +97,6 @@ module.exports = class Autobase extends ReadyResource {
     this._needsWakeup = true
     this._needsWakeupHeads = true
     this._addCheckpoints = false
-    this._firstCheckpoint = true
     this._hasPendingCheckpoint = false
     this._maybeStaticFastForward = false // writer bumps this
 
@@ -107,7 +106,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this._draining = false
     this._advancing = null
-    this._advanced = null
     this._interrupting = false
 
     this.paused = false
@@ -227,24 +225,6 @@ module.exports = class Autobase extends ReadyResource {
     const nodes = new Array(this.system.heads.length)
     for (let i = 0; i < this.system.heads.length; i++) nodes[i] = this.system.heads[i]
     return nodes.sort(compareNodes)
-  }
-
-  // any pending indexers
-  hasPendingIndexers () {
-    if (this.system.pendingIndexers.length > 0) return true
-    return this.hasUnflushedIndexers()
-  }
-
-  // confirmed indexers that aren't in linearizer yet
-  hasUnflushedIndexers () {
-    if (this.linearizer.indexers.length !== this.system.indexers.length) return true
-
-    for (let i = 0; i < this.system.indexers.length; i++) {
-      const w = this.linearizer.indexers[i]
-      if (!b4a.equals(w.core.key, this.system.indexers[i].key)) return true
-    }
-
-    return false
   }
 
   hintWakeup (hints) {
@@ -382,11 +362,8 @@ module.exports = class Autobase extends ReadyResource {
 
     this.system = this._applyState.system
 
-    this.requestWakeup()
-
     // queue a full bump that handles wakeup etc (not legal to wait for that here)
     this._queueBump()
-    this._advanced = this._advancing
 
     // this.queueFastForward()
     this._updateBootstrapWriters()
@@ -397,7 +374,15 @@ module.exports = class Autobase extends ReadyResource {
     //   this.initialFastForward(key, timeout || DEFAULT_FF_TIMEOUT * 2)
     // }
 
-    // if (this.localWriter && this._ackInterval) this._startAckTimer()
+    if (this.core.length - this._applyState.indexedLength > this._ackTickThreshold) {
+      this._ackTick = this._ackTickThreshold
+    }
+    if (this.localWriter && this._ackInterval) {
+      this._startAckTimer()
+    }
+
+    this.recouple()
+    this.requestWakeup()
   }
 
   async _closeLocalCores () {
@@ -502,23 +487,12 @@ module.exports = class Autobase extends ReadyResource {
     this._ackTimer.bump()
   }
 
-  async _waitForIdle () {
-    if (this.localWriter) {
-      await this.localWriter.ready()
-      while (!this.closing && this.localWriter.core.length > this.localWriter.length) {
-        await this.localWriter.waitForSynced()
-        await this._bump() // make sure its all flushed...
-      }
-    }
-  }
-
   async update () {
     if (this.opened === false) await this.ready()
 
     try {
       await this._bump()
       if (this._acking) await this._bump() // if acking just rebump incase it was triggered from above...
-      await this._waitForIdle()
     } catch (err) {
       if (this._interrupting) return
       throw err
@@ -542,13 +516,6 @@ module.exports = class Autobase extends ReadyResource {
     this._queueBump()
   }
 
-  _isPending () {
-    for (const key of this.system.pendingIndexers) {
-      if (b4a.equals(key, this.local.key)) return true
-    }
-    return false
-  }
-
   isFastForwarding () {
     return false
     // if (this.fastForwardTo !== null) return true
@@ -560,16 +527,19 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async ack (bg = false) {
-    if (this.localWriter === null) return
+    if (this.opened === false) await this.ready()
+    if (this.localWriter === null || this._acking || this._interrupting || this._appending !== null) return
 
-    const isPendingIndexer = this._isPending()
+    const applyState = this._applyState
+    if (applyState.opened === false) await applyState.ready()
+
+    const isPendingIndexer = applyState.isLocalPendingIndexer()
 
     // if no one is waiting for our index manifest, wait for FF before pushing an ack
     if (!isPendingIndexer && this.isFastForwarding()) return
 
-    const isIndexer = this.localWriter.isActiveIndexer || isPendingIndexer
-
-    if (!isIndexer || this._acking || this._interrupting) return
+    const isIndexer = applyState.isLocalIndexer() || isPendingIndexer
+    if (!isIndexer) return
 
     this._acking = true
 
@@ -580,24 +550,26 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     if (this._interrupting) return
+    if (!this.localWriter || this.localWriter.closed) return
 
     // avoid lumping acks together due to the bump wait here
     if (this._ackTimer && bg) await this._ackTimer.asapStandalone()
 
     if (this._interrupting) return
 
-    const unflushed = this._hasPendingCheckpoint || this.hasUnflushedIndexers()
-    if (!this._interrupting && (isPendingIndexer || this.linearizer.shouldAck(this.localWriter, unflushed))) {
+    const alwaysWrite = isPendingIndexer || this._applyState.shouldWrite()
+
+    if (!this._interrupting && (alwaysWrite || this.linearizer.shouldAck(this.localWriter, false))) {
       try {
-        if (this.localWriter) await this.append(null)
+        if (this.localWriter && !this.localWriter.closed) await this.append(null)
       } catch (err) {
         if (!this._interrupting) throw err
       }
+    }
 
-      if (!this._interrupting) {
-        this._updateAckThreshold()
-        this._bumpAckTimer()
-      }
+    if (!this._interrupting) {
+      this._updateAckThreshold()
+      this._bumpAckTimer()
     }
 
     this._acking = false
@@ -819,7 +791,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     this.linearizer = new Linearizer(indexers, { heads, writers: this.activeWriters })
-    // this._addCheckpoints = !!(this.localWriter && (this.localWriter.isActiveIndexer || this._isPending()))
+
     this._updateAckThreshold()
   }
 
@@ -950,7 +922,6 @@ module.exports = class Autobase extends ReadyResource {
     // ensure we re-evalute our state
     this._bootstrapWritersChanged = true
     this.updated = true
-
     this._queueBump()
   }
 
@@ -1066,7 +1037,7 @@ module.exports = class Autobase extends ReadyResource {
       const u = this.linearizer.update()
       const indexerUpdate = u ? await this._applyState.update(u, localNodes) : false
 
-      if (this._applyState.dirty) {
+      if (this._applyState.shouldFlush()) {
         await this._applyState.flush()
         this.updating = true
       }
@@ -1163,9 +1134,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._draining = true
 
-    if (this.localWriter && this.localWriter.closed) {
-      await this._updateLocalWriter(this._applyState.system)
-    }
+    const local = this.local.length
 
     try {
       // note: this might block due to network i/o
@@ -1177,9 +1146,15 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
-    if (!this._interrupting && this.localWriter && this._ackIsNeeded()) {
-      if (this._ackTimer) this._ackTimer.asap()
-      else this.ack()
+    if (this.localWriter) {
+      if (this.localWriter.closed) await this._updateLocalWriter(this._applyState.system)
+      if (!this._interrupting && this.localWriter) {
+        if (this._applyState.isLocalPendingIndexer()) this.ack()
+        else if (this._triggerAckAsap()) {
+          this._ackTimer.asap()
+          console.log('asap...')
+        }
+      }
     }
 
     // keep bootstraps in sync with linearizer
@@ -1189,6 +1164,10 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this.updating === true) {
       this.updating = false
+
+      if (local !== this.local.length) this._resetAckTick()
+      else this._ackTick++
+
       if (!this._interrupting) this.emit('update')
       this._waiting.notify(null)
     }
@@ -1196,48 +1175,21 @@ module.exports = class Autobase extends ReadyResource {
     if (!this.closing) await this._gcWriters()
   }
 
-  _ackIsNeeded () {
-    // return false
-    // if (!this._addCheckpoints) return false // ack has no impact
+  _triggerAckAsap () {
+    if (!this._ackTimer) return false
 
-    // flush any pending indexers
-    if (this.system.pendingIndexers.length > 0) {
-      for (const key of this.system.pendingIndexers) {
-        if (b4a.equals(key, this.local.key) && !b4a.equals(key, this.bootstrap)) {
-          return true
+    // flush if threshold is reached and we are not already acking
+    if (this._ackTickThreshold && !this._acking && this._ackTick >= this._ackTickThreshold) {
+      if (this._ackTimer) {
+        for (const w of this.linearizer.indexers) {
+          if (w.core.length > w.length) return false // wait for the normal ack cycle in this case
         }
       }
+
+      return true
     }
 
     return false
-
-    // flush any pending migrates
-    // for (const view of this._viewStore.opened.values()) {
-    //   if (view.queued === -1) continue
-
-    //   const checkpoint = view.signer.bestCheckpoint(this.localWriter)
-    //   const length = checkpoint ? checkpoint.length : 0
-
-    //   if (length < view.queued && length < view.indexedLength) {
-    //     this._hasPendingCheckpoint = true
-    //     return true
-    //   }
-    // }
-
-    // // flush if threshold is reached and we are not already acking
-    // if (this._ackTickThreshold && !this._acking && this._ackTick >= this._ackTickThreshold) {
-    //   if (this._ackTimer) { // the bool in this case is implicitly an "asap" signal
-    //     for (const w of this.linearizer.indexers) {
-    //       if (w.core.length > w.length) return false // wait for the normal ack cycle in this case
-    //     }
-
-    //     return this.linearizer.shouldAck(this.localWriter, this.hasUnflushedIndexers())
-    //   }
-
-    //   return true
-    // }
-
-    // return false
   }
 
   doneFastForwarding () {
@@ -1706,6 +1658,7 @@ module.exports = class Autobase extends ReadyResource {
   _updateAckThreshold () {
     if (this._ackThreshold === 0) return
     if (this._ackTimer) this._ackTimer.bau()
+    this._ackTick = 0
     this._ackTickThreshold = random2over1(this.linearizer.indexers.length * this._ackThreshold)
   }
 

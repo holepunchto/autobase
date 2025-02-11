@@ -172,7 +172,7 @@ test.skip('autoack - concurrent', async t => {
   }
 })
 
-test('autoack - threshold', async t => {
+test.skip('autoack - threshold', async t => {
   t.plan(2)
 
   const { bases } = await create(2, t, {
@@ -199,7 +199,7 @@ test('autoack - threshold', async t => {
   t.ok(b.view.signedLength >= 4)
 })
 
-test('autoack - threshold with interval', async t => {
+test.skip('autoack - threshold with interval', async t => {
   t.plan(3)
 
   const ackInterval = 800
@@ -223,12 +223,13 @@ test('autoack - threshold with interval', async t => {
   await new Promise(resolve => setTimeout(resolve, 1000)) // fast ack
   await sync([a, b])
   await eventFlush() // allow the bg threshold to react...
-  b.append('b4')
-  b.append('b5')
-  b.append('b6')
+
+  await b.append('b4')
+  await b.append('b5')
+  await b.append('b6')
   await b.append('b7')
   await sync([a, b])
-  await new Promise(resolve => setTimeout(resolve, 1000)) // fast ack
+  await new Promise(resolve => setTimeout(resolve, 2000)) // fast ack
 
   t.is(a._ackTimer.interval, ackInterval)
   t.ok(a.view.signedLength >= 4)

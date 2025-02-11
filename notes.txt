@@ -20,14 +20,4 @@ corruption helper:
 
 dbl check extension, should prop move off cores to a protomux for simplicity btw
 
-# check snapshot of snapshot after rebase
-/Users/runner/work/autobase/autobase/node_modules/brittle/index.js:861
-  return new Error(message + details)
-         ^
-
-Error: Test did not end (check snapshot of snapshot after rebase)
-    at prematureEnd (/Users/runner/work/autobase/autobase/node_modules/brittle/index.js:861:10)
-    at Runner.end (/Users/runner/work/autobase/autobase/node_modules/brittle/index.js:158:26)
-    at process.<anonymous> (/Users/runner/work/autobase/autobase/node_modules/brittle/index.js:46:56)
-    at Object.onceWrapper (node:events:639:26)
-    at process.emit (node:events:524:28)
+dbl ack stuff again with chris, especially the should write stuff
