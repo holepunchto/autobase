@@ -842,6 +842,8 @@ module.exports = class Autobase extends ReadyResource {
     const ref = this._viewStore.byName.get(name)
 
     const core = ref.batch || ref.core
+    await core.ready()
+
     const prologue = indexedLength === 0
       ? null
       : { length: indexedLength, hash: (await core.restoreBatch(indexedLength)).hash() }
