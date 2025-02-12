@@ -19,7 +19,7 @@ const CorePool = require('./lib/core-pool.js')
 const AutoWakeup = require('./lib/wakeup.js')
 
 const FastForward = require('./lib/fast-forward.js')
-const WakeupExtension = require('./lib/extension.js')
+const WakeupProtocol = require('./lib/protomux.js')
 const AutoStore = require('./lib/store.js')
 const ApplyState = require('./lib/apply-state.js')
 const boot = require('./lib/boot.js')
@@ -69,7 +69,17 @@ module.exports = class Autobase extends ReadyResource {
     this.corePool = new CorePool()
     this.linearizer = null
     this.updating = false
-    this.wakeupExtension = null
+
+    this.wakeupProtocol = new WakeupProtocol({
+      onRequest: (key, stream) => {
+        if (!b4a.equals(key, this.key)) return
+        stream.sendWakeup(this.wakeup.snapshot())
+      },
+      onResponse: (wakeup) => {
+        if (!b4a.equals(wakeup.key, this.key)) return
+        this.hintWakeup(wakeup.writers)
+      }
+    })
 
     this.fastForwardEnabled = handlers.fastForward !== false
     this.fastForwarding = null
@@ -250,7 +260,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this._primaryBootstrap = result.bootstrap
 
-    this.wakeupExtension = new WakeupExtension(this, this._primaryBootstrap, true)
     this.encryptionKey = result.encryptionKey
     if (this.encryptionKey) this.encryption = { key: this.encryptionKey }
 
@@ -1152,14 +1161,14 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _wakeupPeer (peer) {
-    if (this.wakeupExtension) {
-      this.wakeupExtension.sendWakeup(peer.remotePublicKey)
+    if (this.wakeupProtocol) {
+      this.wakeupProtocol.sendWakeup(peer.remotePublicKey, this._wakeup.snapshot())
     }
   }
 
   broadcastWakeup () {
-    if (this.wakeupExtension) {
-      this.wakeupExtension.broadcastWakeup()
+    if (this.wakeupProtocol) {
+      this.wakeupProtocol.broadcastWakeup(this._wakeup.snapshot())
     }
   }
 
