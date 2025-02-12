@@ -1,4 +1,3 @@
-const os = require('os')
 const { on } = require('events')
 const test = require('brittle')
 const tmpDir = require('test-tmp')
