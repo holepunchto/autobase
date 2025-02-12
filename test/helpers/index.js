@@ -45,14 +45,15 @@ async function create (n, t, opts = {}) {
   const stores = await createStores(n, t, opts)
   const bases = [createBase(stores[0], null, t, opts)]
   await bases[0].ready()
-
+  bases[0].name = 'a'
   if (n === 1) return { stores, bases }
 
   for (let i = 1; i < n; i++) {
     const base = createBase(stores[i], bases[0].local.key, t, opts)
     await base.ready()
-
     bases.push(base)
+    // naming them makes debugging easier so why not
+    base.name = String.fromCharCode('a'.charCodeAt(0) + i)
   }
 
   return {
@@ -81,14 +82,15 @@ function createBase (store, key, t, opts = {}) {
   }
 
   t.teardown(async () => {
-    const view = new Promise(resolve => {
-      setImmediate(() => base._viewStore.close().then(resolve, resolve))
-    })
+    return base.close()
+    // const view = new Promise(resolve => {
+    //   setImmediate(() => base._viewStore.close().then(resolve, resolve))
+    // })
 
-    await Promise.all([
-      view,
-      base.close()
-    ])
+    // await Promise.all([
+    //   view,
+    //   base.close()
+    // ])
   }, { order: 1 })
 
   return base
@@ -242,8 +244,22 @@ async function compareViews (bases, t) {
   const a = missing.shift()
 
   for (const b of missing) {
-    for (const [name, left] of a._viewStore.opened) {
-      const right = b._viewStore.opened.get(name)
+    const views = []
+    const aAutoViews = a._viewStore.getViews()
+    const bAutoViews = b._viewStore.getViews()
+    // missing a sync mechanic for awaiting flushes here
+    for (let i = 0; i < aAutoViews.length; i++) {
+      const v = aAutoViews[i]
+      const left = v.core
+      const right = bAutoViews[i]?.core
+      views.push({
+        name: v.name,
+        left,
+        right
+      })
+    }
+
+    for (const { name, left, right } of views) {
       if (!right) {
         t.fail(`missing view ${name}`)
         continue
@@ -254,19 +270,19 @@ async function compareViews (bases, t) {
         continue
       }
 
-      const length = left.core.signedLength
+      const length = left.signedLength
 
-      if (right.core.signedLength !== length) {
+      if (right.signedLength !== length) {
         t.fail(`view signedLength: ${name}`)
         continue
       }
 
-      if (!b4a.equals(await left.core.treeHash(length), await right.core.treeHash(length))) {
+      if (!b4a.equals(await left.treeHash(length), await right.treeHash(length))) {
         t.fail(`view treeHash: ${name}`)
         continue
       }
 
-      t.pass(`consistent ${name}`)
+      t.pass(`consistent ${name} at signedLength ${length}`)
     }
   }
 }

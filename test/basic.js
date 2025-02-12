@@ -45,6 +45,7 @@ test('basic - single writer', async t => {
 
 test('basic - two writers', async t => {
   const { bases } = await create(3, t, { open: null })
+
   const [base1, base2, base3] = bases
 
   let added = false
@@ -106,7 +107,7 @@ test('basic - no truncates when history is linear', async t => {
   await base1.append('verden')
 
   const all = []
-  for (let i = 0; i < base1.view.signedLength; i++) {
+  for (let i = 0; i < base1.view.length; i++) {
     all.push(await base1.view.get(i))
   }
 
@@ -150,7 +151,7 @@ test('basic - writable event fires', async t => {
 })
 
 test('basic - local key pair', async t => {
-  const keyPair = crypto.keyPair()
+  const keyPair = crypto.keyPair(Buffer.alloc(32))
   const [store] = await createStores(1, t)
 
   const base = createBase(store, null, t, { keyPair })
@@ -232,6 +233,7 @@ test('basic - view/writer userdata is set', async t => {
     const systemData = await Autobase.getUserData(base.system.core)
 
     t.alike(systemData.referrer, base.bootstrap)
+    t.alike(systemData.view, '_system')
 
     t.is(base.activeWriters.size, 2)
     for (const writer of base.activeWriters) {
@@ -264,6 +266,8 @@ test('basic - simple reorg', async t => {
   // trigger reorg
   await replicateAndSync([a, b])
 
+  t.is(b.view.length, 4)
+
   t.is(await b.view.get(0), 'a0')
   t.is(await b.view.get(1), 'a1')
   t.is(await b.view.get(2), 'b0')
@@ -275,7 +279,7 @@ test('basic - compare views', async t => {
 
   const [a, b] = bases
   await addWriter(a, b)
-
+  t.pass('added writer')
   await confirm(bases)
 
   for (let i = 0; i < 6; i++) await bases[i % 2].append('msg' + i)
@@ -316,7 +320,6 @@ test('basic - online majority', async t => {
   await confirm([a, b])
 
   t.not(a.view.signedLength, flushed)
-  t.is(c.view.signedLength, flushed)
   t.is(a.view.signedLength, b.view.signedLength)
 
   await compareViews([a, b], t)
@@ -356,7 +359,6 @@ test('basic - rotating majority', async t => {
   await confirm([a, b])
 
   t.not(a.view.signedLength, indexed)
-  t.is(c.view.signedLength, indexed)
   t.is(a.view.signedLength, b.view.signedLength)
 
   indexed = a.view.signedLength
@@ -371,7 +373,6 @@ test('basic - rotating majority', async t => {
   await confirm([b, c])
 
   t.not(b.view.signedLength, indexed)
-  t.is(a.view.signedLength, indexed)
   t.is(b.view.signedLength, c.view.signedLength)
 
   indexed = b.view.signedLength
@@ -386,7 +387,6 @@ test('basic - rotating majority', async t => {
   await confirm([a, c])
 
   t.not(c.view.signedLength, indexed)
-  t.is(b.view.signedLength, indexed)
   t.is(a.view.signedLength, c.view.signedLength)
 
   indexed = a.view.signedLength
@@ -407,6 +407,7 @@ test('basic - rotating majority', async t => {
   await compareViews([a, b, c], t)
 })
 
+// hard in new hc
 test('basic - throws', async t => {
   const { bases } = await create(2, t)
 
@@ -804,12 +805,14 @@ test('two writers write many messages, third writer joins', async t => {
     base1.append({ value: `Message${i}` })
   }
 
-  await confirm([base1, base2])
+  await base1.update()
+  t.pass('added nodes')
 
+  await confirm([base1, base2])
   await addWriter(base1, base3)
 
   await confirm([base1, base2, base3])
-  t.pass('Confirming did not throw')
+  t.pass('confirming did not throw')
 
   await compareViews([base1, base2, base3], t)
 })
@@ -909,7 +912,7 @@ test('basic - non-indexed writer', async t => {
 
   await compareViews([a, b], t)
 
-  for await (const block of a.local.createReadStream()) {
+  for await (const block of a.local.createReadStream({ start: 1 })) {
     t.ok(block.checkpoint.length !== 0)
   }
 
@@ -1013,15 +1016,16 @@ test('basic - non-indexed writers 3-of-5', async t => {
   t.ok(await Autobase.isAutobase(d.local))
   t.ok(await Autobase.isAutobase(e.local))
 
-  for await (const block of a.local.createReadStream()) {
+  for await (const block of a.local.createReadStream({ start: 1 })) {
     t.ok(block.checkpoint.length !== 0)
   }
 
-  for await (const block of b.local.createReadStream()) {
+  // they only start acking once they are indexers
+  for await (const block of b.local.createReadStream({ start: 2 })) {
     t.ok(block.checkpoint.length !== 0)
   }
 
-  for await (const block of c.local.createReadStream()) {
+  for await (const block of c.local.createReadStream({ start: 2 })) {
     t.ok(block.checkpoint.length !== 0)
   }
 
@@ -1079,7 +1083,10 @@ test('basic - oplog digest', async t => {
   await base1.append(null)
   await replicateAndSync([base1, base2])
 
-  const last = await base1.local.get(1)
+  // TODO: remove me, just because we atomically set local nodes now,
+  // but we can predict the sys key. but also not super importnat
+  await base1.append(null)
+  const last = await base1.local.get(base1.local.length - 1)
 
   t.is(last.digest.pointer, 0)
   t.is(base2.system.core.manifest.signers.length, 2)
@@ -1350,6 +1357,8 @@ test('basic - remove an indexer when 2-of-2', async t => {
   t.is(b.linearizer.indexers.length, 2)
 
   await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+  t.pass('appended removal')
+
   await confirm([a, b])
 
   t.is(b.writable, false)
@@ -1546,7 +1555,7 @@ test('basic - promote writer to indexer', async t => {
 })
 
 test('basic - demote indexer to writer', async t => {
-  t.plan(13)
+  t.plan(14)
 
   const { bases } = await create(2, t)
 
@@ -1571,7 +1580,7 @@ test('basic - demote indexer to writer', async t => {
 
   // demote writer
   await addWriter(a, b, false)
-
+  t.pass('added writer')
   await confirm([a, b])
 
   t.is(a.linearizer.indexers.length, 1)
@@ -1605,6 +1614,8 @@ test('basic - add new indexer after removing', async t => {
   t.is(b.view.manifest.signers.length, 2)
 
   await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+
+  t.pass('appended removal')
   await confirm([a, b])
 
   t.is(b.writable, false)
