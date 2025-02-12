@@ -888,6 +888,7 @@ module.exports = class Autobase extends ReadyResource {
 
     await store.getLocal().setUserData('autobase/boot', value)
     await store.flush()
+    await store.close()
 
     const to = this.core.signedLength
 
