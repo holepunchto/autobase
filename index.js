@@ -18,6 +18,7 @@ const ActiveWriters = require('./lib/active-writers.js')
 const CorePool = require('./lib/core-pool.js')
 const AutoWakeup = require('./lib/wakeup.js')
 
+const FastForward = require('./lib/fast-forward.js')
 const WakeupExtension = require('./lib/extension.js')
 const AutoStore = require('./lib/store.js')
 const ApplyState = require('./lib/apply-state.js')
@@ -31,9 +32,6 @@ const AUTOBASE_VERSION = 1
 // default is to automatically ack
 const DEFAULT_ACK_INTERVAL = 10_000
 const DEFAULT_ACK_THRESHOLD = 4
-
-const FF_THRESHOLD = 16
-const DEFAULT_FF_TIMEOUT = 10_000
 
 const REMOTE_ADD_BATCH = 64
 
@@ -74,12 +72,8 @@ module.exports = class Autobase extends ReadyResource {
     this.wakeupExtension = null
 
     this.fastForwardEnabled = handlers.fastForward !== false
-    this.fastForwarding = 0
+    this.fastForwarding = null
     this.fastForwardTo = null
-
-    if (this.fastForwardEnabled && isObject(handlers.fastForward)) {
-      this.fastForwardTo = handlers.fastForward
-    }
 
     this._bootstrapWriters = [] // might contain dups, but thats ok
     this._bootstrapWritersChanged = false
@@ -147,6 +141,10 @@ module.exports = class Autobase extends ReadyResource {
 
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
     this.core = this._viewStore.get({ name: '_system' })
+
+    if (this.fastForwardEnabled && isObject(handlers.fastForward)) {
+      this._runFastForward(new FastForward(this, handlers.fastForward.key, { verified: false }))
+    }
 
     this.ready().catch(safetyCatch)
   }
@@ -264,7 +262,7 @@ module.exports = class Autobase extends ReadyResource {
   // called by view-store for bootstrapping
   async _getSystemInfo () {
     const boot = await this._getBootRecord()
-    if (!boot) return null
+    if (!boot.key) return null
 
     const encryption = this.encryptionKey
       ? { key: AutoStore.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
@@ -296,7 +294,9 @@ module.exports = class Autobase extends ReadyResource {
     await this._preopen
 
     const pointer = await this.local.getUserData('autobase/boot')
-    return pointer && c.decode(messages.BootRecord, pointer)
+    return pointer
+      ? c.decode(messages.BootRecord, pointer)
+      : { key: null, indexedLength: 0, indexersUpdated: false, fastForwarding: false, heads: null }
   }
 
   interrupt (reason) {
@@ -335,6 +335,16 @@ module.exports = class Autobase extends ReadyResource {
     this._bootstrapWritersChanged = false
   }
 
+  async _openLinearizer () {
+    if (this._applyState.system.bootstrapping) {
+      await this._makeLinearizer(null)
+      this._bootstrapLinearizer()
+      return
+    }
+
+    await this._makeLinearizerFromViewState()
+  }
+
   async _open () {
     this._preopen = this._runPreOpen()
     await this._preopen
@@ -342,32 +352,20 @@ module.exports = class Autobase extends ReadyResource {
     this._applyState = new ApplyState(this)
     await this._applyState.ready()
 
-    if (this._applyState.system.bootstrapping) {
-      await this._makeLinearizer(null)
-      this._bootstrapLinearizer()
+    if (await this._applyState.shouldMigrate()) {
+      await this._migrate()
     } else {
-      const sys = await this._applyState.getIndexedSystem()
-      await this._makeLinearizer(sys)
-      await sys.close()
-    }
+      await this._openLinearizer()
+      await this._applyState.catchup(this.linearizer)
 
-    await this._applyState.catchup(this.linearizer)
+      this.system = this._applyState.system
+    }
 
     await this._wakeup.ready()
 
-    this.system = this._applyState.system
-
     // queue a full bump that handles wakeup etc (not legal to wait for that here)
     this._queueBump()
-
-    // this.queueFastForward()
     this._updateBootstrapWriters()
-
-    // if (this.fastForwardTo !== null) {
-    //   const { key, timeout } = this.fastForwardTo
-    //   this.fastForwardTo = null // will get reset once ready
-    //   this.initialFastForward(key, timeout || DEFAULT_FF_TIMEOUT * 2)
-    // }
 
     if (this.core.length - this._applyState.indexedLength > this._ackTickThreshold) {
       this._ackTick = this._ackTickThreshold
@@ -378,6 +376,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this.recouple()
     this.requestWakeup()
+    this._queueFastForward()
   }
 
   async _closeLocalCores () {
@@ -394,6 +393,8 @@ module.exports = class Autobase extends ReadyResource {
   async _close () {
     this._interrupting = true
     await Promise.resolve() // defer one tick
+
+    if (this.fastForwarding) await this.fastForwarding.close()
 
     if (this._coupler) this._coupler.destroy()
     this._coupler = null
@@ -510,9 +511,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   isFastForwarding () {
-    return false
-    // if (this.fastForwardTo !== null) return true
-    // return this.fastForwardEnabled && this.fastForwarding > 0
+    if (this.fastForwardTo !== null) return true
+    return this.fastForwardEnabled && this.fastForwarding !== null
   }
 
   _backgroundAck () {
@@ -836,6 +836,105 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  async _clearWriters () {
+    await this.activeWriters.clear()
+    if (this.localWriter !== null) await this.localWriter.close()
+    this._checkWriters = []
+  }
+
+  async _makeLinearizerFromViewState () {
+    const sys = await this._applyState.getIndexedSystem()
+    await this._makeLinearizer(sys)
+    await sys.close()
+  }
+
+  async _applyFastForward () {
+    if (this.fastForwardTo.length < this.core.length + FastForward.MINIMUM) {
+      this.fastForwardTo = null
+      // still not worth it
+      return
+    }
+
+    // close existing state
+    await this._applyState.close()
+
+    const from = this.core.signedLength
+    const store = this._viewStore.atomize()
+    const views = this.fastForwardTo.views
+
+    // mutating, prop fine as we are throwing it away immediately
+    views.push({ key: this.fastForwardTo.key, length: this.fastForwardTo.length })
+
+    const ffed = []
+
+    for (const v of views) {
+      const ref = await this._viewStore.findViewByKey(v.key, this.fastForwardTo.indexers)
+      if (!ref) continue // unknown, view ignored
+      ffed.push(ref)
+
+      if (b4a.equals(ref.core.key, v.key)) {
+        await ref.catchup(store.atom, v.length)
+      } else {
+        await this._applyFastForwardMigration(ref, v)
+      }
+    }
+
+    const value = c.encode(messages.BootRecord, {
+      key: this.fastForwardTo.key,
+      indexedLength: this.fastForwardTo.length,
+      indexersUpdated: false,
+      fastForwarding: true
+    })
+
+    await store.getLocal().setUserData('autobase/boot', value)
+    await store.flush()
+
+    const to = this.core.signedLength
+
+    for (const ref of ffed) await ref.release()
+
+    this.fastForwardTo = null
+    this._queueFastForward()
+
+    await this._clearWriters()
+
+    this._applyState = new ApplyState(this)
+    await this._applyState.ready()
+
+    if (await this._applyState.shouldMigrate()) {
+      await this._migrate()
+    } else {
+      await this._makeLinearizerFromViewState()
+      await this._applyState.catchup(this.linearizer)
+    }
+
+    this._rebooted()
+    this.emit('fast-forward', to, from)
+  }
+
+  // TODO: not atomic in regards to the ff, fix that
+  async _applyFastForwardMigration (ref, v) {
+    const next = this.store.get(v.key)
+    await next.ready()
+
+    const prologue = next.manifest.prologue
+
+    if (prologue && prologue.length > 0 && ref.core.length >= prologue.length) {
+      await next.core.copyPrologue(ref.core.state)
+    }
+
+    const batch = next.session({ name: 'batch', overwrite: true, checkout: v.length })
+    await batch.ready()
+
+    // remake the batch, reset from our prologue in case it replicated inbetween
+    // TODO: we should really have an HC function for this
+
+    await ref.batch.state.moveTo(batch, batch.length)
+    await batch.close()
+
+    ref.migrated(this, next)
+  }
+
   async _migrateView (indexerManifests, name, indexedLength) {
     const ref = this._viewStore.byName.get(name)
 
@@ -867,15 +966,12 @@ module.exports = class Autobase extends ReadyResource {
     await ref.batch.state.moveTo(batch, core.length)
     await batch.close()
 
-    // TODO: close old core, for now we just close when the autobase is closed indirectly
-    // atm its unsafe to do as moveTo has a bug due to a missing read lock in hc
-    ref.core = next
-    ref.registerExtension(this)
+    ref.migrated(this, next)
 
     return ref
   }
 
-  async migrate () {
+  async _migrate () {
     const length = this._applyState.indexedLength
     const system = this._applyState.system
 
@@ -893,13 +989,8 @@ module.exports = class Autobase extends ReadyResource {
 
     // start soft shutdown
 
-    await this.activeWriters.clear()
-    if (this.localWriter !== null) await this.localWriter.close()
-    this._checkWriters = []
-
-    const sys = await this._applyState.getIndexedSystem()
-    await this._makeLinearizer(sys)
-    await sys.close()
+    await this._clearWriters()
+    await this._makeLinearizerFromViewState()
 
     await this._applyState.finalize(ref.core.key)
 
@@ -908,15 +999,20 @@ module.exports = class Autobase extends ReadyResource {
     await this._applyState.ready()
     await this._applyState.catchup(this.linearizer)
 
-    this.system = this._applyState.system
-
     // end soft shutdown
 
+    this._rebooted()
+  }
+
+  _rebooted () {
+    this.system = this._applyState.system
+
     this.recouple()
+    this.activeWriters.updateActivity()
 
     // ensure we re-evalute our state
     this._bootstrapWritersChanged = true
-    this.updated = true
+    this.updating = true
     this._queueBump()
   }
 
@@ -1014,14 +1110,15 @@ module.exports = class Autobase extends ReadyResource {
 
     while (!this._interrupting && !this.paused) {
       if (this.opened && this.fastForwardTo !== null) {
-        // await this._applyFastForward()
+        await this._applyFastForward()
         this.requestWakeup()
+        continue // revaluate conditions...
       }
 
       const remoteAdded = this.opened ? await this._addRemoteHeads() : null
       const localNodes = this.opened && this._appending !== null ? this._addLocalHeads() : null
 
-      if (this._maybeStaticFastForward === true && this.fastForwardEnabled === true) await this._checkStaticFastForward()
+      // if (this._maybeStaticFastForward === true && this.fastForwardEnabled === true) await this._checkStaticFastForward()
       if (this._interrupting) return
 
       if (remoteAdded > 0 || localNodes !== null) {
@@ -1046,7 +1143,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       await this._gcWriters()
-      await this.migrate()
+      await this._migrate()
     }
 
     // emit state changes post drain
@@ -1185,408 +1282,69 @@ module.exports = class Autobase extends ReadyResource {
     return false
   }
 
-  doneFastForwarding () {
-    if (--this.fastForwarding === 0 && !this._isFastForwarding()) {
-      for (const w of this.activeWriters) w.resume()
-    }
+  // async _checkStaticFastForward () {
+  //   let tally = null
+
+  //   for (let i = 0; i < this.linearizer.indexers.length; i++) {
+  //     const w = this.linearizer.indexers[i]
+  //     if (w.system !== null && !b4a.equals(w.system, this.system.core.key)) {
+  //       if (tally === null) tally = new Map()
+  //       const hex = b4a.toString(w.system, 'hex')
+  //       tally.set(hex, (tally.get(hex) || 0) + 1)
+  //     }
+  //   }
+
+  //   if (tally === null) {
+  //     this._maybeStaticFastForward = false
+  //     return
+  //   }
+
+  //   const maj = (this.linearizer.indexers.length >> 1) + 1
+
+  //   let candidate = null
+  //   for (const [hex, vote] of tally) {
+  //     if (vote < maj) continue
+  //     candidate = b4a.from(hex, 'hex')
+  //     break
+  //   }
+
+  //   if (candidate && !this._isFastForwarding()) {
+  //     await this.initialFastForward(candidate, DEFAULT_FF_TIMEOUT * 2)
+  //   }
+  // }
+
+  _queueFastForward () {
+    if (!this.core.opened) return
+    // should have a better way to get this
+    const latestSignedLength = this.core.core.state.length
+
+    if (!this.fastForwardEnabled || this.fastForwarding !== null || this._interrupting) return
+    if (latestSignedLength - this.core.length < FastForward.MINIMUM) return
+    if (this.fastForwardTo !== null) return
+
+    this._runFastForward(new FastForward(this, this.core.key)).catch(noop)
   }
 
-  async _checkStaticFastForward () {
-    let tally = null
+  async _runFastForward (ff) {
+    this.fastForwarding = ff
 
-    for (let i = 0; i < this.linearizer.indexers.length; i++) {
-      const w = this.linearizer.indexers[i]
-      if (w.system !== null && !b4a.equals(w.system, this.system.core.key)) {
-        if (tally === null) tally = new Map()
-        const hex = b4a.toString(w.system, 'hex')
-        tally.set(hex, (tally.get(hex) || 0) + 1)
-      }
-    }
+    this.activeWriters.updateActivity()
 
-    if (tally === null) {
-      this._maybeStaticFastForward = false
+    const result = await ff.upgrade()
+    await ff.close()
+
+    if (this.fastForwarding === ff) this.fastForwarding = null
+
+    if (!result) {
+      this.activeWriters.updateActivity()
+      this._queueFastForward()
       return
     }
 
-    const maj = (this.linearizer.indexers.length >> 1) + 1
-
-    let candidate = null
-    for (const [hex, vote] of tally) {
-      if (vote < maj) continue
-      candidate = b4a.from(hex, 'hex')
-      break
-    }
-
-    if (candidate && !this._isFastForwarding()) {
-      await this.initialFastForward(candidate, DEFAULT_FF_TIMEOUT * 2)
-    }
-  }
-
-  async initialFastForward (key, timeout) {
-    this.fastForwarding++
-
-    const encryption = this._viewStore.getBlockEncryption(this._viewStore.getSystemCore().name)
-
-    const core = this.store.get({ key, encryption })
-    await core.ready()
-
-    // get length from network
-    const length = await new Promise((resolve, reject) => {
-      if (core.length) return resolve(core.length)
-
-      const timer = setTimeout(() => {
-        core.off('append', resolveLength)
-        resolve(0)
-      }, timeout)
-
-      core.once('append', resolveLength)
-
-      function resolveLength () {
-        clearTimeout(timer)
-        resolve(core.length)
-      }
-    })
-
-    if (!length || length < this.system.core.indexedLength) {
-      await core.close()
-      this.doneFastForwarding()
-      this.queueFastForward()
-      return
-    }
-
-    let target = null
-
-    try {
-      target = await this._preFastForward(core, length, timeout)
-    } finally {
-      await core.close()
-    }
-
-    // initial fast-forward failed
-    if (target === null) {
-      this.doneFastForwarding()
-      return
-    }
-
-    this.fastForwardTo = target
-    this.doneFastForwarding()
+    this.fastForwardTo = result
 
     this._bumpAckTimer()
     this._queueBump()
-  }
-
-  async queueFastForward () {
-    // if already FFing, let the finish. TODO: auto kill the attempt after a while and move to latest?
-    if (!this.fastForwardEnabled || this.fastForwarding > 0) return
-
-    const core = this.system.core
-    const originalCore = this._viewStore.getSystemCore().originalCore
-
-    if (originalCore.length <= core.length + FF_THRESHOLD) return
-    if (this.fastForwardTo !== null && originalCore.length <= this.fastForwardTo.length + FF_THRESHOLD) return
-    if (!originalCore.length) return
-
-    this.fastForwarding++
-    const target = await this._preFastForward(originalCore, originalCore.length, DEFAULT_FF_TIMEOUT)
-
-    // fast-forward failed
-    if (target === null) {
-      this.doneFastForwarding()
-      return
-    }
-
-    // if it migrated underneath us, ignore for now
-    if (core !== this.system.core) {
-      this.doneFastForwarding()
-      return
-    }
-
-    this.fastForwardTo = target
-    this.doneFastForwarding()
-
-    this._bumpAckTimer()
-    this._queueBump()
-  }
-
-  // NOTE: runs in parallel with everything, can never fail
-  async _preFastForward (core, length, timeout) {
-    if (length === 0) return null
-
-    const info = {
-      key: core.key,
-      length,
-      localLength: 0
-    }
-
-    // pause writers
-    for (const w of this.activeWriters) w.pause()
-
-    let sess = null
-
-    try {
-      // sys runs open with wait false, so get head block first for low complexity
-      if (!(await core.has(length - 1))) {
-        await core.get(length - 1, { timeout })
-      }
-
-      sess = core.session()
-      await sess.ready()
-
-      let system = new SystemView(sess, {
-        checkout: length,
-        maxCacheSize: this.maxCacheSize
-      })
-
-      await system.ready()
-      await this.system.ready()
-
-      if (system.version > this.maxSupportedVersion) {
-        const upgrade = {
-          version: system.version,
-          length
-        }
-
-        this.emit('upgrade-available', upgrade)
-        return null
-      }
-
-      const systemShouldMigrate = b4a.equals(core.key, this.system.core.key) &&
-        !system.sameIndexers(this.linearizer.indexers)
-
-      const localLookup = this.localWriter ? system.get(this.local.key, { timeout }) : null
-      if (localLookup) localLookup.catch(noop)
-
-      const indexers = []
-      const pendingViews = []
-
-      for (const { key, length } of system.indexers) {
-        if (length === 0) continue
-        const core = this.store.get(key)
-        await core.ready()
-        indexers.push({ key, core, length })
-      }
-
-      // handle rest of views
-      for (const v of system.views) {
-        const core = this.store.get(v.key)
-
-        // same as below, we technically just need to check that we have the hash, not the block
-        if (v.length === 0 || await core.has(v.length - 1)) {
-          await core.close()
-        } else {
-          pendingViews.push({ core, length: v.length })
-        }
-      }
-
-      // handle system migration
-      if (systemShouldMigrate) {
-        const hash = system.core.core.state.hash()
-        const name = this._viewStore.getSystemCore().name
-        const prologue = { hash, length }
-
-        info.key = this.deriveKey(name, indexers, prologue)
-
-        await system.close()
-        await sess.close()
-
-        sess = this.store.get(info.key)
-        await sess.get(length - 1, { timeout })
-
-        system = new SystemView(sess, {
-          checkout: length,
-          maxCacheSize: this.maxCacheSize
-        })
-
-        await system.ready()
-      }
-
-      const promises = []
-
-      for (const { key, core, length } of indexers) {
-        if (core.length === 0 && length > 0) promises.push(core.get(length - 1, { timeout }))
-        promises.push(system.get(key, { timeout }))
-      }
-
-      for (const { core, length } of pendingViews) {
-        // we could just get the hash here, but likely user wants the block so yolo
-        promises.push(core.get(length - 1, { timeout }))
-      }
-
-      await Promise.all(promises)
-
-      if (localLookup) {
-        const value = await localLookup
-        if (value) info.localLength = value.isRemoved ? -1 : value.length
-      }
-
-      const closing = []
-
-      for (const { core } of pendingViews) {
-        closing.push(core.close())
-      }
-
-      closing.push(system.close())
-
-      await Promise.allSettled(closing)
-    } catch (err) {
-      safetyCatch(err)
-      return null
-    } finally {
-      if (sess) await sess.close()
-    }
-
-    return info
-  }
-
-  _clearFastForward (queue) {
-    if (this.fastForwarding === 0) {
-      for (const w of this.activeWriters) w.resume()
-    }
-    this.fastForwardTo = null
-    if (queue) this.queueFastForward() // queue in case we lost an ff while applying this one
-  }
-
-  async _applyFastForward () {
-    // remember these in case another fast forward gets queued
-    const { key, length, localLength } = this.fastForwardTo
-
-    const migrated = !b4a.equals(key, this.system.core.key)
-
-    const name = this._viewStore.getSystemCore().name
-    const encryption = this._viewStore.getBlockEncryption(name)
-
-    const core = this.store.get({ key, encryption })
-    await core.ready()
-
-    const from = this.system.core.length
-
-    // just extra sanity check that we are not going back in time, nor that we cleared the storage needed for ff
-    if (from >= length || core.length < length) {
-      this._clearFastForward(true)
-      await core.close()
-      return
-    }
-
-    const system = new SystemView(core, {
-      checkout: length,
-      maxCacheSize: this.maxCacheSize
-    })
-
-    await system.ready()
-
-    const opened = [core]
-    const indexers = [] // only used in migrate branch
-    const prologues = [] // only used in migrate branch
-
-    // preload async state
-    if (migrated) {
-      for (const { key } of system.indexers) {
-        const core = this.store.get(key)
-        await core.ready()
-        indexers.push({ core })
-        await core.close()
-      }
-
-      for (const { key } of system.views) {
-        const core = this.store.get(key)
-        await core.ready()
-        prologues.push(core.manifest.prologue)
-        await core.close()
-      }
-    }
-
-    const views = new Map()
-
-    const currentInfo = await this.system.getIndexedInfo(this._indexedLength)
-
-    const sysView = this._viewStore.getSystemCore()
-    const sysInfo = { key, length, treeLength: this._indexedLength, systemIndex: -1 }
-
-    views.set(sysView, sysInfo)
-
-    for (let i = 0; i < system.views.length; i++) {
-      const v = system.views[i]
-
-      // TODO: check behaviour if new view keys (+ double FF)
-      let view = this._viewStore.getByKey(v.key)
-
-      // search for corresponding view
-      if (!view) {
-        for (view of this._viewStore.opened.values()) {
-          const key = this.deriveKey(view.name, indexers, i < prologues.length ? prologues[i] : null)
-          if (b4a.equals(key, v.key)) break
-          view = null
-        }
-      }
-
-      if (!view) {
-        await closeAll(opened)
-        this._clearFastForward(false) // something wrong somewhere, likely a bug, just safety
-        return
-      }
-
-      const core = this.store.get(v.key)
-      await core.ready()
-
-      opened.push(core)
-
-      if (core.length < v.length) { // sanity check in case there was a migration etc
-        await closeAll(opened)
-        this._clearFastForward(true)
-        return
-      }
-
-      const treeLength = i < currentInfo.views.length ? currentInfo.views[i].length : 0
-      views.set(view, { key: v.key, length: v.length, treeLength, systemIndex: i })
-    }
-
-    await system.close()
-    await this._closeAllActiveWriters(false)
-
-    const atom = this.store.storage.createAtom()
-
-    await this._advanceBootRecord(key, atom)
-
-    for (const view of this._viewStore.opened.values()) {
-      const info = views.get(view)
-      if (info) await view.catchup(info, atom)
-      else if (migrated) await view.migrateTo(indexers, 0, atom)
-    }
-
-    await atom.flush()
-
-    this._updates = []
-
-    await this._refreshSystemState(this.system)
-
-    if (this.localWriter) {
-      if (localLength < 0) this._unsetLocalWriter()
-      else this.localWriter.reset(localLength)
-    }
-
-    this._indexedLength = length
-
-    await this._makeLinearizer(this.system)
-
-    this.version = this.system.version
-
-    // manually set the digest
-    if (migrated) {
-      this._setDigest(key)
-      this.recouple()
-    }
-
-    if (b4a.equals(this.fastForwardTo.key, key) && this.fastForwardTo.length === length) {
-      this._clearFastForward(false)
-    }
-
-    this.updating = true
-    this.emit('fast-forward', length, from)
-
-    // requeue in case we can do another jump!
-    this.queueFastForward()
-
-    await closeAll(opened)
   }
 
   async _closeAllActiveWriters (keepPool) {
@@ -1696,8 +1454,4 @@ function isObject (obj) {
 function emitWarning (err) {
   safetyCatch(err)
   this.emit('warning', err)
-}
-
-async function closeAll (list) {
-  for (const core of list) await core.close()
 }

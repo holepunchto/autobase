@@ -13,7 +13,7 @@ async function runTests () {
   await import('./core.js')
   await import('./dags.js')
   await import('./encryption.js')
-  // await import('./fast-forward.js')
+  await import('./fast-forward.js')
   await import('./linearizer.js')
   await import('./messages.js')
   await import('./node-buffer.js')

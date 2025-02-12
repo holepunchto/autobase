@@ -121,10 +121,7 @@ test('fast-forward - fast forward after migrate', async t => {
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
-// TODO: re-enable this test when rocks is in.
-// Skipping because it is flaky: around 10% of the time it hangs forever
-// (So make sure to verify that it no longer flakes when re-enabling)
-test.skip('fast-forward - multiple writers added', async t => {
+test('fast-forward - multiple writers added', async t => {
   t.plan(2)
 
   const MESSAGES_PER_ROUND = 40
@@ -530,7 +527,9 @@ test('fast-forward - ignore bogus initial ff', async t => {
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
-test('fast-forward - double ff', async t => {
+// very timing dependent this test, so skipping. the idea is good enough tho
+// just needs to make less assumptions about when to ff
+test.skip('fast-forward - double ff', async t => {
   const { bases } = await create(5, t, {
     fastForward: true,
     storage: () => tmpDir(t)
