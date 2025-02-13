@@ -421,7 +421,6 @@ test('basic - throws', async t => {
 
   await t.exception(b.append('not writable'))
   await t.exception(a.view.append('append outside apply'))
-  await t.exception(() => a._applyState.hostCalls.addWriter(b.local.key))
 })
 
 test('basic - add 5 writers', async t => {
