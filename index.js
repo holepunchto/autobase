@@ -779,17 +779,14 @@ module.exports = class Autobase extends ReadyResource {
 
   _updateLinearizer (indexers, heads) {
     // only current active indexers are reset to true below
-    const wasActiveIndexer = this._isActiveIndexer()
-
     for (const w of this.activeWriters) w.isActiveIndexer = false
     if (this.localWriter) this.localWriter.isActiveIndexer = false
 
     for (const writer of indexers) writer.isActiveIndexer = true
 
-    if (this._isActiveIndexer() && !wasActiveIndexer) {
+    if (this._isActiveIndexer() && !this.isIndexer) {
       this._setLocalIndexer()
-    } else if (!this._isActiveIndexer() && wasActiveIndexer) {
-      this._unsetLocalIndexer()
+    } else if (!this._isActiveIndexer() && this.isIndexer) {
       this._clearLocalIndexer()
     }
 
@@ -1050,25 +1047,20 @@ module.exports = class Autobase extends ReadyResource {
 
   _setLocalIndexer () {
     assert(this.localWriter !== null)
-    if (this.isIndexer) return
 
     this.isIndexer = true
     this.emit('is-indexer')
-  }
-
-  _unsetLocalIndexer () {
-    assert(this.localWriter !== null)
-    if (!this.isIndexer) return
-
-    this.isIndexer = false
-    this.emit('is-non-indexer')
   }
 
   _clearLocalIndexer () {
     assert(this.localWriter !== null)
 
     if (this._ackTimer) this._ackTimer.stop()
+
+    this.isIndexer = false
     this._ackTimer = null
+
+    this.emit('is-non-indexer')
   }
 
   _addLocalHeads () {
@@ -1394,12 +1386,6 @@ module.exports = class Autobase extends ReadyResource {
       this._ensureWakeup(writer)
     }
 
-    // If we are getting added as indexer, already start adding checkpoints while we get confirmed...
-    if (writer === this.localWriter) {
-      if (isIndexer) this._setLocalIndexer()
-      else this._unsetLocalIndexer() // unset if demoted
-    }
-
     // fetch any nodes needed for dependents
     this._queueBump()
   }
@@ -1418,10 +1404,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     await this._applyState.system.remove(key)
-
-    if (b4a.equals(key, this.local.key)) {
-      if (this.isIndexer) this._unsetLocalIndexer()
-    }
 
     const w = this.activeWriters.get(key)
     if (w) w.isRemoved = true

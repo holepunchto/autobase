@@ -1679,12 +1679,10 @@ test('basic - readd removed indexer', async t => {
 
   await a.append({ remove: b4a.toString(b.local.key, 'hex') })
 
-  await replicateAndSync([a, b])
+  await confirm([a, b])
 
   t.absent(added)
   t.is(b.isIndexer, false)
-
-  await confirm([a, b])
 
   t.is(b.writable, false)
   await t.exception(b.append('fail'), /Not writable/)
