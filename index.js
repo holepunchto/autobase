@@ -1388,7 +1388,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // triggered from apply
-  async _removeWriter (key) { // just compat for old version
+  _removeWriter (key) { // just compat for old version
     const w = this.activeWriters.get(key)
     if (w) w.isRemoved = true
 
