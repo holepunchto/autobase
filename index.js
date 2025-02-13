@@ -1395,6 +1395,11 @@ module.exports = class Autobase extends ReadyResource {
     this._queueBump()
   }
 
+  removeable (key, sys = this.system) {
+    if (sys.indexers.length !== 1) return true
+    return !b4a.equals(sys.indexers[0].key, key)
+  }
+
   _updateAckThreshold () {
     if (this._ackThreshold === 0) return
     if (this._ackTimer) this._ackTimer.bau()
