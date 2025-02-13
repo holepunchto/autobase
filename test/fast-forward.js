@@ -26,7 +26,7 @@ test('fast-forward - simple', async t => {
 
   const [a, b] = bases
 
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 1000; i++) {
     await a.append('a' + i)
   }
 
