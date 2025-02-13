@@ -98,6 +98,7 @@ module.exports = class Autobase extends ReadyResource {
     this._draining = false
     this._advancing = null
     this._interrupting = false
+    this._caughtup = false
 
     this.paused = false
 
@@ -197,7 +198,7 @@ module.exports = class Autobase extends ReadyResource {
 
   // deprecated, use .core.key
   getSystemKey () {
-    return this.system.core.key
+    return this.core.key
   }
 
   // deprecated
@@ -345,6 +346,16 @@ module.exports = class Autobase extends ReadyResource {
     await this._makeLinearizerFromViewState()
   }
 
+  async _catchupApplyState () {
+    if (await this._applyState.shouldMigrate()) {
+      await this._migrate()
+    } else {
+      await this._applyState.catchup(this.linearizer)
+    }
+
+    this._caughtup = true
+  }
+
   async _open () {
     this._preopen = this._runPreOpen()
     await this._preopen
@@ -352,20 +363,11 @@ module.exports = class Autobase extends ReadyResource {
     this._applyState = new ApplyState(this)
     await this._applyState.ready()
 
-    if (await this._applyState.shouldMigrate()) {
-      await this._migrate()
-    } else {
-      await this._openLinearizer()
-      await this._applyState.catchup(this.linearizer)
+    this.system = this._applyState.system
 
-      this.system = this._applyState.system
-    }
-
+    await this._openLinearizer()
+    await this.core.ready()
     await this._wakeup.ready()
-
-    // queue a full bump that handles wakeup etc (not legal to wait for that here)
-    this._queueBump()
-    this._updateBootstrapWriters()
 
     if (this.core.length - this._applyState.indexedLength > this._ackTickThreshold) {
       this._ackTick = this._ackTickThreshold
@@ -374,9 +376,14 @@ module.exports = class Autobase extends ReadyResource {
       this._startAckTimer()
     }
 
+    this._updateBootstrapWriters()
+
     this.recouple()
     this.requestWakeup()
     this._queueFastForward()
+
+    // queue a full bump that handles wakeup etc (not legal to wait for that here)
+    this._queueBump()
   }
 
   async _closeLocalCores () {
@@ -920,8 +927,12 @@ module.exports = class Autobase extends ReadyResource {
       await this._applyState.catchup(this.linearizer)
     }
 
+    this._caughtup = true
+
     this._rebooted()
     this.emit('fast-forward', to, from)
+
+    this.requestWakeup()
   }
 
   // TODO: not atomic in regards to the ff, fix that
@@ -1012,6 +1023,9 @@ module.exports = class Autobase extends ReadyResource {
     await this._applyState.catchup(this.linearizer)
 
     // end soft shutdown
+
+    this.requestWakeup()
+    this._queueFastForward()
 
     this._rebooted()
   }
@@ -1121,14 +1135,19 @@ module.exports = class Autobase extends ReadyResource {
     const writable = this.writable
 
     while (!this._interrupting && !this.paused) {
-      if (this.opened && this.fastForwardTo !== null) {
+      if (this.fastForwardTo !== null) {
         await this._applyFastForward()
-        this.requestWakeup()
         continue // revaluate conditions...
       }
 
-      const remoteAdded = this.opened ? await this._addRemoteHeads() : null
-      const localNodes = this.opened && this._appending !== null ? this._addLocalHeads() : null
+      // we defer this to post ready so its not blocking reading the views
+      if (this._caughtup === false) {
+        await this._catchupApplyState()
+        continue
+      }
+
+      const remoteAdded = await this._addRemoteHeads()
+      const localNodes = this._appending !== null ? this._addLocalHeads() : null
 
       // if (this._maybeStaticFastForward === true && this.fastForwardEnabled === true) await this._checkStaticFastForward()
       if (this._interrupting) return
