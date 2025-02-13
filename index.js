@@ -905,7 +905,6 @@ module.exports = class Autobase extends ReadyResource {
     this.fastForwardTo = null
     this._queueFastForward()
 
-    this.wasActiveIndexer = this._isActiveIndexer()
     await this._clearWriters()
 
     this._applyState = new ApplyState(this)
@@ -1158,8 +1157,6 @@ module.exports = class Autobase extends ReadyResource {
         if (remoteAdded >= REMOTE_ADD_BATCH) continue
         break
       }
-
-      this.wasActiveIndexer = this._isActiveIndexer()
 
       await this._gcWriters()
       await this._migrate()
