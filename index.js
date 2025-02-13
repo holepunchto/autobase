@@ -523,13 +523,20 @@ module.exports = class Autobase extends ReadyResource {
     if (this.opened === false) await this.ready()
     if (this.localWriter === null || this._acking || this._interrupting || this._appending !== null) return
 
+    if (this._applyState === null) {
+      try {
+        await this._bump()
+      } catch {}
+      if (this._applyState === null || this._interrupting) return
+    }
+
     const applyState = this._applyState
     if (applyState.opened === false) await applyState.ready()
 
     const isPendingIndexer = applyState.isLocalPendingIndexer()
 
     // if no one is waiting for our index manifest, wait for FF before pushing an ack
-    if (!isPendingIndexer && this.isFastForwarding()) return
+    if ((!isPendingIndexer && this.isFastForwarding()) || this._interrupting) return
 
     const isIndexer = applyState.isLocalIndexer() || isPendingIndexer
     if (!isIndexer) return
@@ -542,17 +549,21 @@ module.exports = class Autobase extends ReadyResource {
       if (!this._interrupting) throw err
     }
 
-    if (this._interrupting) return
-    if (!this.localWriter || this.localWriter.closed) return
+    if (this._interrupting || !this.localWriter || this.localWriter.closed) {
+      this._acking = false
+      return
+    }
 
     // avoid lumping acks together due to the bump wait here
     if (this._ackTimer && bg) await this._ackTimer.asapStandalone()
-
-    if (this._interrupting) return
+    if (this._interrupting) {
+      this._acking = false
+      return
+    }
 
     const alwaysWrite = isPendingIndexer || this._applyState.shouldWrite()
 
-    if (!this._interrupting && (alwaysWrite || this.linearizer.shouldAck(this.localWriter, false))) {
+    if (alwaysWrite || this.linearizer.shouldAck(this.localWriter, false)) {
       try {
         if (this.localWriter && !this.localWriter.closed) await this.append(null)
       } catch (err) {
