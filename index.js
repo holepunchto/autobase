@@ -1395,11 +1395,7 @@ module.exports = class Autobase extends ReadyResource {
       this._ensureWakeup(writer)
     }
 
-    // If we are getting added as indexer, already start adding checkpoints while we get confirmed...
-    if (writer === this.localWriter) {
-      if (isIndexer) this._setLocalIndexer()
-      else this._unsetLocalIndexer() // unset if demoted
-    }
+    if (writer === this.localWriter && !isIndexer) this._unsetLocalIndexer() // unset if demoted
 
     // fetch any nodes needed for dependents
     this._queueBump()
