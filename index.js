@@ -388,7 +388,6 @@ module.exports = class Autobase extends ReadyResource {
 
   async _closeLocalCores () {
     const closing = []
-    if (this.system) closing.push(this.system.close())
     if (this._primaryBootstrap) closing.push(this._primaryBootstrap.close())
     if (this.localWriter) closing.push(this._unsetLocalWriter())
     closing.push(this._closeAllActiveWriters())
