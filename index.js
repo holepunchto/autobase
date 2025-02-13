@@ -686,13 +686,6 @@ module.exports = class Autobase extends ReadyResource {
       if (w !== null) {
         if (isAdded && w.core.writable && this._needsLocalWriter()) this._setLocalWriter(w)
         if (w.isRemoved && isAdded) w.isRemoved = false
-
-        if (system) {
-          const info = await system.get(key)
-          const length = info ? info.length : 0
-          if (w.length !== length) w.reset(length)
-        }
-
         w.seen(seen)
         return w
       }
