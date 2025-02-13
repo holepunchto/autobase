@@ -63,7 +63,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this.local = null
     this.localWriter = null
-    this.isIndexer = false
 
     this.activeWriters = new ActiveWriters()
     this.corePool = new CorePool()
@@ -211,6 +210,10 @@ module.exports = class Autobase extends ReadyResource {
     return this.localWriter ? this.localWriter.isActiveIndexer : false
   }
 
+  get isIndexer () {
+    return this._isActiveIndexer()
+  }
+
   replicate (init, opts) {
     return this.store.replicate(init, opts)
   }
@@ -338,12 +341,12 @@ module.exports = class Autobase extends ReadyResource {
 
   async _openLinearizer () {
     if (this._applyState.system.bootstrapping) {
-      await this._makeLinearizer(null)
+      await this._makeLinearizer(null, false)
       this._bootstrapLinearizer()
       return
     }
 
-    await this._makeLinearizerFromViewState()
+    await this._makeLinearizerFromViewState(false)
   }
 
   async _catchupApplyState () {
@@ -778,10 +781,7 @@ module.exports = class Autobase extends ReadyResource {
     return w
   }
 
-  _updateLinearizer (indexers, heads) {
-    // only current active indexers are reset to true below
-    const wasActiveIndexer = this._isActiveIndexer()
-
+  _updateLinearizer (indexers, heads, wasActiveIndexer) {
     for (const w of this.activeWriters) w.isActiveIndexer = false
     if (this.localWriter) this.localWriter.isActiveIndexer = false
 
@@ -790,7 +790,6 @@ module.exports = class Autobase extends ReadyResource {
     if (this._isActiveIndexer() && !wasActiveIndexer) {
       this._setLocalIndexer()
     } else if (!this._isActiveIndexer() && wasActiveIndexer) {
-      this._unsetLocalIndexer()
       this._clearLocalIndexer()
     }
 
@@ -812,10 +811,10 @@ module.exports = class Autobase extends ReadyResource {
     await bootstrap.ready()
     this._ensureWakeup(bootstrap)
 
-    this._updateLinearizer([bootstrap], [])
+    this._updateLinearizer([bootstrap], [], false)
   }
 
-  async _makeLinearizer (sys) {
+  async _makeLinearizer (sys, wasActiveIndexer) {
     if (sys === null) {
       return this._bootstrapLinearizer()
     }
@@ -840,7 +839,7 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
-    this._updateLinearizer(indexers, sys.heads)
+    this._updateLinearizer(indexers, sys.heads, wasActiveIndexer)
 
     for (const { key, length } of sys.heads) {
       await this._getWriterByKey(key, length, 0, false, false, sys)
@@ -853,9 +852,9 @@ module.exports = class Autobase extends ReadyResource {
     this._checkWriters = []
   }
 
-  async _makeLinearizerFromViewState () {
+  async _makeLinearizerFromViewState (wasActiveIndexer) {
     const sys = await this._applyState.getIndexedSystem()
-    await this._makeLinearizer(sys)
+    await this._makeLinearizer(sys, wasActiveIndexer)
     await sys.close()
   }
 
@@ -908,15 +907,16 @@ module.exports = class Autobase extends ReadyResource {
     this.fastForwardTo = null
     this._queueFastForward()
 
+    const wasActiveIndexer = this._isActiveIndexer()
     await this._clearWriters()
 
     this._applyState = new ApplyState(this)
     await this._applyState.ready()
 
     if (await this._applyState.shouldMigrate()) {
-      await this._migrate()
+      await this._migrate(wasActiveIndexer)
     } else {
-      await this._makeLinearizerFromViewState()
+      await this._makeLinearizerFromViewState(false)
       await this._applyState.catchup(this.linearizer)
     }
 
@@ -1005,8 +1005,10 @@ module.exports = class Autobase extends ReadyResource {
 
     // start soft shutdown
 
+    const wasActiveIndexer = this._isActiveIndexer()
+
     await this._clearWriters()
-    await this._makeLinearizerFromViewState()
+    await this._makeLinearizerFromViewState(wasActiveIndexer)
 
     await this._applyState.finalize(ref.core.key)
 
@@ -1051,24 +1053,15 @@ module.exports = class Autobase extends ReadyResource {
 
   _setLocalIndexer () {
     assert(this.localWriter !== null)
-    if (this.isIndexer) return
-
-    this.isIndexer = true
     this.emit('is-indexer')
-  }
-
-  _unsetLocalIndexer () {
-    assert(this.localWriter !== null)
-    if (!this.isIndexer) return
-
-    this.isIndexer = false
-    this.emit('is-non-indexer')
   }
 
   _clearLocalIndexer () {
     assert(this.localWriter !== null)
 
     if (this._ackTimer) this._ackTimer.stop()
+    this.emit('is-non-indexer')
+
     this._ackTimer = null
   }
 
@@ -1166,8 +1159,10 @@ module.exports = class Autobase extends ReadyResource {
         break
       }
 
+      const wasActiveIndexer = this._isActiveIndexer()
+
       await this._gcWriters()
-      await this._migrate()
+      await this._migrate(wasActiveIndexer)
     }
 
     // emit state changes post drain
@@ -1395,8 +1390,6 @@ module.exports = class Autobase extends ReadyResource {
       this._ensureWakeup(writer)
     }
 
-    if (writer === this.localWriter && !isIndexer) this._unsetLocalIndexer() // unset if demoted
-
     // fetch any nodes needed for dependents
     this._queueBump()
   }
@@ -1415,10 +1408,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     await this._applyState.system.remove(key)
-
-    if (b4a.equals(key, this.local.key)) {
-      if (this.isIndexer) this._unsetLocalIndexer()
-    }
 
     const w = this.activeWriters.get(key)
     if (w) w.isRemoved = true
