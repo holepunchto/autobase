@@ -300,7 +300,7 @@ module.exports = class Autobase extends ReadyResource {
       : { key: null, indexedLength: 0, indexersUpdated: false, fastForwarding: false, heads: null }
   }
 
-  interrupt (reason) {
+  _interrupt (reason) {
     assert(this._applyState.applying, 'Interrupt is only allowed in apply')
     this._interrupting = true
     if (reason) this.interrupted = reason
@@ -1371,13 +1371,10 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // triggered from apply
-  async addWriter (key, { indexer = true, isIndexer = indexer } = {}) { // just compat for old version
+  async _addWriter (key, sys) { // just compat for old version
     assert(this._applyState.applying, 'System changes are only allowed in apply')
 
-    const sys = this._applyState.system
-    await sys.add(key, { isIndexer })
-
-    const writer = (await this._getWriterByKey(key, -1, 0, false, true, null)) || this._makeWriter(key, 0, true, false)
+    const writer = (await this._getWriterByKey(key, -1, 0, false, true, sys)) || this._makeWriter(key, 0, true, false)
     await writer.ready()
 
     if (!this.activeWriters.has(key)) {
@@ -1390,25 +1387,16 @@ module.exports = class Autobase extends ReadyResource {
     this._queueBump()
   }
 
-  removeable (key, sys = this.system) {
-    if (sys.indexers.length !== 1) return true
-    return !b4a.equals(sys.indexers[0].key, key)
-  }
-
   // triggered from apply
-  async removeWriter (key) { // just compat for old version
-    assert(this._applyState.applying, 'System changes are only allowed in apply')
-
-    if (!this.removeable(key, this._applyState.system)) {
-      throw new Error('Not allowed to remove the last indexer')
-    }
-
-    await this._applyState.system.remove(key)
-
+  _removeWriter (key) { // just compat for old version
     const w = this.activeWriters.get(key)
     if (w) w.isRemoved = true
 
     this._queueBump()
+  }
+
+  removeable (key) {
+    return this._applyState ? this._applyState.removeable(key) : false
   }
 
   _updateAckThreshold () {
