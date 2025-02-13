@@ -7,11 +7,10 @@
 ## Usage
 
 ```js
-const RAM = require('random-access-memory')
 const Corestore = require('corestore')
 const Autobase = require('autobase')
 
-const store = new Corestore(RAM.reusable())
+const store = new Corestore('./some-dir')
 const local = new Autobase(store, remote.key, { apply, open })
 await local.ready()
 
@@ -43,10 +42,10 @@ function open (store) {
 }
 
 // use apply to handle to updates
-async function apply (nodes, view, base) {
+async function apply (nodes, view, hostcalls) {
   for (const { value } of nodes) {
     if (value.addWriter) {
-      await base.addWriter(value.addWriter, { isIndexer: true })
+      await hostcalls.addWriter(value.addWriter, { isIndexer: true })
       continue
     }
 
@@ -85,7 +84,7 @@ async function apply (nodes, view, base) {
 }
 ```
 
-*IMPORTANT*: Autobase messages may be reordered as new data becomes available. Updates will be undone and reapplied internally, but this can _only_ work if the view is built with an instance of an `Autocore`. It is important that any data structures touched by the `apply` function have been derived from the `store` object passed to the `open` handler. If any external data structures are used, these updates will not be correctly undone.
+*IMPORTANT*: Autobase messages may be reordered as new data becomes available. Updates will be undone and reapplied internally. It is important that any data structures touched by the `apply` function have been derived from the `store` object passed to the `open` handler and that its fully deterministic. If any external data structures are used, these updates will not be correctly undone.
 
 ## API
 
@@ -95,14 +94,14 @@ async function apply (nodes, view, base) {
 
 Instantiate an Autobase.
 
-If loading an existing Autobase then set `bootstrap` to `base.key`, otherwise pass `bootstrap` as null.
+If loading an existing Autobase then set `bootstrap` to `base.key`, otherwise pass `bootstrap` as null or omit.
 
 `opts` takes the following options:
 
 ```js
 {
   open: store => { ... }, // create the view
-  apply: (nodes, view, base) => { ... }, // handle nodes
+  apply: (nodes, view, hostcalls) => { ... }, // handle nodes
   close: view => { ... }, // close the view
   valueEncoding, // encoding
   ackInterval: 1000 // enable auto acking with the interval
@@ -123,15 +122,9 @@ The discovery key associated with the autobase.
 
 Append a new entry to the autobase.
 
-#### `await base.update({ wait: false })`
+#### `await base.update()`
 
 Fetch all available data and update the linearizer.
-
-Setting `wait` option will wait for latest writer blocks to be fetched.
-
-#### `const checkpoint = await base.checkpoint()`
-
-Fetch a static checkpoint of the autobase state.
 
 #### `const core = Autobase.getLocalCore(store, handlers, encryptionKey)`
 
@@ -147,34 +140,18 @@ Each autobase creates a `AutoStore` which is used to create views. The store is 
 
 #### `const core = await store.get(name || { name, valueEncoding })`
 
-Load a `Autocore` by name (passed as `name`) and return a `AutocoreSession` for it. `name` should be passed as a string.
+Load a `Hypercore` by name (passed as `name`). `name` should be passed as a string.
 
 #### `await store.ready()`
 
 Wait until all cores are ready.
 
-### `AutocoreSession`
+### `AutobaseHostCalls`
 
-#### `const core = await store.get(name || { name, valueEncoding })`
+An instance of this is passed to apply and can be used in apply to invoke the following side effects on the base itself.
 
-Create or load a core and return a session for it. A string may be passed directly or otherwise an object can be passed to define `valueEncoding`
+#### `await host.addWriter(key, { isIndexer = true })`
 
-#### `core.signedLength`
+#### `await host.removeWriter(key)`
 
-The ordering of blocks before this value is guaranteed to be consisted for all writers.
-
-#### `core.length`
-
-The number of blocks currently in the core
-
-#### `await core.update()`
-
-Ensure the core is at the latest state.
-
-#### `await core.get(seq)`
-
-Get an entry from a core.
-
-#### `await core.append(buffers)`
-
-Append data to the core
+#### `host.interrupt()`
