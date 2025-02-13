@@ -396,7 +396,7 @@ test('fast-forward - initial fast forward', async t => {
 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
 
-  const c = createBase(store.session(), a.bootstrap, t, { fastForward })
+  const c = createBase(store.session(), a.key, t, { fastForward })
   await c.ready()
 
   await replicateAndSync([a, b, c])
@@ -461,7 +461,7 @@ test('fast-forward - initial ff after multiple migrate', async t => {
 
   const [store] = await createStores(1, t, { offset: 5, storage: () => tmpDir(t) })
 
-  const latecomer = createBase(store.session(), a.bootstrap, t, { fastForward })
+  const latecomer = createBase(store.session(), a.key, t, { fastForward })
   await latecomer.ready()
 
   await replicateAndSync([...bases, latecomer])
@@ -509,7 +509,7 @@ test('fast-forward - ignore bogus initial ff', async t => {
 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
 
-  const latecomer = createBase(store.session(), a.bootstrap, t, { fastForward })
+  const latecomer = createBase(store.session(), a.key, t, { fastForward })
   await latecomer.ready()
 
   await replicateAndSync([...bases, latecomer])
@@ -582,7 +582,7 @@ test.skip('fast-forward - double ff', async t => {
 
   const [store] = await createStores(1, t, { offset: 5, storage: () => tmpDir(t) })
 
-  const latecomer = createBase(store.session(), a.bootstrap, t, { fastForward: true })
+  const latecomer = createBase(store.session(), a.key, t, { fastForward: true })
   await latecomer.ready()
 
   const p = replicateAndSync([...bases, latecomer])
@@ -660,7 +660,7 @@ test('fast-forward - initial fast forward with in between writer', async t => {
 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
 
-  const c = createBase(store.session(), a.bootstrap, t, { fastForward })
+  const c = createBase(store.session(), a.key, t, { fastForward })
   await c.ready()
 
   t.teardown(replicate([a, c]))

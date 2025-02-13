@@ -516,7 +516,7 @@ test('apply - uncaught exception', async t => {
   // should throw uncaught exception
   await t.exception(error, /Synthetic/)
 
-  const a2 = new Autobase(store.session(), a.bootstrap, {
+  const a2 = new Autobase(store.session(), a.key, {
     apply: () => {},
     valueEncoding: 'json'
   })

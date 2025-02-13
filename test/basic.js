@@ -157,7 +157,7 @@ test('basic - local key pair', async t => {
   const base = createBase(store, null, t, { keyPair })
   await base.ready()
 
-  const key = base.bootstrap
+  const key = base.key
 
   const block = { message: 'hello, world!' }
   await base.append(block)
@@ -232,13 +232,13 @@ test('basic - view/writer userdata is set', async t => {
   async function verifyUserData (base) {
     const systemData = await Autobase.getUserData(base.system.core)
 
-    t.alike(systemData.referrer, base.bootstrap)
+    t.alike(systemData.referrer, base.key)
     t.alike(systemData.view, '_system')
 
     t.is(base.activeWriters.size, 2)
     for (const writer of base.activeWriters) {
       const writerData = await Autobase.getUserData(writer.core)
-      t.alike(writerData.referrer, base.bootstrap)
+      t.alike(writerData.referrer, base.key)
     }
   }
 })
@@ -535,7 +535,7 @@ test('basic - restarting sets bootstrap correctly', async t => {
     const base = new Autobase(ns, null, { ackInterval: 0, ackThreshold: 0 })
     await base.ready()
 
-    bootstrapKey = base.bootstrap
+    bootstrapKey = base.key
     localKey = base.local.key
 
     await base.close()
@@ -546,8 +546,8 @@ test('basic - restarting sets bootstrap correctly', async t => {
     const base = new Autobase(ns, bootstrapKey, { ackInterval: 0, ackThreshold: 0 })
     await base.ready()
 
-    t.alike(base.bootstrap, bootstrapKey)
-    t.alike(base.local.key, base.bootstrap)
+    t.alike(base.key, bootstrapKey)
+    t.alike(base.local.key, base.key)
     t.alike(base.local.key, localKey)
 
     await base.close()

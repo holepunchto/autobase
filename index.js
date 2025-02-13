@@ -46,7 +46,12 @@ module.exports = class Autobase extends ReadyResource {
 
     super()
 
-    this.bootstrap = bootstrap ? toKey(bootstrap) : null
+    const key = bootstrap ? toKey(bootstrap) : null
+
+    this.id = null
+    this.key = key
+    this.discoveryKey = null
+
     this.keyPair = handlers.keyPair || null
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
@@ -59,8 +64,6 @@ module.exports = class Autobase extends ReadyResource {
     this.encryptionKey = handlers.encryptionKey || null
     this.encryption = null
 
-    this._primaryBootstrap = null
-
     this.local = null
     this.localWriter = null
     this.isIndexer = false
@@ -70,6 +73,8 @@ module.exports = class Autobase extends ReadyResource {
     this.linearizer = null
     this.updating = false
     this.wakeupExtension = null
+
+    this._primaryBootstrap = null
 
     this.fastForwardEnabled = handlers.fastForward !== false
     this.fastForwarding = null
@@ -159,6 +164,11 @@ module.exports = class Autobase extends ReadyResource {
     return indent + 'Autobase { ... }'
   }
 
+  // just compat, use .key
+  get bootstrap () {
+    return this.key
+  }
+
   // TODO: compat, will be removed
   get bootstraps () {
     return [this.bootstrap]
@@ -170,14 +180,6 @@ module.exports = class Autobase extends ReadyResource {
 
   get ackable () {
     return this.localWriter !== null // prop should add .isIndexer but keeping it simple for now
-  }
-
-  get key () {
-    return this._primaryBootstrap === null ? this.local.key : this._primaryBootstrap.key
-  }
-
-  get discoveryKey () {
-    return this._primaryBootstrap === null ? this.local.discoveryKey : this._primaryBootstrap.discoveryKey
   }
 
   get signedLength () {
@@ -211,8 +213,8 @@ module.exports = class Autobase extends ReadyResource {
     return this.localWriter ? this.localWriter.isActiveIndexer : false
   }
 
-  replicate (init, opts) {
-    return this.store.replicate(init, opts)
+  replicate (isInitiator, opts) {
+    return this.store.replicate(isInitiator, opts)
   }
 
   heads () {
@@ -240,16 +242,18 @@ module.exports = class Autobase extends ReadyResource {
 
     await this.store.ready()
 
-    const result = await boot(this.store, this.bootstrap, {
+    const result = await boot(this.store, this.key, {
       encryptionKey: this.encryptionKey,
       encrypt: this.encrypt,
       keyPair: this.keyPair
     })
 
-    this.bootstrap = result.key
+    this._primaryBootstrap = result.bootstrap
     this.local = result.local
 
-    this._primaryBootstrap = result.bootstrap
+    this.key = result.bootstrap.key
+    this.discoveryKey = result.bootstrap.discoveryKey
+    this.id = result.bootstrap.id
 
     this.wakeupExtension = new WakeupExtension(this, this._primaryBootstrap, true)
     this.encryptionKey = result.encryptionKey
@@ -801,7 +805,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _bootstrapLinearizer () {
-    const bootstrap = this._makeWriter(this.bootstrap, 0, true, false)
+    const bootstrap = this._makeWriter(this.key, 0, true, false)
 
     this.activeWriters.add(bootstrap)
     this._checkWriters.push(bootstrap)
