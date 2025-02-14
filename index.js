@@ -987,6 +987,43 @@ module.exports = class Autobase extends ReadyResource {
     return ref
   }
 
+  async _forkView (indexerManifests, name, length, source) {
+    const ref = this._viewStore.byName.get(name)
+
+    const core = ref.batch || ref.core
+    await core.ready()
+
+    const prologue = length === 0
+      ? null
+      : { length: source.length, hash: await source.treeHash() }
+
+    const next = this._viewStore.getViewCore(indexerManifests, name, prologue)
+    await next.ready()
+
+    if (length > 0) {
+      await next.core.copyPrologue(source.state)
+    }
+
+    // remake the batch, reset from our prologue in case it replicated inbetween
+    // TODO: we should really have an HC function for this
+    const batch = next.session({ name: 'batch', overwrite: true, checkout: length })
+    await batch.ready()
+
+    // get the blocks from prev core because we need them for catchup
+    if (core.length > batch.length) {
+      for (let i = batch.length; i < core.length; i++) {
+        await batch.append(await core.get(i))
+      }
+    }
+
+    await ref.batch.state.moveTo(batch, core.length)
+    await batch.close()
+
+    ref.migrated(this, next)
+
+    return ref
+  }
+
   async _migrate () {
     const length = this._applyState.indexedLength
     const system = this._applyState.system
@@ -1007,6 +1044,51 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._clearWriters()
     await this._makeLinearizerFromViewState()
+
+    await this._applyState.finalize(ref.core.key)
+
+    this._applyState = new ApplyState(this)
+
+    await this._applyState.ready()
+    await this._applyState.catchup(this.linearizer)
+
+    // end soft shutdown
+
+    this.requestWakeup()
+    this._queueFastForward()
+
+    this._rebooted()
+  }
+
+  async _fork ({ indexers, length }) {
+    const system = this._applyState.system
+
+    const indexerKeys = indexers.map(key => ({ key }))
+    const indexerManifests = await this._viewStore.getIndexerManifests(indexerKeys)
+    const views = await this._applyState._generateForkViews(indexerManifests, length)
+
+    const batch = await system.core.session({ name: 'fork', checkout: length })
+    await batch.ready()
+
+    const forked = new SystemView(batch)
+    await forked.ready()
+
+    await forked.fork(indexers, views)
+    const info = await forked.getIndexedInfo(length)
+
+    for (let i = 0; i < this._applyState.views.length; i++) {
+      const name = this._applyState.views[i].name
+      const indexedLength = info.views[i].length
+
+      await this._migrateView(indexerManifests, name, indexedLength)
+    }
+
+    const ref = await this._forkView(indexerManifests, '_system', length, forked.core)
+
+    // start soft shutdown
+
+    await this._clearWriters()
+    await this._makeLinearizer(forked)
 
     await this._applyState.finalize(ref.core.key)
 
@@ -1162,7 +1244,9 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       await this._gcWriters()
-      await this._migrate()
+
+      if (updated.fork) await this._fork(updated.fork)
+      else await this._migrate()
     }
 
     // emit state changes post drain
