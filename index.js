@@ -187,7 +187,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   get indexedLength () {
-    return this.core.indexedLength
+    return this.core.signedLength
   }
 
   get length () {
