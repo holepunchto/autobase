@@ -1,7 +1,3 @@
-corestore parent gots to go, thats internal and breaks stuff
-
-resumeSession thing in moveto doesnt look right, prop needs a clone thing
-
 corruption helper:
 
 // const roots = await core.state.tree.getRoots(indexedLength)
@@ -22,4 +18,4 @@ dbl check extension, should prop move off cores to a protomux for simplicity btw
 
 dbl ack stuff again with chris, especially the should write stuff
 
-prologue connection test (had regressed)
+every writer should signal the system as a checkpoint (on local append), why not
