@@ -56,6 +56,7 @@ module.exports = class Autobase extends ReadyResource {
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
     this.globalCache = store.globalCache || null
+    this.migrated = false
 
     this.system = null
 
@@ -285,7 +286,10 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     // just compat
-    if (boot.heads) this.hintWakeup(boot.heads)
+    if (boot.heads) {
+      this.migrated = true
+      this.hintWakeup(boot.heads)
+    }
 
     return {
       key: boot.key,
