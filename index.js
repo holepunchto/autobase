@@ -83,6 +83,8 @@ module.exports = class Autobase extends ReadyResource {
     this._bootstrapWritersChanged = false
 
     this._checkWriters = []
+    this._optimistic = -1
+    this._appended = 0
     this._appending = null
     this._wakeup = new AutoWakeup(this)
     this._wakeupHints = new Map()
@@ -118,6 +120,7 @@ module.exports = class Autobase extends ReadyResource {
     this._preopen = null
 
     this._hasApply = !!this._handlers.apply
+    this._hasOptimisticApply = !!this._handlers.optimistic
     this._hasOpen = !!this._handlers.open
     this._hasClose = !!this._handlers.close
 
@@ -178,7 +181,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   get ackable () {
-    return this.localWriter !== null // prop should add .isIndexer but keeping it simple for now
+    return this.localWriter !== null && this.localWriter.isActiveIndexer
   }
 
   get signedLength () {
@@ -333,10 +336,16 @@ module.exports = class Autobase extends ReadyResource {
     const writers = this.linearizer.getBootstrapWriters()
 
     // first clear all, but without applying it for churn reasons
-    for (const writer of this._bootstrapWriters) writer.isBootstrap = false
+    for (const writer of this._bootstrapWriters) {
+      writer.isBootstrap = false
+      writer.isCoupled = false
+    }
 
     // all passed are bootstraps
-    for (const writer of writers) writer.setBootstrap(true)
+    for (const writer of writers) {
+      writer.isCoupled = true
+      writer.setBootstrap(true)
+    }
 
     // reset activity on old ones, all should be in sync now
     for (const writer of this._bootstrapWriters) {
@@ -476,7 +485,6 @@ module.exports = class Autobase extends ReadyResource {
       if (!w.flushed()) continue
 
       const unqueued = this._wakeup.unqueue(w.core.key, w.core.length)
-      // this._coupler.remove(w.core)
 
       if (!unqueued || w.isActiveIndexer) continue
       if (this.localWriter === w) continue
@@ -594,12 +602,14 @@ module.exports = class Autobase extends ReadyResource {
     this._acking = false
   }
 
-  async append (value) {
+  async append (value, opts) {
     if (this.opened === false) await this.ready()
     if (this._interrupting) throw new Error('Autobase is closing')
 
+    const optimistic = !!opts && !!opts.optimistic && !!value
+
     // we wanna allow acks so interdexers can flush
-    if (this.localWriter === null || (this.localWriter.isRemoved && value !== null)) {
+    if (!optimistic && (this.localWriter === null || (this.localWriter.isRemoved && value !== null))) {
       throw new Error('Not writable')
     }
 
@@ -611,13 +621,14 @@ module.exports = class Autobase extends ReadyResource {
       this._append(value)
     }
 
-    const appending = this._appending
+    if (optimistic) this._optimistic = this._appending.length - 1
+    const target = this._appended + this._appending.length
 
     // await in case append is in current tick
     if (this._advancing) await this._advancing
 
     // bump until we've flushed the nodes
-    while (this._appending === appending && !this._interrupting) await this._bump()
+    while (this._appended < target && !this._interrupting) await this._bump()
   }
 
   _append (value) {
@@ -680,7 +691,7 @@ module.exports = class Autobase extends ReadyResource {
 
   // no guarantees about writer.isActiveIndexer property here
   async _getWriterByKey (key, len, seen, allowGC, isAdded, system) {
-    assert(this._draining === true || (this.opening && !this.opened))
+    assert(this._draining === true || (this.opening && !this.opened) || this._optimistic > -1)
 
     const release = await this._lock()
 
@@ -710,7 +721,6 @@ module.exports = class Autobase extends ReadyResource {
 
       if (w) {
         w.isRemoved = isRemoved
-        if (w.core.writable && !isRemoved && this._needsLocalWriter()) this._setLocalWriter(w)
       } else {
         w = this._makeWriter(key, len, isActive, isRemoved)
         if (!w) return null
@@ -720,11 +730,19 @@ module.exports = class Autobase extends ReadyResource {
         w.isRemoved = false
       }
 
+      if (w.core.writable && this._needsLocalWriter()) {
+        this._setLocalWriter(w)
+      }
+
       w.seen(seen)
 
       if (alreadyActive) return w
 
       await w.ready()
+
+      if (w.core.writable && this._needsLocalWriter()) {
+        this._setLocalWriter(w)
+      }
 
       if (allowGC && w.flushed()) {
         this._wakeup.unqueue(key, len)
@@ -737,10 +755,6 @@ module.exports = class Autobase extends ReadyResource {
 
       this.activeWriters.add(w)
       this._checkWriters.push(w)
-      if (w.core.writable && this._needsLocalWriter()) this._setLocalWriter(w)
-
-      // will only add non-indexer writers
-      if (this._coupler) this._coupler.add(w.core)
 
       assert(w.opened)
       assert(!w.closed)
@@ -813,7 +827,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async _updateLocalWriter (sys) {
     if (this.localWriter !== null && !this.localWriter.closed) return
-    await this._getWriterByKey(this.local.key, -1, 0, false, false, sys)
+    await this._getWriterByKey(this.local.key, -1, 0, true, false, sys)
   }
 
   async _bootstrapLinearizer () {
@@ -1083,20 +1097,27 @@ module.exports = class Autobase extends ReadyResource {
     // safety, localwriter is still processing, should prop be an assertion
     if (!this.localWriter.idle()) return null
 
-    const nodes = new Array(this._appending.length)
-    for (let i = 0; i < this._appending.length; i++) {
+    const length = this._optimistic === -1
+      ? this._appending.length
+      : this._optimistic || 1
+
+    const nodes = new Array(length)
+    for (let i = 0; i < length; i++) {
       const heads = this.linearizer.getHeads()
       const deps = new Set(this.linearizer.heads)
       const batch = this._appending.length - i
       const value = this._appending[i]
 
-      const node = this.localWriter.append(value, heads, batch, deps, this.maxSupportedVersion)
+      const node = this.localWriter.append(value, heads, batch, deps, this.maxSupportedVersion, this._optimistic === 0)
 
       this.linearizer.addHead(node)
       nodes[i] = node
     }
 
-    this._appending = null
+    this._appended += length
+    this._appending = length === this._appending.length ? null : this._appending.slice(length)
+
+    if (this._optimistic > -1 && this._optimistic < length) this._optimistic = -1
 
     return nodes
   }
@@ -1197,8 +1218,8 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _wakeupWriter (key) {
-    this._ensureWakeup(await this._getWriterByKey(key, -1, 0, true, false, null))
+  async _wakeupWriter (key, length) {
+    this._ensureWakeup(await this._getWriterByKey(key, -1, length, true, false, null))
   }
 
   // ensure wakeup on an existing writer (the writer calls this in addition to above)
@@ -1214,14 +1235,14 @@ module.exports = class Autobase extends ReadyResource {
       this._needsWakeup = false
 
       for (const { key } of this._wakeup) {
-        await this._wakeupWriter(key)
+        await this._wakeupWriter(key, 0)
       }
 
       if (this._needsWakeupHeads === true) {
         this._needsWakeupHeads = false
 
         for (const { key } of await this._applyState.system.heads) {
-          await this._wakeupWriter(key)
+          await this._wakeupWriter(key, 0)
         }
       }
     }
@@ -1230,10 +1251,9 @@ module.exports = class Autobase extends ReadyResource {
       const key = b4a.from(hex, 'hex')
       if (length !== -1) {
         const info = await this._applyState.system.get(key)
-        if (info && length < info.length) continue // stale hint
+        if (info && length <= info.length) continue // stale hint
       }
-
-      await this._wakeupWriter(key)
+      await this._wakeupWriter(key, length === -1 ? 0 : length)
     }
 
     this._wakeupHints.clear()
@@ -1268,8 +1288,8 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this._interrupting) return
 
-    if (this.localWriter) {
-      if (this.localWriter.closed) await this._updateLocalWriter(this._applyState.system)
+    if (this.localWriter || this._optimistic > -1) {
+      if (!this.localWriter || this.localWriter.closed) await this._updateLocalWriter(this._applyState.system)
       if (!this._interrupting && this.localWriter) {
         if (this._applyState.isLocalPendingIndexer()) this.ack().catch(noop)
         else if (this._triggerAckAsap()) this._ackTimer.asap()
