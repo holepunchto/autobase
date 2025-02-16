@@ -336,10 +336,16 @@ module.exports = class Autobase extends ReadyResource {
     const writers = this.linearizer.getBootstrapWriters()
 
     // first clear all, but without applying it for churn reasons
-    for (const writer of this._bootstrapWriters) writer.isBootstrap = false
+    for (const writer of this._bootstrapWriters) {
+      writer.isBootstrap = false
+      writer.isCoupled = false
+    }
 
     // all passed are bootstraps
-    for (const writer of writers) writer.setBootstrap(true)
+    for (const writer of writers) {
+      writer.isCoupled = true
+      writer.setBootstrap(true)
+    }
 
     // reset activity on old ones, all should be in sync now
     for (const writer of this._bootstrapWriters) {
@@ -479,7 +485,6 @@ module.exports = class Autobase extends ReadyResource {
       if (!w.flushed()) continue
 
       const unqueued = this._wakeup.unqueue(w.core.key, w.core.length)
-      // this._coupler.remove(w.core)
 
       if (!unqueued || w.isActiveIndexer) continue
       if (this.localWriter === w) continue
@@ -750,9 +755,6 @@ module.exports = class Autobase extends ReadyResource {
 
       this.activeWriters.add(w)
       this._checkWriters.push(w)
-
-      // will only add non-indexer writers
-      if (this._coupler) this._coupler.add(w.core)
 
       assert(w.opened)
       assert(!w.closed)
@@ -1249,9 +1251,8 @@ module.exports = class Autobase extends ReadyResource {
       const key = b4a.from(hex, 'hex')
       if (length !== -1) {
         const info = await this._applyState.system.get(key)
-        if (info && length < info.length) continue // stale hint
+        if (info && length <= info.length) continue // stale hint
       }
-
       await this._wakeupWriter(key)
     }
 
