@@ -686,7 +686,7 @@ module.exports = class Autobase extends ReadyResource {
 
   // no guarantees about writer.isActiveIndexer property here
   async _getWriterByKey (key, len, seen, allowGC, isAdded, system) {
-    assert(this._draining === true || (this.opening && !this.opened))
+    assert(this._draining === true || (this.opening && !this.opened) || this._optimistic > -1)
 
     const release = await this._lock()
 
@@ -819,7 +819,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async _updateLocalWriter (sys) {
     if (this.localWriter !== null && !this.localWriter.closed) return
-    await this._getWriterByKey(this.local.key, -1, 0, false, false, sys)
+    await this._getWriterByKey(this.local.key, -1, 0, true, false, sys)
   }
 
   async _bootstrapLinearizer () {
