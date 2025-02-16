@@ -716,7 +716,6 @@ module.exports = class Autobase extends ReadyResource {
 
       if (w) {
         w.isRemoved = isRemoved
-        if (w.core.writable && !isRemoved && this._needsLocalWriter()) this._setLocalWriter(w)
       } else {
         w = this._makeWriter(key, len, isActive, isRemoved)
         if (!w) return null
@@ -726,11 +725,19 @@ module.exports = class Autobase extends ReadyResource {
         w.isRemoved = false
       }
 
+      if (w.core.writable && this._needsLocalWriter()) {
+        this._setLocalWriter(w)
+      }
+
       w.seen(seen)
 
       if (alreadyActive) return w
 
       await w.ready()
+
+      if (w.core.writable && this._needsLocalWriter()) {
+        this._setLocalWriter(w)
+      }
 
       if (allowGC && w.flushed()) {
         this._wakeup.unqueue(key, len)
@@ -743,7 +750,6 @@ module.exports = class Autobase extends ReadyResource {
 
       this.activeWriters.add(w)
       this._checkWriters.push(w)
-      if (w.core.writable && this._needsLocalWriter()) this._setLocalWriter(w)
 
       // will only add non-indexer writers
       if (this._coupler) this._coupler.add(w.core)
