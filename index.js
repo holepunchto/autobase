@@ -181,7 +181,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   get ackable () {
-    return this.localWriter !== null // prop should add .isIndexer but keeping it simple for now
+    return this.localWriter !== null && this.localWriter.isActiveIndexer
   }
 
   get signedLength () {
