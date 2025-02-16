@@ -690,32 +690,39 @@ module.exports = class Autobase extends ReadyResource {
 
     try {
       let w = this.activeWriters.get(key)
-      if (w !== null) {
-        if (isAdded && w.core.writable && this._needsLocalWriter()) this._setLocalWriter(w)
-        if (w.isRemoved && isAdded) w.isRemoved = false
-        w.seen(seen)
-        return w
-      }
 
+      const alreadyActive = !!w
       const sys = system || this.system
       const writerInfo = await sys.get(key)
 
       if (len === -1) {
-        if (!allowGC && writerInfo === null) return null
+        if (!allowGC && writerInfo === null) {
+          if (w) w.isRemoved = !isAdded
+          return null
+        }
+
         len = writerInfo === null ? 0 : writerInfo.length
       }
 
       const isActive = writerInfo !== null && (isAdded || !writerInfo.isRemoved)
+      const isRemoved = !isActive
 
-      // assumes that seen is passed 0 everywhere except in writer._ensureNodeDependencies
-      const isRemoved = seen === 0
-        ? writerInfo !== null && (!isAdded && writerInfo.isRemoved)
-        : !isActive // a writer might have referenced a removed writer
+      if (w) {
+        w.isRemoved = isRemoved
+        if (w.core.writable && !isRemoved && this._needsLocalWriter()) this._setLocalWriter(w)
+      } else {
+        w = this._makeWriter(key, len, isActive, isRemoved)
+        if (!w) return null
+      }
 
-      w = this._makeWriter(key, len, isActive, isRemoved)
-      if (!w) return null
+      if (isRemoved && sys.bootstrapping && b4a.equals(w.core.key, this.key)) {
+        w.isRemoved = false
+      }
 
       w.seen(seen)
+
+      if (alreadyActive) return w
+
       await w.ready()
 
       if (allowGC && w.flushed()) {
