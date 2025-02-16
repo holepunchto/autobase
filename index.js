@@ -1218,8 +1218,8 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _wakeupWriter (key) {
-    this._ensureWakeup(await this._getWriterByKey(key, -1, 0, true, false, null))
+  async _wakeupWriter (key, length) {
+    this._ensureWakeup(await this._getWriterByKey(key, -1, length, true, false, null))
   }
 
   // ensure wakeup on an existing writer (the writer calls this in addition to above)
@@ -1235,14 +1235,14 @@ module.exports = class Autobase extends ReadyResource {
       this._needsWakeup = false
 
       for (const { key } of this._wakeup) {
-        await this._wakeupWriter(key)
+        await this._wakeupWriter(key, 0)
       }
 
       if (this._needsWakeupHeads === true) {
         this._needsWakeupHeads = false
 
         for (const { key } of await this._applyState.system.heads) {
-          await this._wakeupWriter(key)
+          await this._wakeupWriter(key, 0)
         }
       }
     }
@@ -1253,7 +1253,7 @@ module.exports = class Autobase extends ReadyResource {
         const info = await this._applyState.system.get(key)
         if (info && length <= info.length) continue // stale hint
       }
-      await this._wakeupWriter(key)
+      await this._wakeupWriter(key, length === -1 ? 0 : length)
     }
 
     this._wakeupHints.clear()
