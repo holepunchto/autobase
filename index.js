@@ -58,8 +58,6 @@ module.exports = class Autobase extends ReadyResource {
     this.globalCache = store.globalCache || null
     this.migrated = false
 
-    this.system = null
-
     this.encrypted = handlers.encrypted || !!handlers.encryptionKey
     this.encrypt = !!handlers.encrypt
     this.encryptionKey = handlers.encryptionKey || null
@@ -204,10 +202,14 @@ module.exports = class Autobase extends ReadyResource {
     return this.core.key
   }
 
+  get system () {
+    return this._applyState && this._applyState.system
+  }
+
   // deprecated
   async getIndexedInfo () {
     if (this.opened === false) await this.ready()
-    return this.system.getIndexedInfo(this._applyState.indexedLength)
+    return this._applyState && this._applyState.system.getIndexedInfo(this._applyState.indexedLength)
   }
 
   _isActiveIndexer () {
@@ -219,8 +221,9 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   heads () {
-    const nodes = new Array(this.system.heads.length)
-    for (let i = 0; i < this.system.heads.length; i++) nodes[i] = this.system.heads[i]
+    if (!this._applyState) return []
+    const nodes = new Array(this._applyState.system.heads.length)
+    for (let i = 0; i < this._applyState.system.heads.length; i++) nodes[i] = this._applyState.system.heads[i]
     return nodes.sort(compareNodes)
   }
 
@@ -370,8 +373,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this._applyState = new ApplyState(this)
     await this._applyState.ready()
-
-    this.system = this._applyState.system
 
     await this._openLinearizer()
     await this.core.ready()
@@ -692,7 +693,7 @@ module.exports = class Autobase extends ReadyResource {
       let w = this.activeWriters.get(key)
 
       const alreadyActive = !!w
-      const sys = system || this.system
+      const sys = system || this._applyState.system
       const writerInfo = await sys.get(key)
 
       if (len === -1) {
@@ -1035,8 +1036,6 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _rebooted () {
-    this.system = this._applyState.system
-
     this.recouple()
     this.activeWriters.updateActivity()
 
