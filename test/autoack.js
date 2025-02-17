@@ -266,7 +266,7 @@ test('autoack - value beneath null values', async t => {
   t.plan(4)
 
   const { bases } = await create(2, t, {
-    ackInterval: 100,
+    ackInterval: 10,
     ackThreshold: 0
   })
 
@@ -280,10 +280,10 @@ test('autoack - value beneath null values', async t => {
   await b.append('b0')
   await b.append(null) // place null value above tail
 
-  await sync([a, b])
-
   const alen = a.local.length
   const blen = b.local.length
+
+  await sync([a, b])
 
   await new Promise(resolve => setTimeout(resolve, 1000))
 
