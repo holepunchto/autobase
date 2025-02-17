@@ -266,7 +266,7 @@ test('autoack - value beneath null values', async t => {
   t.plan(4)
 
   const { bases } = await create(2, t, {
-    ackInterval: 10,
+    ackInterval: 100,
     ackThreshold: 0
   })
 
