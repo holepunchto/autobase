@@ -22,12 +22,12 @@ test('apply - simple', async t => {
 
   t.is(a.system.members, 1)
   t.is(a.view.length, 1)
-  t.is(a.view.indexedLength, 1)
+  t.is(a.view.signedLength, 1)
 
   await a.append('a2')
 
   t.is(a.view.length, 2)
-  t.is(a.view.indexedLength, 2)
+  t.is(a.view.signedLength, 2)
 
   async function apply (nodes, view, base) {
     for (const node of nodes) {
@@ -58,13 +58,13 @@ test('apply - add writer', async t => {
   t.is(a.view.length, 2)
   t.is(b.view.length, 2)
 
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
+  t.is(a.view.signedLength, 0)
+  t.is(b.view.signedLength, 0)
 
   await confirm([a, b])
 
-  t.is(a.view.indexedLength, 2)
-  t.is(b.view.indexedLength, 2)
+  t.is(a.view.signedLength, 2)
+  t.is(b.view.signedLength, 2)
 
   async function apply (nodes, view, base) {
     for (const node of nodes) {
@@ -101,13 +101,13 @@ test('apply - multiple appends', async t => {
   t.is(a.view.length, 6)
   t.is(b.view.length, 6)
 
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
+  t.is(a.view.signedLength, 0)
+  t.is(b.view.signedLength, 0)
 
   await confirm([a, b])
 
-  t.is(a.view.indexedLength, 6)
-  t.is(b.view.indexedLength, 6)
+  t.is(a.view.signedLength, 6)
+  t.is(b.view.signedLength, 6)
 
   async function apply (nodes, view, base) {
     for (const node of nodes) {
@@ -146,13 +146,13 @@ test('apply - simultaneous appends', async t => {
   t.is(a.view.length, 20)
   t.is(b.view.length, 20)
 
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
+  t.is(a.view.signedLength, 0)
+  t.is(b.view.signedLength, 0)
 
   await confirm([a, b])
 
-  t.is(a.view.indexedLength, 20)
-  t.is(b.view.indexedLength, 20)
+  t.is(a.view.signedLength, 20)
+  t.is(b.view.signedLength, 20)
 
   async function apply (nodes, view, base) {
     for (const node of nodes) {
@@ -197,13 +197,13 @@ test('apply - add writer and append', async t => {
   t.is(a.view.length, 3)
   t.is(b.view.length, 3)
 
-  t.is(a.view.indexedLength, 1)
-  t.is(b.view.indexedLength, 1)
+  t.is(a.view.signedLength, 1)
+  t.is(b.view.signedLength, 1)
 
   await confirm([a, b])
 
-  t.is(a.view.indexedLength, 3)
-  t.is(b.view.indexedLength, 3)
+  t.is(a.view.signedLength, 3)
+  t.is(b.view.signedLength, 3)
 
   async function apply (nodes, view, base) {
     for (const node of nodes) {
@@ -243,13 +243,13 @@ test('apply - simultaneous add writer and append', async t => {
   t.is(a.view.length, 3)
   t.is(b.view.length, 3)
 
-  t.is(a.view.indexedLength, 1)
-  t.is(b.view.indexedLength, 1)
+  t.is(a.view.signedLength, 1)
+  t.is(b.view.signedLength, 1)
 
   await confirm([a, b])
 
-  t.is(a.view.indexedLength, 3)
-  t.is(b.view.indexedLength, 3)
+  t.is(a.view.signedLength, 3)
+  t.is(b.view.signedLength, 3)
 
   async function apply (nodes, view, base) {
     for (const node of nodes) {
@@ -288,20 +288,20 @@ test('apply - simultaneous append over entire batch', async t => {
   t.is(a.view.length, 20)
   t.is(b.view.length, 20)
 
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
+  t.is(a.view.signedLength, 0)
+  t.is(b.view.signedLength, 0)
 
   await confirm([a, b])
 
-  t.is(a.view.indexedLength, 20)
-  t.is(b.view.indexedLength, 20)
+  t.is(a.view.signedLength, 20)
+  t.is(b.view.signedLength, 20)
 
   await replicateAndSync([a, b, c])
 
-  t.is(c.view.indexedLength, 20)
+  t.is(c.view.signedLength, 20)
   t.alike(
-    await c.view.getBackingCore().treeHash(),
-    await a.view.getBackingCore().treeHash()
+    await c.view.treeHash(),
+    await a.view.treeHash()
   )
 
   async function apply (nodes, view, base) {
@@ -343,20 +343,20 @@ test('apply - simultaneous append and add over entire batch', async t => {
   t.is(a.view.length, 20)
   t.is(b.view.length, 20)
 
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
+  t.is(a.view.signedLength, 0)
+  t.is(b.view.signedLength, 0)
 
   await confirm([a, b])
 
-  t.is(a.view.indexedLength, 20)
-  t.is(b.view.indexedLength, 20)
+  t.is(a.view.signedLength, 20)
+  t.is(b.view.signedLength, 20)
 
   await replicateAndSync([a, b, c])
 
-  t.is(c.view.indexedLength, 20)
+  t.is(c.view.signedLength, 20)
   t.alike(
-    await c.view.getBackingCore().treeHash(),
-    await a.view.getBackingCore().treeHash()
+    await c.view.treeHash(),
+    await a.view.treeHash()
   )
 
   async function apply (nodes, view, base) {
@@ -417,20 +417,20 @@ test.skip('apply - simultaneous appends with large batch', async t => {
   t.is(a.view.length, 900)
   t.is(b.view.length, 900)
 
-  t.is(a.view.indexedLength, 0)
-  t.is(b.view.indexedLength, 0)
+  t.is(a.view.signedLength, 0)
+  t.is(b.view.signedLength, 0)
 
   await confirm(bases.slice(0, 9))
 
-  t.is(a.view.indexedLength, 900)
-  t.is(b.view.indexedLength, 900)
+  t.is(a.view.signedLength, 900)
+  t.is(b.view.signedLength, 900)
 
   await replicateAndSync(bases)
 
-  t.is(last.view.indexedLength, 900)
+  t.is(last.view.signedLength, 900)
   t.alike(
-    await last.view.getBackingCore().treeHash(),
-    await a.view.getBackingCore().treeHash()
+    await last.view.treeHash(),
+    await a.view.treeHash()
   )
 
   async function apply (nodes, view, base) {
@@ -516,11 +516,12 @@ test('apply - uncaught exception', async t => {
   // should throw uncaught exception
   await t.exception(error, /Synthetic/)
 
-  const a2 = new Autobase(store.session(), a.bootstrap, {
+  const a2 = new Autobase(store.session(), a.key, {
     apply: () => {},
     valueEncoding: 'json'
   })
 
   // can reopen
   await t.execution(a2.ready())
+  await a2.close()
 })
