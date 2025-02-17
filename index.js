@@ -642,6 +642,21 @@ module.exports = class Autobase extends ReadyResource {
     this._appending.push(value)
   }
 
+  static encodeValue (value, opts = {}) {
+    return c.encode(messages.OplogMessage, {
+      version: AUTOBASE_VERSION,
+      maxSupportedVersion: AUTOBASE_VERSION,
+      digist: null,
+      checkpoint: null,
+      optimistic: !!opts.optimistic,
+      node: {
+        heads: opts.heads || [],
+        batch: 1,
+        value
+      }
+    })
+  }
+
   static getLocalCore (store, handlers, encryptionKey) {
     const encryption = encryptionKey === null ? null : { key: encryptionKey }
     const opts = { ...handlers, compat: false, active: false, exclusive: true, valueEncoding: messages.OplogMessage, encryption }
