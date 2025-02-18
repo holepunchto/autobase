@@ -8,6 +8,7 @@ const assert = require('nanoassert')
 const SignalPromise = require('signal-promise')
 const CoreCoupler = require('core-coupler')
 const mutexify = require('mutexify/promise')
+const ProtomuxWakeup = require('protomux-wakeup')
 
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
@@ -19,7 +20,6 @@ const CorePool = require('./lib/core-pool.js')
 const AutoWakeup = require('./lib/wakeup.js')
 
 const FastForward = require('./lib/fast-forward.js')
-const WakeupExtension = require('./lib/extension.js')
 const AutoStore = require('./lib/store.js')
 const ApplyState = require('./lib/apply-state.js')
 const boot = require('./lib/boot.js')
@@ -34,6 +34,32 @@ const DEFAULT_ACK_INTERVAL = 10_000
 const DEFAULT_ACK_THRESHOLD = 4
 
 const REMOTE_ADD_BATCH = 64
+
+class WakeupHandler {
+  constructor (base, discoveryKey) {
+    this.active = true
+    this.discoveryKey = discoveryKey
+    this.base = base
+  }
+
+  onpeeradd (peer, session) {
+    session.lookup(peer, { hash: null })
+  }
+
+  onpeerremove (peer, session) {
+    // do nothing
+  }
+
+  onlookup (req, peer, session) {
+    const wakeup = this.base._getWakeup()
+    if (wakeup.length === 0) return
+    session.announce(peer, wakeup)
+  }
+
+  onannounce (wakeup, peer, session) {
+    this.base.hintWakeup(wakeup)
+  }
+}
 
 module.exports = class Autobase extends ReadyResource {
   constructor (store, bootstrap, handlers = {}) {
@@ -71,7 +97,11 @@ module.exports = class Autobase extends ReadyResource {
     this.corePool = new CorePool()
     this.linearizer = null
     this.updating = false
-    this.wakeupExtension = null
+
+    this.wakeupOwner = !handlers.wakeup
+    this.wakeupCapability = handlers.wakeupCapability || null
+    this.wakeupProtocol = handlers.wakeup || new ProtomuxWakeup()
+    this.wakeupSession = null
 
     this._primaryBootstrap = null
 
@@ -220,7 +250,9 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   replicate (isInitiator, opts) {
-    return this.store.replicate(isInitiator, opts)
+    const stream = this.store.replicate(isInitiator, opts)
+    this.wakeupProtocol.addStream(stream)
+    return stream
   }
 
   heads () {
@@ -262,13 +294,20 @@ module.exports = class Autobase extends ReadyResource {
     this.discoveryKey = result.bootstrap.discoveryKey
     this.id = result.bootstrap.id
 
-    this.wakeupExtension = new WakeupExtension(this, this._primaryBootstrap, true)
     this.encryptionKey = result.encryptionKey
     if (this.encryptionKey) this.encryption = { key: this.encryptionKey }
 
     if (this.encrypted) {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
     }
+
+    this.setWakeup(this.wakeupCapability || this.key, null)
+  }
+
+  setWakeup (cap, discoveryKey) {
+    if (this.wakeupSession) this.wakeupSession.destroy()
+    if (!discoveryKey && b4a.equals(cap, this.key)) discoveryKey = this.discoveryKey
+    this.wakeupSession = this.wakeupProtocol.session(cap, new WakeupHandler(this, discoveryKey || null))
   }
 
   // called by view-store for bootstrapping
@@ -417,6 +456,9 @@ module.exports = class Autobase extends ReadyResource {
   async _close () {
     this._interrupting = true
     await Promise.resolve() // defer one tick
+
+    if (this.wakeupSession) this.wakeupSession.destroy()
+    if (this.wakeupOwner) this.wakeupProtocol.destroy()
 
     if (this.fastForwarding) await this.fastForwarding.close()
 
@@ -1216,21 +1258,26 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _wakeupPeer (peer) {
-    if (this.wakeupExtension) {
-      this.wakeupExtension.sendWakeup(peer.remotePublicKey)
-    }
+    if (!this.wakeupSession) return
+    const wakeup = this._getWakeup()
+    if (wakeup.length === 0) return
+    this.wakeupSession.announceByStream(peer.stream, wakeup)
   }
 
-  broadcastWakeup () {
-    if (this.wakeupExtension) {
-      this.wakeupExtension.broadcastWakeup()
+  _getWakeup () {
+    const writers = []
+
+    for (const w of this.activeWriters) {
+      if (w.isActiveIndexer || w.flushed()) continue
+      writers.push({ key: w.core.key, length: w.length })
     }
+
+    return writers
   }
 
   requestWakeup () {
-    if (this.wakeupExtension) {
-      this.wakeupExtension.requestWakeup()
-    }
+    if (!this.wakeupSession) return
+    this.wakeupSession.broadcastLookup({ hash: null }) // TODO: add state hash
   }
 
   async _wakeupWriter (key, length) {
