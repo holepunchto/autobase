@@ -36,9 +36,9 @@ const DEFAULT_ACK_THRESHOLD = 4
 const REMOTE_ADD_BATCH = 64
 
 class WakeupHandler {
-  constructor (base) {
+  constructor (base, discoveryKey) {
     this.active = true
-    this.discoveryKey = base.discoveryKey
+    this.discoveryKey = discoveryKey
     this.base = base
   }
 
@@ -301,12 +301,13 @@ module.exports = class Autobase extends ReadyResource {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
     }
 
-    this.setWakeup(this.wakeupCapability || this.key)
+    this.setWakeup(this.wakeupCapability || this.key, null)
   }
 
-  setWakeup (cap) {
+  setWakeup (cap, discoveryKey) {
     if (this.wakeupSession) this.wakeupSession.destroy()
-    this.wakeupSession = this.wakeupProtocol.session(cap, new WakeupHandler(this))
+    if (!discoveryKey && b4a.equals(cap, this.key)) discoveryKey = this.discoveryKey
+    this.wakeupSession = this.wakeupProtocol.session(cap, new WakeupHandler(this, discoveryKey || null))
   }
 
   // called by view-store for bootstrapping
