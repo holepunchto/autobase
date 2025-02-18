@@ -35,6 +35,32 @@ const DEFAULT_ACK_THRESHOLD = 4
 
 const REMOTE_ADD_BATCH = 64
 
+class WakeupHandler {
+  constructor (base) {
+    this.active = true
+    this.discoveryKey = base.discoveryKey
+    this.base = base
+  }
+
+  onpeeradd (peer, session) {
+    session.lookup(peer, { hash: null })
+  }
+
+  onpeerremove (peer, session) {
+    // do nothing
+  }
+
+  onlookup (req, peer, session) {
+    const wakeup = this.base._getWakeup()
+    if (wakeup.length === 0) return
+    session.announce(peer, wakeup)
+  }
+
+  onannounce (wakeup, peer, session) {
+    this.base.hintWakeup(wakeup)
+  }
+}
+
 module.exports = class Autobase extends ReadyResource {
   constructor (store, bootstrap, handlers = {}) {
     if (Array.isArray(bootstrap)) bootstrap = bootstrap[0] // TODO: just a quick compat, lets remove soon
@@ -278,37 +304,9 @@ module.exports = class Autobase extends ReadyResource {
     this.setWakeup(this.wakeupCapability || this.key)
   }
 
-  // called by wakeup...
-  onpeeradd (peer) {
-    this.wakeupSession.request(peer, { hash: null })
-  }
-
-  // called by wakeup...
-  onpeerremove (peer) {
-    // do nothing...
-  }
-
-  // called by wakeup...
-  onwakeuprequest (req, peer) {
-    // TODO: check state as well
-    const wakeup = this._getWakeup()
-    if (wakeup.length === 0) return
-    this.wakeupSession.wakeup(peer, wakeup)
-  }
-
-  // called by wakeup...
-  onwakeup (wakeup, peer) {
-    this.hintWakeup(wakeup)
-  }
-
   setWakeup (cap) {
-    if (this.wakeupSession) {
-      this.wakeupSession.handler = null
-      this.wakeupSession.inactive(this)
-    }
-
-    this.wakeupSession = this.wakeupProtocol.session(cap)
-    this.wakeupSession.handler = this
+    if (this.wakeupSession) this.wakeupSession.destroy()
+    this.wakeupSession = this.wakeupProtocol.session(cap, new WakeupHandler(this))
   }
 
   // called by view-store for bootstrapping
@@ -458,12 +456,9 @@ module.exports = class Autobase extends ReadyResource {
     this._interrupting = true
     await Promise.resolve() // defer one tick
 
-    if (this.wakeupSession) {
-      this.wakeupSession.handler = null
-      this.wakeupSession.inactive()
-    }
-
+    if (this.wakeupSession) this.wakeupSession.destroy()
     if (this.wakeupOwner) this.wakeupProtocol.destroy()
+
     if (this.fastForwarding) await this.fastForwarding.close()
 
     if (this._coupler) this._coupler.destroy()
@@ -1262,11 +1257,10 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _wakeupPeer (peer) {
-    if (this.wakeupSession) {
-      const wakeup = this._getWakeup()
-      if (wakeup.length === 0) return
-      this.wakeupSession.wakeupByStream(peer.stream, wakeup)
-    }
+    if (!this.wakeupSession) return
+    const wakeup = this._getWakeup()
+    if (wakeup.length === 0) return
+    this.wakeupSession.announceByStream(peer.stream, wakeup)
   }
 
   _getWakeup () {
@@ -1281,9 +1275,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   requestWakeup () {
-    if (this.wakeupSession) {
-      this.wakeupSession.broadcastRequest({ hash: null }) // TODO: add state hash
-    }
+    if (!this.wakeupSession) return
+    this.wakeupSession.broadcastLookup({ hash: null }) // TODO: add state hash
   }
 
   async _wakeupWriter (key, length) {
