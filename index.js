@@ -290,7 +290,8 @@ module.exports = class Autobase extends ReadyResource {
     return {
       key: boot.key,
       indexers: info.indexers,
-      views: info.views
+      views: info.views,
+      entropy: info.entropy
     }
   }
 
@@ -872,6 +873,7 @@ module.exports = class Autobase extends ReadyResource {
     const from = this.core.signedLength
     const store = this._viewStore.atomize()
     const views = this.fastForwardTo.views
+    const entropy = this.fastForwardTo.entropy
 
     // mutating, prop fine as we are throwing it away immediately
     views.push({ key: this.fastForwardTo.key, length: this.fastForwardTo.length })
@@ -879,7 +881,7 @@ module.exports = class Autobase extends ReadyResource {
     const ffed = []
 
     for (const v of views) {
-      const ref = await this._viewStore.findViewByKey(v.key, this.fastForwardTo.indexers)
+      const ref = await this._viewStore.findViewByKey(v.key, this.fastForwardTo.indexers, entropy)
       if (!ref) continue // unknown, view ignored
       ffed.push(ref)
 
@@ -951,7 +953,7 @@ module.exports = class Autobase extends ReadyResource {
     ref.migrated(this, next)
   }
 
-  async _migrateView (indexerManifests, name, indexedLength) {
+  async _migrateView (indexerManifests, name, indexedLength, entropy) {
     const ref = this._viewStore.byName.get(name)
 
     const core = ref.batch || ref.core
@@ -961,7 +963,7 @@ module.exports = class Autobase extends ReadyResource {
       ? null
       : { length: indexedLength, hash: (await core.restoreBatch(indexedLength)).hash() }
 
-    const next = this._viewStore.getViewCore(indexerManifests, name, prologue)
+    const next = this._viewStore.getViewCore(indexerManifests, name, prologue, entropy)
     await next.ready()
 
     if (indexedLength > 0) {
@@ -987,7 +989,7 @@ module.exports = class Autobase extends ReadyResource {
     return ref
   }
 
-  async _forkView (indexerManifests, name, length, source) {
+  async _forkView (indexerManifests, name, length, system) {
     const ref = this._viewStore.byName.get(name)
 
     const core = ref.batch || ref.core
@@ -995,13 +997,13 @@ module.exports = class Autobase extends ReadyResource {
 
     const prologue = length === 0
       ? null
-      : { length: source.length, hash: await source.treeHash() }
+      : { length: system.core.length, hash: await system.core.treeHash() }
 
-    const next = this._viewStore.getViewCore(indexerManifests, name, prologue)
+    const next = this._viewStore.getViewCore(indexerManifests, name, prologue, system.entropy)
     await next.ready()
 
     if (length > 0) {
-      await next.core.copyPrologue(source.state)
+      await next.core.copyPrologue(system.core.state)
     }
 
     // remake the batch, reset from our prologue in case it replicated inbetween
@@ -1035,10 +1037,10 @@ module.exports = class Autobase extends ReadyResource {
       const name = this._applyState.views[i].name
       const indexedLength = info.views[i].length
 
-      await this._migrateView(indexerManifests, name, indexedLength)
+      await this._migrateView(indexerManifests, name, indexedLength, info.entropy)
     }
 
-    const ref = await this._migrateView(indexerManifests, '_system', length)
+    const ref = await this._migrateView(indexerManifests, '_system', length, info.entropy)
 
     // start soft shutdown
 
@@ -1065,7 +1067,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const indexerKeys = indexers.map(key => ({ key }))
     const indexerManifests = await this._viewStore.getIndexerManifests(indexerKeys)
-    const views = await this._applyState._generateForkViews(indexerManifests, length)
+    const views = await this._applyState._generateForkViews(indexerKeys, indexerManifests, length)
 
     const batch = await system.core.session({ name: 'fork', checkout: length })
     await batch.ready()
@@ -1080,10 +1082,10 @@ module.exports = class Autobase extends ReadyResource {
       const name = this._applyState.views[i].name
       const indexedLength = info.views[i].length
 
-      await this._migrateView(indexerManifests, name, indexedLength)
+      await this._migrateView(indexerManifests, name, indexedLength, info.entropy)
     }
 
-    const ref = await this._forkView(indexerManifests, '_system', length, forked.core)
+    const ref = await this._forkView(indexerManifests, '_system', length, forked)
 
     // start soft shutdown
     await forked.close()
