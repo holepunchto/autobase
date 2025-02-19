@@ -1172,10 +1172,10 @@ module.exports = class Autobase extends ReadyResource {
     const ref = await this._forkView(indexerManifests, '_system', length, forked)
 
     // start soft shutdown
-    await forked.close()
-
     await this._clearWriters()
     await this._makeLinearizer(forked)
+
+    await forked.close()
 
     await this._applyState.finalize(ref.core.key)
 
