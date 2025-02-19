@@ -35,8 +35,8 @@ test('basic - single writer', async t => {
   t.is(base.view.length, 2)
   t.is(base.view.signedLength, 2)
 
-  t.is(base.system.core.length, 6)
-  t.is(base.system.core.signedLength, 6)
+  t.is(base.system.core.length, 5)
+  t.is(base.system.core.signedLength, 5)
 
   await t.execution(append)
 

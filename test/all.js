@@ -18,6 +18,7 @@ async function runTests () {
   await import('./linearizer.js')
   await import('./messages.js')
   await import('./node-buffer.js')
+  await import('./optimistic.js')
   await import('./snapshots.js')
   await import('./suspend.js')
   await import('./timer.js')

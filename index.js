@@ -8,6 +8,7 @@ const assert = require('nanoassert')
 const SignalPromise = require('signal-promise')
 const CoreCoupler = require('core-coupler')
 const mutexify = require('mutexify/promise')
+const ProtomuxWakeup = require('protomux-wakeup')
 
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
@@ -19,9 +20,9 @@ const CorePool = require('./lib/core-pool.js')
 const AutoWakeup = require('./lib/wakeup.js')
 
 const FastForward = require('./lib/fast-forward.js')
-const WakeupExtension = require('./lib/extension.js')
 const AutoStore = require('./lib/store.js')
 const ApplyState = require('./lib/apply-state.js')
+const { PublicApplyCalls } = require('./lib/apply-calls.js')
 const boot = require('./lib/boot.js')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
@@ -34,6 +35,32 @@ const DEFAULT_ACK_INTERVAL = 10_000
 const DEFAULT_ACK_THRESHOLD = 4
 
 const REMOTE_ADD_BATCH = 64
+
+class WakeupHandler {
+  constructor (base, discoveryKey) {
+    this.active = true
+    this.discoveryKey = discoveryKey
+    this.base = base
+  }
+
+  onpeeradd (peer, session) {
+    session.lookup(peer, { hash: null })
+  }
+
+  onpeerremove (peer, session) {
+    // do nothing
+  }
+
+  onlookup (req, peer, session) {
+    const wakeup = this.base._getWakeup()
+    if (wakeup.length === 0) return
+    session.announce(peer, wakeup)
+  }
+
+  onannounce (wakeup, peer, session) {
+    this.base.hintWakeup(wakeup)
+  }
+}
 
 module.exports = class Autobase extends ReadyResource {
   constructor (store, bootstrap, handlers = {}) {
@@ -56,8 +83,7 @@ module.exports = class Autobase extends ReadyResource {
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
     this.globalCache = store.globalCache || null
-
-    this.system = null
+    this.migrated = false
 
     this.encrypted = handlers.encrypted || !!handlers.encryptionKey
     this.encrypt = !!handlers.encrypt
@@ -72,7 +98,11 @@ module.exports = class Autobase extends ReadyResource {
     this.corePool = new CorePool()
     this.linearizer = null
     this.updating = false
-    this.wakeupExtension = null
+
+    this.wakeupOwner = !handlers.wakeup
+    this.wakeupCapability = handlers.wakeupCapability || null
+    this.wakeupProtocol = handlers.wakeup || new ProtomuxWakeup()
+    this.wakeupSession = null
 
     this._primaryBootstrap = null
 
@@ -84,6 +114,8 @@ module.exports = class Autobase extends ReadyResource {
     this._bootstrapWritersChanged = false
 
     this._checkWriters = []
+    this._optimistic = -1
+    this._appended = 0
     this._appending = null
     this._wakeup = new AutoWakeup(this)
     this._wakeupHints = new Map()
@@ -119,6 +151,7 @@ module.exports = class Autobase extends ReadyResource {
     this._preopen = null
 
     this._hasApply = !!this._handlers.apply
+    this._hasOptimisticApply = !!this._handlers.optimistic
     this._hasOpen = !!this._handlers.open
     this._hasClose = !!this._handlers.close
 
@@ -145,7 +178,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._waiting = new SignalPromise()
 
-    this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
+    this.view = this._hasOpen ? this._handlers.open(this._viewStore, new PublicApplyCalls(this)) : null
     this.core = this._viewStore.get({ name: '_system' })
 
     if (this.fastForwardEnabled && isObject(handlers.fastForward)) {
@@ -179,7 +212,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   get ackable () {
-    return this.localWriter !== null // prop should add .isIndexer but keeping it simple for now
+    return this.localWriter !== null && this.localWriter.isActiveIndexer
   }
 
   get signedLength () {
@@ -203,10 +236,14 @@ module.exports = class Autobase extends ReadyResource {
     return this.core.key
   }
 
+  get system () {
+    return this._applyState && this._applyState.system
+  }
+
   // deprecated
   async getIndexedInfo () {
     if (this.opened === false) await this.ready()
-    return this.system.getIndexedInfo(this._applyState.indexedLength)
+    return this._applyState && this._applyState.system.getIndexedInfo(this._applyState.indexedLength)
   }
 
   _isActiveIndexer () {
@@ -214,12 +251,15 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   replicate (isInitiator, opts) {
-    return this.store.replicate(isInitiator, opts)
+    const stream = this.store.replicate(isInitiator, opts)
+    this.wakeupProtocol.addStream(stream)
+    return stream
   }
 
   heads () {
-    const nodes = new Array(this.system.heads.length)
-    for (let i = 0; i < this.system.heads.length; i++) nodes[i] = this.system.heads[i]
+    if (!this._applyState) return []
+    const nodes = new Array(this._applyState.system.heads.length)
+    for (let i = 0; i < this._applyState.system.heads.length; i++) nodes[i] = this._applyState.system.heads[i]
     return nodes.sort(compareNodes)
   }
 
@@ -255,13 +295,20 @@ module.exports = class Autobase extends ReadyResource {
     this.discoveryKey = result.bootstrap.discoveryKey
     this.id = result.bootstrap.id
 
-    this.wakeupExtension = new WakeupExtension(this, this._primaryBootstrap, true)
     this.encryptionKey = result.encryptionKey
     if (this.encryptionKey) this.encryption = { key: this.encryptionKey }
 
     if (this.encrypted) {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
     }
+
+    this.setWakeup(this.wakeupCapability || this.key, null)
+  }
+
+  setWakeup (cap, discoveryKey) {
+    if (this.wakeupSession) this.wakeupSession.destroy()
+    if (!discoveryKey && b4a.equals(cap, this.key)) discoveryKey = this.discoveryKey
+    this.wakeupSession = this.wakeupProtocol.session(cap, new WakeupHandler(this, discoveryKey || null))
   }
 
   // called by view-store for bootstrapping
@@ -285,7 +332,10 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     // just compat
-    if (boot.heads) this.hintWakeup(boot.heads)
+    if (boot.heads) {
+      this.migrated = true
+      this.hintWakeup(boot.heads)
+    }
 
     return {
       key: boot.key,
@@ -327,10 +377,16 @@ module.exports = class Autobase extends ReadyResource {
     const writers = this.linearizer.getBootstrapWriters()
 
     // first clear all, but without applying it for churn reasons
-    for (const writer of this._bootstrapWriters) writer.isBootstrap = false
+    for (const writer of this._bootstrapWriters) {
+      writer.isBootstrap = false
+      writer.isCoupled = false
+    }
 
     // all passed are bootstraps
-    for (const writer of writers) writer.setBootstrap(true)
+    for (const writer of writers) {
+      writer.isCoupled = true
+      writer.setBootstrap(true)
+    }
 
     // reset activity on old ones, all should be in sync now
     for (const writer of this._bootstrapWriters) {
@@ -368,8 +424,6 @@ module.exports = class Autobase extends ReadyResource {
     this._applyState = new ApplyState(this)
     await this._applyState.ready()
 
-    this.system = this._applyState.system
-
     await this._openLinearizer()
     await this.core.ready()
     await this._wakeup.ready()
@@ -404,6 +458,9 @@ module.exports = class Autobase extends ReadyResource {
   async _close () {
     this._interrupting = true
     await Promise.resolve() // defer one tick
+
+    if (this.wakeupSession) this.wakeupSession.destroy()
+    if (this.wakeupOwner) this.wakeupProtocol.destroy()
 
     if (this.fastForwarding) await this.fastForwarding.close()
 
@@ -472,7 +529,6 @@ module.exports = class Autobase extends ReadyResource {
       if (!w.flushed()) continue
 
       const unqueued = this._wakeup.unqueue(w.core.key, w.core.length)
-      // this._coupler.remove(w.core)
 
       if (!unqueued || w.isActiveIndexer) continue
       if (this.localWriter === w) continue
@@ -590,12 +646,14 @@ module.exports = class Autobase extends ReadyResource {
     this._acking = false
   }
 
-  async append (value) {
+  async append (value, opts) {
     if (this.opened === false) await this.ready()
     if (this._interrupting) throw new Error('Autobase is closing')
 
+    const optimistic = !!opts && !!opts.optimistic && !!value
+
     // we wanna allow acks so interdexers can flush
-    if (this.localWriter === null || (this.localWriter.isRemoved && value !== null)) {
+    if (!optimistic && (this.localWriter === null || (this.localWriter.isRemoved && value !== null))) {
       throw new Error('Not writable')
     }
 
@@ -607,13 +665,14 @@ module.exports = class Autobase extends ReadyResource {
       this._append(value)
     }
 
-    const appending = this._appending
+    if (optimistic) this._optimistic = this._appending.length - 1
+    const target = this._appended + this._appending.length
 
     // await in case append is in current tick
     if (this._advancing) await this._advancing
 
     // bump until we've flushed the nodes
-    while (this._appending === appending && !this._interrupting) await this._bump()
+    while (this._appended < target && !this._interrupting) await this._bump()
   }
 
   _append (value) {
@@ -625,6 +684,21 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
     this._appending.push(value)
+  }
+
+  static encodeValue (value, opts = {}) {
+    return c.encode(messages.OplogMessage, {
+      version: AUTOBASE_VERSION,
+      maxSupportedVersion: AUTOBASE_VERSION,
+      digist: null,
+      checkpoint: null,
+      optimistic: !!opts.optimistic,
+      node: {
+        heads: opts.heads || [],
+        batch: 1,
+        value
+      }
+    })
   }
 
   static getLocalCore (store, handlers, encryptionKey) {
@@ -676,7 +750,7 @@ module.exports = class Autobase extends ReadyResource {
 
   // no guarantees about writer.isActiveIndexer property here
   async _getWriterByKey (key, len, seen, allowGC, isAdded, system) {
-    assert(this._draining === true || (this.opening && !this.opened))
+    assert(this._draining === true || (this.opening && !this.opened) || this._optimistic > -1)
 
     const release = await this._lock()
 
@@ -687,33 +761,47 @@ module.exports = class Autobase extends ReadyResource {
 
     try {
       let w = this.activeWriters.get(key)
-      if (w !== null) {
-        if (isAdded && w.core.writable && this._needsLocalWriter()) this._setLocalWriter(w)
-        if (w.isRemoved && isAdded) w.isRemoved = false
-        w.seen(seen)
-        return w
-      }
 
-      const sys = system || this.system
+      const alreadyActive = !!w
+      const sys = system || this._applyState.system
       const writerInfo = await sys.get(key)
 
       if (len === -1) {
-        if (!allowGC && writerInfo === null) return null
+        if (!allowGC && writerInfo === null) {
+          if (w) w.isRemoved = !isAdded
+          return null
+        }
+
         len = writerInfo === null ? 0 : writerInfo.length
       }
 
       const isActive = writerInfo !== null && (isAdded || !writerInfo.isRemoved)
+      const isRemoved = !isActive
 
-      // assumes that seen is passed 0 everywhere except in writer._ensureNodeDependencies
-      const isRemoved = seen === 0
-        ? writerInfo !== null && (!isAdded && writerInfo.isRemoved)
-        : !isActive // a writer might have referenced a removed writer
+      if (w) {
+        w.isRemoved = isRemoved
+      } else {
+        w = this._makeWriter(key, len, isActive, isRemoved)
+        if (!w) return null
+      }
 
-      w = this._makeWriter(key, len, isActive, isRemoved)
-      if (!w) return null
+      if (isRemoved && sys.bootstrapping && b4a.equals(w.core.key, this.key)) {
+        w.isRemoved = false
+      }
+
+      if (w.core.writable && this._needsLocalWriter()) {
+        this._setLocalWriter(w)
+      }
 
       w.seen(seen)
+
+      if (alreadyActive) return w
+
       await w.ready()
+
+      if (w.core.writable && this._needsLocalWriter()) {
+        this._setLocalWriter(w)
+      }
 
       if (allowGC && w.flushed()) {
         this._wakeup.unqueue(key, len)
@@ -726,10 +814,6 @@ module.exports = class Autobase extends ReadyResource {
 
       this.activeWriters.add(w)
       this._checkWriters.push(w)
-      if (w.core.writable && this._needsLocalWriter()) this._setLocalWriter(w)
-
-      // will only add non-indexer writers
-      if (this._coupler) this._coupler.add(w.core)
 
       assert(w.opened)
       assert(!w.closed)
@@ -802,7 +886,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async _updateLocalWriter (sys) {
     if (this.localWriter !== null && !this.localWriter.closed) return
-    await this._getWriterByKey(this.local.key, -1, 0, false, false, sys)
+    await this._getWriterByKey(this.local.key, -1, 0, true, false, sys)
   }
 
   async _bootstrapLinearizer () {
@@ -1109,8 +1193,6 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _rebooted () {
-    this.system = this._applyState.system
-
     this.recouple()
     this.activeWriters.updateActivity()
 
@@ -1158,20 +1240,27 @@ module.exports = class Autobase extends ReadyResource {
     // safety, localwriter is still processing, should prop be an assertion
     if (!this.localWriter.idle()) return null
 
-    const nodes = new Array(this._appending.length)
-    for (let i = 0; i < this._appending.length; i++) {
+    const length = this._optimistic === -1
+      ? this._appending.length
+      : this._optimistic || 1
+
+    const nodes = new Array(length)
+    for (let i = 0; i < length; i++) {
       const heads = this.linearizer.getHeads()
       const deps = new Set(this.linearizer.heads)
       const batch = this._appending.length - i
       const value = this._appending[i]
 
-      const node = this.localWriter.append(value, heads, batch, deps, this.maxSupportedVersion)
+      const node = this.localWriter.append(value, heads, batch, deps, this.maxSupportedVersion, this._optimistic === 0)
 
       this.linearizer.addHead(node)
       nodes[i] = node
     }
 
-    this._appending = null
+    this._appended += length
+    this._appending = length === this._appending.length ? null : this._appending.slice(length)
+
+    if (this._optimistic > -1 && this._optimistic < length) this._optimistic = -1
 
     return nodes
   }
@@ -1257,25 +1346,30 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _wakeupPeer (peer) {
-    if (this.wakeupExtension) {
-      this.wakeupExtension.sendWakeup(peer.remotePublicKey)
-    }
+    if (!this.wakeupSession) return
+    const wakeup = this._getWakeup()
+    if (wakeup.length === 0) return
+    this.wakeupSession.announceByStream(peer.stream, wakeup)
   }
 
-  broadcastWakeup () {
-    if (this.wakeupExtension) {
-      this.wakeupExtension.broadcastWakeup()
+  _getWakeup () {
+    const writers = []
+
+    for (const w of this.activeWriters) {
+      if (w.isActiveIndexer || w.flushed()) continue
+      writers.push({ key: w.core.key, length: w.length })
     }
+
+    return writers
   }
 
   requestWakeup () {
-    if (this.wakeupExtension) {
-      this.wakeupExtension.requestWakeup()
-    }
+    if (!this.wakeupSession) return
+    this.wakeupSession.broadcastLookup({ hash: null }) // TODO: add state hash
   }
 
-  async _wakeupWriter (key) {
-    this._ensureWakeup(await this._getWriterByKey(key, -1, 0, true, false, null))
+  async _wakeupWriter (key, length) {
+    this._ensureWakeup(await this._getWriterByKey(key, -1, length, true, false, null))
   }
 
   // ensure wakeup on an existing writer (the writer calls this in addition to above)
@@ -1291,14 +1385,14 @@ module.exports = class Autobase extends ReadyResource {
       this._needsWakeup = false
 
       for (const { key } of this._wakeup) {
-        await this._wakeupWriter(key)
+        await this._wakeupWriter(key, 0)
       }
 
       if (this._needsWakeupHeads === true) {
         this._needsWakeupHeads = false
 
         for (const { key } of await this._applyState.system.heads) {
-          await this._wakeupWriter(key)
+          await this._wakeupWriter(key, 0)
         }
       }
     }
@@ -1307,10 +1401,9 @@ module.exports = class Autobase extends ReadyResource {
       const key = b4a.from(hex, 'hex')
       if (length !== -1) {
         const info = await this._applyState.system.get(key)
-        if (info && length < info.length) continue // stale hint
+        if (info && length <= info.length) continue // stale hint
       }
-
-      await this._wakeupWriter(key)
+      await this._wakeupWriter(key, length === -1 ? 0 : length)
     }
 
     this._wakeupHints.clear()
@@ -1345,8 +1438,8 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this._interrupting) return
 
-    if (this.localWriter) {
-      if (this.localWriter.closed) await this._updateLocalWriter(this._applyState.system)
+    if (this.localWriter || this._optimistic > -1) {
+      if (!this.localWriter || this.localWriter.closed) await this._updateLocalWriter(this._applyState.system)
       if (!this._interrupting && this.localWriter) {
         if (this._applyState.isLocalPendingIndexer()) this.ack().catch(noop)
         else if (this._triggerAckAsap()) this._ackTimer.asap()

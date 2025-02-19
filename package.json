@@ -1,6 +1,6 @@
 {
   "name": "autobase",
-  "version": "7.0.15",
+  "version": "7.0.21",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -41,6 +41,7 @@
     "hypercore-id-encoding": "^1.2.0",
     "mutexify": "^1.4.0",
     "nanoassert": "^2.0.0",
+    "protomux-wakeup": "^2.0.0",
     "ready-resource": "^1.0.0",
     "safety-catch": "^1.0.2",
     "signal-promise": "^1.0.3",
