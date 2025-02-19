@@ -22,6 +22,7 @@ const AutoWakeup = require('./lib/wakeup.js')
 const FastForward = require('./lib/fast-forward.js')
 const AutoStore = require('./lib/store.js')
 const ApplyState = require('./lib/apply-state.js')
+const { PublicApplyCalls } = require('./lib/apply-calls.js')
 const boot = require('./lib/boot.js')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
@@ -177,7 +178,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._waiting = new SignalPromise()
 
-    this.view = this._hasOpen ? this._handlers.open(this._viewStore, this) : null
+    this.view = this._hasOpen ? this._handlers.open(this._viewStore, new PublicApplyCalls(this)) : null
     this.core = this._viewStore.get({ name: '_system' })
 
     if (this.fastForwardEnabled && isObject(handlers.fastForward)) {
