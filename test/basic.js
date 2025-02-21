@@ -1427,6 +1427,62 @@ test('basic - remove multiple indexers concurrently', async t => {
   }
 })
 
+test('basic - downgrade multiple indexers concurrently', async t => {
+  const { bases } = await create(3, t, { apply })
+  const [a, b, c] = bases
+
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(b, c)
+
+  await c.append('c1')
+
+  await confirm([a, b, c])
+
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 3)
+
+  a.append({ remove: b4a.toString(b.local.key, 'hex') })
+  await a.append({ remove: b4a.toString(c.local.key, 'hex') })
+
+  await b.append('some')
+  await c.append('calming')
+
+  await replicateAndSync([b, c])
+
+  await c.append('noise')
+
+  await confirm([a, b, c])
+
+  t.is(b.writable, true)
+  t.is(c.writable, true)
+
+  await t.execution(b.append('writable'))
+  await t.execution(c.append('writable'))
+
+  const length = a.view.indexedLength
+  await t.execution(a.append('hello'))
+
+  t.not(a.view.indexedLength, length) // 1 indexer
+
+  t.is(b.linearizer.indexers.length, 1)
+  t.is(b.view.getBackingCore().session.manifest.signers.length, 1)
+
+  async function apply (batch, view, base) {
+    for (const { value } of batch) {
+      if (value.add) {
+        await base.addWriter(b4a.from(value.add, 'hex'))
+        continue
+      }
+
+      if (value.remove) {
+        await base.addWriter(b4a.from(value.remove, 'hex'), { indexer: false })
+        continue
+      }
+
+      await view.append(value)
+    }
+  }
+})
+
 test('basic - indexer removes themselves', async t => {
   const { bases } = await create(3, t, { apply })
   const [a, b, c] = bases
