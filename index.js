@@ -220,7 +220,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   get indexedLength () {
-    return this.core.indexedLength
+    return this.core.signedLength
   }
 
   get length () {
@@ -340,7 +340,8 @@ module.exports = class Autobase extends ReadyResource {
     return {
       key: boot.key,
       indexers: info.indexers,
-      views: info.views
+      views: info.views,
+      entropy: info.entropy
     }
   }
 
@@ -957,6 +958,7 @@ module.exports = class Autobase extends ReadyResource {
     const from = this.core.signedLength
     const store = this._viewStore.atomize()
     const views = this.fastForwardTo.views
+    const entropy = this.fastForwardTo.entropy
 
     // mutating, prop fine as we are throwing it away immediately
     views.push({ key: this.fastForwardTo.key, length: this.fastForwardTo.length })
@@ -964,7 +966,7 @@ module.exports = class Autobase extends ReadyResource {
     const ffed = []
 
     for (const v of views) {
-      const ref = await this._viewStore.findViewByKey(v.key, this.fastForwardTo.indexers)
+      const ref = await this._viewStore.findViewByKey(v.key, this.fastForwardTo.indexers, entropy)
       if (!ref) continue // unknown, view ignored
       ffed.push(ref)
 
@@ -1036,7 +1038,7 @@ module.exports = class Autobase extends ReadyResource {
     ref.migrated(this, next)
   }
 
-  async _migrateView (indexerManifests, name, indexedLength) {
+  async _migrateView (indexerManifests, name, indexedLength, entropy) {
     const ref = this._viewStore.byName.get(name)
 
     const core = ref.batch || ref.core
@@ -1046,7 +1048,7 @@ module.exports = class Autobase extends ReadyResource {
       ? null
       : { length: indexedLength, hash: (await core.restoreBatch(indexedLength)).hash() }
 
-    const next = this._viewStore.getViewCore(indexerManifests, name, prologue)
+    const next = this._viewStore.getViewCore(indexerManifests, name, prologue, entropy)
     await next.ready()
 
     if (indexedLength > 0) {
@@ -1072,6 +1074,43 @@ module.exports = class Autobase extends ReadyResource {
     return ref
   }
 
+  async _forkView (indexerManifests, name, length, system) {
+    const ref = this._viewStore.byName.get(name)
+
+    const core = ref.batch || ref.core
+    await core.ready()
+
+    const prologue = length === 0
+      ? null
+      : { length: system.core.length, hash: await system.core.treeHash() }
+
+    const next = this._viewStore.getViewCore(indexerManifests, name, prologue, system.entropy)
+    await next.ready()
+
+    if (length > 0) {
+      await next.core.copyPrologue(system.core.state)
+    }
+
+    // remake the batch, reset from our prologue in case it replicated inbetween
+    // TODO: we should really have an HC function for this
+    const batch = next.session({ name: 'batch', overwrite: true, checkout: length })
+    await batch.ready()
+
+    // get the blocks from prev core because we need them for catchup
+    if (core.length > batch.length) {
+      for (let i = batch.length; i < core.length; i++) {
+        await batch.append(await core.get(i))
+      }
+    }
+
+    await ref.batch.state.moveTo(batch, core.length)
+    await batch.close()
+
+    ref.migrated(this, next)
+
+    return ref
+  }
+
   async _migrate () {
     const length = this._applyState.indexedLength
     const system = this._applyState.system
@@ -1083,15 +1122,61 @@ module.exports = class Autobase extends ReadyResource {
       const name = this._applyState.views[i].name
       const indexedLength = info.views[i].length
 
-      await this._migrateView(indexerManifests, name, indexedLength)
+      await this._migrateView(indexerManifests, name, indexedLength, info.entropy)
     }
 
-    const ref = await this._migrateView(indexerManifests, '_system', length)
+    const ref = await this._migrateView(indexerManifests, '_system', length, info.entropy)
 
     // start soft shutdown
 
     await this._clearWriters()
     await this._makeLinearizerFromViewState()
+
+    await this._applyState.finalize(ref.core.key)
+
+    this._applyState = new ApplyState(this)
+
+    await this._applyState.ready()
+    await this._applyState.catchup(this.linearizer)
+
+    // end soft shutdown
+
+    this.requestWakeup()
+    this._queueFastForward()
+
+    this._rebooted()
+  }
+
+  async _fork ({ indexers, length }) {
+    const system = this._applyState.system
+
+    const indexerKeys = indexers.map(key => ({ key }))
+    const indexerManifests = await this._viewStore.getIndexerManifests(indexerKeys)
+    const views = await this._applyState._generateForkViews(indexerKeys, indexerManifests, length)
+
+    const batch = await system.core.session({ name: 'fork', checkout: length })
+    await batch.ready()
+
+    const forked = new SystemView(batch)
+    await forked.ready()
+
+    await forked.fork(indexers, views)
+    const info = await forked.getIndexedInfo(length)
+
+    for (let i = 0; i < this._applyState.views.length; i++) {
+      const name = this._applyState.views[i].name
+      const indexedLength = info.views[i].length
+
+      await this._migrateView(indexerManifests, name, indexedLength, info.entropy)
+    }
+
+    const ref = await this._forkView(indexerManifests, '_system', length, forked)
+
+    // start soft shutdown
+    await this._clearWriters()
+    await this._makeLinearizer(forked)
+
+    await forked.close()
 
     await this._applyState.finalize(ref.core.key)
 
@@ -1235,9 +1320,9 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const u = this.linearizer.update()
-      const indexersUpdated = u ? await this._applyState.update(u, localNodes) : false
+      const updated = u ? await this._applyState.update(u, localNodes) : false
 
-      if (!indexersUpdated) {
+      if (!updated) {
         if (this._applyState.shouldFlush()) {
           await this._applyState.flush()
           this.updating = true
@@ -1252,7 +1337,9 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       await this._gcWriters()
-      await this._migrate()
+
+      if (updated.fork) await this._fork(updated.fork)
+      else await this._migrate()
     }
 
     // emit state changes post drain
