@@ -702,7 +702,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   static getLocalCore (store, handlers, encryptionKey) {
-    const encryption = encryptionKey === null ? null : { key: encryptionKey }
+    const encryption = !encryptionKey ? null : { key: encryptionKey }
     const opts = { ...handlers, compat: false, active: false, exclusive: true, valueEncoding: messages.OplogMessage, encryption }
     return opts.keyPair ? store.get(opts) : store.get({ ...opts, name: 'local' })
   }
