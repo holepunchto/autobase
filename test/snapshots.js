@@ -155,9 +155,11 @@ test('no inconsistent entries when using snapshot core in bee (bee snapshot)', a
   ])
 
   const bee1 = base1.view.snapshot()
+  await bee1.ready()
   t.is(bee1.version, 3) // Sanity check
 
   const bee2 = base2.view.snapshot()
+  await bee2.ready()
   t.is(bee2.version, 4) // Sanity check
 
   let hasTruncated = false
