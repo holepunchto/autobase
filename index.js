@@ -1147,17 +1147,29 @@ module.exports = class Autobase extends ReadyResource {
     // mutating, prop fine as we are throwing it away immediately
     views.push({ key: this.fastForwardTo.key, length: this.fastForwardTo.length })
 
-    const ffed = []
+    const ffed = new Set()
+    const migrated = !b4a.equals(this.fastForwardTo.key, this.core.key)
 
     for (const v of views) {
       const ref = await this._viewStore.findViewByKey(v.key, this.fastForwardTo.indexers)
       if (!ref) continue // unknown, view ignored
-      ffed.push(ref)
+      ffed.add(ref)
 
       if (b4a.equals(ref.core.key, v.key)) {
         await ref.catchup(store.atom, v.length)
       } else {
         await this._applyFastForwardMigration(ref, v)
+      }
+    }
+
+    // migrate zero length cores
+    if (migrated) {
+      const indexers = this.fastForwardTo.indexers
+      const manifests = await this._viewStore.getIndexerManifests(indexers)
+
+      for (const [name, ref] of this._viewStore.byName) {
+        if (ffed.has(ref)) continue
+        await this._migrateView(manifests, name, 0)
       }
     }
 
