@@ -859,6 +859,44 @@ test('fast-forward - static fast-forward', async t => {
   t.pass()
 })
 
+test('fast-forward - initial ff with zero length view', async t => {
+  t.plan(4)
+
+  const { bases } = await create(2, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b] = bases
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append(null)
+  }
+
+  await addWriterAndSync(a, b)
+
+  t.is(a.linearizer.indexers.length, 2)
+
+  const fastForward = { key: a.core.key }
+
+  const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
+
+  const c = createBase(store.session(), a.key, t, { fastForward })
+  await c.ready()
+
+  await replicateAndSync([a, b, c])
+
+  const core = c.core
+  const sparse = await isSparse(core)
+
+  t.is(c.linearizer.indexers.length, 2)
+  t.alike(c.view.key, a.view.key)
+
+  t.ok(sparse > 0)
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+})
+
 async function isSparse (core) {
   let n = 0
   for (let i = 0; i < core.length; i++) {
