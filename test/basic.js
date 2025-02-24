@@ -300,6 +300,23 @@ test('basic - simple reorg', async t => {
   t.is(await b.view.get(3), 'b1')
 })
 
+test('basic - zero length view', async t => {
+  const { bases } = await create(2, t)
+
+  const [a, b] = bases
+
+  await addWriter(a, b)
+  await confirm(bases)
+
+  await a.append(null)
+
+  await confirm(bases)
+
+  const info = await a.system.getIndexedInfo()
+
+  t.is(info.views.length, 0)
+})
+
 test('basic - compare views', async t => {
   const { bases } = await create(2, t)
 
