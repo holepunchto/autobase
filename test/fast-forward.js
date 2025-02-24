@@ -777,12 +777,59 @@ test('fast-forward - is indexer set correctly', async t => {
   await t.execution(event)
 })
 
+test('fast-forward - multiple views reordered', async t => {
+  t.plan(3)
+
+  const { bases } = await create(2, t, {
+    fastForward: true,
+    open: openMultiple,
+    apply: applyMultiple,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b] = bases
+
+  await addWriterAndSync(a, b, false)
+
+  await b.append({ index: 1, data: 'b0' })
+  await a.append({ index: 2, data: 'a0' })
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append(null)
+  }
+
+  await a.append({ index: 1, data: 'a1' })
+
+  t.is(a.system.core.signedLength, 2008)
+
+  await addWriter(a, b, true)
+  await replicateAndSync([a, b])
+
+  const core = b.system.core
+  const sparse = await isSparse(core)
+
+  t.alike(b.view.key, a.view.key)
+
+  await b.append({ index: 2, data: 'a2' })
+
+  t.ok(sparse > 0)
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+})
+
 async function isSparse (core) {
   let n = 0
   for (let i = 0; i < core.length; i++) {
     if (!await core.has(i)) n++
   }
   return n
+}
+
+function openMultiple (store) {
+  return {
+    first: store.get('first', { valueEncoding: 'json' }),
+    second: store.get('second', { valueEncoding: 'json' })
+  }
 }
 
 async function applyWithRemove (batch, view, base) {
@@ -798,5 +845,20 @@ async function applyWithRemove (batch, view, base) {
     }
 
     await view.append(value)
+  }
+}
+
+async function applyMultiple (batch, view, base) {
+  for (const { value } of batch) {
+    if (value.add) {
+      await base.addWriter(Buffer.from(value.add, 'hex'), { indexer: value.indexer !== false })
+      continue
+    }
+
+    if (value.index === 1) {
+      await view.first.append(value.data)
+    } else if (value.index === 2) {
+      await view.second.append(value.data)
+    }
   }
 }
