@@ -1129,7 +1129,6 @@ module.exports = class Autobase extends ReadyResource {
     this._queueBump()
   }
 
-  // TODO: need to update mappedIndex on ff
   async _applyFastForward () {
     if (!this.fastForwardTo.force && this.fastForwardTo.length < this.core.length + FastForward.MINIMUM) {
       this.fastForwardTo = null
