@@ -777,6 +777,44 @@ test('fast-forward - is indexer set correctly', async t => {
   await t.execution(event)
 })
 
+test('fast-forward - initial ff with zero length view', async t => {
+  t.plan(4)
+
+  const { bases } = await create(2, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b] = bases
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append(null)
+  }
+
+  await addWriterAndSync(a, b)
+
+  t.is(a.linearizer.indexers.length, 2)
+
+  const fastForward = { key: a.core.key }
+
+  const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
+
+  const c = createBase(store.session(), a.key, t, { fastForward })
+  await c.ready()
+
+  await replicateAndSync([a, b, c])
+
+  const core = c.core
+  const sparse = await isSparse(core)
+
+  t.is(c.linearizer.indexers.length, 2)
+  t.alike(c.view.key, a.view.key)
+
+  t.ok(sparse > 0)
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+})
+
 test('fast-forward - multiple views reordered', async t => {
   t.plan(3)
 
@@ -789,18 +827,13 @@ test('fast-forward - multiple views reordered', async t => {
 
   const [a, b] = bases
 
-  await addWriterAndSync(a, b, false)
-
-  await b.append({ index: 1, data: 'b0' })
-  await a.append({ index: 2, data: 'a0' })
-
   for (let i = 0; i < 1000; i++) {
     await a.append(null)
   }
 
   await a.append({ index: 1, data: 'a1' })
 
-  t.is(a.core.signedLength, 2008)
+  t.is(a.core.signedLength, a.core.length)
 
   await addWriter(a, b, true)
   await replicateAndSync([a, b])
