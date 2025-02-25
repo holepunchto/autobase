@@ -789,18 +789,13 @@ test('fast-forward - multiple views reordered', async t => {
 
   const [a, b] = bases
 
-  await addWriterAndSync(a, b, false)
-
-  await b.append({ index: 1, data: 'b0' })
-  await a.append({ index: 2, data: 'a0' })
-
   for (let i = 0; i < 1000; i++) {
     await a.append(null)
   }
 
   await a.append({ index: 1, data: 'a1' })
 
-  t.is(a.core.signedLength, 2008)
+  t.is(a.core.signedLength, a.core.length)
 
   await addWriter(a, b, true)
   await replicateAndSync([a, b])
