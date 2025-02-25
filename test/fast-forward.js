@@ -776,6 +776,7 @@ test('fast-forward - is indexer set correctly', async t => {
 
   await t.execution(event)
 })
+
 test('fast-forward - initial ff with zero length view', async t => {
   t.plan(4)
 
@@ -832,7 +833,7 @@ test('fast-forward - multiple views reordered', async t => {
 
   await a.append({ index: 1, data: 'a1' })
 
-  t.is(a.core.signedLength, 2008)
+  t.is(a.core.signedLength, a.core.length)
 
   await addWriter(a, b, true)
   await replicateAndSync([a, b])
