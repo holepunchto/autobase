@@ -200,7 +200,7 @@ test('fast-forward - multiple queues', async t => {
 
   await confirm([a, b, c])
 
-  const midLength = a.system.core.signedLength
+  const midLength = a.core.signedLength
 
   for (let i = 0; i < 200; i++) {
     await a.append('a' + i)
@@ -319,7 +319,7 @@ test.skip('fast-forward - force reset then ff', async t => {
   await addWriterAndSync(a, c)
   await confirm([a, b, c])
 
-  t.is(a.system.core.manifest.signers.length, 3)
+  t.is(a.core.manifest.signers.length, 3)
 
   for (let i = 0; i < 400; i++) {
     await a.append('a' + i)
@@ -335,15 +335,15 @@ test.skip('fast-forward - force reset then ff', async t => {
     await a.append('a' + i)
   }
 
-  t.ok(b.system.core.signedLength < 40)
+  t.ok(b.core.signedLength < 40)
 
   await confirm([a, c])
 
-  t.ok(a.system.core.signedLength > 800)
+  t.ok(a.core.signedLength > 800)
 
-  const truncate = new Promise(resolve => b.system.core.on('truncate', resolve))
+  const truncate = new Promise(resolve => b.core.on('truncate', resolve))
 
-  t.not(b.system.core.signedLength, a.system.core.signedLength)
+  t.not(b.core.signedLength, a.core.signedLength)
 
   await b.forceResetViews()
 
@@ -351,11 +351,11 @@ test.skip('fast-forward - force reset then ff', async t => {
 
   await t.execution(truncate)
 
-  t.is(b.system.core.signedLength, a.system.core.signedLength)
+  t.is(b.core.signedLength, a.core.signedLength)
 
   await replicateAndSync([a, c])
 
-  const core = b.system.core
+  const core = b.core
   const sparse = await isSparse(core)
 
   t.is(c.linearizer.indexers.length, 3)
@@ -392,7 +392,7 @@ test('fast-forward - initial fast forward', async t => {
 
   await confirm([a, b])
 
-  const fastForward = { key: a.system.core.key }
+  const fastForward = { key: a.core.key }
 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
 
@@ -400,7 +400,7 @@ test('fast-forward - initial fast forward', async t => {
   await c.ready()
 
   await replicateAndSync([a, b, c])
-  const core = c.system.core
+  const core = c.core
   const sparse = await isSparse(core)
 
   t.is(c.linearizer.indexers.length, 2)
@@ -454,7 +454,7 @@ test('fast-forward - initial ff after multiple migrate', async t => {
 
   await confirm(bases)
 
-  const sys = a.system.core
+  const sys = a.core
   t.is(sys.manifest.signers.length, 5)
 
   const fastForward = { key: sys.key }
@@ -465,7 +465,7 @@ test('fast-forward - initial ff after multiple migrate', async t => {
   await latecomer.ready()
 
   await replicateAndSync([...bases, latecomer])
-  const core = latecomer.system.core
+  const core = latecomer.core
   const sparse = await isSparse(core)
 
   t.is(latecomer.linearizer.indexers.length, 5)
@@ -496,7 +496,7 @@ test('fast-forward - ignore bogus initial ff', async t => {
     await b.append('b' + i)
   }
 
-  const sys = a.system.core
+  const sys = a.core
   t.is(sys.manifest.signers.length, 2)
 
   const key = Buffer.from(sys.key)
@@ -513,7 +513,7 @@ test('fast-forward - ignore bogus initial ff', async t => {
   await latecomer.ready()
 
   await replicateAndSync([...bases, latecomer])
-  const core = latecomer.system.core
+  const core = latecomer.core
   const sparse = await isSparse(core)
 
   t.is(latecomer.linearizer.indexers.length, 2)
@@ -546,7 +546,7 @@ test.skip('fast-forward - double ff', async t => {
     await b.append('b' + i)
   }
 
-  migrations.push(a.system.core.manifest.prologue.length)
+  migrations.push(a.core.manifest.prologue.length)
 
   await addWriterAndSync(b, c)
   await confirm(bases)
@@ -555,7 +555,7 @@ test.skip('fast-forward - double ff', async t => {
     await c.append('c' + i)
   }
 
-  migrations.push(a.system.core.manifest.prologue.length)
+  migrations.push(a.core.manifest.prologue.length)
 
   await addWriterAndSync(c, d)
   await confirm(bases)
@@ -564,7 +564,7 @@ test.skip('fast-forward - double ff', async t => {
     await d.append('d' + i)
   }
 
-  migrations.push(a.system.core.manifest.prologue.length)
+  migrations.push(a.core.manifest.prologue.length)
 
   await addWriterAndSync(d, e)
   await confirm(bases)
@@ -573,11 +573,11 @@ test.skip('fast-forward - double ff', async t => {
     await e.append('e' + i)
   }
 
-  migrations.push(a.system.core.manifest.prologue.length)
+  migrations.push(a.core.manifest.prologue.length)
 
   await confirm(bases)
 
-  const sys = a.system.core
+  const sys = a.core
   t.is(sys.manifest.signers.length, 5)
 
   const [store] = await createStores(1, t, { offset: 5, storage: () => tmpDir(t) })
@@ -597,7 +597,7 @@ test.skip('fast-forward - double ff', async t => {
 
   await p
 
-  const core = latecomer.system.core
+  const core = latecomer.core
   const sparse = await isSparse(core)
 
   t.is(latecomer.linearizer.indexers.length, 5)
@@ -624,8 +624,8 @@ test('fast-forward - unindexed cores should migrate', async t => {
   await confirm([a, b, c])
   await replicateAndSync([a, b, c, d])
 
-  t.is(a.system.core.signedLength, c.system.core.signedLength)
-  t.alike(a.system.core.key, c.system.core.key)
+  t.is(a.core.signedLength, c.core.signedLength)
+  t.alike(a.core.key, c.core.key)
 })
 
 test('fast-forward - initial fast forward with in between writer', async t => {
@@ -656,7 +656,7 @@ test('fast-forward - initial fast forward with in between writer', async t => {
 
   t.is(a.linearizer.indexers.length, 1)
 
-  const fastForward = { key: a.system.core.key }
+  const fastForward = { key: a.core.key }
 
   const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
 
@@ -800,12 +800,12 @@ test('fast-forward - multiple views reordered', async t => {
 
   await a.append({ index: 1, data: 'a1' })
 
-  t.is(a.system.core.signedLength, 2008)
+  t.is(a.core.signedLength, 2008)
 
   await addWriter(a, b, true)
   await replicateAndSync([a, b])
 
-  const core = b.system.core
+  const core = b.core
   const sparse = await isSparse(core)
 
   t.alike(b.view.key, a.view.key)
