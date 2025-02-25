@@ -311,10 +311,26 @@ module.exports = class Autobase extends ReadyResource {
     this.wakeupSession = this.wakeupProtocol.session(cap, new WakeupHandler(this, discoveryKey || null))
   }
 
+  // migrating from 6 -> latest
+  async _migrate6 (key, length) {
+    const core = this.store.get({ key, active: false })
+    await core.ready()
+    const batch = core.session({ name: 'batch', overwrite: true, checkout: length })
+    await batch.ready()
+    await batch.close()
+    await core.close()
+  }
+
   // called by view-store for bootstrapping
   async _getSystemInfo () {
     const boot = await this._getBootRecord()
     if (!boot.key) return null
+
+    const migrated = !!boot.heads
+
+    if (migrated) { // ensure system batch is consistent on initial migration
+      await this._migrate6(boot.key, boot.indexedLength)
+    }
 
     const encryption = this.encryptionKey
       ? { key: AutoStore.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
@@ -322,6 +338,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const core = this.store.get({ key: boot.key, encryption, active: false })
     await core.ready()
+
     const batch = core.session({ name: 'batch' })
     const info = await SystemView.getIndexedInfo(batch, boot.indexedLength)
     await batch.close()
@@ -332,8 +349,13 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     // just compat
-    if (boot.heads) {
+    if (migrated) {
       this.migrated = true
+
+      for (const view of info.views) { // ensure any views ref'ed by system are consistent as well
+        await this._migrate6(view.key, view.length)
+      }
+
       this.hintWakeup(boot.heads)
     }
 
@@ -495,6 +517,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (err === INTERRUPT) {
       this.emit('interrupt', this.interrupted)
+      this.emit('update')
       return
     }
 
@@ -702,7 +725,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   static getLocalCore (store, handlers, encryptionKey) {
-    const encryption = encryptionKey === null ? null : { key: encryptionKey }
+    const encryption = !encryptionKey ? null : { key: encryptionKey }
     const opts = { ...handlers, compat: false, active: false, exclusive: true, valueEncoding: messages.OplogMessage, encryption }
     return opts.keyPair ? store.get(opts) : store.get({ ...opts, name: 'local' })
   }
@@ -947,6 +970,7 @@ module.exports = class Autobase extends ReadyResource {
   async _applyFastForward () {
     if (this.fastForwardTo.length < this.core.length + FastForward.MINIMUM) {
       this.fastForwardTo = null
+      this._updateActivity()
       // still not worth it
       return
     }
@@ -1194,7 +1218,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _rebooted () {
     this.recouple()
-    this.activeWriters.updateActivity()
+    this._updateActivity()
 
     // ensure we re-evalute our state
     this._bootstrapWritersChanged = true
@@ -1524,10 +1548,18 @@ module.exports = class Autobase extends ReadyResource {
     this._runFastForward(new FastForward(this, this.core.key)).catch(noop)
   }
 
+  _updateActivity () {
+    this.activeWriters.updateActivity()
+    if (this._applyState) {
+      if (this.isFastForwarding()) this._applyState.pause()
+      else this._applyState.resume()
+    }
+  }
+
   async _runFastForward (ff) {
     this.fastForwarding = ff
 
-    this.activeWriters.updateActivity()
+    this._updateActivity()
 
     const result = await ff.upgrade()
     await ff.close()
@@ -1535,8 +1567,8 @@ module.exports = class Autobase extends ReadyResource {
     if (this.fastForwarding === ff) this.fastForwarding = null
 
     if (!result) {
-      this.activeWriters.updateActivity()
       this._queueFastForward()
+      this._updateActivity()
       return
     }
 
