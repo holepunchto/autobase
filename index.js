@@ -969,6 +969,7 @@ module.exports = class Autobase extends ReadyResource {
   async _applyFastForward () {
     if (this.fastForwardTo.length < this.core.length + FastForward.MINIMUM) {
       this.fastForwardTo = null
+      this._updateActivity()
       // still not worth it
       return
     }
@@ -1132,7 +1133,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _rebooted () {
     this.recouple()
-    this.activeWriters.updateActivity()
+    this._updateActivity()
 
     // ensure we re-evalute our state
     this._bootstrapWritersChanged = true
@@ -1460,10 +1461,18 @@ module.exports = class Autobase extends ReadyResource {
     this._runFastForward(new FastForward(this, this.core.key)).catch(noop)
   }
 
+  _updateActivity () {
+    this.activeWriters.updateActivity()
+    if (this._applyState) {
+      if (this.isFastForwarding()) this._applyState.pause()
+      else this._applyState.resume()
+    }
+  }
+
   async _runFastForward (ff) {
     this.fastForwarding = ff
 
-    this.activeWriters.updateActivity()
+    this._updateActivity()
 
     const result = await ff.upgrade()
     await ff.close()
@@ -1471,8 +1480,8 @@ module.exports = class Autobase extends ReadyResource {
     if (this.fastForwarding === ff) this.fastForwarding = null
 
     if (!result) {
-      this.activeWriters.updateActivity()
       this._queueFastForward()
+      this._updateActivity()
       return
     }
 
