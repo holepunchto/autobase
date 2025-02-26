@@ -1318,6 +1318,26 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _drainWakeup () { // TODO: parallel load the writers here later
+    const promises = []
+
+    // warmup all the below gets
+    if (this._needsWakeup) {
+      for (const { key } of this._wakeup) {
+        promises.push(this._applyState.system.get(key))
+      }
+      if (this._needsWakeupHeads) {
+        for (const { key } of await this._applyState.system.heads) {
+          promises.push(this._applyState.system.get(key))
+        }
+      }
+    }
+    for (const [hex] of this._wakeupHints) {
+      const key = b4a.from(hex, 'hex')
+      promises.push(this._applyState.system.get(key))
+    }
+
+    await Promise.allSettled(promises)
+
     if (this._needsWakeup === true) {
       this._needsWakeup = false
 
