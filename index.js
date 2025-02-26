@@ -220,7 +220,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   get indexedLength () {
-    return this._applyState && this._applyState.indexedLength
+    return this._applyState ? this._applyState.indexedLength : 0
   }
 
   get length () {
