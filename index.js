@@ -1317,7 +1317,7 @@ module.exports = class Autobase extends ReadyResource {
     this._bootstrapWritersChanged = true
   }
 
-  async _drainWakeup () { // TODO: parallel load the writers here later
+  async _drainWakeup () {
     const promises = []
 
     // warmup all the below gets
