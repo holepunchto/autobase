@@ -1718,7 +1718,6 @@ test('basic - readd removed indexer', async t => {
   t.is(b.system.core.manifest.signers.length, 2)
 })
 
-// todo: this test is hard, probably have to rely on ff to fix
 test('basic - writer adds a writer while being removed', async t => {
   const { bases } = await create(2, t, { apply: applyWithRemove })
   const [a, b] = bases
@@ -1763,8 +1762,8 @@ test('basic - writer adds a writer while being removed', async t => {
   const ainfo = await a.system.get(b.local.key)
   const binfo = await b.system.get(b.local.key)
 
-  t.is(ainfo.length, b.local.length)
-  t.is(ainfo.length, b.local.length)
+  t.is(ainfo.length, 4)
+  t.is(binfo.length, 4)
 
   t.is(ainfo.isRemoved, true)
   t.is(binfo.isRemoved, true)
@@ -1817,8 +1816,7 @@ test('basic - interrupt', async t => {
   }
 })
 
-// todo: this test is hard, probably have to rely on ff to recover
-test.skip('basic - writer adds a writer while being removed', async t => {
+test('basic - writer adds a writer while being removed', async t => {
   const { bases } = await create(4, t, { apply: applyWithRemove })
   const [a, b, c, d] = bases
 
@@ -1833,8 +1831,6 @@ test.skip('basic - writer adds a writer while being removed', async t => {
 
   await addWriterAndSync(a, d, false)
   await a.append({ remove: b4a.toString(b.local.key, 'hex') })
-
-  console.log('d', d.system.core.length)
 
   t.is(b.writable, true)
   await addWriterAndSync(b, c, false)
@@ -1870,7 +1866,6 @@ test.skip('basic - writer adds a writer while being removed', async t => {
   t.is(await d.view.get(1), 'd1')
 })
 
-// todo: this test is hard, probably have to rely on ff to fix
 test('basic - removed writer adds a writer while being removed', async t => {
   const { bases } = await create(3, t, { apply: applyWithRemove })
   const [a, b, c] = bases
