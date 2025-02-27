@@ -679,6 +679,9 @@ module.exports = class Autobase extends ReadyResource {
       throw new Error('Not writable')
     }
 
+    // good to check this early in case we are replaying, 99.999% of times this is ignored but doesnt hurt
+    if (this.localWriter && !this.localWriter.idle()) await this.localWriter.waitForSynced()
+
     if (this._appending === null) this._appending = []
 
     if (Array.isArray(value)) {
@@ -694,7 +697,11 @@ module.exports = class Autobase extends ReadyResource {
     if (this._advancing) await this._advancing
 
     // bump until we've flushed the nodes
-    while (this._appended < target && !this._interrupting) await this._bump()
+    while (this._appended < target && !this._interrupting) {
+      // in case we are replaying the state for whatever reason...
+      if (this.localWriter && !this.localWriter.idle()) await this.localWriter.waitForSynced()
+      await this._bump()
+    }
   }
 
   _append (value) {
