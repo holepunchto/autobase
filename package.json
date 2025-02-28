@@ -39,6 +39,7 @@
     "hypercore": "^11.0.21",
     "hypercore-crypto": "^3.4.0",
     "hypercore-id-encoding": "^1.2.0",
+    "index-encoder": "^3.3.2",
     "mutexify": "^1.4.0",
     "nanoassert": "^2.0.0",
     "protomux-wakeup": "^2.0.0",
