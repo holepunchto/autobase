@@ -1012,8 +1012,14 @@ module.exports = class Autobase extends ReadyResource {
       fastForwarding: true
     })
 
-    await store.getLocal().setUserData('autobase/boot', value)
-    await store.getLocal().setUserData('autobase/linearizer', null)
+    const local = store.getLocal()
+    await local.ready()
+    await local.setUserData('autobase/boot', value)
+
+    const tx = local.state.storage.write()
+    tx.deleteLocalRange(b4a.from([1]), b4a.from([2])) // drop updates
+    await tx.flush()
+
     await store.flush()
     await store.close()
 
