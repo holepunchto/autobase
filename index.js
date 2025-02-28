@@ -58,6 +58,7 @@ class WakeupHandler {
   }
 
   onannounce (wakeup, peer, session) {
+    if (this.base.isFastForwarding()) return
     this.base.hintWakeup(wakeup)
   }
 }
