@@ -1017,7 +1017,8 @@ module.exports = class Autobase extends ReadyResource {
     await local.setUserData('autobase/boot', value)
 
     const tx = local.state.storage.write()
-    tx.deleteLocalRange(b4a.from([1]), b4a.from([2])) // drop updates
+    // reset linearizer
+    tx.deleteLocalRange(b4a.from([messages.LINEARIZER_PREFIX]), b4a.from([messages.LINEARIZER_PREFIX + 1]))
     await tx.flush()
 
     await store.flush()
