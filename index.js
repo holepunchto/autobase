@@ -1013,6 +1013,7 @@ module.exports = class Autobase extends ReadyResource {
     })
 
     await store.getLocal().setUserData('autobase/boot', value)
+    await store.getLocal().setUserData('autobase/linearizer', null)
     await store.flush()
     await store.close()
 
