@@ -680,7 +680,10 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     // good to check this early in case we are replaying, 99.999% of times this is ignored but doesnt hurt
-    if (this.localWriter && !this.localWriter.idle()) await this.localWriter.waitForSynced()
+    if (this.localWriter && !this.localWriter.idle()) {
+      await this._bump()
+      await this.localWriter.waitForSynced()
+    }
 
     if (this._appending === null) this._appending = []
 
@@ -698,9 +701,9 @@ module.exports = class Autobase extends ReadyResource {
 
     // bump until we've flushed the nodes
     while (this._appended < target && !this._interrupting) {
+      await this._bump()
       // in case we are replaying the state for whatever reason...
       if (this.localWriter && !this.localWriter.idle()) await this.localWriter.waitForSynced()
-      await this._bump()
     }
   }
 
