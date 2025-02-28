@@ -1397,9 +1397,9 @@ module.exports = class Autobase extends ReadyResource {
     const local = this.local.length
 
     try {
-      // note: this might block due to network i/o
-      if (this._needsWakeup === true || this._wakeupHints.size > 0) await this._drainWakeup()
       await this._drain()
+      // must run post drain so the linearizer is caught up
+      if (this._caughtup && (this._needsWakeup === true || this._wakeupHints.size > 0)) await this._drainWakeup()
       this._draining = false
     } catch (err) {
       this._onError(err)
