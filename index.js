@@ -1080,7 +1080,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const prologue = indexedLength === 0
       ? null
-      : { length: indexedLength, hash: (await core.restoreBatch(indexedLength)).hash() }
+      : { length: indexedLength, hash: await core.treeHash(indexedLength) }
 
     const next = this._viewStore.getViewCore(indexerManifests, name, prologue)
     await next.ready()
