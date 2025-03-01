@@ -1344,8 +1344,12 @@ module.exports = class Autobase extends ReadyResource {
         }
       }
     }
-    for (const [hex] of this._wakeupHints) {
+    for (const [hex, length] of this._wakeupHints) {
       const key = b4a.from(hex, 'hex')
+      if (length !== -1) {
+        const w = this.activeWriters.get(key)
+        if (w && w.length >= length) continue
+      }
       promises.push(this._applyState.system.get(key))
     }
 
