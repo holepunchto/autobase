@@ -1041,6 +1041,10 @@ module.exports = class Autobase extends ReadyResource {
       await this._applyState.catchup(this.linearizer)
     }
 
+    if (!this.localWriter || this.localWriter.closed) {
+      await this._updateLocalWriter(this._applyState.system)
+    }
+
     this._caughtup = true
 
     this._rebooted()
