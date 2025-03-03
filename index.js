@@ -100,6 +100,8 @@ module.exports = class Autobase extends ReadyResource {
     this.linearizer = null
     this.updating = false
 
+    this.nukeTip = !!handlers.nukeTip
+
     this.wakeupOwner = !handlers.wakeup
     this.wakeupCapability = handlers.wakeupCapability || null
     this.wakeupProtocol = handlers.wakeup || new ProtomuxWakeup()
@@ -303,7 +305,55 @@ module.exports = class Autobase extends ReadyResource {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
     }
 
+    if (this.nukeTip) await this._nukeTip()
+
     this.setWakeup(this.wakeupCapability || this.key, null)
+  }
+
+  async _nukeTipBatch (key, length) {
+    const core = this.store.get({ key, active: false })
+    await core.ready()
+
+    const batch = core.session({ name: 'batch' })
+    await batch.ready()
+    if (batch.length > length) await batch.truncate(length)
+    await batch.close()
+
+    await core.close()
+  }
+
+  // TODO: not atomic atm, so more of a (very useful) debug helper
+  async _nukeTip () {
+    const pointer = await this.local.getUserData('autobase/boot')
+    if (!pointer) return
+
+    const boot = c.decode(messages.BootRecord, pointer)
+
+    const tx = this.local.state.storage.write()
+    tx.deleteLocalRange(b4a.from([messages.LINEARIZER_PREFIX]), b4a.from([messages.LINEARIZER_PREFIX + 1]))
+    await tx.flush()
+
+    await this._nukeTipBatch(boot.key, boot.indexedLength)
+
+    const encryption = this.encryptionKey
+      ? { key: AutoStore.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
+      : null
+
+    const core = this.store.get({ key: boot.key, encryption, active: false })
+    await core.ready()
+
+    const batch = core.session({ name: 'batch' })
+    await batch.ready()
+
+    const info = await SystemView.getIndexedInfo(batch, boot.indexedLength)
+    await batch.close()
+
+    for (const view of info.views) { // ensure any views ref'ed by system are consistent as well
+      await this._nukeTipBatch(view.key, view.length)
+    }
+
+    if (boot.heads) this.hintWakeup(boot.heads)
+    if (this.local.length) this.hintWakeup([{ key: this.local.key, length: this.local.length }])
   }
 
   setWakeup (cap, discoveryKey) {
@@ -357,7 +407,8 @@ module.exports = class Autobase extends ReadyResource {
         await this._migrate6(view.key, view.length)
       }
 
-      this.hintWakeup(boot.heads)
+      if (boot.heads) this.hintWakeup(boot.heads)
+      if (this.local.length) this.hintWakeup([{ key: this.local.key, length: this.local.length }])
     }
 
     return {
