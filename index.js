@@ -1058,7 +1058,7 @@ module.exports = class Autobase extends ReadyResource {
     const next = this.store.get(v.key)
     await next.ready()
 
-    const prologue = next.manifest.prologue
+    const prologue = next.manifest && next.manifest.prologue
 
     if (prologue && prologue.length > 0 && ref.core.length >= prologue.length) {
       await next.core.copyPrologue(ref.core.state)
