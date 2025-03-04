@@ -676,7 +676,7 @@ test('fast-forward - initial fast forward with in between writer', async t => {
   t.pass()
 })
 
-test('fast-forward - writer removed', async t => {
+test.solo('fast-forward - writer removed', async t => {
   t.plan(3)
 
   const { bases } = await create(2, t, {
@@ -713,6 +713,9 @@ test('fast-forward - writer removed', async t => {
   t.is(b.writable, false)
 
   t.ok(sparse > 0)
+
+  await a.append('hello')
+  await replicateAndSync([a, b])
 
   t.comment('sparse blocks: ' + sparse)
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
@@ -842,6 +845,10 @@ async function applyWithRemove (batch, view, base) {
     if (value.remove) {
       await base.removeWriter(b4a.from(value.remove, 'hex'))
       continue
+    }
+
+    if (view.length > 0) {
+      await view.get((view.length / 2) | 0)
     }
 
     await view.append(value)
