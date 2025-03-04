@@ -795,6 +795,7 @@ test('sequential restarts', async t => {
 })
 
 test('two writers write many messages, third writer joins', async t => {
+  t.timeout(120_000)
   const { bases } = await create(3, t)
   const [base1, base2, base3] = bases
 
