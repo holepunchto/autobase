@@ -779,6 +779,14 @@ module.exports = class Autobase extends ReadyResource {
     })
   }
 
+  static async getLocalKey (store, opts = {}) {
+    const core = opts.keyPair ? store.get({ ...opts, active: false }) : store.get({ ...opts, name: 'local', active: false })
+    await core.ready()
+    const key = core.key
+    await core.close()
+    return key
+  }
+
   static getLocalCore (store, handlers, encryptionKey) {
     const encryption = !encryptionKey ? null : { key: encryptionKey }
     const opts = { ...handlers, compat: false, active: false, exclusive: true, valueEncoding: messages.OplogMessage, encryption }
