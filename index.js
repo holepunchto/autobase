@@ -366,10 +366,16 @@ module.exports = class Autobase extends ReadyResource {
   async _migrate6 (key, length) {
     const core = this.store.get({ key, active: false })
     await core.ready()
+
+    // auto correct in case bad data
+    if (core.length < length) length = core.length
+
     const batch = core.session({ name: 'batch', overwrite: true, checkout: length })
     await batch.ready()
     await batch.close()
     await core.close()
+
+    return length
   }
 
   // called by view-store for bootstrapping
@@ -380,7 +386,7 @@ module.exports = class Autobase extends ReadyResource {
     const migrated = !!boot.heads
 
     if (migrated) { // ensure system batch is consistent on initial migration
-      await this._migrate6(boot.key, boot.indexedLength)
+      boot.indexedLength = await this._migrate6(boot.key, boot.indexedLength)
     }
 
     const encryption = this.encryptionKey
