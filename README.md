@@ -137,6 +137,14 @@ The primary key of the autobase.
 
 The discovery key associated with the autobase.
 
+#### `base.isIndexer`
+
+Whether the instance is an indexer.
+
+#### `base.writable`
+
+Whether the instance is a writer for the autobase.
+
 #### `base.paused`
 
 Whether the autobase is currently paused.
