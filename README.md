@@ -58,19 +58,22 @@ async function apply (nodes, view, host) {
 
 ### Ordering
 
-Autobase nodes explicitly reference previous nodes in the graph. The nodes are linearized by analyzing the causal references.
+Autobase writer nodes explicitly reference previous nodes creating a causal directed acyclic graph (DAG). The nodes are linearized by analyzing the causal references so:
+
+1. Nodes referencing previous nodes come after them.
+2. Ordering is eventually consistent.
 
 ### Reordering
 
-As new causal information comes in, existing nodes may be reordered. Any changes to the view will be undone and reapplied on top of the new ordering.
+As new causal information comes in, existing nodes may be reordered when causal forks occur. Any changes to the view will be undone and reapplied on top of the new ordering.
 
 ### Signed Length
 
-The linearizing algorithm is able to define a point at which the ordering of the graph below will never change. This point advances continually, so long as a majority set of indexers are writing messages.
+The linearizing algorithm is able to define checkpoints after which the ordering of the graph will never change. This point advances continually, so long as a majority set of indexers are writing messages. These checkpoints allow peers who are behind to catchup quickly and reduce the need to reorder nodes.
 
 ### Views
 
-A view is one or more hypercores who's content is created by deterministically applying linearized blocks appended by writers. The view represents the combined history of all writers' inputs.
+A view is one or more hypercores who's contents are created by deterministically applying the linearized nodes from writers. The view represents the combined history of all writers' inputs or the current state of the system as a whole.
 
 Autobase accepts an `open` function for creating views and an `apply` function that can be used to update a view.
 
