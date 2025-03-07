@@ -118,6 +118,10 @@ The primary key of the autobase.
 
 The discovery key associated with the autobase.
 
+#### `base.paused`
+
+Whether the autobase is currently paused.
+
 #### `await base.append(value)`
 
 Append a new entry to the autobase.
@@ -125,6 +129,15 @@ Append a new entry to the autobase.
 #### `await base.update()`
 
 Fetch all available data and update the linearizer.
+
+
+#### `await base.pause()`
+
+Pauses the autobase prevent the next apply from running.
+
+#### `await base.resume()`
+
+Resumes a paused autobase and will check for an update.
 
 #### `const core = Autobase.getLocalCore(store, handlers, encryptionKey)`
 
