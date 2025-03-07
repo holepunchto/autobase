@@ -62,7 +62,7 @@ Autobase nodes explicitly reference previous nodes in the graph. The nodes are l
 
 As new causal information comes in, existing nodes may be reordered. Any changes to the view will be undone and reapplied on top of the new ordering.
 
-### Indexed Length
+### Signed Length
 
 The linearizing algorithm is able to define a point at which the ordering of the graph below will never change. This point advances continually, so long as a majority set of indexers are writing messages.
 
@@ -106,6 +106,7 @@ If loading an existing Autobase then set `bootstrap` to `base.key`, otherwise pa
   close: view => { ... }, // close the view
   valueEncoding, // encoding
   ackInterval: 1000 // enable auto acking with the interval
+  fastForward: true, // Enable fast forwarding. If passing { key: base.core.key }, they autobase will fastforward to that key first.
 }
 ```
 
@@ -225,6 +226,44 @@ Get user data associated with an autobase `core`. `referrer` is the `.key` of th
 #### `const isBase = Autobase.isAutobase(core, opts)`
 
 Returns whether the core is an autobase core. `opts` are the same options as [core.get(index, opts)](https://github.com/holepunchto/hypercore?tab=readme-ov-file#const-block--await-coregetindex-options).
+
+#### `base.on('update', () => { ... })`
+
+Triggered when the autobase view updates after `apply` has finished running.
+
+#### `base.on('interrupt', (reason) => { ... })`
+
+Triggered when `host.interrupt(reason)` is called in the `apply` handler. See [`host.interrupt(reason)`](#hostinterruptreason) for when interrupts are used.
+
+#### `base.on('fast-forward', (to, from) => { ... })`
+
+Triggered when the autobase fast forwards to a state already with a quorum. `to` and `from` are the `.signedLength` after and before the fast forward respectively.
+
+Fast forwarding speeds up an autobase catching up to peers.
+
+#### `base.on('is-indexer', () => { ... })`
+
+Triggered when the autobase instance is an indexer.
+
+#### `base.on('is-non-indexer', () => { ... })`
+
+Triggered when the autobase instance is not an indexer.
+
+#### `base.on('writable', () => { ... })`
+
+Triggered when the autobase instance is now a writer.
+
+#### `base.on('unwritable', () => { ... })`
+
+Triggered when the autobase instance is now not a writer.
+
+#### `base.on('warning', (warning) => { ... })`
+
+Triggered when a warning is triggered.
+
+#### `base.on('error', (err) => { ... })`
+
+Triggered when an error is triggered while updating the autobase.
 
 ### `AutoStore`
 
