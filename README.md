@@ -102,6 +102,7 @@ If loading an existing Autobase then set `bootstrap` to `base.key`, otherwise pa
 {
   open: store => { ... }, // create the view
   apply: (nodes, view, hostcalls) => { ... }, // handle nodes
+  optimistic: false, // Autobase supports optimistic appends
   close: view => { ... }, // close the view
   valueEncoding, // encoding
   ackInterval: 1000 // enable auto acking with the interval
@@ -109,6 +110,24 @@ If loading an existing Autobase then set `bootstrap` to `base.key`, otherwise pa
 ```
 
 An `ackInterval` may be set to enable automatic acknowledgements. When enabled, in cases where it would help the linearizer converge the base shall eagerly append `null` values to the oplog.
+
+Setting an autobase to be `optimistic` means that writers can append an `optimistic` block even when they are not a writer. For a block to be optimistically applied to the view, the writer must be acknowledge via `hostcall.ackWriter(key)`.
+
+```js
+const base = new Autobase(store, bootstrap, {
+  optimistic: true,
+  async apply (nodes, view, hostcalls) {
+    for (const node of nodes) {
+      // Acknowledge only even numbers
+      if (node.value % 2 === 0) await hostcalls.ackWriter(node.from.key)
+      await view.append(node.value)
+    }
+  }
+})
+
+await base.append(3, { optimistic: true }) // will not be applied
+await base.append(2, { optimistic: true }) // will be applied
+```
 
 #### `base.key`
 
@@ -122,9 +141,17 @@ The discovery key associated with the autobase.
 
 Whether the autobase is currently paused.
 
-#### `await base.append(value)`
+#### `await base.append(value, opts)`
 
 Append a new entry to the autobase.
+
+Options include:
+
+```
+{
+  optimistic: false // Allow appending on an optimistic autobase while not a writer
+}
+```
 
 #### `await base.update()`
 
