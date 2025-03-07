@@ -1,5 +1,7 @@
 # Autobase
 
+A multiwriter data structure for combining multiple writer cores into a view of the system. Using the event sourcing pattern, writers append blocks which are linearized into an eventually consistent order for building a view of the system, combining their inputs.
+
 ## Install
 
 `npm i autobase`
