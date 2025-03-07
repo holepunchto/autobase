@@ -42,10 +42,10 @@ function open (store) {
 }
 
 // use apply to handle to updates
-async function apply (nodes, view, hostcalls) {
+async function apply (nodes, view, host) {
   for (const { value } of nodes) {
     if (value.addWriter) {
-      await hostcalls.addWriter(value.addWriter, { isIndexer: true })
+      await host.addWriter(value.addWriter, { isIndexer: true })
       continue
     }
 
@@ -100,8 +100,8 @@ If loading an existing Autobase then set `bootstrap` to `base.key`, otherwise pa
 
 ```js
 {
-  open: (store, hostcalls) => { ... }, // create the view
-  apply: (nodes, view, hostcalls) => { ... }, // handle nodes
+  open: (store, host) => { ... }, // create the view
+  apply: (nodes, view, host) => { ... }, // handle nodes
   optimistic: false, // Autobase supports optimistic appends
   close: view => { ... }, // close the view
   valueEncoding, // encoding
@@ -112,15 +112,15 @@ If loading an existing Autobase then set `bootstrap` to `base.key`, otherwise pa
 
 An `ackInterval` may be set to enable automatic acknowledgements. When enabled, in cases where it would help the linearizer converge the base shall eagerly append `null` values to the oplog.
 
-Setting an autobase to be `optimistic` means that writers can append an `optimistic` block even when they are not a writer. For a block to be optimistically applied to the view, the writer must be acknowledge via `hostcall.ackWriter(key)`.
+Setting an autobase to be `optimistic` means that writers can append an `optimistic` block even when they are not a writer. For a block to be optimistically applied to the view, the writer must be acknowledge via `host.ackWriter(key)`.
 
 ```js
 const base = new Autobase(store, bootstrap, {
   optimistic: true,
-  async apply (nodes, view, hostcalls) {
+  async apply (nodes, view, host) {
     for (const node of nodes) {
       // Acknowledge only even numbers
-      if (node.value % 2 === 0) await hostcalls.ackWriter(node.from.key)
+      if (node.value % 2 === 0) await host.ackWriter(node.from.key)
       await view.append(node.value)
     }
   }
