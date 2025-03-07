@@ -400,6 +400,16 @@ module.exports = class Autobase extends ReadyResource {
 
     const batch = core.session({ name: 'batch' })
     const info = await SystemView.getIndexedInfo(batch, boot.indexedLength)
+
+    for (const view of info.views) {
+      if (Math.abs(view.length - 22222) < 20) {
+        console.log('POTENTIAL VIEW!')
+        console.log('  AUTOBASE:', this.key.toString('hex'))
+        console.log('  VIEW:', view.key.toString('hex'))
+        console.log('  LENGTH:', view.length.toString('hex'))
+      }
+    }
+
     await batch.close()
     await core.close()
 
