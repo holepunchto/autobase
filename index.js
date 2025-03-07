@@ -366,6 +366,14 @@ module.exports = class Autobase extends ReadyResource {
   async _migrate6 (key, length) {
     const core = this.store.get({ key, active: false })
     await core.ready()
+
+    if (core.length < length) {
+      console.log('CORE LENGTH < BOOT LENGTH')
+      console.log('  KEY:', core.key.toString('hex'))
+      console.log('  LENGTH:', core.length)
+      console.log('  BOOT LENGTH:', length)
+    }
+
     const batch = core.session({ name: 'batch', overwrite: true, checkout: length })
     await batch.ready()
     await batch.close()
