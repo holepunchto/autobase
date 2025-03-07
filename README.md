@@ -47,7 +47,7 @@ function open (store) {
 async function apply (nodes, view, host) {
   for (const { value } of nodes) {
     if (value.addWriter) {
-      await host.addWriter(value.addWriter, { isIndexer: true })
+      await host.addWriter(value.addWriter, { indexer: true })
       continue
     }
 
@@ -285,9 +285,9 @@ Wait until all cores are ready.
 
 An instance of this is passed to apply and can be used in apply to invoke the following side effects on the base itself.
 
-#### `await host.addWriter(key, { isIndexer = true })`
+#### `await host.addWriter(key, { indexer = true })`
 
-Add a writer with the given `key` to the autobase allowing their local core to append. If `isIndexer` is `true`, it will be added as an indexer.
+Add a writer with the given `key` to the autobase allowing their local core to append. If `indexer` is `true`, it will be added as an indexer.
 
 #### `await host.removeWriter(key)`
 
