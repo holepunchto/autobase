@@ -145,6 +145,10 @@ Whether the instance is an indexer.
 
 Whether the instance is a writer for the autobase.
 
+#### `base.view`
+
+The view of the autobase derived from writer inputs. The view is created in the `open` handler and can have any shape. The most common `view` is a [hyperbee](https://github.com/holepunchto/hyperbee).
+
 #### `base.length`
 
 The length of the system core. This is neither the length of the local writer nor the length of the view.
