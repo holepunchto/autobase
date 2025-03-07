@@ -89,9 +89,7 @@ async function apply (nodes, view, host) {
 }
 ```
 
-_Note:_ Always use the `view` passed to the `apply` to update the view, not the `base.view`.
-
-*IMPORTANT*: Autobase messages may be reordered as new data becomes available. Updates will be undone and reapplied internally. It is important that any data structures touched by the `apply` function have been derived from the `store` object passed to the `open` handler and that its fully deterministic. If any external data structures are used, these updates will not be correctly undone.
+*IMPORTANT*: Autobase messages may be reordered as new data becomes available. Updates will be undone and reapplied internally. It is important that the `open` handler returns a data structure only derived from the `store` object as an argument and that the `view` argument is the only data structure touched by the `apply` function and that its fully deterministic. If any external data structures are used, these updates will not be correctly undone.
 
 ## API
 
