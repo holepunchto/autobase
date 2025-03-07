@@ -177,6 +177,10 @@ Options include:
 
 Fetch all available data and update the linearizer.
 
+#### `const hash = await base.hash()`
+
+Returns the hash of the system core's merkle tree roots.
+
 
 #### `const heads = base.heads()`
 
