@@ -68,7 +68,7 @@ The linearizing algorithm is able to define a point at which the ordering of the
 
 ### Views
 
-A linearized view may be created on top of an Autobase. This view can be updated to reflect the messages of within the base.
+A view is one or more hypercores who's content is created by deterministically applying linearized blocks appended by writers. The view represents the combined history of all writers' inputs.
 
 Autobase accepts an `open` function for creating views and an `apply` function that can be used to update a view.
 
@@ -79,10 +79,12 @@ async function open (store) {
 ```
 
 ```js
-async function apply (nodes, view, base) {
-  for (const n of nodes) await view.append(nodes)
+async function apply (nodes, view, host) {
+  for (const n of nodes) await view.append(n)
 }
 ```
+
+_Note:_ Always use the `view` passed to the `apply` to update the view, not the `base.view`.
 
 *IMPORTANT*: Autobase messages may be reordered as new data becomes available. Updates will be undone and reapplied internally. It is important that any data structures touched by the `apply` function have been derived from the `store` object passed to the `open` handler and that its fully deterministic. If any external data structures are used, these updates will not be correctly undone.
 
