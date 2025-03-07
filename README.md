@@ -222,6 +222,10 @@ Generate a local core to be used for an Autobase.
 
 Get user data associated with an autobase `core`. `referrer` is the `.key` of the autobase the `core` is from. `view` is the `name` of the view.
 
+#### `const isBase = Autobase.isAutobase(core, opts)`
+
+Returns whether the core is an autobase core. `opts` are the same options as [core.get(index, opts)](https://github.com/holepunchto/hypercore?tab=readme-ov-file#const-block--await-coregetindex-options).
+
 ### `AutoStore`
 
 Each autobase creates a `AutoStore` which is used to create views. The store is passed to the `open` function.
