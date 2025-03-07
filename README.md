@@ -254,7 +254,9 @@ Remove a writer from the autobase. This will throw if the writer cannot be remov
 
 Acknowledge a writer even if they haven't been added before. This is most useful for applying `optimistic` blocks from writers that are not currently a writer.
 
-#### `host.interrupt()`
+#### `host.interrupt(reason)`
+
+Interrupt the applying of writer blocks optionally giving a `reason`. This will emit an `interrupt` event passing the `reason` to the callback and close the autobase. Interrupts are an escape hatch to stop the apply function and resolve the issue by updating your apply function to handle it.
 
 #### `host.removeable(key)`
 
