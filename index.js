@@ -76,6 +76,8 @@ module.exports = class Autobase extends ReadyResource {
 
     const key = bootstrap ? toKey(bootstrap) : null
 
+    console.log('AUTOBASE OPENING:', key.toString('hex'))
+
     this.id = null
     this.key = key
     this.discoveryKey = null
