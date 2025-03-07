@@ -194,4 +194,9 @@ An instance of this is passed to apply and can be used in apply to invoke the fo
 
 #### `await host.removeWriter(key)`
 
+
+#### `await host.ackWriter(key)`
+
+Acknowledge a writer even if they haven't been added before. This is most useful for applying `optimistic` blocks from writers that are not currently a writer.
+
 #### `host.interrupt()`
