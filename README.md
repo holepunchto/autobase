@@ -100,7 +100,7 @@ If loading an existing Autobase then set `bootstrap` to `base.key`, otherwise pa
 
 ```js
 {
-  open: store => { ... }, // create the view
+  open: (store, hostcalls) => { ... }, // create the view
   apply: (nodes, view, hostcalls) => { ... }, // handle nodes
   optimistic: false, // Autobase supports optimistic appends
   close: view => { ... }, // close the view
