@@ -177,6 +177,12 @@ Options include:
 
 Fetch all available data and update the linearizer.
 
+#### `await base.ack(bg = false)`
+
+Manually acknowledge the current state by appending a null node that references known head nodes. Null nodes are ignored by the `apply` handler and only serve as a way to acknowledge the current linearized state. Only indexers can ack.
+
+If `bg` is set to `true`, the ack will not be appended immediately but will set the automatic ack timer to trigger as soon as possible.
+
 #### `const hash = await base.hash()`
 
 Returns the hash of the system core's merkle tree roots.
