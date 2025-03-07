@@ -218,9 +218,9 @@ Generate a local core to be used for an Autobase.
 
 `handlers` are any options passed to `store` to get the core.
 
-#### `const userData = Autobase.getUserData(core)`
+#### `const { referrer, view } = Autobase.getUserData(core)`
 
-Get user data associated with the autobase core.
+Get user data associated with an autobase `core`. `referrer` is the `.key` of the autobase the `core` is from. `view` is the `name` of the view.
 
 ### `AutoStore`
 
