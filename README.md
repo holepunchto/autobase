@@ -274,13 +274,9 @@ Triggered when an error is triggered while updating the autobase.
 
 Each autobase creates a `AutoStore` which is used to create views. The store is passed to the `open` function.
 
-#### `const core = await store.get(name || { name, valueEncoding })`
+#### `const core = store.get(name || { name, valueEncoding })`
 
 Load a `Hypercore` by name (passed as `name`). `name` should be passed as a string.
-
-#### `await store.ready()`
-
-Wait until all cores are ready.
 
 ### `AutobaseHostCalls`
 
