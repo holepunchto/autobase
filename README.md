@@ -178,6 +178,10 @@ Options include:
 Fetch all available data and update the linearizer.
 
 
+#### `const heads = base.heads()`
+
+Gets the current writer heads. A writer head is node written by a writer which has no causal dependents, aka it is the latest write. If there is more than one head, there is a causal fork which is pretty common.
+
 #### `await base.pause()`
 
 Pauses the autobase prevent the next apply from running.
