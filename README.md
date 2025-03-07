@@ -145,6 +145,14 @@ Whether the instance is an indexer.
 
 Whether the instance is a writer for the autobase.
 
+#### `base.length`
+
+The length of the system core. This is neither the length of the local writer nor the length of the view.
+
+#### `base.signedLength`
+
+The index of the system core that has been signed by a quorum of indexers. The system up until this point will not change.
+
 #### `base.paused`
 
 Whether the autobase is currently paused.
