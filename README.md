@@ -192,11 +192,18 @@ An instance of this is passed to apply and can be used in apply to invoke the fo
 
 #### `await host.addWriter(key, { isIndexer = true })`
 
+Add a writer with the given `key` to the autobase allowing their local core to append. If `isIndexer` is `true`, it will be added as an indexer.
+
 #### `await host.removeWriter(key)`
 
+Remove a writer from the autobase. This will throw if the writer cannot be removed.
 
 #### `await host.ackWriter(key)`
 
 Acknowledge a writer even if they haven't been added before. This is most useful for applying `optimistic` blocks from writers that are not currently a writer.
 
 #### `host.interrupt()`
+
+#### `host.removeable(key)`
+
+Returns whether the writer for the given `key` can be removed. The last indexer cannot be removed.
