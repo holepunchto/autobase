@@ -216,6 +216,8 @@ Resumes a paused autobase and will check for an update.
 
 Generate a local core to be used for an Autobase.
 
+`handlers` are any options passed to `store` to get the core.
+
 #### `const userData = Autobase.getUserData(core)`
 
 Get user data associated with the autobase core.
