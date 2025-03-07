@@ -27,6 +27,7 @@ const boot = require('./lib/boot.js')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 const INTERRUPT = new Error('Apply interrupted')
+const BINARY_ENCODING = c.from('binary')
 
 const AUTOBASE_VERSION = 1
 
@@ -723,6 +724,7 @@ module.exports = class Autobase extends ReadyResource {
   async append (value, opts) {
     if (this.opened === false) await this.ready()
     if (this._interrupting) throw new Error('Autobase is closing')
+    if (value && this.valueEncoding !== BINARY_ENCODING) value = normalize(this.valueEncoding, value)
 
     const optimistic = !!opts && !!opts.optimistic && !!value
 
@@ -1676,4 +1678,13 @@ function isObject (obj) {
 function emitWarning (err) {
   safetyCatch(err)
   this.emit('warning', err)
+}
+
+function normalize (valueEncoding, value) {
+  const state = { buffer: null, start: 0, end: 0 }
+  valueEncoding.preencode(state, value)
+  state.buffer = b4a.allocUnsafe(state.end)
+  valueEncoding.encode(state, value)
+  state.start = 0
+  return valueEncoding.decode(state)
 }
