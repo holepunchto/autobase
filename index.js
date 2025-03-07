@@ -36,6 +36,7 @@ const DEFAULT_ACK_INTERVAL = 10_000
 const DEFAULT_ACK_THRESHOLD = 4
 
 const REMOTE_ADD_BATCH = 64
+const MIN_FF_WAIT = 300_000 // wait at least 5min before attempting to ff again after failure
 
 class WakeupHandler {
   constructor (base, discoveryKey) {
@@ -113,6 +114,7 @@ module.exports = class Autobase extends ReadyResource {
     this.fastForwardEnabled = handlers.fastForward !== false
     this.fastForwarding = null
     this.fastForwardTo = null
+    this.fastForwardFailedAt = 0
 
     this._bootstrapWriters = [] // might contain dups, but thats ok
     this._bootstrapWritersChanged = false
@@ -1559,6 +1561,7 @@ module.exports = class Autobase extends ReadyResource {
     if (!this.fastForwardEnabled || this.fastForwarding !== null || this._interrupting) return
     if (latestSignedLength - this.core.length < FastForward.MINIMUM) return
     if (this.fastForwardTo !== null) return
+    if ((Date.now() - this.fastForwardFailedAt) < MIN_FF_WAIT) return
 
     this._runFastForward(new FastForward(this, this.core.key)).catch(noop)
   }
@@ -1582,11 +1585,13 @@ module.exports = class Autobase extends ReadyResource {
     if (this.fastForwarding === ff) this.fastForwarding = null
 
     if (!result) {
+      this.fastForwardFailedAt = Date.now()
       this._queueFastForward()
       this._updateActivity()
       return
     }
 
+    this.fastForwardFailedAt = 0
     this.fastForwardTo = result
 
     this._bumpAckTimer()
