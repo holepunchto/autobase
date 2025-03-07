@@ -187,6 +187,18 @@ If `bg` is set to `true`, the ack will not be appended immediately but will set 
 
 Returns the hash of the system core's merkle tree roots.
 
+#### `const stream = base.replicate(isInitiator || stream, opts)`
+
+Creates a replication stream for replicating the autobase. Arguments are the same as [corestores's `.replicate()`](https://github.com/holepunchto/corestore?tab=readme-ov-file#const-stream--storereplicateoptsorstream).
+
+```js
+const swarm = new Hyperswarm()
+
+// Join a topic
+swarm.join(base.discoveryKey)
+
+swarn.on('connection', (connection) => store.replicate(connection))
+```
 
 #### `const heads = base.heads()`
 
