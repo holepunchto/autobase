@@ -544,13 +544,19 @@ module.exports = class Autobase extends ReadyResource {
   async _open () {
     this._preopen = this._runPreOpen()
     await this._preopen
+    if (this.closing) return
 
     this._applyState = new ApplyState(this)
-    await this._applyState.ready()
 
-    await this._openLinearizer()
-    await this.core.ready()
-    await this._wakeup.ready()
+    try {
+      await this._applyState.ready()
+      await this._openLinearizer()
+      await this.core.ready()
+      await this._wakeup.ready()
+    } catch (err) {
+      if (this.closing) return
+      throw err
+    }
 
     if (this.core.length - this._applyState.indexedLength > this._ackTickThreshold) {
       this._ackTick = this._ackTickThreshold
@@ -594,7 +600,7 @@ module.exports = class Autobase extends ReadyResource {
 
     await this.activeWriters.clear()
 
-    const closing = this._advancing.catch(safetyCatch)
+    const closing = this._advancing ? this._advancing.catch(safetyCatch) : null
     await this._closeLocalCores()
 
     if (this._ackTimer) {
@@ -611,6 +617,7 @@ module.exports = class Autobase extends ReadyResource {
     await this.corePool.clear()
     await this.core.close()
     await this.store.close()
+
     await closing
   }
 
