@@ -374,6 +374,36 @@ module.exports = class Autobase extends ReadyResource {
     this.wakeupSession = this.wakeupProtocol.session(cap, new WakeupHandler(this, discoveryKey || null))
   }
 
+  async _getMigrationPointer (key, length) {
+    const encryption = this.encryptionKey
+      ? { key: AutoStore.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
+      : null
+
+    const core = this.store.get({ key, active: false, encryption })
+    await core.ready()
+
+    for (let i = length - 1; i >= 0; i--) {
+      if (!(await core.has(i))) continue
+
+      const sys = new SystemView(core, { checkout: i + 1 })
+      await sys.ready()
+
+      let good = true
+
+      for (const v of sys.views) {
+        const vc = this.store.get({ key: v.key, active: false })
+        await vc.ready()
+        if (vc.length < v.length) good = false
+        await vc.close()
+      }
+
+      await sys.close()
+      if (!good) continue
+
+      return i + 1
+    }
+  }
+
   // migrating from 6 -> latest
   async _migrate6 (key, length) {
     const core = this.store.get({ key, active: false })
@@ -435,9 +465,18 @@ module.exports = class Autobase extends ReadyResource {
     await this._preopen
 
     const pointer = await this.local.getUserData('autobase/boot')
-    return pointer
+
+    const boot = pointer
       ? c.decode(messages.BootRecord, pointer)
       : { key: null, indexedLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
+
+    if (boot.heads) {
+      const len = await this._getMigrationPointer(boot.key, boot.indexedLength)
+      if (len !== boot.indexedLength) this._warn(new Error('Invalid pointer in migration, correcting (' + len + ' vs ' + boot.indexedLength + ')'))
+      boot.indexedLength = len
+    }
+
+    return boot
   }
 
   _interrupt (reason) {
