@@ -30,6 +30,7 @@ const INTERRUPT = new Error('Apply interrupted')
 const BINARY_ENCODING = c.from('binary')
 
 const AUTOBASE_VERSION = 1
+const RECOVERIES = 1
 
 // default is to automatically ack
 const DEFAULT_ACK_INTERVAL = 10_000
@@ -168,6 +169,7 @@ module.exports = class Autobase extends ReadyResource {
     this.core = null
     this.version = -1
     this.interrupted = null
+    this.recoveries = RECOVERIES
 
     const {
       ackInterval = DEFAULT_ACK_INTERVAL,
@@ -293,6 +295,13 @@ module.exports = class Autobase extends ReadyResource {
       encrypt: this.encrypt,
       keyPair: this.keyPair
     })
+
+    const pointer = await result.local.getUserData('autobase/boot')
+
+    if (pointer) {
+      const { recoveries } = c.decode(messages.BootRecord, pointer)
+      this.recoveries = recoveries
+    }
 
     this._primaryBootstrap = result.bootstrap
     this.local = result.local
@@ -428,7 +437,7 @@ module.exports = class Autobase extends ReadyResource {
     const pointer = await this.local.getUserData('autobase/boot')
     return pointer
       ? c.decode(messages.BootRecord, pointer)
-      : { key: null, indexedLength: 0, indexersUpdated: false, fastForwarding: false, heads: null }
+      : { key: null, indexedLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
   }
 
   _interrupt (reason) {
@@ -1034,8 +1043,18 @@ module.exports = class Autobase extends ReadyResource {
     await sys.close()
   }
 
+  async _recoverMaybe () {
+    if (!this._applyState) return
+
+    const ff = await this._applyState.recoverAt()
+    if (!ff || this.fastForwardTo) return
+
+    this.fastForwardTo = ff
+    this._queueBump()
+  }
+
   async _applyFastForward () {
-    if (this.fastForwardTo.length < this.core.length + FastForward.MINIMUM) {
+    if (!this.fastForwardTo.force && this.fastForwardTo.length < this.core.length + FastForward.MINIMUM) {
       this.fastForwardTo = null
       this._updateActivity()
       // still not worth it
@@ -1070,7 +1089,8 @@ module.exports = class Autobase extends ReadyResource {
       key: this.fastForwardTo.key,
       indexedLength: this.fastForwardTo.length,
       indexersUpdated: false,
-      fastForwarding: true
+      fastForwarding: true,
+      recoveries: RECOVERIES
     })
 
     const local = store.getLocal()
@@ -1089,6 +1109,7 @@ module.exports = class Autobase extends ReadyResource {
 
     for (const ref of ffed) await ref.release()
 
+    this.recoveries = RECOVERIES
     this.fastForwardTo = null
     this._queueFastForward()
 
@@ -1464,6 +1485,8 @@ module.exports = class Autobase extends ReadyResource {
     if (this.paused || this._interrupting) return
 
     this._draining = true
+
+    if (this.recoveries < RECOVERIES) await this._recoverMaybe()
 
     const local = this.local.length
 
