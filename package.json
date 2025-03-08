@@ -33,6 +33,7 @@
   "dependencies": {
     "b4a": "^1.6.1",
     "bare-events": "^2.2.0",
+    "compact-encoding": "^2.16.0",
     "core-coupler": "^1.0.0",
     "debounceify": "^1.0.0",
     "hyperbee": "^2.22.0",
@@ -52,9 +53,8 @@
   "devDependencies": {
     "autobase-test-helpers": "^3.0.0",
     "brittle": "^3.1.1",
-    "corestore": "^7.0.5",
+    "corestore": "^7.0.15",
     "rache": "^1.0.0",
-    "random-access-memory": "^6.2.0",
     "same-data": "^1.0.0",
     "standard": "^17.0.0",
     "test-tmp": "^1.2.0"
