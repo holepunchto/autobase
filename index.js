@@ -16,7 +16,6 @@ const messages = require('./lib/messages.js')
 const Timer = require('./lib/timer.js')
 const Writer = require('./lib/writer.js')
 const ActiveWriters = require('./lib/active-writers.js')
-const CorePool = require('./lib/core-pool.js')
 const AutoWakeup = require('./lib/wakeup.js')
 
 const FastForward = require('./lib/fast-forward.js')
@@ -99,7 +98,6 @@ module.exports = class Autobase extends ReadyResource {
     this.isIndexer = false
 
     this.activeWriters = new ActiveWriters()
-    this.corePool = new CorePool()
     this.linearizer = null
     this.updating = false
 
@@ -544,6 +542,7 @@ module.exports = class Autobase extends ReadyResource {
   async _open () {
     this._preopen = this._runPreOpen()
     await this._preopen
+
     if (this.closing) return
 
     this._applyState = new ApplyState(this)
@@ -614,7 +613,6 @@ module.exports = class Autobase extends ReadyResource {
     if (this._applyState) await this._applyState.close()
 
     await this._viewStore.close()
-    await this.corePool.clear()
     await this.core.close()
     await this.store.close()
 
@@ -644,7 +642,6 @@ module.exports = class Autobase extends ReadyResource {
 
   async _closeWriter (w, now) {
     this.activeWriters.delete(w)
-    if (!now) this.corePool.linger(w.core)
     await w.close()
   }
 
@@ -951,7 +948,6 @@ module.exports = class Autobase extends ReadyResource {
       if (allowGC && w.flushed()) {
         this._wakeup.unqueue(key, len)
         if (w !== this.localWriter) {
-          this.corePool.linger(w.core)
           await w.close()
           return w
         }
@@ -979,12 +975,6 @@ module.exports = class Autobase extends ReadyResource {
   _makeWriterCore (key) {
     if (this.closing) throw new Error('Autobase is closing')
     if (this._interrupting) throw INTERRUPT()
-
-    const pooled = this.corePool.get(key)
-    if (pooled) {
-      pooled.valueEncoding = messages.OplogMessage
-      return pooled
-    }
 
     const local = b4a.equals(key, this.local.key)
 
@@ -1667,12 +1657,11 @@ module.exports = class Autobase extends ReadyResource {
     this._queueBump()
   }
 
-  async _closeAllActiveWriters (keepPool) {
+  async _closeAllActiveWriters () {
     for (const w of this.activeWriters) {
       if (this.localWriter === w) continue
       await this._closeWriter(w, true)
     }
-    if (keepPool) await this.corePool.clear()
   }
 
   // triggered from apply
