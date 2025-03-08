@@ -111,6 +111,9 @@ If loading an existing Autobase then set `bootstrap` to `base.key`, otherwise pa
   close: view => { ... }, // close the view
   valueEncoding, // encoding
   ackInterval: 1000 // enable auto acking with the interval
+  encryptionKey: buffer, // Key to encrypt the base
+  encrypt: false, // Encrypt the base if unencrypted & no encryptionKey is set
+  encrypted: false, // Expect the base to be encrypted, will throw an error otherwise
   fastForward: true, // Enable fast forwarding. If passing { key: base.core.key }, they autobase will fastforward to that key first.
 }
 ```
