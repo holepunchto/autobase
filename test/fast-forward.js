@@ -817,6 +817,48 @@ test('fast-forward - multiple views reordered', async t => {
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
+test('fast-forward - static fast-forward', async t => {
+  const { bases } = await create(4, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b, c, d] = bases
+
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c, false)
+
+  await b.append('b')
+  await c.append('c')
+
+  await confirm([a, b, c])
+
+  for (let i = 0; i < 200; i++) {
+    await a.append('a' + i)
+  }
+
+  await addWriterAndSync(a, c)
+
+  for (let i = 0; i < 200; i++) {
+    await a.append('a' + i)
+  }
+
+  await confirm([a, b])
+
+  let count = 0
+  d.on('fast-forward', () => count++)
+
+  const ff = new Promise(resolve => d.once('fast-forward', resolve))
+
+  // trigger fast-forward
+  t.teardown(replicate([a, b, d]))
+
+  t.is(await ff, a.core.signedLength)
+  t.alike(d.core.key, a.core.key)
+  t.is(count, 1)
+  t.pass()
+})
+
 async function isSparse (core) {
   let n = 0
   for (let i = 0; i < core.length; i++) {
