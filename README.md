@@ -73,9 +73,9 @@ The linearizing algorithm is able to define checkpoints after which the ordering
 
 ### Views
 
-A view is one or more hypercores who's contents are created by deterministically applying the linearized nodes from writers. The view represents the combined history of all writers' inputs or the current state of the system as a whole.
+A view is one or more hypercores whose contents are created by deterministically applying the linearized nodes from writers. The view represents the combined history of all writers' inputs or the current state of the system as a whole.
 
-Autobase accepts an `open` function for creating views and an `apply` function that can be used to update a view.
+Autobase accepts an `open` function for creating views and an `apply` function that can be used to update the views based on the writer nodes.
 
 ```js
 async function open (store) {
@@ -89,7 +89,7 @@ async function apply (nodes, view, host) {
 }
 ```
 
-*IMPORTANT*: Autobase messages may be reordered as new data becomes available. Updates will be undone and reapplied internally. It is important that the `open` handler returns a data structure only derived from the `store` object as an argument and that the `view` argument is the only data structure touched by the `apply` function and that its fully deterministic. If any external data structures are used, these updates will not be correctly undone.
+*IMPORTANT*: Autobase messages may be reordered as new data becomes available. Updates will be undone and reapplied internally. So it is important that the `open` handler returns a data structure only derived from its `store` object argument and that while updating the view in the `apply` function, the `view` argument is the only data structure being update and that its fully deterministic. If any external data structures are used, these updates will not be correctly undone.
 
 ## API
 
@@ -106,20 +106,20 @@ If loading an existing Autobase then set `bootstrap` to `base.key`, otherwise pa
 ```js
 {
   open: (store, host) => { ... }, // create the view
-  apply: (nodes, view, host) => { ... }, // handle nodes
+  apply: async (nodes, view, host) => { ... }, // handle nodes to update view
   optimistic: false, // Autobase supports optimistic appends
-  close: view => { ... }, // close the view
+  close: async view => { ... }, // close the view
   valueEncoding, // encoding
   ackInterval: 1000 // enable auto acking with the interval
   encryptionKey: buffer, // Key to encrypt the base
   encrypt: false, // Encrypt the base if unencrypted & no encryptionKey is set
-  encrypted: false, // Expect the base to be encrypted, will throw an error otherwise
+  encrypted: false, // Expect the base to be encrypted, will throw an error otherwise, defaults to true if encryptionKey is set
   fastForward: true, // Enable fast forwarding. If passing { key: base.core.key }, they autobase will fastforward to that key first.
   wakeup: new ProtomuxWakeup(), // Set a custom wakeup protocol for hinting which writers are active, see `protomux-wakeup` for protocol details
 }
 ```
 
-An `ackInterval` may be set to enable automatic acknowledgements. When enabled, in cases where it would help the linearizer converge the base shall eagerly append `null` values to the oplog.
+An `ackInterval` may be set to enable automatic acknowledgements. When enabled, in cases where it would help the linearizer converge, the base shall eagerly append `null` values to merge causal forks.
 
 Setting an autobase to be `optimistic` means that writers can append an `optimistic` block even when they are not a writer. For a block to be optimistically applied to the view, the writer must be acknowledge via `host.ackWriter(key)`.
 
@@ -161,7 +161,7 @@ The view of the autobase derived from writer inputs. The view is created in the 
 
 #### `base.length`
 
-The length of the system core. This is neither the length of the local writer nor the length of the view.
+The length of the system core. This is neither the length of the local writer nor the length of the view. The system core tracks the autobase as a whole.
 
 #### `base.signedLength`
 
@@ -169,7 +169,7 @@ The index of the system core that has been signed by a quorum of indexers. The s
 
 #### `base.paused`
 
-Whether the autobase is currently paused.
+Returns `true` if the autobase is currently paused, otherwise returns `false`.
 
 #### `await base.append(value, opts)`
 
@@ -189,7 +189,7 @@ Fetch all available data and update the linearizer.
 
 #### `await base.ack(bg = false)`
 
-Manually acknowledge the current state by appending a null node that references known head nodes. Null nodes are ignored by the `apply` handler and only serve as a way to acknowledge the current linearized state. Only indexers can ack.
+Manually acknowledge the current state by appending a `null` node that references known head nodes. `null` nodes are ignored by the `apply` handler and only serve as a way to acknowledge the current linearized state. Only indexers can ack.
 
 If `bg` is set to `true`, the ack will not be appended immediately but will set the automatic ack timer to trigger as soon as possible.
 
@@ -212,7 +212,7 @@ swarn.on('connection', (connection) => store.replicate(connection))
 
 #### `const heads = base.heads()`
 
-Gets the current writer heads. A writer head is node written by a writer which has no causal dependents, aka it is the latest write. If there is more than one head, there is a causal fork which is pretty common.
+Gets the current writer heads. A writer head is a node which has no causal dependents, aka it is the latest write. If there is more than one head, there is a causal fork which is pretty common.
 
 #### `await base.pause()`
 
@@ -264,7 +264,7 @@ Triggered when the autobase instance is now a writer.
 
 #### `base.on('unwritable', () => { ... })`
 
-Triggered when the autobase instance is now not a writer.
+Triggered when the autobase instance is no longer a writer.
 
 #### `base.on('warning', (warning) => { ... })`
 
@@ -284,7 +284,7 @@ Load a `Hypercore` by name (passed as `name`). `name` should be passed as a stri
 
 ### `AutobaseHostCalls`
 
-An instance of this is passed to apply and can be used in apply to invoke the following side effects on the base itself.
+An instance of this is passed to `apply` and can be used to invoke the following side effects on the base itself.
 
 #### `await host.addWriter(key, { indexer = true })`
 
