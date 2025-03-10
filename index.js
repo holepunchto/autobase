@@ -131,7 +131,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this._needsWakeup = true
     this._needsWakeupHeads = true
-    this._maybeStaticFastForward = false // writer bumps this
 
     this._updates = []
     this._handlers = handlers || {}
@@ -1387,7 +1386,6 @@ module.exports = class Autobase extends ReadyResource {
       const remoteAdded = await this._addRemoteHeads()
       const localNodes = this._appending !== null ? this._addLocalHeads() : null
 
-      // if (this._maybeStaticFastForward === true && this.fastForwardEnabled === true) await this._checkStaticFastForward()
       if (this._interrupting) return
 
       if (remoteAdded > 0 || localNodes !== null) {
@@ -1581,37 +1579,6 @@ module.exports = class Autobase extends ReadyResource {
     return false
   }
 
-  // async _checkStaticFastForward () {
-  //   let tally = null
-
-  //   for (let i = 0; i < this.linearizer.indexers.length; i++) {
-  //     const w = this.linearizer.indexers[i]
-  //     if (w.system !== null && !b4a.equals(w.system, this.system.core.key)) {
-  //       if (tally === null) tally = new Map()
-  //       const hex = b4a.toString(w.system, 'hex')
-  //       tally.set(hex, (tally.get(hex) || 0) + 1)
-  //     }
-  //   }
-
-  //   if (tally === null) {
-  //     this._maybeStaticFastForward = false
-  //     return
-  //   }
-
-  //   const maj = (this.linearizer.indexers.length >> 1) + 1
-
-  //   let candidate = null
-  //   for (const [hex, vote] of tally) {
-  //     if (vote < maj) continue
-  //     candidate = b4a.from(hex, 'hex')
-  //     break
-  //   }
-
-  //   if (candidate && !this._isFastForwarding()) {
-  //     await this.initialFastForward(candidate, DEFAULT_FF_TIMEOUT * 2)
-  //   }
-  // }
-
   _queueFastForward () {
     if (!this.core.opened) return
     // should have a better way to get this
@@ -1623,6 +1590,14 @@ module.exports = class Autobase extends ReadyResource {
     if ((Date.now() - this.fastForwardFailedAt) < MIN_FF_WAIT) return
 
     this._runFastForward(new FastForward(this, this.core.key)).catch(noop)
+  }
+
+  _queueStaticFastForward (key) {
+    if (!this.fastForwardEnabled || this.fastForwarding !== null || this._interrupting) return
+    if (this.fastForwardTo !== null) return
+    if ((Date.now() - this.fastForwardFailedAt) < MIN_FF_WAIT) return
+
+    this._runFastForward(new FastForward(this, key, { verified: false })).catch(noop)
   }
 
   _updateActivity () {
