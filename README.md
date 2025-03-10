@@ -60,7 +60,7 @@ async function apply (nodes, view, host) {
 
 Autobase writer nodes explicitly reference previous nodes creating a causal directed acyclic graph (DAG). The nodes are linearized by analyzing the causal references so:
 
-1. Nodes referencing previous nodes come after them.
+1. Nodes never precede nodes they reference.
 2. Ordering is eventually consistent.
 
 ### Reordering
