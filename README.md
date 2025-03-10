@@ -115,6 +115,7 @@ If loading an existing Autobase then set `bootstrap` to `base.key`, otherwise pa
   encrypt: false, // Encrypt the base if unencrypted & no encryptionKey is set
   encrypted: false, // Expect the base to be encrypted, will throw an error otherwise
   fastForward: true, // Enable fast forwarding. If passing { key: base.core.key }, they autobase will fastforward to that key first.
+  wakeup: new ProtomuxWakeup(), // Set a custom wakeup protocol for hinting which writers are active, see `protomux-wakeup` for protocol details
 }
 ```
 
