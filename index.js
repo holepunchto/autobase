@@ -1619,8 +1619,8 @@ module.exports = class Autobase extends ReadyResource {
     if (this.fastForwarding === ff) this.fastForwarding = null
 
     if (!result) {
-      this.fastForwardFailedAt = Date.now()
-      this._queueFastForward()
+      if (ff.failed) this.fastForwardFailedAt = Date.now()
+      else this._queueFastForward()
       this._updateActivity()
       return
     }
