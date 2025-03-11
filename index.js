@@ -46,7 +46,7 @@ class WakeupHandler {
   }
 
   onpeeradd (peer, session) {
-    session.lookup(peer, { hash: null })
+    // do nothing
   }
 
   onpeerremove (peer, session) {
@@ -566,7 +566,6 @@ module.exports = class Autobase extends ReadyResource {
     this._updateBootstrapWriters()
 
     this.recouple()
-    this.requestWakeup()
     this._queueFastForward()
 
     // queue a full bump that handles wakeup etc (not legal to wait for that here)
@@ -1168,8 +1167,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this._rebooted()
     this.emit('fast-forward', to, from)
-
-    this.requestWakeup()
   }
 
   // TODO: not atomic in regards to the ff, fix that
@@ -1261,7 +1258,6 @@ module.exports = class Autobase extends ReadyResource {
 
     // end soft shutdown
 
-    this.requestWakeup()
     this._queueFastForward()
 
     this._rebooted()
@@ -1433,11 +1429,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return writers
-  }
-
-  requestWakeup () {
-    if (!this.wakeupSession) return
-    this.wakeupSession.broadcastLookup({ hash: null }) // TODO: add state hash
   }
 
   async _wakeupWriter (key, length) {
