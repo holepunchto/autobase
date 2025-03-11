@@ -29,7 +29,10 @@ const INTERRUPT = new Error('Apply interrupted')
 const BINARY_ENCODING = c.from('binary')
 
 const AUTOBASE_VERSION = 1
-const RECOVERIES = 1
+
+const RECOVERIES = 2
+const FF_RECOVERY = 1
+const BOOT_RECOVERY = 2
 
 // default is to automatically ack
 const DEFAULT_ACK_INTERVAL = 10_000
@@ -399,6 +402,8 @@ module.exports = class Autobase extends ReadyResource {
 
       return i + 1
     }
+
+    return 0
   }
 
   // migrating from 6 -> latest
@@ -457,6 +462,43 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  async _recoverBootMaybe (boot) {
+    const sys = this.store.get({ key: boot.key, active: false })
+    await sys.ready()
+    const b = sys.session({ name: 'batch' })
+    await b.ready()
+
+    if (!(await b.has(boot.indexedLength - 1)) || !(await b.has(b.length - 1))) {
+      this._warn(new Error('Invalid pointer post migration, reseting to migration state'))
+
+      const len = await this._getMigrationPointer(boot.key, boot.indexedLength)
+      const value = c.encode(messages.BootRecord, {
+        key: boot.key,
+        indexedLength: len,
+        indexersUpdated: false,
+        fastForwarding: true,
+        recoveries: BOOT_RECOVERY
+      })
+
+      const tx = this.local.state.storage.write()
+      tx.deleteLocalRange(b4a.from([messages.LINEARIZER_PREFIX]), b4a.from([messages.LINEARIZER_PREFIX + 1]))
+      await tx.flush()
+
+      await this.local.ready()
+      await this.local.setUserData('autobase/boot', value)
+
+      this.recoveries = RECOVERIES
+
+      boot.indexedLength = len
+      boot.heads = []
+    }
+
+    await b.close()
+    await sys.close()
+
+    if (boot.recoveries === FF_RECOVERY) boot.recoveries = RECOVERIES
+  }
+
   // called by the apply state for bootstrapping
   async _getBootRecord () {
     await this._preopen
@@ -466,6 +508,8 @@ module.exports = class Autobase extends ReadyResource {
     const boot = pointer
       ? c.decode(messages.BootRecord, pointer)
       : { key: null, indexedLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
+
+    if (boot.recoveries < BOOT_RECOVERY) await this._recoverBootMaybe(boot)
 
     if (boot.heads) {
       const len = await this._getMigrationPointer(boot.key, boot.indexedLength)
@@ -1520,7 +1564,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._draining = true
 
-    if (this.recoveries < RECOVERIES) await this._recoverMaybe()
+    if (this.recoveries < FF_RECOVERY) await this._recoverMaybe()
 
     const local = this.local.length
 
