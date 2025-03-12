@@ -30,9 +30,8 @@ const BINARY_ENCODING = c.from('binary')
 
 const AUTOBASE_VERSION = 1
 
-const RECOVERIES = 2
+const RECOVERIES = 3
 const FF_RECOVERY = 1
-const BOOT_RECOVERY = 2
 
 // default is to automatically ack
 const DEFAULT_ACK_INTERVAL = 10_000
@@ -185,12 +184,13 @@ module.exports = class Autobase extends ReadyResource {
     this._acking = false
 
     this._waiting = new SignalPromise()
+    this._bootRecovery = false
 
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, new PublicApplyCalls(this)) : null
     this.core = this._viewStore.get({ name: '_system' })
 
     if (this.fastForwardEnabled && isObject(handlers.fastForward)) {
-      this._runFastForward(new FastForward(this, handlers.fastForward.key, { verified: false }))
+      this._runFastForward(new FastForward(this, handlers.fastForward.key, { verified: false })).catch(noop)
     }
 
     this.ready().catch(safetyCatch)
@@ -462,43 +462,6 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _recoverBootMaybe (boot) {
-    const sys = this.store.get({ key: boot.key, active: false })
-    await sys.ready()
-    const b = sys.session({ name: 'batch' })
-    await b.ready()
-
-    if (!(await b.has(boot.indexedLength - 1)) || !(await b.has(b.length - 1))) {
-      this._warn(new Error('Invalid pointer post migration, reseting to migration state'))
-
-      const len = await this._getMigrationPointer(boot.key, boot.indexedLength)
-      const value = c.encode(messages.BootRecord, {
-        key: boot.key,
-        indexedLength: len,
-        indexersUpdated: false,
-        fastForwarding: true,
-        recoveries: BOOT_RECOVERY
-      })
-
-      const tx = this.local.state.storage.write()
-      tx.deleteLocalRange(b4a.from([messages.LINEARIZER_PREFIX]), b4a.from([messages.LINEARIZER_PREFIX + 1]))
-      await tx.flush()
-
-      await this.local.ready()
-      await this.local.setUserData('autobase/boot', value)
-
-      this.recoveries = RECOVERIES
-
-      boot.indexedLength = len
-      boot.heads = []
-    }
-
-    await b.close()
-    await sys.close()
-
-    if (boot.recoveries === FF_RECOVERY) boot.recoveries = RECOVERIES
-  }
-
   // called by the apply state for bootstrapping
   async _getBootRecord () {
     await this._preopen
@@ -508,8 +471,6 @@ module.exports = class Autobase extends ReadyResource {
     const boot = pointer
       ? c.decode(messages.BootRecord, pointer)
       : { key: null, indexedLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
-
-    if (boot.recoveries < BOOT_RECOVERY) await this._recoverBootMaybe(boot)
 
     if (boot.heads) {
       const len = await this._getMigrationPointer(boot.key, boot.indexedLength)
@@ -592,6 +553,28 @@ module.exports = class Autobase extends ReadyResource {
 
     try {
       await this._applyState.ready()
+    } catch (err) {
+      if (this.closing) return
+
+      try {
+        await this._applyState.close()
+      } catch {}
+
+      this._applyState = null
+      if (this.closing) return
+
+      this._warn(new Error('Failed to boot due to: ' + err.message))
+
+      if (this.recoveries < RECOVERIES) {
+        this._bootRecovery = true
+        this._queueBump()
+        return
+      }
+
+      throw err
+    }
+
+    try {
       await this._openLinearizer()
       await this.core.ready()
       await this._wakeup.ready()
@@ -1123,7 +1106,11 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _recoverMaybe () {
-    if (!this._applyState) return
+    if (!this._applyState) {
+      if (!this._bootRecovery) return
+      await this._runFastForward(new FastForward(this, this.core.key, { force: true }))
+      return
+    }
 
     const ff = await this._applyState.recoverAt()
     if (!ff || this.fastForwardTo) return
@@ -1564,7 +1551,9 @@ module.exports = class Autobase extends ReadyResource {
 
     this._draining = true
 
-    if (this.recoveries < FF_RECOVERY) await this._recoverMaybe()
+    if (this.recoveries < FF_RECOVERY || this._bootRecovery) {
+      await this._recoverMaybe()
+    }
 
     const local = this.local.length
 
