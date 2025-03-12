@@ -1109,8 +1109,11 @@ module.exports = class Autobase extends ReadyResource {
     if (!this._applyState) {
       if (!this._bootRecovery) return
       await this._runFastForward(new FastForward(this, this.core.key, { force: true }))
+      this._queueBump()
       return
     }
+
+    this._bootRecovery = false
 
     const ff = await this._applyState.recoverAt()
     if (!ff || this.fastForwardTo) return
@@ -1128,7 +1131,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     // close existing state
-    await this._applyState.close()
+    if (this._applyState) await this._applyState.close()
 
     const from = this.core.signedLength
     const store = this._viewStore.atomize()
