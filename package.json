@@ -1,6 +1,6 @@
 {
   "name": "autobase",
-  "version": "7.0.25",
+  "version": "7.0.44",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -33,12 +33,14 @@
   "dependencies": {
     "b4a": "^1.6.1",
     "bare-events": "^2.2.0",
+    "compact-encoding": "^2.16.0",
     "core-coupler": "^1.0.0",
     "debounceify": "^1.0.0",
     "hyperbee": "^2.22.0",
-    "hypercore": "^11.0.21",
+    "hypercore": "^11.0.30",
     "hypercore-crypto": "^3.4.0",
     "hypercore-id-encoding": "^1.2.0",
+    "index-encoder": "^3.3.2",
     "mutexify": "^1.4.0",
     "nanoassert": "^2.0.0",
     "protomux-wakeup": "^2.0.0",
@@ -51,9 +53,8 @@
   "devDependencies": {
     "autobase-test-helpers": "^3.0.0",
     "brittle": "^3.1.1",
-    "corestore": "^7.0.5",
+    "corestore": "^7.0.15",
     "rache": "^1.0.0",
-    "random-access-memory": "^6.2.0",
     "same-data": "^1.0.0",
     "standard": "^17.0.0",
     "test-tmp": "^1.2.0"

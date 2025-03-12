@@ -19,14 +19,17 @@ test('encryption - basic', async t => {
   t.is(base.system.core.signedLength, 3)
 
   let found = false
-  for (const core of store.sessions) {
+
+  for (const core of store.cores) {
+    const session = store.get(core.key)
+    await session.setEncryptionKey(null) // ensure no auto decryption
+
     for (let i = 0; i < core.length; i++) {
-      const session = core.session()
-      await session.setEncryptionKey(null) // ensure no auto decryption
       const buf = await session.get(i, { valueEncoding: 'ascii' })
       if (buf.indexOf('you should not see me') > -1) found = true
-      await session.close()
     }
+
+    await session.close()
   }
 
   t.absent(found)
@@ -54,14 +57,14 @@ test('encryption - restart', async t => {
 
   let found = false
 
-  for (const core of store2.sessions) {
-    for (let i = 0; i < core.length; i++) {
-      const session = core.session()
-      await session.setEncryptionKey(null) // ensure no auto decryption
+  for (const core of store2.cores) {
+    const session = store2.get(core.key)
+    await session.setEncryptionKey(null) // ensure no auto decryption
+    for (let i = 0; i < session.length; i++) {
       const buf = await session.get(i, { valueEncoding: 'ascii' })
       if (buf.indexOf('you should still not see me') > -1) found = true
-      await session.close()
     }
+    await session.close()
   }
 
   t.absent(found)
