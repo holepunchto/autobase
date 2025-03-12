@@ -123,20 +123,29 @@ An `ackInterval` may be set to enable automatic acknowledgements. When enabled, 
 
 Setting an autobase to be `optimistic` means that writers can append an `optimistic` block even when they are not a writer. For a block to be optimistically applied to the view, the writer must be acknowledge via `host.ackWriter(key)`.
 
+_Note:_ Optimistic blocks should self verify in the `apply` handler to prevent unintended writers from appending blocks to exploit the system. If the `apply` handler does not have a way to verify optimistic blocks, any writer could append blocks even when not added to the system.
+
 ```js
 const base = new Autobase(store, bootstrap, {
   optimistic: true,
   async apply (nodes, view, host) {
     for (const node of nodes) {
+      const { value } = node
+      // Verify block
+      if (value.password !== 'secrets') continue
+
       // Acknowledge only even numbers
-      if (node.value % 2 === 0) await host.ackWriter(node.from.key)
-      await view.append(node.value)
+      if (value.num % 2 === 0) await host.ackWriter(node.from.key)
+
+      await view.append(value.num)
     }
   }
 })
 
-await base.append(3, { optimistic: true }) // will not be applied
-await base.append(2, { optimistic: true }) // will be applied
+// Passing the password 'secrets' represents being verifiable
+await base.append({ num: 3, password: 'secrets' }, { optimistic: true }) // will not be applied because `ackWriter` isnt called
+await base.append({ num: 2, password: 'secrets' }, { optimistic: true }) // will be applied
+await base.append({ num: 4, password: 'incorrect' }, { optimistic: true }) // will not be applied because the block isn't verifiable
 ```
 
 #### `base.key`
