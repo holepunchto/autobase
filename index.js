@@ -382,7 +382,9 @@ module.exports = class Autobase extends ReadyResource {
     const core = this.store.get({ key, active: false, encryption })
     await core.ready()
 
-    for (let i = length - 1; i >= 0; i--) {
+    const min = (core.manifest && core.manifest.prologue) ? core.manifest.prologue.length : 0
+
+    for (let i = length - 1; i >= min; i--) {
       if (!(await core.has(i))) continue
 
       const sys = new SystemView(core, { checkout: i + 1 })
@@ -403,7 +405,7 @@ module.exports = class Autobase extends ReadyResource {
       return i + 1
     }
 
-    return 0
+    return min
   }
 
   // migrating from 6 -> latest
@@ -558,6 +560,10 @@ module.exports = class Autobase extends ReadyResource {
 
       try {
         await this._applyState.close()
+      } catch {}
+
+      try {
+        await this.core.ready()
       } catch {}
 
       this._applyState = null
