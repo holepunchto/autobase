@@ -29,7 +29,9 @@ const INTERRUPT = new Error('Apply interrupted')
 const BINARY_ENCODING = c.from('binary')
 
 const AUTOBASE_VERSION = 1
-const RECOVERIES = 1
+
+const RECOVERIES = 3
+const FF_RECOVERY = 1
 
 // default is to automatically ack
 const DEFAULT_ACK_INTERVAL = 10_000
@@ -182,12 +184,13 @@ module.exports = class Autobase extends ReadyResource {
     this._acking = false
 
     this._waiting = new SignalPromise()
+    this._bootRecovery = false
 
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, new PublicApplyCalls(this)) : null
     this.core = this._viewStore.get({ name: '_system' })
 
     if (this.fastForwardEnabled && isObject(handlers.fastForward)) {
-      this._runFastForward(new FastForward(this, handlers.fastForward.key, { verified: false }))
+      this._runFastForward(new FastForward(this, handlers.fastForward.key, { verified: false })).catch(noop)
     }
 
     this.ready().catch(safetyCatch)
@@ -379,7 +382,9 @@ module.exports = class Autobase extends ReadyResource {
     const core = this.store.get({ key, active: false, encryption })
     await core.ready()
 
-    for (let i = length - 1; i >= 0; i--) {
+    const min = (core.manifest && core.manifest.prologue) ? core.manifest.prologue.length : 0
+
+    for (let i = length - 1; i >= min; i--) {
       if (!(await core.has(i))) continue
 
       const sys = new SystemView(core, { checkout: i + 1 })
@@ -399,6 +404,8 @@ module.exports = class Autobase extends ReadyResource {
 
       return i + 1
     }
+
+    return min
   }
 
   // migrating from 6 -> latest
@@ -548,6 +555,32 @@ module.exports = class Autobase extends ReadyResource {
 
     try {
       await this._applyState.ready()
+    } catch (err) {
+      if (this.closing) return
+
+      try {
+        await this._applyState.close()
+      } catch {}
+
+      try {
+        await this.core.ready()
+      } catch {}
+
+      this._applyState = null
+      if (this.closing) return
+
+      this._warn(new Error('Failed to boot due to: ' + err.message))
+
+      if (this.recoveries < RECOVERIES) {
+        this._bootRecovery = true
+        this._queueBump()
+        return
+      }
+
+      throw err
+    }
+
+    try {
       await this._openLinearizer()
       await this.core.ready()
       await this._wakeup.ready()
@@ -1079,7 +1112,14 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _recoverMaybe () {
-    if (!this._applyState) return
+    if (!this._applyState) {
+      if (!this._bootRecovery) return
+      await this._runFastForward(new FastForward(this, this.core.key, { force: true }))
+      this._queueBump()
+      return
+    }
+
+    this._bootRecovery = false
 
     const ff = await this._applyState.recoverAt()
     if (!ff || this.fastForwardTo) return
@@ -1097,7 +1137,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     // close existing state
-    await this._applyState.close()
+    if (this._applyState) await this._applyState.close()
 
     const from = this.core.signedLength
     const store = this._viewStore.atomize()
@@ -1520,7 +1560,9 @@ module.exports = class Autobase extends ReadyResource {
 
     this._draining = true
 
-    if (this.recoveries < RECOVERIES) await this._recoverMaybe()
+    if (this.recoveries < FF_RECOVERY || this._bootRecovery) {
+      await this._recoverMaybe()
+    }
 
     const local = this.local.length
 
