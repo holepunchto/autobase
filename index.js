@@ -962,7 +962,7 @@ module.exports = class Autobase extends ReadyResource {
         w.isRemoved = false
       }
 
-      if (w.core.writable && this._needsLocalWriter()) {
+      if (this._isLocalCore(w.core) && this._needsLocalWriter()) {
         this._setLocalWriter(w)
       }
 
@@ -972,7 +972,7 @@ module.exports = class Autobase extends ReadyResource {
 
       await w.ready()
 
-      if (w.core.writable && this._needsLocalWriter()) {
+      if (this._isLocalCore(w.core) && this._needsLocalWriter()) {
         this._setLocalWriter(w)
       }
 
@@ -1020,7 +1020,7 @@ module.exports = class Autobase extends ReadyResource {
     const core = this._makeWriterCore(key)
     const w = new Writer(this, core, length, isRemoved)
 
-    if (core.writable) {
+    if (this._isLocalCore(core)) {
       if (isActive) this._setLocalWriter(w) // only set active writer
       return w
     }
@@ -1347,6 +1347,10 @@ module.exports = class Autobase extends ReadyResource {
     this._ackTimer = null
 
     this.emit('is-non-indexer')
+  }
+
+  _isLocalCore (core) {
+    return core.writable && core.id === this.local.core
   }
 
   _addLocalHeads () {
