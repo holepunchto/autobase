@@ -84,7 +84,7 @@ module.exports = class Autobase extends ReadyResource {
     this.key = key
     this.discoveryKey = null
 
-    this.keyPair = handlers.keyPair || null
+    this.keyPair = null
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
     this.globalCache = store.globalCache || null
@@ -289,6 +289,8 @@ module.exports = class Autobase extends ReadyResource {
     if (this._handlers.wait) await this._handlers.wait()
 
     await this.store.ready()
+
+    this.keyPair = (await this._handlers.keyPair) || null
 
     const result = await boot(this.store, this.key, {
       encryptionKey: this.encryptionKey,
