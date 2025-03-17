@@ -1217,7 +1217,11 @@ module.exports = class Autobase extends ReadyResource {
     const prologue = next.manifest && next.manifest.prologue
 
     if (prologue && prologue.length > 0 && ref.core.length >= prologue.length) {
-      await next.core.copyPrologue(ref.core.state)
+      try {
+        await next.core.copyPrologue(ref.core.state)
+      } catch {
+        // we might be missing some nodes for this, just ignore, only an optimisation
+      }
     }
 
     const batch = next.session({ name: 'batch', overwrite: true, checkout: v.length })
