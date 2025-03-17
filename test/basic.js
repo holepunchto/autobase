@@ -176,7 +176,7 @@ test('basic - local key pair', async t => {
   t.alike(base2.local.manifest.signers[0].publicKey, keyPair.publicKey)
 })
 
-test.solo('basic - local key pair promise', async t => {
+test('basic - local key pair promise', async t => {
   const keyPair = crypto.keyPair(Buffer.alloc(32))
   const [store] = await createStores(1, t)
 
