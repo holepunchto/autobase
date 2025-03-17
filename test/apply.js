@@ -1,3 +1,4 @@
+const process = require('process')
 const test = require('brittle')
 const b4a = require('b4a')
 

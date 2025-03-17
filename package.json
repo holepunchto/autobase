@@ -6,6 +6,7 @@
   "scripts": {
     "test": "standard && brittle test/all.js",
     "test:encrypted": "standard && brittle test/all.js --encrypt-all",
+    "test:bare": "bare test/all.js",
     "fuzz:generated": "brittle test/reference/fuzz/generated/*.js",
     "fuzz:main": "node test/fuzz/index.js",
     "fuzz": "node test/reference/fuzz/fuzz.js"
@@ -18,6 +19,10 @@
     "events": {
       "bare": "bare-events",
       "default": "events"
+    },
+    "process": {
+      "bare": "bare-process",
+      "default": "process"
     }
   },
   "repository": {
@@ -33,6 +38,7 @@
   "dependencies": {
     "b4a": "^1.6.1",
     "bare-events": "^2.2.0",
+    "bare-process": "^4.1.2",
     "compact-encoding": "^2.16.0",
     "core-coupler": "^1.0.0",
     "debounceify": "^1.0.0",
