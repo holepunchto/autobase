@@ -111,7 +111,6 @@ module.exports = class Autobase extends ReadyResource {
     this.wakeupSession = null
 
     this._primaryBootstrap = null
-    this._localName = null
 
     this.fastForwardEnabled = handlers.fastForward !== false
     this.fastForwarding = null
