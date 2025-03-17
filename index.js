@@ -265,7 +265,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   heads () {
-    if (!this._applyState) return []
+    if (!this._applyState || !this._applyState.opened) return []
     const nodes = new Array(this._applyState.system.heads.length)
     for (let i = 0; i < this._applyState.system.heads.length; i++) nodes[i] = this._applyState.system.heads[i]
     return nodes.sort(compareNodes)
