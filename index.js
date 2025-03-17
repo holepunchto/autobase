@@ -84,7 +84,7 @@ module.exports = class Autobase extends ReadyResource {
     this.key = key
     this.discoveryKey = null
 
-    this.keyPair = handlers.keyPair || null
+    this.keyPair = null
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
     this.globalCache = store.globalCache || null
@@ -287,22 +287,17 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _runPreOpen () {
-    const local = this._handlers.writer ? await this._handlers.writer : null
-
     if (this._handlers.wait) await this._handlers.wait()
 
     await this.store.ready()
 
+    this.keyPair = (await this._handlers.keyPair) || null
+
     const result = await boot(this.store, this.key, {
       encryptionKey: this.encryptionKey,
       encrypt: this.encrypt,
-      keyPair: this.keyPair,
-      local
+      keyPair: this.keyPair
     })
-    if (local) {
-      // The overridden local core is sessioned inside boot, so closed here to avoid leaking
-      await local.close()
-    }
 
     const pointer = await result.local.getUserData('autobase/boot')
 

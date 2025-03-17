@@ -176,6 +176,32 @@ test('basic - local key pair', async t => {
   t.alike(base2.local.manifest.signers[0].publicKey, keyPair.publicKey)
 })
 
+test.solo('basic - local key pair promise', async t => {
+  const keyPair = crypto.keyPair(Buffer.alloc(32))
+  const [store] = await createStores(1, t)
+
+  const base = createBase(store, null, t, { keyPair: Promise.resolve(keyPair) })
+  await base.ready()
+
+  const key = base.key
+
+  const block = { message: 'hello, world!' }
+  await base.append(block)
+
+  t.is(base.view.signedLength, 1)
+  t.alike(await base.view.get(0), block)
+  t.alike(base.local.manifest.signers[0].publicKey, keyPair.publicKey)
+
+  await base.close()
+
+  const base2 = createBase(store, key, t)
+  await base2.ready()
+
+  t.alike(base2.local.key, base.local.key)
+  t.alike(await base2.view.get(0), block)
+  t.alike(base2.local.manifest.signers[0].publicKey, keyPair.publicKey)
+})
+
 test('basic - view', async t => {
   const { bases } = await create(1, t)
   const [base] = bases
