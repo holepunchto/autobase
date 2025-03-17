@@ -48,7 +48,7 @@ class WakeupHandler {
   }
 
   onpeeradd (peer, session) {
-    session.lookup(peer, { hash: null })
+    // do nothing
   }
 
   onpeerremove (peer, session) {
@@ -599,7 +599,6 @@ module.exports = class Autobase extends ReadyResource {
     this._updateBootstrapWriters()
 
     this.recouple()
-    this.requestWakeup()
     this._queueFastForward()
 
     // queue a full bump that handles wakeup etc (not legal to wait for that here)
@@ -1208,8 +1207,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this._rebooted()
     this.emit('fast-forward', to, from)
-
-    this.requestWakeup()
   }
 
   // TODO: not atomic in regards to the ff, fix that
@@ -1301,7 +1298,6 @@ module.exports = class Autobase extends ReadyResource {
 
     // end soft shutdown
 
-    this.requestWakeup()
     this._queueFastForward()
 
     this._rebooted()
@@ -1475,11 +1471,6 @@ module.exports = class Autobase extends ReadyResource {
     return writers
   }
 
-  requestWakeup () {
-    if (!this.wakeupSession) return
-    this.wakeupSession.broadcastLookup({ hash: null }) // TODO: add state hash
-  }
-
   async _wakeupWriter (key, length) {
     this._ensureWakeup(await this._getWriterByKey(key, -1, length, true, false, null))
   }
@@ -1498,10 +1489,12 @@ module.exports = class Autobase extends ReadyResource {
     // warmup all the below gets
     if (this._needsWakeup) {
       for (const { key } of this._wakeup) {
+        if (this.activeWriters.has(key)) continue
         promises.push(this._applyState.system.get(key))
       }
       if (this._needsWakeupHeads) {
         for (const { key } of await this._applyState.system.heads) {
+          if (this.activeWriters.has(key)) continue
           promises.push(this._applyState.system.get(key))
         }
       }
@@ -1510,7 +1503,10 @@ module.exports = class Autobase extends ReadyResource {
       const key = b4a.from(hex, 'hex')
       if (length !== -1) {
         const w = this.activeWriters.get(key)
-        if (w && w.length >= length) continue
+        if (w) {
+          if (w.length < length) w.seen(length)
+          continue
+        }
       }
       promises.push(this._applyState.system.get(key))
     }
@@ -1521,6 +1517,7 @@ module.exports = class Autobase extends ReadyResource {
       this._needsWakeup = false
 
       for (const { key } of this._wakeup) {
+        if (this.activeWriters.has(key)) continue
         await this._wakeupWriter(key, 0)
       }
 
@@ -1528,6 +1525,7 @@ module.exports = class Autobase extends ReadyResource {
         this._needsWakeupHeads = false
 
         for (const { key } of await this._applyState.system.heads) {
+          if (this.activeWriters.has(key)) continue
           await this._wakeupWriter(key, 0)
         }
       }
@@ -1535,6 +1533,7 @@ module.exports = class Autobase extends ReadyResource {
 
     for (const [hex, length] of this._wakeupHints) {
       const key = b4a.from(hex, 'hex')
+      if (this.activeWriters.has(key)) continue
       if (length !== -1) {
         const info = await this._applyState.system.get(key)
         if (info && length <= info.length) continue // stale hint
