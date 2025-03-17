@@ -53,6 +53,34 @@ test('suspend - pass exisiting store', async t => {
   await t.execution(replicateAndSync([base3, base1]))
 })
 
+test('suspend - update local writer', async t => {
+  const { stores, bases } = await create(2, t)
+
+  const [base1] = bases
+
+  const next = base1.store.get({ name: 'next' })
+  await next.ready()
+
+  const keyPair = next.keyPair
+
+  await base1.append({
+    add: next.key.toString('hex'),
+    debug: 'this is adding b'
+  })
+
+  await base1.append({
+    value: 'base1'
+  })
+
+  await base1.close()
+
+  const base2 = createBase(stores[0], base1.local.key, t, { keyPair })
+  await base2.ready()
+
+  t.is(base2.system.members, 2)
+  t.is(base2.local.id, next.id)
+})
+
 test('suspend - pass exisiting fs store', async t => {
   const { bases } = await create(1, t, { open: null })
   const [base1] = bases
