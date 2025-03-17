@@ -1350,7 +1350,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _isLocalCore (core) {
-    return core.writable && core.id === this.local.core
+    return core.writable && core.id === this.local.id
   }
 
   _addLocalHeads () {
