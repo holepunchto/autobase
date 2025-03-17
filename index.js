@@ -111,6 +111,7 @@ module.exports = class Autobase extends ReadyResource {
     this.wakeupSession = null
 
     this._primaryBootstrap = null
+    this._localName = null
 
     this.fastForwardEnabled = handlers.fastForward !== false
     this.fastForwarding = null
@@ -286,6 +287,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _runPreOpen () {
+    const local = this._handlers.writer ? await this._handlers.writer : null
+
     if (this._handlers.wait) await this._handlers.wait()
 
     await this.store.ready()
@@ -293,8 +296,13 @@ module.exports = class Autobase extends ReadyResource {
     const result = await boot(this.store, this.key, {
       encryptionKey: this.encryptionKey,
       encrypt: this.encrypt,
-      keyPair: this.keyPair
+      keyPair: this.keyPair,
+      local
     })
+    if (local) {
+      // The overridden local core is sessioned inside boot, so closed here to avoid leaking
+      await local.close()
+    }
 
     const pointer = await result.local.getUserData('autobase/boot')
 
