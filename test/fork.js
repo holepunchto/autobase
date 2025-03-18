@@ -60,12 +60,11 @@ test('fork - one writer to another', async t => {
     }
   })
 
-  t.is(base2.system.indexers.length, 1)
-  t.alike(base2.system.indexers[0].key, base2.local.key)
-
   t.is(base2.view.length, 4)
 
   await t.execution(base2.append('post fork'))
 
   t.is(base2.view.length, 5)
+  t.is(base2._applyState.encryptionView.core.signedLength, 2)
+  t.alike(base2.system.indexers[0].key, base2.local.key)
 })
