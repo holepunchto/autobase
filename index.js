@@ -1240,21 +1240,18 @@ module.exports = class Autobase extends ReadyResource {
     ref.migrated(this, next)
   }
 
-  async _migrateView (indexerManifests, name, indexedLength, entropy) {
-    const ref = this._viewStore.byName.get(name)
-
-    const core = ref.batch || ref.core
-    await core.ready()
+  async _migrateView (indexerManifests, source, name, indexedLength, entropy) {
+    const ref = await this._viewStore.byName.get(name)
 
     const prologue = indexedLength === 0
       ? null
-      : { length: indexedLength, hash: await core.treeHash(indexedLength) }
+      : { length: indexedLength, hash: await source.treeHash(indexedLength) }
 
     const next = this._viewStore.getViewCore(indexerManifests, name, prologue, entropy)
     await next.ready()
 
     if (indexedLength > 0) {
-      await next.core.copyPrologue(core.state)
+      await next.core.copyPrologue(source.state)
     }
 
     // remake the batch, reset from our prologue in case it replicated inbetween
@@ -1262,13 +1259,13 @@ module.exports = class Autobase extends ReadyResource {
     const batch = next.session({ name: 'batch', overwrite: true, checkout: indexedLength })
     await batch.ready()
 
-    if (core.length > batch.length) {
-      for (let i = batch.length; i < core.length; i++) {
-        await batch.append(await core.get(i))
+    if (source.length > batch.length) {
+      for (let i = batch.length; i < source.length; i++) {
+        await batch.append(await source.get(i))
       }
     }
 
-    await ref.batch.state.moveTo(batch, core.length)
+    await ref.batch.state.moveTo(batch, source.length)
     await batch.close()
 
     ref.migrated(this, next)
@@ -1287,10 +1284,15 @@ module.exports = class Autobase extends ReadyResource {
       const name = this._applyState.views[i].name
       const indexedLength = info.views[i].length
 
-      await this._migrateView(indexerManifests, name, indexedLength, info.entropy)
+      const ref = this._viewStore.byName.get(name)
+      const source = ref.batch || ref.core
+      await source.ready()
+
+      await this._migrateView(indexerManifests, source, name, indexedLength, info.entropy)
     }
 
-    const ref = await this._migrateView(indexerManifests, '_system', length, info.entropy)
+    const sysCore = this._applyState.systemRef.batch // review: could we use this.core ?
+    const ref = await this._migrateView(indexerManifests, sysCore, '_system', length, info.entropy)
 
     // start soft shutdown
 
@@ -1300,6 +1302,77 @@ module.exports = class Autobase extends ReadyResource {
     await this._applyState.finalize(ref.core.key)
 
     this._applyState = new ApplyState(this)
+
+    await this._applyState.ready()
+    await this._applyState.catchup(this.linearizer)
+
+    // end soft shutdown
+
+    this._queueFastForward()
+
+    this._rebooted()
+  }
+
+  async _fork ({ indexers, length, encryptionKey }) {
+    await this._applyState.finalize(this._applyState.system.core.key)
+
+    const store = this._viewStore.atomize()
+
+    const manifests = await store.getIndexerManifests(indexers)
+
+    const sysCore = store.get({ name: '_system' })
+    await sysCore.truncate(length)
+
+    const system = new SystemView(sysCore)
+    await system.ready()
+
+    const entropy = system.getEntropy(indexers)
+
+    const views = []
+    for (let i = 0; i < system.views.length; i++) {
+      const view = system.views[i]
+      const ref = await store.findViewByKey(view.key, indexers, system.entropy)
+
+      const session = store.get({ name: ref.name })
+      await session.ready()
+
+      await session.truncate(view.length)
+
+      const prologue = await getPrologue(session)
+      const key = await store.createView(manifests, ref.name, prologue, entropy)
+
+      // update key
+      views.push({ key, length: session.length })
+
+      await this._migrateView(manifests, session, ref.name, session.length, entropy)
+    }
+
+    await system.fork(indexers, manifests, views)
+
+    const ref = await this._migrateView(manifests, system.core, '_system', length, entropy)
+
+    const local = store.getLocal()
+    await local.ready()
+
+    const pointer = c.encode(messages.BootRecord, {
+      key: ref.core.key,
+      indexedLength: length,
+      indexersUpdated: true,
+      fastForwarding: false,
+      recoveries: this.recoveries
+    })
+
+    await local.setUserData('autobase/boot', pointer)
+
+    await store.flush()
+
+    // start soft shutdown
+    await this._clearWriters()
+    await this._makeLinearizer(system)
+
+    await store.close()
+
+    this._applyState = new ApplyState(this, system)
 
     await this._applyState.ready()
     await this._applyState.catchup(this.linearizer)
@@ -1441,9 +1514,9 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const u = this.linearizer.update()
-      const indexersUpdated = u ? await this._applyState.update(u, localNodes) : false
+      const updated = u ? await this._applyState.update(u, localNodes) : false
 
-      if (!indexersUpdated) {
+      if (!updated) {
         if (this._applyState.shouldFlush()) {
           await this._applyState.flush()
           this.updating = true
@@ -1458,7 +1531,9 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       await this._gcWriters()
-      await this._migrate()
+
+      if (updated.fork) await this._fork(updated.fork)
+      else await this._migrate()
     }
 
     // emit state changes post drain
@@ -1778,4 +1853,15 @@ function normalize (valueEncoding, value) {
   valueEncoding.encode(state, value)
   state.start = 0
   return valueEncoding.decode(state)
+}
+
+async function getPrologue (core, length = core.length) {
+  if (!length) return null
+
+  const hash = await core.treeHash(length)
+
+  return {
+    length,
+    hash
+  }
 }
