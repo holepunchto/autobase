@@ -12,7 +12,7 @@ const ProtomuxWakeup = require('protomux-wakeup')
 
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
-const { EncryptionView } = require('./lib/encryption.js')
+const AutobaseEncryption = require('./lib/encryption.js')
 const messages = require('./lib/messages.js')
 const Timer = require('./lib/timer.js')
 const Writer = require('./lib/writer.js')
@@ -309,11 +309,12 @@ module.exports = class Autobase extends ReadyResource {
     this.id = result.bootstrap.id
 
     this.encryptionKey = result.encryptionKey
-    if (this.encryptionKey) this.encryption = new EncryptionView(this, null)
 
     if (this.encrypted) {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
     }
+
+    if (this.encryptionKey) this.encryption = new AutobaseEncryption(this, null)
 
     if (this.nukeTip) await this._nukeTip()
 
@@ -1300,7 +1301,7 @@ module.exports = class Autobase extends ReadyResource {
 
       // update encryption
       if (i === 0) {
-        const encryption = new EncryptionView(this, session)
+        const encryption = new AutobaseEncryption(this, session)
         await encryption.update(encryptionKey)
       }
 
