@@ -309,7 +309,7 @@ module.exports = class Autobase extends ReadyResource {
     this.id = result.bootstrap.id
 
     this.encryptionKey = result.encryptionKey
-    if (this.encryptionKey) this.encryption = { key: this.encryptionKey }
+    if (this.encryptionKey) this.encryption = new EncryptionView(this, null)
 
     if (this.encrypted) {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
