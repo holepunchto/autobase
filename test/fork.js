@@ -11,6 +11,7 @@ test('fork - one writer to another', async t => {
   let forked = false
 
   const { bases } = await create(2, t, {
+    encryptionKey: b4a.alloc(32, 0),
     apply: async (batch, view, host) => {
       for (const { value } of batch) {
         if (value.add) {
@@ -21,9 +22,10 @@ test('fork - one writer to another', async t => {
 
         if (value.fork) {
           const indexers = value.fork.indexers.map(key => b4a.from(key, 'hex'))
+          const encryptionKey = b4a.from(value.fork.encryptionKey, 'hex')
           value.fork.system.key = b4a.from(value.fork.system.key, 'hex')
 
-          t.is(await host.fork(indexers, value.fork.system), !forked)
+          t.is(await host.fork(indexers, value.fork.system, encryptionKey), !forked)
           forked = true
         }
 
@@ -53,7 +55,8 @@ test('fork - one writer to another', async t => {
       system: {
         key: b4a.toString(base2.system.core.key, 'hex'),
         length: base2.indexedLength
-      }
+      },
+      encryptionKey: b4a.alloc(32, 1)
     }
   })
 
