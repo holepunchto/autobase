@@ -462,7 +462,8 @@ module.exports = class Autobase extends ReadyResource {
     return {
       key: boot.key,
       indexers: info.indexers,
-      views: info.views
+      views: info.views,
+      entropy: info.entropy
     }
   }
 
@@ -1143,6 +1144,7 @@ module.exports = class Autobase extends ReadyResource {
     const from = this.core.signedLength
     const store = this._viewStore.atomize()
     const views = this.fastForwardTo.views
+    const entropy = this.fastForwardTo.entropy
 
     // mutating, prop fine as we are throwing it away immediately
     views.push({ key: this.fastForwardTo.key, length: this.fastForwardTo.length })
@@ -1150,7 +1152,7 @@ module.exports = class Autobase extends ReadyResource {
     const ffed = []
 
     for (const v of views) {
-      const ref = await this._viewStore.findViewByKey(v.key, this.fastForwardTo.indexers)
+      const ref = await this._viewStore.findViewByKey(v.key, this.fastForwardTo.indexers, entropy)
       if (!ref) continue // unknown, view ignored
       ffed.push(ref)
 
@@ -1238,7 +1240,7 @@ module.exports = class Autobase extends ReadyResource {
     ref.migrated(this, next)
   }
 
-  async _migrateView (indexerManifests, name, indexedLength) {
+  async _migrateView (indexerManifests, name, indexedLength, entropy) {
     const ref = this._viewStore.byName.get(name)
 
     const core = ref.batch || ref.core
@@ -1248,7 +1250,7 @@ module.exports = class Autobase extends ReadyResource {
       ? null
       : { length: indexedLength, hash: await core.treeHash(indexedLength) }
 
-    const next = this._viewStore.getViewCore(indexerManifests, name, prologue)
+    const next = this._viewStore.getViewCore(indexerManifests, name, prologue, entropy)
     await next.ready()
 
     if (indexedLength > 0) {
@@ -1285,10 +1287,10 @@ module.exports = class Autobase extends ReadyResource {
       const name = this._applyState.views[i].name
       const indexedLength = info.views[i].length
 
-      await this._migrateView(indexerManifests, name, indexedLength)
+      await this._migrateView(indexerManifests, name, indexedLength, info.entropy)
     }
 
-    const ref = await this._migrateView(indexerManifests, '_system', length)
+    const ref = await this._migrateView(indexerManifests, '_system', length, info.entropy)
 
     // start soft shutdown
 
