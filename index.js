@@ -352,7 +352,7 @@ module.exports = class Autobase extends ReadyResource {
     await this._nukeTipBatch(boot.key, boot.indexedLength)
 
     const encryption = this.encryptionKey
-      ? { key: AutoStore.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
+      ? { key: AutobaseEncryption.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
       : null
 
     const core = this.store.get({ key: boot.key, encryption, active: false })
@@ -380,7 +380,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async _getMigrationPointer (key, length) {
     const encryption = this.encryptionKey
-      ? { key: AutoStore.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
+      ? { key: AutobaseEncryption.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
       : null
 
     const core = this.store.get({ key, active: false, encryption })
@@ -434,7 +434,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const encryption = this.encryptionKey
-      ? { key: AutoStore.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
+      ? { key: AutobaseEncryption.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
       : null
 
     const core = this.store.get({ key: boot.key, encryption, active: false })
