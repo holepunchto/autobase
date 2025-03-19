@@ -1328,7 +1328,7 @@ module.exports = class Autobase extends ReadyResource {
     this._rebooted()
   }
 
-  async _fork ({ indexers, length, encryptionKey }) {
+  async _fork ({ indexers, length }) {
     await this._applyState.finalize(this._applyState.system.core.key)
 
     const store = this._viewStore.atomize()
