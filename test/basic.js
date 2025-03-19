@@ -320,6 +320,23 @@ test('basic - simple reorg', async t => {
   t.is(await b.view.get(3), 'b1')
 })
 
+test('basic - zero length view', async t => {
+  const { bases } = await create(2, t)
+
+  const [a, b] = bases
+
+  await addWriter(a, b)
+  await confirm(bases)
+
+  await a.append(null)
+
+  await confirm(bases)
+
+  const info = await a.system.getIndexedInfo()
+
+  t.is(info.views.length, 0)
+})
+
 test('basic - compare views', async t => {
   const { bases } = await create(2, t)
 
@@ -1967,6 +1984,38 @@ test('basic - removed writer adds a writer while being removed', async t => {
   t.is(a.view.length, c.view.length)
 })
 
+test('basic - append to views out of order', async t => {
+  const { bases } = await create(2, t, {
+    apply: applyMultiple,
+    open: openMultiple,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b] = bases
+
+  await addWriterAndSync(a, b)
+
+  await replicateAndSync([a, b])
+
+  await a.append({ index: 2, data: 'a0' })
+
+  await confirm([a, b])
+
+  await b.append({ index: 2, data: 'b0' })
+  await a.append({ index: 1, data: 'a1' })
+
+  t.is(b.activeWriters.size, 2)
+
+  await confirm([a, b])
+
+  await b.append({ index: 1, data: 'final' })
+  await t.execution(replicateAndSync([a, b]))
+
+  t.is(b.view.first.signedLength, 1)
+
+  await t.execution(confirm([a, b]))
+})
+
 async function applyWithRemove (batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
@@ -1980,5 +2029,27 @@ async function applyWithRemove (batch, view, base) {
     }
 
     await view.append(value)
+  }
+}
+
+function openMultiple (store) {
+  return {
+    first: store.get('first', { valueEncoding: 'json' }),
+    second: store.get('second', { valueEncoding: 'json' })
+  }
+}
+
+async function applyMultiple (batch, view, base) {
+  for (const { value } of batch) {
+    if (value.add) {
+      await base.addWriter(Buffer.from(value.add, 'hex'))
+      continue
+    }
+
+    if (value.index === 1) {
+      await view.first.append(value.data)
+    } else if (value.index === 2) {
+      await view.second.append(value.data)
+    }
   }
 }
