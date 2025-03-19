@@ -529,7 +529,8 @@ test('linearizer - all voted', async t => {
   t.alike(cinfo.views[0].length, 1)
 })
 
-async function getIndexedViewLength (base) {
+async function getIndexedViewLength (base, index = -1) {
   const info = await base.getIndexedInfo()
-  return info.views[0] ? info.views[0].length : 0
+  if (index === -1) index = info.views.length - 1
+  return info.views[index] ? info.views[index].length : 0
 }
