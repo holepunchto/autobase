@@ -319,7 +319,12 @@ module.exports = class Autobase extends ReadyResource {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
     }
 
-    if (this.encryptionKey) this.encryption = new AutobaseEncryption(this, null)
+    if (this.encryptionKey) {
+      this.encryption = new AutobaseEncryption(this, null)
+
+      await this.local.setEncryption(this.getWriterEncryption(this.local.key))
+      await this._primaryBootstrap.setEncryption(this.getWriterEncryption(this.key))
+    }
 
     if (this.nukeTip) await this._nukeTip()
 
@@ -1007,12 +1012,16 @@ module.exports = class Autobase extends ReadyResource {
     return Promise.all(p)
   }
 
+  getWriterEncryption (key) {
+    return this.encryption && this.encryption.get(b4a.toString(key, 'hex'))
+  }
+
   _makeWriterCore (key) {
     if (this.closing) throw new Error('Autobase is closing')
     if (this._interrupting) throw INTERRUPT()
 
     const local = b4a.equals(key, this.local.key)
-    const encryption = this.encryption && this.encryption.get(b4a.toString(key, 'hex'))
+    const encryption = this.getWriterEncryption(key)
 
     const core = local
       ? this.local.session({ valueEncoding: messages.OplogMessage, encryption, active: false })
