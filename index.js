@@ -158,9 +158,10 @@ module.exports = class Autobase extends ReadyResource {
 
     this._preopen = null
 
+    this._hasOpen = !!this._handlers.open
     this._hasApply = !!this._handlers.apply
     this._hasOptimisticApply = !!this._handlers.optimistic
-    this._hasOpen = !!this._handlers.open
+    this._hasUpdate = !!this._handlers.update
     this._hasClose = !!this._handlers.close
 
     this._viewStore = new AutoStore(this)
