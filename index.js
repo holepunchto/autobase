@@ -12,6 +12,7 @@ const ProtomuxWakeup = require('protomux-wakeup')
 
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
+const AutobaseEncryption = require('./lib/encryption.js')
 const messages = require('./lib/messages.js')
 const Timer = require('./lib/timer.js')
 const Writer = require('./lib/writer.js')
@@ -313,10 +314,16 @@ module.exports = class Autobase extends ReadyResource {
     this.id = result.bootstrap.id
 
     this.encryptionKey = result.encryptionKey
-    if (this.encryptionKey) this.encryption = { key: this.encryptionKey }
 
     if (this.encrypted) {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
+    }
+
+    if (this.encryptionKey) {
+      this.encryption = new AutobaseEncryption(this, null)
+
+      await this.local.setEncryption(this.getWriterEncryption(this.local.key))
+      await this._primaryBootstrap.setEncryption(this.getWriterEncryption(this.key))
     }
 
     if (this.nukeTip) await this._nukeTip()
@@ -350,7 +357,7 @@ module.exports = class Autobase extends ReadyResource {
     await this._nukeTipBatch(boot.key, boot.indexedLength)
 
     const encryption = this.encryptionKey
-      ? { key: AutoStore.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
+      ? { key: AutobaseEncryption.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
       : null
 
     const core = this.store.get({ key: boot.key, encryption, active: false })
@@ -378,7 +385,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async _getMigrationPointer (key, length) {
     const encryption = this.encryptionKey
-      ? { key: AutoStore.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
+      ? { key: AutobaseEncryption.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
       : null
 
     const core = this.store.get({ key, active: false, encryption })
@@ -432,7 +439,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const encryption = this.encryptionKey
-      ? { key: AutoStore.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
+      ? { key: AutobaseEncryption.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
       : null
 
     const core = this.store.get({ key: boot.key, encryption, active: false })
@@ -1005,15 +1012,20 @@ module.exports = class Autobase extends ReadyResource {
     return Promise.all(p)
   }
 
+  getWriterEncryption (key) {
+    return this.encryption && this.encryption.get(b4a.toString(key, 'hex'))
+  }
+
   _makeWriterCore (key) {
     if (this.closing) throw new Error('Autobase is closing')
     if (this._interrupting) throw INTERRUPT()
 
     const local = b4a.equals(key, this.local.key)
+    const encryption = this.getWriterEncryption(key)
 
     const core = local
-      ? this.local.session({ valueEncoding: messages.OplogMessage, encryption: this.encryption, active: false })
-      : this.store.get({ key, compat: false, writable: false, valueEncoding: messages.OplogMessage, encryption: this.encryption, active: false })
+      ? this.local.session({ valueEncoding: messages.OplogMessage, encryption, active: false })
+      : this.store.get({ key, compat: false, writable: false, valueEncoding: messages.OplogMessage, encryption, active: false })
 
     return core
   }

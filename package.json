@@ -38,6 +38,7 @@
     "debounceify": "^1.0.0",
     "hyperbee": "^2.22.0",
     "hypercore": "^11.0.30",
+    "hypercore-block-encryption": "github:holepunchto/hypercore-block-encryption",
     "hypercore-crypto": "^3.4.0",
     "hypercore-id-encoding": "^1.2.0",
     "index-encoder": "^3.3.2",
