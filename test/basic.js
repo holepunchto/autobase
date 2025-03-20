@@ -80,6 +80,26 @@ test('basic - two writers', async t => {
   // t.alike(await base1.system.checkpoint(), await base3.system.checkpoint())
 })
 
+test('basic - wait for writable', async t => {
+  const { bases } = await create(3, t, { open: null })
+
+  const [base1, base2, base3] = bases
+
+  const p1 = base2.waitForWritable()
+  const p2 = base3.waitForWritable()
+
+  await addWriter(base1, base2)
+  await confirm([base1, base2, base3])
+
+  await addWriter(base2, base3)
+  await confirm([base1, base2, base3])
+
+  await p1
+  await p2
+
+  t.pass('resolved')
+})
+
 test('basic - no truncates when history is linear', async t => {
   const { bases } = await create(3, t)
   const [base1, base2, base3] = bases

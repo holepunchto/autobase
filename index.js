@@ -9,6 +9,7 @@ const SignalPromise = require('signal-promise')
 const CoreCoupler = require('core-coupler')
 const mutexify = require('mutexify/promise')
 const ProtomuxWakeup = require('protomux-wakeup')
+const rrp = require('resolve-reject-promise')
 
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
@@ -139,6 +140,7 @@ module.exports = class Autobase extends ReadyResource {
     this._warn = emitWarning.bind(this)
 
     this._draining = false
+    this._writable = null
     this._advancing = null
     this._interrupting = false
     this._caughtup = false
@@ -648,6 +650,8 @@ module.exports = class Autobase extends ReadyResource {
     await this._viewStore.close()
     await this.core.close()
     await this.store.close()
+
+    if (this._writable) this._writable.resolve(false)
 
     await closing
   }
@@ -1460,7 +1464,10 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     // emit state changes post drain
-    if (writable !== this.writable) this.emit(writable ? 'unwritable' : 'writable')
+    if (writable !== this.writable) {
+      if (this.writable && this._writable) this._writable.resolve(true)
+      this.emit(writable ? 'unwritable' : 'writable')
+    }
   }
 
   _wakeupPeer (peer) {
@@ -1563,6 +1570,12 @@ module.exports = class Autobase extends ReadyResource {
     this._queueBump()
   }
 
+  waitForWritable () {
+    if (this.writable) return Promise.resolve(true)
+    if (!this._writable) this._writable = rrp()
+    return this._writable.promise
+  }
+
   async _advance () {
     if (this.opened === false) await this.ready()
     if (this.paused || this._interrupting) return
@@ -1577,8 +1590,15 @@ module.exports = class Autobase extends ReadyResource {
 
     try {
       await this._drain()
+
       // must run post drain so the linearizer is caught up
       if (this._caughtup && (this._needsWakeup === true || this._wakeupHints.size > 0)) await this._drainWakeup()
+
+      // check if we should update local writer
+      if (!this.localWriter || this.localWriter.closed) {
+        await this._updateLocalWriter(this._applyState.system)
+      }
+
       this._draining = false
     } catch (err) {
       this._onError(err)
@@ -1587,12 +1607,9 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this._interrupting) return
 
-    if (this.localWriter || this._optimistic > -1) {
-      if (!this.localWriter || this.localWriter.closed) await this._updateLocalWriter(this._applyState.system)
-      if (!this._interrupting && this.localWriter) {
-        if (this._applyState.isLocalPendingIndexer()) this.ack().catch(noop)
-        else if (this._triggerAckAsap()) this._ackTimer.asap()
-      }
+    if (this.localWriter && !this.localWriter.closed) {
+      if (this._applyState.isLocalPendingIndexer()) this.ack().catch(noop)
+      else if (this._triggerAckAsap()) this._ackTimer.asap()
     }
 
     // keep bootstraps in sync with linearizer

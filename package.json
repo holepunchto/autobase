@@ -45,6 +45,7 @@
     "nanoassert": "^2.0.0",
     "protomux-wakeup": "^2.0.0",
     "ready-resource": "^1.0.0",
+    "resolve-reject-promise": "^1.1.0",
     "safety-catch": "^1.0.2",
     "signal-promise": "^1.0.3",
     "sub-encoder": "^2.1.1",
