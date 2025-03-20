@@ -14,8 +14,7 @@ const {
   addWriter,
   addWriterAndSync,
   confirm,
-  eventFlush,
-  encryptionKey
+  eventFlush
 } = require('./helpers')
 
 test('suspend - pass exisiting store', async t => {
@@ -551,8 +550,8 @@ test('suspend - open new index after reopen', async t => {
   const an = await a.local.get(a.local.length - 1)
   const bn = await b2.local.get(b2.local.length - 1)
 
-  t.is(an.checkpoint.length, encryptionKey ? 4 : 3)
-  t.is(bn.checkpoint.length, encryptionKey ? 4 : 3)
+  t.is(an.checkpoint.length, 4)
+  t.is(bn.checkpoint.length, 4)
 
   // const acp1 = await a.localWriter.getCheckpoint(1)
   // const acp2 = await a.localWriter.getCheckpoint(2)
@@ -640,8 +639,8 @@ test('suspend - reopen multiple indexes', async t => {
   const an = await a.local.get(a.local.length - 1)
   const b2n = await b2.local.get(b2.local.length - 1)
 
-  t.is(an.checkpoint.length, encryptionKey ? 4 : 3)
-  t.is(b2n.checkpoint.length, encryptionKey ? 4 : 3)
+  t.is(an.checkpoint.length, 4)
+  t.is(b2n.checkpoint.length, 4)
 
   // const acp1 = await a.localWriter.getCheckpoint(1)
   // const acp2 = await a.localWriter.getCheckpoint(2)
@@ -795,8 +794,8 @@ test.skip('suspend - append but not indexed then reopen', async t => {
   const an = await a.local.get(a.local.length - 1)
   const c2n = await c2.local.get(c2.local.length - 1)
 
-  t.is(an.checkpoint.length, encryptionKey ? 4 : 3)
-  t.is(c2n.checkpoint.length, encryptionKey ? 4 : 3)
+  t.is(an.checkpoint.length, 4)
+  t.is(c2n.checkpoint.length, 4)
 
   const acp1 = await a.localWriter.getCheckpoint(1)
   // const acp2 = await a.localWriter.getCheckpoint(2)

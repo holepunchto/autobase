@@ -520,13 +520,9 @@ test('linearizer - all voted', async t => {
   await c.append('c' + ci++)
   await replicateAndSync(bases)
 
-  const ainfo = await a.getIndexedInfo()
-  const binfo = await a.getIndexedInfo()
-  const cinfo = await a.getIndexedInfo()
-
-  t.alike(ainfo.views[0].length, 1)
-  t.alike(binfo.views[0].length, 1)
-  t.alike(cinfo.views[0].length, 1)
+  t.alike(await getIndexedViewLength(a), 1)
+  t.alike(await getIndexedViewLength(b), 1)
+  t.alike(await getIndexedViewLength(c), 1)
 })
 
 async function getIndexedViewLength (base, index = -1) {
