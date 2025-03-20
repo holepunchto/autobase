@@ -1171,7 +1171,7 @@ module.exports = class Autobase extends ReadyResource {
 
       for (const [name, ref] of this._viewStore.byName) {
         if (ffed.has(ref)) continue
-        await this._migrateView(manifests, name, 0)
+        await this._migrateView(manifests, null, name, 0, entropy)
       }
     }
 
@@ -1271,13 +1271,13 @@ module.exports = class Autobase extends ReadyResource {
     const batch = next.session({ name: 'batch', overwrite: true, checkout: indexedLength })
     await batch.ready()
 
-    if (source.length > batch.length) {
-      for (let i = batch.length; i < source.length; i++) {
-        await batch.append(await source.get(i))
+    if (source !== null) {
+      while (batch.length < source.length) {
+        await batch.append(await source.get(batch.length))
       }
     }
 
-    await ref.batch.state.moveTo(batch, source.length)
+    await ref.batch.state.moveTo(batch, batch.length)
     await batch.close()
 
     ref.migrated(this, next)
@@ -1292,18 +1292,15 @@ module.exports = class Autobase extends ReadyResource {
     const info = await system.getIndexedInfo(length)
     const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
 
-    for (let i = 0; i < this._applyState.views.length; i++) {
-      const view = this._applyState.views[i]
-      const name = this._applyState.views[i].name
-
+    for (const view of this._applyState.views) {
       const v = this._applyState.getViewFromSystem(view, info)
       const indexedLength = v ? v.length : 0
 
-      const ref = this._viewStore.byName.get(name)
+      const ref = this._viewStore.byName.get(view.name)
       const source = ref.batch || ref.core
       await source.ready()
 
-      await this._migrateView(indexerManifests, source, name, indexedLength, info.entropy)
+      await this._migrateView(indexerManifests, source, view.name, indexedLength, info.entropy)
     }
 
     const sysCore = this._applyState.systemRef.batch // review: could we use this.core ?
@@ -1344,22 +1341,22 @@ module.exports = class Autobase extends ReadyResource {
     const entropy = system.getEntropy(indexers)
 
     const views = []
-    for (let i = 0; i < system.views.length; i++) {
-      const view = system.views[i]
-      const ref = await store.findViewByKey(view.key, indexers, system.entropy)
+    for (const view of this._applyState.views) {
+      const v = this._applyState.getViewFromSystem(view, system)
+      const indexedLength = v ? v.length : 0
 
-      const session = store.get({ name: ref.name })
+      const session = store.get({ name: view.name })
       await session.ready()
 
-      await session.truncate(view.length)
+      await session.truncate(indexedLength)
 
       const prologue = await getPrologue(session)
-      const key = await store.createView(manifests, ref.name, prologue, entropy)
+      const key = await store.createView(manifests, view.name, prologue, entropy)
 
       // update key
       views.push({ key, length: session.length })
 
-      await this._migrateView(manifests, session, ref.name, session.length, entropy)
+      await this._migrateView(manifests, session, view.name, session.length, entropy)
     }
 
     await system.fork(indexers, manifests, views)
