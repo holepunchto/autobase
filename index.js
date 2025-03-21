@@ -12,6 +12,7 @@ const ProtomuxWakeup = require('protomux-wakeup')
 
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
+const ViewEncryption = require('./lib/encryption.js')
 const messages = require('./lib/messages.js')
 const Timer = require('./lib/timer.js')
 const Writer = require('./lib/writer.js')
@@ -94,6 +95,7 @@ module.exports = class Autobase extends ReadyResource {
     this.encrypt = !!handlers.encrypt
     this.encryptionKey = handlers.encryptionKey || null
     this.encryption = null
+    this.viewEncryption = null
 
     this.local = null
     this.localWriter = null
@@ -319,6 +321,8 @@ module.exports = class Autobase extends ReadyResource {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
     }
 
+    if (this.encryptionKey) this.viewEncryption = new ViewEncryption(this, null)
+
     if (this.nukeTip) await this._nukeTip()
 
     this.setWakeup(this.wakeupCapability || this.key, null)
@@ -349,12 +353,15 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._nukeTipBatch(boot.key, boot.indexedLength)
 
-    const encryption = this.encryptionKey
-      ? { key: AutoStore.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
-      : null
-
-    const core = this.store.get({ key: boot.key, encryption, active: false })
+    const core = this.store.get({ key: boot.key, active: false })
     await core.ready()
+
+    if (this.encryptionKey) {
+      const encryption = new ViewEncryption(this, core)
+      await encryption.ready()
+
+      await core.setEncryption(await encryption.get('_system'))
+    }
 
     const batch = core.session({ name: 'batch' })
     await batch.ready()
@@ -377,12 +384,15 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _getMigrationPointer (key, length) {
-    const encryption = this.encryptionKey
-      ? { key: AutoStore.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
-      : null
-
-    const core = this.store.get({ key, active: false, encryption })
+    const core = this.store.get({ key, active: false })
     await core.ready()
+
+    if (this.encryptionKey) {
+      const encryption = new ViewEncryption(this, core)
+      await encryption.ready()
+
+      await core.setEncryption(await encryption.get('_system'))
+    }
 
     const min = (core.manifest && core.manifest.prologue) ? core.manifest.prologue.length : 0
 
@@ -431,12 +441,15 @@ module.exports = class Autobase extends ReadyResource {
       await this._migrate6(boot.key, boot.indexedLength)
     }
 
-    const encryption = this.encryptionKey
-      ? { key: AutoStore.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
-      : null
-
-    const core = this.store.get({ key: boot.key, encryption, active: false })
+    const core = this.store.get({ key: boot.key, active: false })
     await core.ready()
+
+    if (this.encryptionKey) {
+      const encryption = new ViewEncryption(this, core)
+      await encryption.ready()
+
+      await core.setEncryption(await encryption.get('_system'))
+    }
 
     const batch = core.session({ name: 'batch' })
     const info = await SystemView.getIndexedInfo(batch, boot.indexedLength)
