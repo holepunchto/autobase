@@ -792,8 +792,7 @@ test('reindex', async t => {
   }
 })
 
-test('sequential restarts', async t => {
-  t.timeout(120000) // Occasionally the default 30s is insufficient
+test('sequential restarts', { timeout: 120_000 }, async t => {
   const { bases } = await create(9, t)
 
   const root = bases[0]
