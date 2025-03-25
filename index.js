@@ -1262,7 +1262,7 @@ module.exports = class Autobase extends ReadyResource {
     ref.migrated(this, next)
   }
 
-  async _migrateView (indexerManifests, name, indexedLength) {
+  async _migrateView (indexerManifests, name, indexedLength, linked) {
     const ref = this._viewStore.byName.get(name)
 
     const core = ref.batch || ref.core
@@ -1272,7 +1272,7 @@ module.exports = class Autobase extends ReadyResource {
       ? null
       : { length: indexedLength, hash: await core.treeHash(indexedLength) }
 
-    const next = this._viewStore.getViewCore(indexerManifests, name, prologue)
+    const next = this._viewStore.getViewCore(indexerManifests, name, prologue, linked)
     await next.ready()
 
     if (indexedLength > 0) {
@@ -1305,17 +1305,20 @@ module.exports = class Autobase extends ReadyResource {
     const info = await system.getIndexedInfo(length)
     const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
 
+    let linkedKey = null
     for (let i = 0; i < this._applyState.views.length; i++) {
       const view = this._applyState.views[i]
       const name = this._applyState.views[i].name
 
+      if (name === '_encryption') linkedKey = view.key
+
       const v = this._applyState.getViewFromSystem(view, info)
       const indexedLength = v ? v.length : 0
 
-      await this._migrateView(indexerManifests, name, indexedLength)
+      await this._migrateView(indexerManifests, name, indexedLength, null)
     }
 
-    const ref = await this._migrateView(indexerManifests, '_system', length)
+    const ref = await this._migrateView(indexerManifests, '_system', length, [linkedKey])
 
     // start soft shutdown
 
