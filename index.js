@@ -1400,6 +1400,16 @@ module.exports = class Autobase extends ReadyResource {
     this._applyState = new ApplyState(this, system)
 
     await this._applyState.ready()
+
+    // the encryption key is only updated AFTER the fork, so the
+    // initial info block of the fork is encrypted with the
+    // previous encryption key, this is a requirement for the
+    // encryption view to be able to derive it's keys
+
+    if (this.viewEncryption) {
+      await this.viewEncryption.update(length)
+    }
+
     await this._applyState.catchup(this.linearizer)
 
     // end soft shutdown
