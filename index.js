@@ -49,7 +49,7 @@ class WakeupHandler {
   }
 
   onpeeradd (peer, session) {
-    // do nothing
+    if (this.base._coupler) this.base._coupler.update(peer.stream)
   }
 
   onpeerremove (peer, session) {
@@ -1485,11 +1485,11 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  _wakeupPeer (peer) {
+  _wakeupPeer (stream) {
     if (!this.wakeupSession) return
     const wakeup = this._getWakeup()
     if (wakeup.length === 0) return
-    this.wakeupSession.announceByStream(peer.stream, wakeup)
+    this.wakeupSession.announceByStream(stream, wakeup)
   }
 
   _getWakeup () {
