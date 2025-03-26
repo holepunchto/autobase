@@ -361,7 +361,7 @@ module.exports = class Autobase extends ReadyResource {
       : null
 
     const core = this.store.get({ key: boot.key, encryption, active: false })
-    await core.ready()
+    const encCore = await AutobaseEncryption.setSystemEncryption(this, core)
 
     const batch = core.session({ name: 'batch' })
     await batch.ready()
@@ -375,6 +375,9 @@ module.exports = class Autobase extends ReadyResource {
 
     if (boot.heads) this.hintWakeup(boot.heads)
     if (this.local.length) this.hintWakeup([{ key: this.local.key, length: this.local.length }])
+
+    await core.close()
+    await encCore.close()
   }
 
   setWakeup (cap, discoveryKey) {
@@ -389,7 +392,7 @@ module.exports = class Autobase extends ReadyResource {
       : null
 
     const core = this.store.get({ key, active: false, encryption })
-    await core.ready()
+    const encCore = await AutobaseEncryption.setSystemEncryption(this, core)
 
     const min = (core.manifest && core.manifest.prologue) ? core.manifest.prologue.length : 0
 
@@ -413,6 +416,9 @@ module.exports = class Autobase extends ReadyResource {
 
       return i + 1
     }
+
+    await core.close()
+    await encCore.close()
 
     return min
   }
@@ -438,15 +444,13 @@ module.exports = class Autobase extends ReadyResource {
       await this._migrate6(boot.key, boot.indexedLength)
     }
 
-    const encryption = this.encryptionKey
-      ? { key: AutobaseEncryption.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
-      : null
-
-    const core = this.store.get({ key: boot.key, encryption, active: false })
-    await core.ready()
+    const core = this.store.get({ key: boot.key, encryption: null, active: false })
+    const encCore = await AutobaseEncryption.setSystemEncryption(this, core)
 
     const batch = core.session({ name: 'batch' })
     const info = await SystemView.getIndexedInfo(batch, boot.indexedLength)
+
+    await encCore.close()
     await batch.close()
     await core.close()
 
