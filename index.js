@@ -13,6 +13,7 @@ const rrp = require('resolve-reject-promise')
 
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
+const AutobaseEncryption = require('./lib/encryption.js')
 const messages = require('./lib/messages.js')
 const Timer = require('./lib/timer.js')
 const Writer = require('./lib/writer.js')
@@ -315,10 +316,16 @@ module.exports = class Autobase extends ReadyResource {
     this.id = result.bootstrap.id
 
     this.encryptionKey = result.encryptionKey
-    if (this.encryptionKey) this.encryption = { key: this.encryptionKey }
 
     if (this.encrypted) {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
+    }
+
+    if (this.encryptionKey) {
+      this.encryption = new AutobaseEncryption(this, null)
+
+      await this.local.setEncryption(this.getWriterEncryption(this.local.key))
+      await this._primaryBootstrap.setEncryption(this.getWriterEncryption(this.key))
     }
 
     if (this.nukeTip) await this._nukeTip()
@@ -352,11 +359,11 @@ module.exports = class Autobase extends ReadyResource {
     await this._nukeTipBatch(boot.key, boot.indexedLength)
 
     const encryption = this.encryptionKey
-      ? { key: AutoStore.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
+      ? { key: AutobaseEncryption.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
       : null
 
     const core = this.store.get({ key: boot.key, encryption, active: false })
-    await core.ready()
+    const encCore = await AutobaseEncryption.setSystemEncryption(this, core)
 
     const batch = core.session({ name: 'batch' })
     await batch.ready()
@@ -370,6 +377,9 @@ module.exports = class Autobase extends ReadyResource {
 
     if (boot.heads) this.hintWakeup(boot.heads)
     if (this.local.length) this.hintWakeup([{ key: this.local.key, length: this.local.length }])
+
+    await core.close()
+    if (encCore) await encCore.close()
   }
 
   setWakeup (cap, discoveryKey) {
@@ -380,11 +390,11 @@ module.exports = class Autobase extends ReadyResource {
 
   async _getMigrationPointer (key, length) {
     const encryption = this.encryptionKey
-      ? { key: AutoStore.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
+      ? { key: AutobaseEncryption.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
       : null
 
     const core = this.store.get({ key, active: false, encryption })
-    await core.ready()
+    const encCore = await AutobaseEncryption.setSystemEncryption(this, core)
 
     const min = (core.manifest && core.manifest.prologue) ? core.manifest.prologue.length : 0
 
@@ -408,6 +418,9 @@ module.exports = class Autobase extends ReadyResource {
 
       return i + 1
     }
+
+    await core.close()
+    if (encCore) await encCore.close()
 
     return min
   }
@@ -433,15 +446,13 @@ module.exports = class Autobase extends ReadyResource {
       await this._migrate6(boot.key, boot.indexedLength)
     }
 
-    const encryption = this.encryptionKey
-      ? { key: AutoStore.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
-      : null
-
-    const core = this.store.get({ key: boot.key, encryption, active: false })
-    await core.ready()
+    const core = this.store.get({ key: boot.key, encryption: null, active: false })
+    const encCore = await AutobaseEncryption.setSystemEncryption(this, core)
 
     const batch = core.session({ name: 'batch' })
     const info = await SystemView.getIndexedInfo(batch, boot.indexedLength)
+
+    if (encCore) await encCore.close()
     await batch.close()
     await core.close()
 
@@ -1009,15 +1020,20 @@ module.exports = class Autobase extends ReadyResource {
     return Promise.all(p)
   }
 
+  getWriterEncryption (key) {
+    return this.encryption && this.encryption.get(b4a.toString(key, 'hex'))
+  }
+
   _makeWriterCore (key) {
     if (this.closing) throw new Error('Autobase is closing')
     if (this._interrupting) throw INTERRUPT()
 
     const local = b4a.equals(key, this.local.key)
+    const encryption = this.getWriterEncryption(key)
 
     const core = local
-      ? this.local.session({ valueEncoding: messages.OplogMessage, encryption: this.encryption, active: false })
-      : this.store.get({ key, compat: false, writable: false, valueEncoding: messages.OplogMessage, encryption: this.encryption, active: false })
+      ? this.local.session({ valueEncoding: messages.OplogMessage, encryption, active: false })
+      : this.store.get({ key, compat: false, writable: false, valueEncoding: messages.OplogMessage, encryption, active: false })
 
     return core
   }
@@ -1254,7 +1270,7 @@ module.exports = class Autobase extends ReadyResource {
     ref.migrated(this, next)
   }
 
-  async _migrateView (indexerManifests, name, indexedLength) {
+  async _migrateView (indexerManifests, name, indexedLength, linked) {
     const ref = this._viewStore.byName.get(name)
 
     const core = ref.batch || ref.core
@@ -1264,7 +1280,7 @@ module.exports = class Autobase extends ReadyResource {
       ? null
       : { length: indexedLength, hash: await core.treeHash(indexedLength) }
 
-    const next = this._viewStore.getViewCore(indexerManifests, name, prologue)
+    const next = this._viewStore.getViewCore(indexerManifests, name, prologue, linked)
     await next.ready()
 
     if (indexedLength > 0) {
@@ -1297,17 +1313,20 @@ module.exports = class Autobase extends ReadyResource {
     const info = await system.getIndexedInfo(length)
     const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
 
+    let linkedKey = null
     for (let i = 0; i < this._applyState.views.length; i++) {
       const view = this._applyState.views[i]
       const name = this._applyState.views[i].name
 
+      if (name === '_encryption') linkedKey = view.key
+
       const v = this._applyState.getViewFromSystem(view, info)
       const indexedLength = v ? v.length : 0
 
-      await this._migrateView(indexerManifests, name, indexedLength)
+      await this._migrateView(indexerManifests, name, indexedLength, null)
     }
 
-    const ref = await this._migrateView(indexerManifests, '_system', length)
+    const ref = await this._migrateView(indexerManifests, '_system', length, [linkedKey])
 
     // start soft shutdown
 
