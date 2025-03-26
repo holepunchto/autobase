@@ -1,6 +1,6 @@
 {
   "name": "autobase",
-  "version": "7.0.45",
+  "version": "7.1.1",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -34,7 +34,7 @@
     "b4a": "^1.6.1",
     "bare-events": "^2.2.0",
     "compact-encoding": "^2.16.0",
-    "core-coupler": "^1.0.0",
+    "core-coupler": "^2.0.0",
     "debounceify": "^1.0.0",
     "hyperbee": "^2.22.0",
     "hypercore": "^11.0.30",
@@ -46,6 +46,7 @@
     "nanoassert": "^2.0.0",
     "protomux-wakeup": "^2.0.0",
     "ready-resource": "^1.0.0",
+    "resolve-reject-promise": "^1.1.0",
     "safety-catch": "^1.0.2",
     "signal-promise": "^1.0.3",
     "sub-encoder": "^2.1.1",
