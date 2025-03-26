@@ -379,7 +379,7 @@ module.exports = class Autobase extends ReadyResource {
     if (this.local.length) this.hintWakeup([{ key: this.local.key, length: this.local.length }])
 
     await core.close()
-    await encCore.close()
+    if (encCore) await encCore.close()
   }
 
   setWakeup (cap, discoveryKey) {
@@ -420,7 +420,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     await core.close()
-    await encCore.close()
+    if (encCore) await encCore.close()
 
     return min
   }
@@ -452,7 +452,7 @@ module.exports = class Autobase extends ReadyResource {
     const batch = core.session({ name: 'batch' })
     const info = await SystemView.getIndexedInfo(batch, boot.indexedLength)
 
-    await encCore.close()
+    if (encCore) await encCore.close()
     await batch.close()
     await core.close()
 
