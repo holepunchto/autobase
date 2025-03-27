@@ -13,6 +13,7 @@ const rrp = require('resolve-reject-promise')
 
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
+const UpdateChanges = require('./lib/updates.js')
 const messages = require('./lib/messages.js')
 const Timer = require('./lib/timer.js')
 const Writer = require('./lib/writer.js')
@@ -1142,8 +1143,13 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
+    const changes = this._hasUpdate ? new UpdateChanges(this) : null
+
     // close existing state
-    if (this._applyState) await this._applyState.close()
+    if (this._applyState) {
+      if (changes) this._applyState.trackUpdates(changes)
+      await this._applyState.close()
+    }
 
     const from = this.core.signedLength
     const store = this._viewStore.atomize()
@@ -1194,6 +1200,8 @@ module.exports = class Autobase extends ReadyResource {
     // reset linearizer
     tx.deleteLocalRange(b4a.from([messages.LINEARIZER_PREFIX]), b4a.from([messages.LINEARIZER_PREFIX + 1]))
     await tx.flush()
+
+    if (changes) await this._handlers.update(this.view, changes)
 
     await store.flush()
     await store.close()
