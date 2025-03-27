@@ -161,6 +161,60 @@ test('updates - fast-forward with truncation', async t => {
   }
 })
 
+test('updates - initial fast forward', async t => {
+  const stores = await createStores(3, t)
+  const a = createBase(stores[0], null, t, { fastForward: true })
+  await a.ready()
+
+  const b = createBase(stores[1], a.key, t, { fastForward: true })
+  await b.ready()
+
+  for (let i = 0; i < 200; i++) {
+    await a.append('a' + i)
+  }
+
+  await addWriter(a, b)
+  await confirm([a, b])
+
+  t.is(a.linearizer.indexers.length, 2)
+
+  await a.append('lets index some nodes')
+  await confirm([a, b])
+
+  for (let i = 0; i < 200; i++) {
+    await b.append('a' + i)
+  }
+
+  await confirm([a, b])
+
+  const to = a.view.signedLength
+  const fastForward = { key: a.core.key }
+
+  let updated = false
+
+  const c = createBase(stores[2], a.key, t, { fastForward, update })
+  await c.ready()
+
+  await replicateAndSync([a, b, c])
+  const core = c.core
+  const sparse = await isSparse(core)
+
+  t.is(c.linearizer.indexers.length, 2)
+  t.ok(sparse > 0)
+
+  async function update (view, changes) {
+    if (updated) return
+    updated = true
+
+    const update = changes.get('view')
+    if (update.to !== to) return
+
+    t.is(update.from, 0)
+    t.is(update.shared, 0)
+    t.is(update.to, to)
+  }
+})
+
 async function isSparse (core) {
   let n = 0
   for (let i = 0; i < core.length; i++) {

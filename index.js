@@ -1144,12 +1144,10 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const changes = this._hasUpdate ? new UpdateChanges(this) : null
+    if (changes && this._applyState) this._applyState.trackUpdates(changes)
 
     // close existing state
-    if (this._applyState) {
-      if (changes) this._applyState.trackUpdates(changes)
-      await this._applyState.close()
-    }
+    if (this._applyState) await this._applyState.close()
 
     const from = this.core.signedLength
     const store = this._viewStore.atomize()
