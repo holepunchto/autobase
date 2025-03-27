@@ -1144,7 +1144,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const changes = this._hasUpdate ? new UpdateChanges(this) : null
-    if (changes && this._applyState) this._applyState.trackUpdates(changes)
+    if (changes) changes.track(this._applyState)
 
     // close existing state
     if (this._applyState) await this._applyState.close()
@@ -1199,7 +1199,7 @@ module.exports = class Autobase extends ReadyResource {
     tx.deleteLocalRange(b4a.from([messages.LINEARIZER_PREFIX]), b4a.from([messages.LINEARIZER_PREFIX + 1]))
     await tx.flush()
 
-    if (changes) await this._handlers.update(this.view, changes)
+    if (changes) changes.finalise()
 
     await store.flush()
     await store.close()
@@ -1216,6 +1216,8 @@ module.exports = class Autobase extends ReadyResource {
 
     this._applyState = new ApplyState(this)
     await this._applyState.ready()
+
+    if (changes) await this._handlers.update(this._applyState.view, changes)
 
     if (await this._applyState.shouldMigrate()) {
       await this._migrate()
