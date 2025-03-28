@@ -22,6 +22,7 @@ async function runTests () {
   await import('./suspend.js')
   await import('./timer.js')
   await import('./topolist.js')
+  await import('./updates.js')
 
   test.resume()
 }

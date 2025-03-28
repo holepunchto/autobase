@@ -13,6 +13,7 @@ const rrp = require('resolve-reject-promise')
 
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
+const UpdateChanges = require('./lib/updates.js')
 const messages = require('./lib/messages.js')
 const Timer = require('./lib/timer.js')
 const Writer = require('./lib/writer.js')
@@ -158,9 +159,10 @@ module.exports = class Autobase extends ReadyResource {
 
     this._preopen = null
 
+    this._hasOpen = !!this._handlers.open
     this._hasApply = !!this._handlers.apply
     this._hasOptimisticApply = !!this._handlers.optimistic
-    this._hasOpen = !!this._handlers.open
+    this._hasUpdate = !!this._handlers.update
     this._hasClose = !!this._handlers.close
 
     this._viewStore = new AutoStore(this)
@@ -1141,6 +1143,9 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
+    const changes = this._hasUpdate ? new UpdateChanges(this) : null
+    if (changes) changes.track(this._applyState)
+
     // close existing state
     if (this._applyState) await this._applyState.close()
 
@@ -1194,6 +1199,8 @@ module.exports = class Autobase extends ReadyResource {
     tx.deleteLocalRange(b4a.from([messages.LINEARIZER_PREFIX]), b4a.from([messages.LINEARIZER_PREFIX + 1]))
     await tx.flush()
 
+    if (changes) changes.finalise()
+
     await store.flush()
     await store.close()
 
@@ -1209,6 +1216,8 @@ module.exports = class Autobase extends ReadyResource {
 
     this._applyState = new ApplyState(this)
     await this._applyState.ready()
+
+    if (changes) await this._handlers.update(this._applyState.view, changes)
 
     if (await this._applyState.shouldMigrate()) {
       await this._migrate()
