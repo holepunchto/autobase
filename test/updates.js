@@ -117,6 +117,7 @@ test('updates - fast-forward with truncation', async t => {
 
   await addWriter(a, b)
   await addWriter(a, c)
+  await replicateAndSync([a, b, c])
 
   await a.append('confirmed')
   await a.append('data')
