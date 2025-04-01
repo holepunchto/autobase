@@ -334,7 +334,7 @@ test('basic - zero length view', async t => {
 
   const info = await a.system.getIndexedInfo()
 
-  t.is(info.views.length, 1) // encryption view
+  t.is(info.views.length, 0)
 })
 
 test('basic - compare views', async t => {

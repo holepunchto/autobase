@@ -550,8 +550,8 @@ test('suspend - open new index after reopen', async t => {
   const an = await a.local.get(a.local.length - 1)
   const bn = await b2.local.get(b2.local.length - 1)
 
-  t.is(an.checkpoint.length, 4)
-  t.is(bn.checkpoint.length, 4)
+  t.is(an.checkpoint.length, 3)
+  t.is(bn.checkpoint.length, 3)
 
   // const acp1 = await a.localWriter.getCheckpoint(1)
   // const acp2 = await a.localWriter.getCheckpoint(2)
@@ -639,8 +639,8 @@ test('suspend - reopen multiple indexes', async t => {
   const an = await a.local.get(a.local.length - 1)
   const b2n = await b2.local.get(b2.local.length - 1)
 
-  t.is(an.checkpoint.length, 4)
-  t.is(b2n.checkpoint.length, 4)
+  t.is(an.checkpoint.length, 3)
+  t.is(b2n.checkpoint.length, 3)
 
   // const acp1 = await a.localWriter.getCheckpoint(1)
   // const acp2 = await a.localWriter.getCheckpoint(2)
