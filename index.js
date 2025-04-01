@@ -324,8 +324,8 @@ module.exports = class Autobase extends ReadyResource {
     if (this.encryptionKey) {
       this.encryption = new AutobaseEncryption(this, null)
 
-      await this.local.setEncryption(this.getWriterEncryption(this.local.key))
-      await this._primaryBootstrap.setEncryption(this.getWriterEncryption(this.key))
+      await this.local.setEncryptionKey(this.encryptionKey)
+      await this._primaryBootstrap.setEncryptionKey(this.encryptionKey)
     }
 
     if (this.nukeTip) await this._nukeTip()
@@ -358,11 +358,7 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._nukeTipBatch(boot.key, boot.indexedLength)
 
-    const encryption = this.encryptionKey
-      ? { key: AutobaseEncryption.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
-      : null
-
-    const core = this.store.get({ key: boot.key, encryption, active: false })
+    const core = this.store.get({ key: boot.key, active: false, encryption: null })
     const encCore = await AutobaseEncryption.setSystemEncryption(this, core)
 
     const batch = core.session({ name: 'batch' })
@@ -389,11 +385,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _getMigrationPointer (key, length) {
-    const encryption = this.encryptionKey
-      ? { key: AutobaseEncryption.getBlockKey(this.bootstrap, this.encryptionKey, '_system'), block: true }
-      : null
-
-    const core = this.store.get({ key, active: false, encryption })
+    const core = this.store.get({ key, active: false, encryption: null })
     const encCore = await AutobaseEncryption.setSystemEncryption(this, core)
 
     const min = (core.manifest && core.manifest.prologue) ? core.manifest.prologue.length : 0
@@ -1021,7 +1013,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   getWriterEncryption (key) {
-    return this.encryption && this.encryption.get(b4a.toString(key, 'hex'))
+    return this.encryptionKey ? { key: this.encryptionKey, block: false } : null
   }
 
   _makeWriterCore (key) {
