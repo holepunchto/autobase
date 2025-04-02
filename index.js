@@ -1847,7 +1847,7 @@ function createEncryptionProvider (encryptionKey, coreKey) {
       return {
         version: 1,
         padding: 16,
-        key: Buffer.alloc(32)
+        key: HypercoreEncryption.getBlockKey(coreKey, Buffer.alloc(32))
       }
     }
 
