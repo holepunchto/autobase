@@ -10,6 +10,7 @@ const CoreCoupler = require('core-coupler')
 const mutexify = require('mutexify/promise')
 const ProtomuxWakeup = require('protomux-wakeup')
 const rrp = require('resolve-reject-promise')
+const HypercoreEncryption = require('hypercore-encryption')
 
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
@@ -321,6 +322,11 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this.encrypted) {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
+    }
+
+    if (result.encryptionKey) {
+      this.local.setEncryption(createEncryptionProvider(this.encryptionKey, this.local.key))
+      this._primaryBootstrap.setEncryption(createEncryptionProvider(this.encryptionKey, this._primaryBootstrap.key))
     }
 
     if (this.nukeTip) await this._nukeTip()
@@ -860,7 +866,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   static encodeValue (value, opts = {}) {
-    return c.encode(messages.OplogMessage, {
+    const block = c.encode(messages.OplogMessage, {
       version: AUTOBASE_VERSION,
       maxSupportedVersion: AUTOBASE_VERSION,
       digist: null,
@@ -872,6 +878,16 @@ module.exports = class Autobase extends ReadyResource {
         value
       }
     })
+
+    if (opts.encryptionKey) {
+      const blindingKey = Buffer.alloc(32) // TODO
+      const blockKey = HypercoreEncryption.getBlockKey(opts.core, opts.encryptionKey)
+      const buffer = Buffer.concat([Buffer.alloc(16), block])
+      HypercoreEncryption.encrypt(opts.index, buffer, 0, 1, opts.id, blockKey, blindingKey)
+      return buffer
+    }
+
+    return block
   }
 
   static async getLocalKey (store, opts = {}) {
@@ -1018,8 +1034,8 @@ module.exports = class Autobase extends ReadyResource {
     const local = b4a.equals(key, this.local.key)
 
     const core = local
-      ? this.local.session({ valueEncoding: messages.OplogMessage, encryption: this.encryption, active: false })
-      : this.store.get({ key, compat: false, writable: false, valueEncoding: messages.OplogMessage, encryption: this.encryption, active: false })
+      ? this.local.session({ valueEncoding: messages.OplogMessage, encryption: createEncryptionProvider(this.encryptionKey, this.local.key), active: false })
+      : this.store.get({ key, compat: false, writable: false, valueEncoding: messages.OplogMessage, encryption: createEncryptionProvider(this.encryptionKey, key), active: false })
 
     return core
   }
@@ -1818,4 +1834,27 @@ function normalize (valueEncoding, value) {
   valueEncoding.encode(state, value)
   state.start = 0
   return valueEncoding.decode(state)
+}
+
+function createEncryptionProvider (encryptionKey, coreKey) {
+  if (!encryptionKey) return null
+
+  // TODO: obvs needs to be populated
+  const blindingKey = Buffer.alloc(32)
+
+  return new HypercoreEncryption(blindingKey, function (id) {
+    if (id === 0xffffffff) { // the blank key
+      return {
+        version: 1,
+        padding: 16,
+        key: Buffer.alloc(32)
+      }
+    }
+
+    return {
+      version: 1,
+      padding: 16,
+      key: HypercoreEncryption.getBlockKey(coreKey, encryptionKey)
+    }
+  }, { preopen: Promise.resolve(0) })
 }
