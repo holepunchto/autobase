@@ -1,4 +1,4 @@
-import Autobase from './index.js'
+import Autobase from '../../index.js'
 import Corestore from 'corestore'
 import { replicateAndSync } from 'autobase-test-helpers'
 
