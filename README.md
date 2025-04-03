@@ -78,7 +78,7 @@ A view is one or more hypercores whose contents are created by deterministically
 Autobase accepts an `open` function for creating views and an `apply` function that can be used to update the views based on the writer nodes.
 
 ```js
-async function open (store) {
+function open (store) {
   return store.get('my-view')
 }
 ```

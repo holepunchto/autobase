@@ -9,9 +9,11 @@ const SignalPromise = require('signal-promise')
 const CoreCoupler = require('core-coupler')
 const mutexify = require('mutexify/promise')
 const ProtomuxWakeup = require('protomux-wakeup')
+const rrp = require('resolve-reject-promise')
 
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
+const UpdateChanges = require('./lib/updates.js')
 const messages = require('./lib/messages.js')
 const Timer = require('./lib/timer.js')
 const Writer = require('./lib/writer.js')
@@ -48,7 +50,7 @@ class WakeupHandler {
   }
 
   onpeeradd (peer, session) {
-    // do nothing
+    if (this.base._coupler) this.base._coupler.update(peer.stream)
   }
 
   onpeerremove (peer, session) {
@@ -84,7 +86,7 @@ module.exports = class Autobase extends ReadyResource {
     this.key = key
     this.discoveryKey = null
 
-    this.keyPair = handlers.keyPair || null
+    this.keyPair = null
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
     this.store = store
     this.globalCache = store.globalCache || null
@@ -139,6 +141,7 @@ module.exports = class Autobase extends ReadyResource {
     this._warn = emitWarning.bind(this)
 
     this._draining = false
+    this._writable = null
     this._advancing = null
     this._interrupting = false
     this._caughtup = false
@@ -156,9 +159,10 @@ module.exports = class Autobase extends ReadyResource {
 
     this._preopen = null
 
+    this._hasOpen = !!this._handlers.open
     this._hasApply = !!this._handlers.apply
     this._hasOptimisticApply = !!this._handlers.optimistic
-    this._hasOpen = !!this._handlers.open
+    this._hasUpdate = !!this._handlers.update
     this._hasClose = !!this._handlers.close
 
     this._viewStore = new AutoStore(this)
@@ -265,7 +269,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   heads () {
-    if (!this._applyState) return []
+    if (!this._applyState || !this._applyState.opened) return []
     const nodes = new Array(this._applyState.system.heads.length)
     for (let i = 0; i < this._applyState.system.heads.length; i++) nodes[i] = this._applyState.system.heads[i]
     return nodes.sort(compareNodes)
@@ -289,6 +293,8 @@ module.exports = class Autobase extends ReadyResource {
     if (this._handlers.wait) await this._handlers.wait()
 
     await this.store.ready()
+
+    this.keyPair = (await this._handlers.keyPair) || null
 
     const result = await boot(this.store, this.key, {
       encryptionKey: this.encryptionKey,
@@ -647,6 +653,8 @@ module.exports = class Autobase extends ReadyResource {
     await this.core.close()
     await this.store.close()
 
+    if (this._writable) this._writable.resolve(false)
+
     await closing
   }
 
@@ -962,7 +970,7 @@ module.exports = class Autobase extends ReadyResource {
         w.isRemoved = false
       }
 
-      if (w.core.writable && this._needsLocalWriter()) {
+      if (this._isLocalCore(w.core) && this._needsLocalWriter()) {
         this._setLocalWriter(w)
       }
 
@@ -972,7 +980,7 @@ module.exports = class Autobase extends ReadyResource {
 
       await w.ready()
 
-      if (w.core.writable && this._needsLocalWriter()) {
+      if (this._isLocalCore(w.core) && this._needsLocalWriter()) {
         this._setLocalWriter(w)
       }
 
@@ -1020,7 +1028,7 @@ module.exports = class Autobase extends ReadyResource {
     const core = this._makeWriterCore(key)
     const w = new Writer(this, core, length, isRemoved)
 
-    if (core.writable) {
+    if (this._isLocalCore(core)) {
       if (isActive) this._setLocalWriter(w) // only set active writer
       return w
     }
@@ -1135,6 +1143,9 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
+    const changes = this._hasUpdate ? new UpdateChanges(this) : null
+    if (changes) changes.track(this._applyState)
+
     // close existing state
     if (this._applyState) await this._applyState.close()
 
@@ -1145,17 +1156,29 @@ module.exports = class Autobase extends ReadyResource {
     // mutating, prop fine as we are throwing it away immediately
     views.push({ key: this.fastForwardTo.key, length: this.fastForwardTo.length })
 
-    const ffed = []
+    const ffed = new Set()
+    const migrated = !b4a.equals(this.fastForwardTo.key, this.core.key)
 
     for (const v of views) {
       const ref = await this._viewStore.findViewByKey(v.key, this.fastForwardTo.indexers)
       if (!ref) continue // unknown, view ignored
-      ffed.push(ref)
+      ffed.add(ref)
 
       if (b4a.equals(ref.core.key, v.key)) {
         await ref.catchup(store.atom, v.length)
       } else {
         await this._applyFastForwardMigration(ref, v)
+      }
+    }
+
+    // migrate zero length cores
+    if (migrated) {
+      const indexers = this.fastForwardTo.indexers
+      const manifests = await this._viewStore.getIndexerManifests(indexers)
+
+      for (const [name, ref] of this._viewStore.byName) {
+        if (ffed.has(ref)) continue
+        await this._migrateView(manifests, name, 0)
       }
     }
 
@@ -1176,6 +1199,8 @@ module.exports = class Autobase extends ReadyResource {
     tx.deleteLocalRange(b4a.from([messages.LINEARIZER_PREFIX]), b4a.from([messages.LINEARIZER_PREFIX + 1]))
     await tx.flush()
 
+    if (changes) changes.finalise()
+
     await store.flush()
     await store.close()
 
@@ -1191,6 +1216,8 @@ module.exports = class Autobase extends ReadyResource {
 
     this._applyState = new ApplyState(this)
     await this._applyState.ready()
+
+    if (changes) await this._handlers.update(this._applyState.view, changes)
 
     if (await this._applyState.shouldMigrate()) {
       await this._migrate()
@@ -1217,7 +1244,11 @@ module.exports = class Autobase extends ReadyResource {
     const prologue = next.manifest && next.manifest.prologue
 
     if (prologue && prologue.length > 0 && ref.core.length >= prologue.length) {
-      await next.core.copyPrologue(ref.core.state)
+      try {
+        await next.core.copyPrologue(ref.core.state)
+      } catch {
+        // we might be missing some nodes for this, just ignore, only an optimisation
+      }
     }
 
     const batch = next.session({ name: 'batch', overwrite: true, checkout: v.length })
@@ -1276,8 +1307,11 @@ module.exports = class Autobase extends ReadyResource {
     const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
 
     for (let i = 0; i < this._applyState.views.length; i++) {
+      const view = this._applyState.views[i]
       const name = this._applyState.views[i].name
-      const indexedLength = info.views[i].length
+
+      const v = this._applyState.getViewFromSystem(view, info)
+      const indexedLength = v ? v.length : 0
 
       await this._migrateView(indexerManifests, name, indexedLength)
     }
@@ -1343,6 +1377,10 @@ module.exports = class Autobase extends ReadyResource {
     this._ackTimer = null
 
     this.emit('is-non-indexer')
+  }
+
+  _isLocalCore (core) {
+    return core.writable && core.id === this.local.id
   }
 
   _addLocalHeads () {
@@ -1450,14 +1488,17 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     // emit state changes post drain
-    if (writable !== this.writable) this.emit(writable ? 'unwritable' : 'writable')
+    if (writable !== this.writable) {
+      if (this.writable && this._writable) this._writable.resolve(true)
+      this.emit(writable ? 'unwritable' : 'writable')
+    }
   }
 
-  _wakeupPeer (peer) {
+  _wakeupPeer (stream) {
     if (!this.wakeupSession) return
     const wakeup = this._getWakeup()
     if (wakeup.length === 0) return
-    this.wakeupSession.announceByStream(peer.stream, wakeup)
+    this.wakeupSession.announceByStream(stream, wakeup)
   }
 
   _getWakeup () {
@@ -1553,6 +1594,12 @@ module.exports = class Autobase extends ReadyResource {
     this._queueBump()
   }
 
+  waitForWritable () {
+    if (this.writable) return Promise.resolve(true)
+    if (!this._writable) this._writable = rrp()
+    return this._writable.promise
+  }
+
   async _advance () {
     if (this.opened === false) await this.ready()
     if (this.paused || this._interrupting) return
@@ -1567,8 +1614,15 @@ module.exports = class Autobase extends ReadyResource {
 
     try {
       await this._drain()
+
       // must run post drain so the linearizer is caught up
       if (this._caughtup && (this._needsWakeup === true || this._wakeupHints.size > 0)) await this._drainWakeup()
+
+      // check if we should update local writer
+      if (!this.localWriter || this.localWriter.closed) {
+        await this._updateLocalWriter(this._applyState.system)
+      }
+
       this._draining = false
     } catch (err) {
       this._onError(err)
@@ -1577,12 +1631,9 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this._interrupting) return
 
-    if (this.localWriter || this._optimistic > -1) {
-      if (!this.localWriter || this.localWriter.closed) await this._updateLocalWriter(this._applyState.system)
-      if (!this._interrupting && this.localWriter) {
-        if (this._applyState.isLocalPendingIndexer()) this.ack().catch(noop)
-        else if (this._triggerAckAsap()) this._ackTimer.asap()
-      }
+    if (this.localWriter && !this.localWriter.closed) {
+      if (this._applyState.isLocalPendingIndexer()) this.ack().catch(noop)
+      else if (this._triggerAckAsap()) this._ackTimer.asap()
     }
 
     // keep bootstraps in sync with linearizer

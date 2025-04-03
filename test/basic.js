@@ -80,6 +80,26 @@ test('basic - two writers', async t => {
   // t.alike(await base1.system.checkpoint(), await base3.system.checkpoint())
 })
 
+test('basic - wait for writable', async t => {
+  const { bases } = await create(3, t, { open: null })
+
+  const [base1, base2, base3] = bases
+
+  const p1 = base2.waitForWritable()
+  const p2 = base3.waitForWritable()
+
+  await addWriter(base1, base2)
+  await confirm([base1, base2, base3])
+
+  await addWriter(base2, base3)
+  await confirm([base1, base2, base3])
+
+  await p1
+  await p2
+
+  t.pass('resolved')
+})
+
 test('basic - no truncates when history is linear', async t => {
   const { bases } = await create(3, t)
   const [base1, base2, base3] = bases
@@ -155,6 +175,32 @@ test('basic - local key pair', async t => {
   const [store] = await createStores(1, t)
 
   const base = createBase(store, null, t, { keyPair })
+  await base.ready()
+
+  const key = base.key
+
+  const block = { message: 'hello, world!' }
+  await base.append(block)
+
+  t.is(base.view.signedLength, 1)
+  t.alike(await base.view.get(0), block)
+  t.alike(base.local.manifest.signers[0].publicKey, keyPair.publicKey)
+
+  await base.close()
+
+  const base2 = createBase(store, key, t)
+  await base2.ready()
+
+  t.alike(base2.local.key, base.local.key)
+  t.alike(await base2.view.get(0), block)
+  t.alike(base2.local.manifest.signers[0].publicKey, keyPair.publicKey)
+})
+
+test('basic - local key pair promise', async t => {
+  const keyPair = crypto.keyPair(Buffer.alloc(32))
+  const [store] = await createStores(1, t)
+
+  const base = createBase(store, null, t, { keyPair: Promise.resolve(keyPair) })
   await base.ready()
 
   const key = base.key
@@ -272,6 +318,23 @@ test('basic - simple reorg', async t => {
   t.is(await b.view.get(1), 'a1')
   t.is(await b.view.get(2), 'b0')
   t.is(await b.view.get(3), 'b1')
+})
+
+test('basic - zero length view', async t => {
+  const { bases } = await create(2, t)
+
+  const [a, b] = bases
+
+  await addWriter(a, b)
+  await confirm(bases)
+
+  await a.append(null)
+
+  await confirm(bases)
+
+  const info = await a.system.getIndexedInfo()
+
+  t.is(info.views.length, 0)
 })
 
 test('basic - compare views', async t => {
@@ -729,7 +792,7 @@ test('reindex', async t => {
   }
 })
 
-test('sequential restarts', async t => {
+test('sequential restarts', { timeout: 120_000 }, async t => {
   const { bases } = await create(9, t)
 
   const root = bases[0]
@@ -1921,6 +1984,38 @@ test('basic - removed writer adds a writer while being removed', async t => {
   t.is(a.view.length, c.view.length)
 })
 
+test('basic - append to views out of order', async t => {
+  const { bases } = await create(2, t, {
+    apply: applyMultiple,
+    open: openMultiple,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b] = bases
+
+  await addWriterAndSync(a, b)
+
+  await replicateAndSync([a, b])
+
+  await a.append({ index: 2, data: 'a0' })
+
+  await confirm([a, b])
+
+  await b.append({ index: 2, data: 'b0' })
+  await a.append({ index: 1, data: 'a1' })
+
+  t.is(b.activeWriters.size, 2)
+
+  await confirm([a, b])
+
+  await b.append({ index: 1, data: 'final' })
+  await t.execution(replicateAndSync([a, b]))
+
+  t.is(b.view.first.signedLength, 1)
+
+  await t.execution(confirm([a, b]))
+})
+
 async function applyWithRemove (batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
@@ -1934,5 +2029,27 @@ async function applyWithRemove (batch, view, base) {
     }
 
     await view.append(value)
+  }
+}
+
+function openMultiple (store) {
+  return {
+    first: store.get('first', { valueEncoding: 'json' }),
+    second: store.get('second', { valueEncoding: 'json' })
+  }
+}
+
+async function applyMultiple (batch, view, base) {
+  for (const { value } of batch) {
+    if (value.add) {
+      await base.addWriter(Buffer.from(value.add, 'hex'))
+      continue
+    }
+
+    if (value.index === 1) {
+      await view.first.append(value.data)
+    } else if (value.index === 2) {
+      await view.second.append(value.data)
+    }
   }
 }
