@@ -19,10 +19,6 @@
     "events": {
       "bare": "bare-events",
       "default": "events"
-    },
-    "process": {
-      "bare": "bare-process",
-      "default": "process"
     }
   },
   "repository": {
@@ -58,13 +54,13 @@
   },
   "devDependencies": {
     "autobase-test-helpers": "^3.0.0",
-    "bare-process": "^4.1.2",
     "brittle": "^3.1.1",
     "corestore": "^7.0.15",
     "rache": "^1.0.0",
     "same-data": "^1.0.0",
     "standard": "^17.0.0",
-    "test-tmp": "^1.2.0"
+    "test-tmp": "^1.2.0",
+    "uncaughts": "^1.1.0"
   },
   "standard": {
     "ignore": [
