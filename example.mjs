@@ -1,6 +1,6 @@
 import Autobase from './index.js'
 import Corestore from 'corestore'
-import RAM from 'random-access-memory'
+import { replicateAndSync } from 'autobase-test-helpers'
 
 function open (store) {
   return store.get('view', { valueEncoding: 'json' })
@@ -16,7 +16,7 @@ async function apply (nodes, view, base) {
   }
 }
 
-const a = new Autobase(makeStore('a'), {
+const a = new Autobase(makeStore('A'), {
   valueEncoding: 'json',
   open,
   apply
@@ -24,7 +24,7 @@ const a = new Autobase(makeStore('a'), {
 
 await a.ready()
 
-const b = new Autobase(makeStore('b'), a.key, {
+const b = new Autobase(makeStore('B'), a.key, {
   valueEncoding: 'json',
   open,
   apply
@@ -32,55 +32,60 @@ const b = new Autobase(makeStore('b'), a.key, {
 
 await b.ready()
 
-a.debug = true
 await a.append({
   add: b.local.key.toString('hex')
 })
 
-await sync(a, b)
+await replicateAndSync([a, b])
 
-console.log('pre append...')
+console.log('- B appends -')
 await b.append('sup')
 
-console.log('nu')
+// B appended but hasn't synced with 'a'
+await list('A', a)
+await list('B', b)
+
+// Outputs:
+// - B appends -
+// - list A -
+// 0 add writer 3c059a578e217790630a5454d33f254bda36b96beb33e2d664cee8302ff7d329
+
+// - list B -
+// 0 add writer 3c059a578e217790630a5454d33f254bda36b96beb33e2d664cee8302ff7d329
+// 1 sup
+
+console.log('== Sync A & B ==\n')
+await replicateAndSync([a, b])
+
+// Both synced
+await list('A', a)
+await list('B', b)
+
+// Outputs:
+// == Sync A & B ==
+
+// - list A -
+// 0 add writer 3c059a578e217790630a5454d33f254bda36b96beb33e2d664cee8302ff7d329
+// 1 sup
+
+// - list B -
+// 0 add writer 3c059a578e217790630a5454d33f254bda36b96beb33e2d664cee8302ff7d329
+// 1 sup
 
 async function list (name, base) {
-  console.log('**** list ' + name + ' ****')
-  for (let i = 0; i < base.length; i++) {
-    console.log(i, (await base.get(i)).value)
+  console.log('- list ' + name + ' -')
+  for (let i = 0; i < base.view.length; i++) {
+    const node = await base.view.get(i)
+    if (typeof node === 'object' && 'add' in node) {
+      // Print pretty version of 'add' block
+      console.log(i, 'add writer', node.add)
+    } else {
+      console.log(i, node)
+    }
   }
   console.log('')
 }
 
-async function sync (a, b) {
-  const s1 = a.store.replicate(true)
-  const s2 = b.store.replicate(false)
-
-  s1.on('error', () => {})
-  s2.on('error', () => {})
-
-  s1.pipe(s2).pipe(s1)
-
-  await new Promise(r => setImmediate(r))
-
-  await a.update()
-  await b.update()
-
-  s1.destroy()
-  s2.destroy()
-}
-
-async function syncAll () {
-  console.log('**** sync all ****')
-  await sync(a, b)
-
-  console.log('**** synced a and b ****')
-  await sync(a, c)
-  // await sync(b, a)
-  console.log('**** sync all done ****')
-  console.log()
-}
-
 function makeStore (seed) {
-  return new Corestore(RAM, { primaryKey: Buffer.alloc(32).fill(seed) })
+  return new Corestore('./example-corestore-peer-' + seed, { primaryKey: Buffer.alloc(32).fill(seed) })
 }
