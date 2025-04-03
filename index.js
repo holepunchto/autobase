@@ -881,7 +881,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (opts.encryptionKey) {
       const blindingKey = Buffer.alloc(32) // TODO
-      const blockKey = HypercoreEncryption.getBlockKey(opts.core, opts.encryptionKey)
+      const blockKey = opts.id === 0xffffffff ? Buffer.alloc(32) : HypercoreEncryption.getBlockKey(opts.core, opts.encryptionKey)
       const buffer = Buffer.concat([Buffer.alloc(16), block])
       HypercoreEncryption.encrypt(opts.index, buffer, 0, 1, opts.id, blockKey, blindingKey)
       return buffer
