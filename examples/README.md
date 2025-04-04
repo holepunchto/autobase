@@ -2,7 +2,7 @@
 
 ## Table of Contents
 
-- [`basic`](./basic/)  
+- [`basic`](./basic/index.mjs)  
   Show cases how to define the `open` & `apply` handlers with support for
   adding a peer as a writer.
 - [`autobase-example`](https://github.com/holepunchto/autobase-example)  
