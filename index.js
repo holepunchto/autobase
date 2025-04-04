@@ -1033,6 +1033,7 @@ module.exports = class Autobase extends ReadyResource {
       return w
     }
 
+    core.on('ready', this._onremotewriterchangeBound)
     core.on('append', this._onremotewriterchangeBound)
     core.on('download', this._onremotewriterchangeBound)
     core.on('manifest', this._onremotewriterchangeBound)
