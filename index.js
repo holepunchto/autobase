@@ -10,7 +10,7 @@ const CoreCoupler = require('core-coupler')
 const mutexify = require('mutexify/promise')
 const ProtomuxWakeup = require('protomux-wakeup')
 const rrp = require('resolve-reject-promise')
-const HypercoreEncryption = require('hypercore-encryption')
+const crypto = require('hypercore-crypto')
 
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
@@ -325,8 +325,8 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     if (result.encryptionKey) {
-      this.local.setEncryption(this.getWriterEncryption(this.local.key))
-      this._primaryBootstrap.setEncryption(this.getWriterEncryption(this._primaryBootstrap.key))
+      this.local.setEncryption(this.getWriterEncryption())
+      this._primaryBootstrap.setEncryption(this.getWriterEncryption())
     }
 
     if (this.nukeTip) await this._nukeTip()
@@ -879,15 +879,17 @@ module.exports = class Autobase extends ReadyResource {
       }
     })
 
-    if (opts.encryptionKey) {
-      const blindingKey = Buffer.alloc(32) // TODO
-      const blockKey = opts.id === 0xffffffff ? Buffer.alloc(32) : HypercoreEncryption.getBlockKey(opts.core, opts.encryptionKey)
-      const buffer = Buffer.concat([Buffer.alloc(16), block])
-      HypercoreEncryption.encrypt(opts.index, buffer, 0, 1, opts.id, blockKey, blindingKey)
-      return buffer
+    if (!opts.encryptionKey) return block
+
+    if (!opts.optimistic) {
+      throw new Error('Encoding an encrypted value is not supported')
     }
 
-    return block
+    const padding = b4a.alloc(16)
+    crypto.hash(block, padding)
+    padding[0] = 0
+
+    return b4a.concat([padding, block])
   }
 
   static async getLocalKey (store, opts = {}) {
@@ -1027,8 +1029,9 @@ module.exports = class Autobase extends ReadyResource {
     return Promise.all(p)
   }
 
-  getWriterEncryption (key) {
-    return createEncryptionProvider(this.encryptionKey, key)
+  getWriterEncryption () {
+    if (!this.encryptionKey) return null
+    return Writer.createEncryption(this)
   }
 
   _makeWriterCore (key) {
@@ -1038,8 +1041,8 @@ module.exports = class Autobase extends ReadyResource {
     const local = b4a.equals(key, this.local.key)
 
     const core = local
-      ? this.local.session({ valueEncoding: messages.OplogMessage, encryption: this.getWriterEncryption(this.local.key), active: false })
-      : this.store.get({ key, compat: false, writable: false, valueEncoding: messages.OplogMessage, encryption: this.getWriterEncryption(key), active: false })
+      ? this.local.session({ valueEncoding: messages.OplogMessage, encryption: this.getWriterEncryption(), active: false })
+      : this.store.get({ key, compat: false, writable: false, valueEncoding: messages.OplogMessage, encryption: this.getWriterEncryption(), active: false })
 
     return core
   }
@@ -1838,27 +1841,4 @@ function normalize (valueEncoding, value) {
   valueEncoding.encode(state, value)
   state.start = 0
   return valueEncoding.decode(state)
-}
-
-function createEncryptionProvider (encryptionKey, coreKey) {
-  if (!encryptionKey) return null
-
-  // TODO: obvs needs to be populated
-  const blindingKey = Buffer.alloc(32)
-
-  return new HypercoreEncryption(blindingKey, function (id) {
-    if (id === 0xffffffff) { // the blank key
-      return {
-        version: 1,
-        padding: 16,
-        key: Buffer.alloc(32)
-      }
-    }
-
-    return {
-      version: 1,
-      padding: 16,
-      key: HypercoreEncryption.getBlockKey(coreKey, encryptionKey)
-    }
-  }, { preopen: Promise.resolve(0) })
 }
