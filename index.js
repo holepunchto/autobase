@@ -10,6 +10,7 @@ const CoreCoupler = require('core-coupler')
 const mutexify = require('mutexify/promise')
 const ProtomuxWakeup = require('protomux-wakeup')
 const rrp = require('resolve-reject-promise')
+const crypto = require('hypercore-crypto')
 
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
@@ -321,6 +322,11 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this.encrypted) {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
+    }
+
+    if (result.encryptionKey) {
+      this.local.setEncryption(this.getWriterEncryption())
+      this._primaryBootstrap.setEncryption(this.getWriterEncryption())
     }
 
     if (this.nukeTip) await this._nukeTip()
@@ -860,7 +866,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   static encodeValue (value, opts = {}) {
-    return c.encode(messages.OplogMessage, {
+    const block = c.encode(messages.OplogMessage, {
       version: AUTOBASE_VERSION,
       maxSupportedVersion: AUTOBASE_VERSION,
       digist: null,
@@ -872,6 +878,18 @@ module.exports = class Autobase extends ReadyResource {
         value
       }
     })
+
+    if (!opts.encryptionKey) return block
+
+    if (!opts.optimistic) {
+      throw new Error('Encoding an encrypted value is not supported')
+    }
+
+    const padding = b4a.alloc(16)
+    crypto.hash(block, padding)
+    padding[0] = 0
+
+    return b4a.concat([padding, block])
   }
 
   static async getLocalKey (store, opts = {}) {
@@ -1011,6 +1029,11 @@ module.exports = class Autobase extends ReadyResource {
     return Promise.all(p)
   }
 
+  getWriterEncryption () {
+    if (!this.encryptionKey) return null
+    return Writer.createEncryption(this)
+  }
+
   _makeWriterCore (key) {
     if (this.closing) throw new Error('Autobase is closing')
     if (this._interrupting) throw INTERRUPT()
@@ -1018,8 +1041,8 @@ module.exports = class Autobase extends ReadyResource {
     const local = b4a.equals(key, this.local.key)
 
     const core = local
-      ? this.local.session({ valueEncoding: messages.OplogMessage, encryption: this.encryption, active: false })
-      : this.store.get({ key, compat: false, writable: false, valueEncoding: messages.OplogMessage, encryption: this.encryption, active: false })
+      ? this.local.session({ valueEncoding: messages.OplogMessage, encryption: this.getWriterEncryption(), active: false })
+      : this.store.get({ key, compat: false, writable: false, valueEncoding: messages.OplogMessage, encryption: this.getWriterEncryption(), active: false })
 
     return core
   }
