@@ -869,7 +869,7 @@ module.exports = class Autobase extends ReadyResource {
     const block = c.encode(messages.OplogMessage, {
       version: AUTOBASE_VERSION,
       maxSupportedVersion: AUTOBASE_VERSION,
-      digist: null,
+      digest: null,
       checkpoint: null,
       optimistic: !!opts.optimistic,
       node: {
@@ -879,7 +879,7 @@ module.exports = class Autobase extends ReadyResource {
       }
     })
 
-    if (!opts.encryptionKey) return block
+    if (!opts.encrypted) return block
 
     if (!opts.optimistic) {
       throw new Error('Encoding an encrypted value is not supported')
