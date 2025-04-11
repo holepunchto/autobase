@@ -885,11 +885,11 @@ module.exports = class Autobase extends ReadyResource {
       throw new Error('Encoding an encrypted value is not supported')
     }
 
-    const padding = b4a.alloc(16)
+    const padding = b4a.alloc(16) // min hash length is 16
     crypto.hash(block, padding)
     padding[0] = 0
 
-    return b4a.concat([padding, block])
+    return b4a.concat([padding.subarray(0, 8), block])
   }
 
   static async getLocalKey (store, opts = {}) {
