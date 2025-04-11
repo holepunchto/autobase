@@ -10,10 +10,12 @@ const CoreCoupler = require('core-coupler')
 const mutexify = require('mutexify/promise')
 const ProtomuxWakeup = require('protomux-wakeup')
 const rrp = require('resolve-reject-promise')
+const crypto = require('hypercore-crypto')
 
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
-const AutobaseEncryption = require('./lib/encryption.js')
+const { AutobaseEncryption } = require('./lib/encryption.js')
+const UpdateChanges = require('./lib/updates.js')
 const messages = require('./lib/messages.js')
 const Timer = require('./lib/timer.js')
 const Writer = require('./lib/writer.js')
@@ -159,9 +161,10 @@ module.exports = class Autobase extends ReadyResource {
 
     this._preopen = null
 
+    this._hasOpen = !!this._handlers.open
     this._hasApply = !!this._handlers.apply
     this._hasOptimisticApply = !!this._handlers.optimistic
-    this._hasOpen = !!this._handlers.open
+    this._hasUpdate = !!this._handlers.update
     this._hasClose = !!this._handlers.close
 
     this._viewStore = new AutoStore(this)
@@ -324,8 +327,8 @@ module.exports = class Autobase extends ReadyResource {
     if (this.encryptionKey) {
       this.encryption = new AutobaseEncryption(this, null)
 
-      await this.local.setEncryptionKey(this.encryptionKey)
-      await this._primaryBootstrap.setEncryptionKey(this.encryptionKey)
+      this.local.setEncryption(this.getWriterEncryption())
+      this._primaryBootstrap.setEncryption(this.getWriterEncryption())
     }
 
     if (this.nukeTip) await this._nukeTip()
@@ -861,10 +864,10 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   static encodeValue (value, opts = {}) {
-    return c.encode(messages.OplogMessage, {
+    const block = c.encode(messages.OplogMessage, {
       version: AUTOBASE_VERSION,
       maxSupportedVersion: AUTOBASE_VERSION,
-      digist: null,
+      digest: null,
       checkpoint: null,
       optimistic: !!opts.optimistic,
       node: {
@@ -873,6 +876,18 @@ module.exports = class Autobase extends ReadyResource {
         value
       }
     })
+
+    if (!opts.encrypted) return block
+
+    if (!opts.optimistic) {
+      throw new Error('Encoding an encrypted value is not supported')
+    }
+
+    const padding = b4a.alloc(16) // min hash length is 16
+    crypto.hash(block, padding)
+    padding[0] = 0
+
+    return b4a.concat([padding.subarray(0, 8), block])
   }
 
   static async getLocalKey (store, opts = {}) {
@@ -1012,8 +1027,9 @@ module.exports = class Autobase extends ReadyResource {
     return Promise.all(p)
   }
 
-  getWriterEncryption (key) {
-    return this.encryptionKey ? { key: this.encryptionKey, block: false } : null
+  getWriterEncryption () {
+    if (!this.encryptionKey) return null
+    return Writer.createEncryption(this)
   }
 
   _makeWriterCore (key) {
@@ -1021,7 +1037,7 @@ module.exports = class Autobase extends ReadyResource {
     if (this._interrupting) throw INTERRUPT()
 
     const local = b4a.equals(key, this.local.key)
-    const encryption = this.getWriterEncryption(key)
+    const encryption = this.getWriterEncryption()
 
     const core = local
       ? this.local.session({ valueEncoding: messages.OplogMessage, encryption, active: false })
@@ -1039,6 +1055,7 @@ module.exports = class Autobase extends ReadyResource {
       return w
     }
 
+    core.on('ready', this._onremotewriterchangeBound)
     core.on('append', this._onremotewriterchangeBound)
     core.on('download', this._onremotewriterchangeBound)
     core.on('manifest', this._onremotewriterchangeBound)
@@ -1149,6 +1166,9 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
+    const changes = this._hasUpdate ? new UpdateChanges(this) : null
+    if (changes) changes.track(this._applyState)
+
     // close existing state
     if (this._applyState) await this._applyState.close()
 
@@ -1202,6 +1222,8 @@ module.exports = class Autobase extends ReadyResource {
     tx.deleteLocalRange(b4a.from([messages.LINEARIZER_PREFIX]), b4a.from([messages.LINEARIZER_PREFIX + 1]))
     await tx.flush()
 
+    if (changes) changes.finalise()
+
     await store.flush()
     await store.close()
 
@@ -1217,6 +1239,8 @@ module.exports = class Autobase extends ReadyResource {
 
     this._applyState = new ApplyState(this)
     await this._applyState.ready()
+
+    if (changes) await this._handlers.update(this._applyState.view, changes)
 
     if (await this._applyState.shouldMigrate()) {
       await this._migrate()

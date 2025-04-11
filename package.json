@@ -1,11 +1,12 @@
 {
   "name": "autobase",
-  "version": "7.1.1",
-  "description": "",
+  "version": "7.3.2",
+  "description": "A multiwriter data structure for Hypercore",
   "main": "index.js",
   "scripts": {
     "test": "standard && brittle test/all.js",
     "test:encrypted": "standard && brittle test/all.js --encrypt-all",
+    "test:bare": "bare test/all.js",
     "fuzz:generated": "brittle test/reference/fuzz/generated/*.js",
     "fuzz:main": "node test/fuzz/index.js",
     "fuzz": "node test/reference/fuzz/fuzz.js"
@@ -37,7 +38,7 @@
     "core-coupler": "^2.0.0",
     "debounceify": "^1.0.0",
     "hyperbee": "^2.22.0",
-    "hypercore": "^11.0.30",
+    "hypercore": "^11.4.0",
     "hypercore-crypto": "^3.4.0",
     "hypercore-encryption": "^1.0.1",
     "hypercore-id-encoding": "^1.2.0",
@@ -59,7 +60,8 @@
     "rache": "^1.0.0",
     "same-data": "^1.0.0",
     "standard": "^17.0.0",
-    "test-tmp": "^1.2.0"
+    "test-tmp": "^1.2.0",
+    "uncaughts": "^1.1.0"
   },
   "standard": {
     "ignore": [

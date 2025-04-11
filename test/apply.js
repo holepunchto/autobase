@@ -1,6 +1,6 @@
 const test = require('brittle')
 const b4a = require('b4a')
-
+const uncaughts = require('uncaughts')
 const Autobase = require('..')
 
 const {
@@ -500,7 +500,7 @@ test('apply - uncaught exception', async t => {
   const [store] = await createStores(1, t)
 
   const error = new Promise((resolve, reject) => {
-    process.once('uncaughtException', reject)
+    uncaughts.on(reject)
   })
 
   const a = new Autobase(store.session(), null, {
