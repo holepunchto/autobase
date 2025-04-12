@@ -50,12 +50,8 @@ class WakeupHandler {
     this.base = base
   }
 
-  onpeeradd (peer, session) {
-    if (this.base._coupler) this.base._coupler.update(peer.stream)
-  }
-
-  onpeerremove (peer, session) {
-    // do nothing
+  onpeeractive (peer, session) {
+    this.base._bumpWakeupPeer(peer)
   }
 
   onlookup (req, peer, session) {
@@ -381,10 +377,19 @@ module.exports = class Autobase extends ReadyResource {
     if (this.local.length) this.hintWakeup([{ key: this.local.key, length: this.local.length }])
   }
 
+  _bumpWakeupPeer (peer) {
+    if (this._coupler) this._coupler.update(peer.stream)
+  }
+
   setWakeup (cap, discoveryKey) {
     if (this.wakeupSession) this.wakeupSession.destroy()
     if (!discoveryKey && b4a.equals(cap, this.key)) discoveryKey = this.discoveryKey
     this.wakeupSession = this.wakeupProtocol.session(cap, new WakeupHandler(this, discoveryKey || null))
+
+    // incase this session has active peers already, bump the coupler
+    for (const peer of this.wakeupSession.peers) {
+      if (peer.active) this._bumpWakeupPeer(peer)
+    }
   }
 
   async _getMigrationPointer (key, length) {
