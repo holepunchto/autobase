@@ -109,7 +109,7 @@ module.exports = class Autobase extends ReadyResource {
     this.nukeTip = !!handlers.nukeTip
 
     this.wakeupOwner = !handlers.wakeup
-    this.wakeupCapability = handlers.wakeupCapability || null
+    this.wakeupCapability = null
     this.wakeupProtocol = handlers.wakeup || new ProtomuxWakeup()
     this.wakeupSession = null
 
@@ -331,6 +331,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this.nukeTip) await this._nukeTip()
 
+    this.wakeupCapability = (await this._handlers.wakeupCapability) || null
     this.setWakeup(this.wakeupCapability || this.key, null)
   }
 
