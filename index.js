@@ -327,8 +327,8 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this.nukeTip) await this._nukeTip()
 
-    this.wakeupCapability = (await this._handlers.wakeupCapability) || null
-    this.setWakeup(this.wakeupCapability || this.key, null)
+    this.wakeupCapability = (await this._handlers.wakeupCapability) || { key: this.key, discoveryKey: this.discoveryKey }
+    this.setWakeup(this.wakeupCapability.key, this.wakeupCapability.discoveryKey)
   }
 
   async _nukeTipBatch (key, length) {
