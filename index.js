@@ -14,7 +14,7 @@ const crypto = require('hypercore-crypto')
 
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
-const { AutobaseEncryption } = require('./lib/encryption.js')
+const { EncryptionView } = require('./lib/encryption.js')
 const UpdateChanges = require('./lib/updates.js')
 const messages = require('./lib/messages.js')
 const Timer = require('./lib/timer.js')
@@ -32,7 +32,7 @@ const inspect = Symbol.for('nodejs.util.inspect.custom')
 const INTERRUPT = new Error('Apply interrupted')
 const BINARY_ENCODING = c.from('binary')
 
-const AUTOBASE_VERSION = 1
+const AUTOBASE_VERSION = 2
 
 const RECOVERIES = 3
 const FF_RECOVERY = 1
@@ -325,7 +325,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     if (this.encryptionKey) {
-      this.encryption = new AutobaseEncryption(this, null)
+      this.encryption = new EncryptionView(this, null)
 
       this.local.setEncryption(this.getWriterEncryption())
       this._primaryBootstrap.setEncryption(this.getWriterEncryption())
@@ -362,7 +362,7 @@ module.exports = class Autobase extends ReadyResource {
     await this._nukeTipBatch(boot.key, boot.indexedLength)
 
     const core = this.store.get({ key: boot.key, active: false, encryption: null })
-    const encCore = await AutobaseEncryption.setSystemEncryption(this, core)
+    const encCore = await EncryptionView.setSystemEncryption(this, core)
 
     const batch = core.session({ name: 'batch' })
     await batch.ready()
@@ -389,7 +389,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async _getMigrationPointer (key, length) {
     const core = this.store.get({ key, active: false, encryption: null })
-    const encCore = await AutobaseEncryption.setSystemEncryption(this, core)
+    const encCore = await EncryptionView.setSystemEncryption(this, core)
 
     const min = (core.manifest && core.manifest.prologue) ? core.manifest.prologue.length : 0
 
@@ -442,7 +442,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const core = this.store.get({ key: boot.key, encryption: null, active: false })
-    const encCore = await AutobaseEncryption.setSystemEncryption(this, core)
+    const encCore = await EncryptionView.setSystemEncryption(this, core)
 
     const batch = core.session({ name: 'batch' })
     const info = await SystemView.getIndexedInfo(batch, boot.indexedLength)
@@ -1029,7 +1029,7 @@ module.exports = class Autobase extends ReadyResource {
 
   getWriterEncryption () {
     if (!this.encryptionKey) return null
-    return Writer.createEncryption(this)
+    return this.encryption.getWriterEncryption()
   }
 
   _makeWriterCore (key) {
@@ -1296,7 +1296,7 @@ module.exports = class Autobase extends ReadyResource {
       ? null
       : { length: indexedLength, hash: await core.treeHash(indexedLength) }
 
-    const next = this._viewStore.getViewCore(indexerManifests, name, prologue, linked)
+    const next = this._viewStore.getViewCore(indexerManifests, name, prologue, this._applyState.system.core.manifest.version, linked)
     await next.ready()
 
     if (indexedLength > 0) {

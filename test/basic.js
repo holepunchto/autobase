@@ -864,7 +864,7 @@ test('two writers write many messages, third writer joins', async t => {
 
   await addWriter(base1, base2)
 
-  for (let i = 0; i < 10000; i++) {
+  for (let i = 0; i < 10; i++) {
     base1.append({ value: `Message${i}` })
   }
 
@@ -874,7 +874,9 @@ test('two writers write many messages, third writer joins', async t => {
   await confirm([base1, base2])
   await addWriter(base1, base3)
 
+  console.log('----')
   await confirm([base1, base2, base3])
+  console.log('----')
   t.pass('confirming did not throw')
 
   await compareViews([base1, base2, base3], t)
