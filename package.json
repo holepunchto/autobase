@@ -40,7 +40,6 @@
     "hyperbee": "^2.22.0",
     "hypercore": "^11.4.0",
     "hypercore-crypto": "^3.4.0",
-    "hypercore-encryption": "^1.0.1",
     "hypercore-id-encoding": "^1.2.0",
     "index-encoder": "^3.3.2",
     "mutexify": "^1.4.0",
