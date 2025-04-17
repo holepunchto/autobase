@@ -482,7 +482,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const boot = pointer
       ? c.decode(messages.BootRecord, pointer)
-      : { key: null, indexedLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
+      : { key: null, internalViews: [], indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
 
     if (boot.heads) {
       const len = await this._getMigrationPointer(boot.key, boot.indexedLength)
@@ -1175,14 +1175,12 @@ module.exports = class Autobase extends ReadyResource {
     const from = this.core.signedLength
     const store = this._viewStore.atomize()
     const views = this.fastForwardTo.views
-
-    // mutating, prop fine as we are throwing it away immediately
-    views.push({ key: this.fastForwardTo.key, length: this.fastForwardTo.length })
+    const internalViews = this.fastForwardTo.internalViews
 
     const ffed = new Set()
     const migrated = !b4a.equals(this.fastForwardTo.key, this.core.key)
 
-    for (const v of views) {
+    for (const v of internalViews.concat(views)) {
       const ref = await this._viewStore.findViewByKey(v.key, this.fastForwardTo.indexers)
       if (!ref) continue // unknown, view ignored
       ffed.add(ref)
@@ -1207,7 +1205,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const value = c.encode(messages.BootRecord, {
       key: this.fastForwardTo.key,
-      indexedLength: this.fastForwardTo.length,
+      internalViews: internalViews.map(v => v.length),
       indexersUpdated: false,
       fastForwarding: true,
       recoveries: RECOVERIES
@@ -1329,12 +1327,11 @@ module.exports = class Autobase extends ReadyResource {
     const info = await system.getIndexedInfo(length)
     const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
 
-    let linkedKey = null
-    for (let i = 0; i < this._applyState.views.length; i++) {
-      const view = this._applyState.views[i]
-      const name = this._applyState.views[i].name
+    const { views, internalViews } = this._applyState
 
-      if (name === '_encryption') linkedKey = view.key
+    for (let i = 0; i < views.length; i++) {
+      const view = views[i]
+      const name = views[i].name
 
       const v = this._applyState.getViewFromSystem(view, info)
       const indexedLength = v ? v.length : 0
@@ -1342,7 +1339,18 @@ module.exports = class Autobase extends ReadyResource {
       await this._migrateView(indexerManifests, name, indexedLength, null)
     }
 
-    const ref = await this._migrateView(indexerManifests, '_system', length, [linkedKey])
+    let linked = null
+
+    for (let i = 1; i < internalViews.length; i++) {
+      if (linked === null) linked = []
+
+      const { ref, indexedLength } = internalViews[i]
+      const next = await this._migrateView(indexerManifests, ref.name, indexedLength, null)
+
+      linked.push(next.core.key)
+    }
+
+    const ref = await this._migrateView(indexerManifests, '_system', length, linked)
 
     // start soft shutdown
 

@@ -874,9 +874,7 @@ test('two writers write many messages, third writer joins', async t => {
   await confirm([base1, base2])
   await addWriter(base1, base3)
 
-  console.log('----')
   await confirm([base1, base2, base3])
-  console.log('----')
   t.pass('confirming did not throw')
 
   await compareViews([base1, base2, base3], t)
