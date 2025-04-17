@@ -431,21 +431,24 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // called by view-store for bootstrapping
-  async _getSystemInfo () {
+  async _getSystemInfo (tag) {
     const boot = await this._getBootRecord()
     if (!boot.key) return null
 
     const migrated = !!boot.heads
+    const indexedLength = boot.internalViews[0]
 
     if (migrated) { // ensure system batch is consistent on initial migration
-      await this._migrate6(boot.key, boot.indexedLength)
+      await this._migrate6(boot.key, indexedLength)
     }
 
     const core = this.store.get({ key: boot.key, encryption: null, active: false })
-    const encCore = await EncryptionView.setSystemEncryption(this, core)
+    await core.ready()
 
     const batch = core.session({ name: 'batch' })
-    const info = await SystemView.getIndexedInfo(batch, boot.indexedLength)
+    const encCore = await EncryptionView.setSystemEncryption(this, batch)
+
+    const info = await SystemView.getIndexedInfo(batch, indexedLength)
 
     if (encCore) await encCore.close()
     await batch.close()
