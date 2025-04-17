@@ -61,7 +61,6 @@
     "same-data": "^1.0.0",
     "standard": "^17.0.0",
     "test-tmp": "^1.2.0",
-    "trace-console-log": "^1.0.0",
     "uncaughts": "^1.1.0"
   },
   "standard": {
