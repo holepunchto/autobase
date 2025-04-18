@@ -128,6 +128,7 @@ module.exports = class Autobase extends ReadyResource {
     this._wakeupPeerBound = this._wakeupPeer.bind(this)
     this._coupler = null
 
+    this._updateLocalCore = null
     this._lock = mutexify()
 
     this._needsWakeup = true
@@ -379,6 +380,29 @@ module.exports = class Autobase extends ReadyResource {
 
   _bumpWakeupPeer (peer) {
     if (this._coupler) this._coupler.update(peer.stream)
+  }
+
+  async _rotateLocalWriter (local) {
+    assert(!this.writable, 'Cannot rotate a local writer if a current one is open')
+
+    await local.setUserData('referrer', this.key)
+    if (this.encryptionKey) await local.setUserData('autobase/encryption', this.encryptionKey) // legacy support
+    await local.setUserData('autobase/boot', await this.local.getUserData('autobase/boot'))
+
+    this.local = local
+    await this.local.close()
+  }
+
+  async setLocal (key, { keyPair } = {}) {
+    const manifest = keyPair ? { version: this.store.manifestVersion, signers: [{ publicKey: keyPair.publicKey }] } : null
+    const encryption = this.encryptionKey ? this.getWriterEncryption() : null
+
+    const local = this.store.get({ key, manifest, active: false, exclusive: true, encryption, valueEncoding: messages.OplogMessage })
+    await local.ready()
+
+    this._updateLocalCore = local
+
+    await this._bump()
   }
 
   setWakeup (cap, discoveryKey) {
@@ -1638,6 +1662,10 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this.recoveries < FF_RECOVERY || this._bootRecovery) {
       await this._recoverMaybe()
+    }
+
+    if (this._updateLocalCore !== null) {
+      await this._rotateLocalWriter(this._updateLocalCore)
     }
 
     const local = this.local.length
