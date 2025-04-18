@@ -383,7 +383,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _rotateLocalWriter (local) {
-    assert(!this.localWriter || this.localWriter.closed, 'Cannot rotate a local writer if a current one is open')
+    assert(!this.writable, 'Cannot rotate a local writer if a current one is open')
 
     await local.setUserData('referrer', this.key)
     if (this.encryptionKey) await local.setUserData('autobase/encryption', this.encryptionKey) // legacy support
