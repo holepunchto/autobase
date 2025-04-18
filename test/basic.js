@@ -2016,6 +2016,18 @@ test('basic - append to views out of order', async t => {
   await t.execution(confirm([a, b]))
 })
 
+test('basic - rotate local writer', async t => {
+  const tmp = await tmpDir(t)
+  const store = new Corestore(tmp)
+  const base = new Autobase(store, b4a.alloc(32), { open: openMultiple, apply: applyMultiple })
+
+  await base.ready()
+  const local = base.local
+  await base.setLocal(null, { keyPair: crypto.keyPair() })
+  t.ok(local !== base.local)
+  await base.close()
+})
+
 async function applyWithRemove (batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {

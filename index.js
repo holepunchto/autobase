@@ -51,12 +51,8 @@ class WakeupHandler {
     this.base = base
   }
 
-  onpeeradd (peer, session) {
-    if (this.base._coupler) this.base._coupler.update(peer.stream)
-  }
-
-  onpeerremove (peer, session) {
-    // do nothing
+  onpeeractive (peer, session) {
+    this.base._bumpWakeupPeer(peer)
   }
 
   onlookup (req, peer, session) {
@@ -110,7 +106,7 @@ module.exports = class Autobase extends ReadyResource {
     this.nukeTip = !!handlers.nukeTip
 
     this.wakeupOwner = !handlers.wakeup
-    this.wakeupCapability = handlers.wakeupCapability || null
+    this.wakeupCapability = null
     this.wakeupProtocol = handlers.wakeup || new ProtomuxWakeup()
     this.wakeupSession = null
 
@@ -133,6 +129,7 @@ module.exports = class Autobase extends ReadyResource {
     this._wakeupPeerBound = this._wakeupPeer.bind(this)
     this._coupler = null
 
+    this._updateLocalCore = null
     this._lock = mutexify()
 
     this._needsWakeup = true
@@ -333,7 +330,8 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this.nukeTip) await this._nukeTip()
 
-    this.setWakeup(this.wakeupCapability || this.key, null)
+    this.wakeupCapability = (await this._handlers.wakeupCapability) || { key: this.key, discoveryKey: this.discoveryKey }
+    this.setWakeup(this.wakeupCapability.key, this.wakeupCapability.discoveryKey)
   }
 
   async _nukeTipBatch (key, length) {
@@ -381,10 +379,42 @@ module.exports = class Autobase extends ReadyResource {
     if (encCore) await encCore.close()
   }
 
+  _bumpWakeupPeer (peer) {
+    if (this._coupler) this._coupler.update(peer.stream)
+  }
+
+  async _rotateLocalWriter (local) {
+    assert(!this.writable, 'Cannot rotate a local writer if a current one is open')
+
+    await local.setUserData('referrer', this.key)
+    if (this.encryptionKey) await local.setUserData('autobase/encryption', this.encryptionKey) // legacy support
+    await local.setUserData('autobase/boot', await this.local.getUserData('autobase/boot'))
+
+    this.local = local
+    await this.local.close()
+  }
+
+  async setLocal (key, { keyPair } = {}) {
+    const manifest = keyPair ? { version: this.store.manifestVersion, signers: [{ publicKey: keyPair.publicKey }] } : null
+    const encryption = this.encryptionKey ? this.getWriterEncryption() : null
+
+    const local = this.store.get({ key, manifest, active: false, exclusive: true, encryption, valueEncoding: messages.OplogMessage })
+    await local.ready()
+
+    this._updateLocalCore = local
+
+    await this._bump()
+  }
+
   setWakeup (cap, discoveryKey) {
     if (this.wakeupSession) this.wakeupSession.destroy()
     if (!discoveryKey && b4a.equals(cap, this.key)) discoveryKey = this.discoveryKey
     this.wakeupSession = this.wakeupProtocol.session(cap, new WakeupHandler(this, discoveryKey || null))
+
+    // incase this session has active peers already, bump the coupler
+    for (const peer of this.wakeupSession.peers) {
+      if (peer.active) this._bumpWakeupPeer(peer)
+    }
   }
 
   async _getMigrationPointer (key, length) {
@@ -1645,6 +1675,10 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this.recoveries < FF_RECOVERY || this._bootRecovery) {
       await this._recoverMaybe()
+    }
+
+    if (this._updateLocalCore !== null) {
+      await this._rotateLocalWriter(this._updateLocalCore)
     }
 
     const local = this.local.length
