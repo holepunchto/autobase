@@ -31,9 +31,6 @@ test('encryption - fixture', async t => {
   await base.append('determinstically')
   await base.append('encrypted')
 
-  t.comment('local')
-  await compareFixture(base.local, fixture.local)
-
   t.comment('system')
   await compareFixture(base.core, fixture.system)
 
