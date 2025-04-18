@@ -130,7 +130,7 @@ test('encryption - fixture', async t => {
     t.is(core.length, fixture.length)
     for (let i = 0; i < core.length; i++) {
       const block = await core.get(i, { raw: true })
-      t.is(b4a.toString(block, 'hex'), fixture[i])
+      t.is(b4a.toString(block, 'hex'), fixture[i], 'index ' + i)
     }
   }
 })

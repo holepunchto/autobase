@@ -32,7 +32,7 @@ const inspect = Symbol.for('nodejs.util.inspect.custom')
 const INTERRUPT = new Error('Apply interrupted')
 const BINARY_ENCODING = c.from('binary')
 
-const AUTOBASE_VERSION = 2
+const AUTOBASE_VERSION = 1
 
 const RECOVERIES = 3
 const FF_RECOVERY = 1
@@ -431,7 +431,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // called by view-store for bootstrapping
-  async _getSystemInfo (tag) {
+  async _getSystemInfo () {
     const boot = await this._getBootRecord()
     if (!boot.key) return null
 
