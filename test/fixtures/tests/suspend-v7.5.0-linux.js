@@ -1,58 +1,17 @@
 const fs = require('fs/promises')
+const os = require('os')
 const path = require('path')
 const Corestore = require('corestore')
 const test = require('brittle')
 const tmpDir = require('test-tmp')
-const crypto = require('hypercore-crypto')
 const b4a = require('b4a')
 
-const Autobase = require('..')
+const skip = os.platform() !== 'linux' // fixture was generated on linux
 
-const fixture = require('./fixtures/encryption.js')
+const { createBase, replicateAndSync } = require('../../helpers')
 
-const { createBase, replicateAndSync } = require('./helpers')
-
-test('encryption - fixture', async t => {
-  const keyPair = crypto.keyPair(b4a.alloc(32, 1))
-  const storage = await tmpDir()
-  const store = new Corestore(storage)
-
-  const base = new Autobase(store, {
-    keyPair,
-    apply,
-    open,
-    ackInterval: 0,
-    ackThreshold: 0,
-    encryptionKey: b4a.alloc(32).fill('secret')
-  })
-
-  await base.append('encrypted data')
-  await base.append('that should be')
-  await base.append('determinstically')
-  await base.append('encrypted')
-
-  t.comment('system')
-  await compareFixture(base.core, fixture.system)
-
-  t.comment('view')
-  await compareFixture(base.view, fixture.view)
-
-  const closing = base.close()
-  await store.close()
-
-  await closing
-
-  async function compareFixture (core, fixture) {
-    t.is(core.length, fixture.length)
-    for (let i = 0; i < core.length; i++) {
-      const block = await core.get(i, { raw: true })
-      t.is(b4a.toString(block, 'hex'), fixture[i], 'index ' + i)
-    }
-  }
-})
-
-test('suspend - restart from v7.5.0 fixture', async t => {
-  const fixturePath = path.join(__dirname, './fixtures/suspend/stores/v7.5.0')
+test('suspend - restart from v7.5.0 fixture', { skip }, async t => {
+  const fixturePath = path.join(__dirname, '../data/suspend/linux/corestore-v7.5.0')
 
   const bdir = await tmpDir(t)
   const cdir = await tmpDir(t)
@@ -78,7 +37,7 @@ test('suspend - restart from v7.5.0 fixture', async t => {
 
   // invariant
   const exp = {
-    key: b4a.from('365fca8bf0e9e567d74efd5c28c4acb912dbbd227e0b9855882fa79ed94880ec', 'hex'),
+    key: b4a.from('584fa632b638b94ebca6433dfa9716fedce754118f5f9da5d256b9064019dc1e', 'hex'),
     length: 83
   }
 
@@ -92,16 +51,6 @@ test('suspend - restart from v7.5.0 fixture', async t => {
   t.is(await c.view.first.get(c.view.first.length - 1), 'c' + 300)
   t.is(await c.view.second.get(c.view.second.length - 1), 'b' + 299)
 })
-
-function open (store) {
-  return store.get('view', { valueEncoding: 'json' })
-}
-
-async function apply (batch, view, base) {
-  for (const { value } of batch) {
-    await view.append(value.toString())
-  }
-}
 
 function openMultiple (store) {
   return {

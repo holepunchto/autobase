@@ -1,5 +1,7 @@
 // Generate suspend fixtures
 
+const os = require('os')
+const fs = require('fs/promises')
 const path = require('path')
 const Corestore = require('corestore')
 const b4a = require('b4a')
@@ -14,7 +16,7 @@ const {
   confirm
 } = require('../../helpers')
 
-main()
+main().catch(console.error)
 
 async function main () {
   const closing = []
@@ -28,7 +30,10 @@ async function main () {
 
   const [a] = bases
 
-  const fixturePath = path.join(__dirname, './stores/v' + version)
+  const platform = os.platform()
+
+  const testPath = path.resolve(__dirname, '..', `tests/suspend-v${version}-${platform}.js`)
+  const fixturePath = path.join(__dirname, '..', `data/suspend/${platform}/corestore-v${version}`)
 
   const bstore = new Corestore(path.join(fixturePath, 'b'))
   const cstore = new Corestore(path.join(fixturePath, 'c'))
@@ -79,17 +84,36 @@ async function main () {
   await bstore.close()
   await cstore.close()
 
-  console.log('Generated test:\n')
-  console.log(generate(version, n, exp))
+  await shutdown
+
+  await fs.writeFile(testPath, generate(version, n, exp, os.platform()))
+
+  console.log('Test was written to:', testPath)
 
   function teardown (fn) {
     closing.push(fn)
   }
+
+  function shutdown () {
+    return Promise.all(closing.map(fn => fn()))
+  }
 }
 
-function generate (version, n, exp) {
-  return `test('suspend - restart from v${version} fixture', async t => {
-  const fixturePath = path.join(__dirname, './fixtures/suspend/stores/v${version}')
+function generate (version, n, exp, platform) {
+  return `const fs = require('fs/promises')
+const os = require('os')
+const path = require('path')
+const Corestore = require('corestore')
+const test = require('brittle')
+const tmpDir = require('test-tmp')
+const b4a = require('b4a')
+
+const skip = os.platform() !== '${platform}' // fixture was generated on ${platform}
+
+const { createBase, replicateAndSync } = require('../../helpers')
+
+test('suspend - restart from v${version} fixture', { skip }, async t => {
+  const fixturePath = path.join(__dirname, '../data/suspend/${platform}/corestore-v${version}')
 
   const bdir = await tmpDir(t)
   const cdir = await tmpDir(t)
@@ -128,7 +152,30 @@ function generate (version, n, exp) {
 
   t.is(await c.view.first.get(c.view.first.length - 1), 'c' + ${n})
   t.is(await c.view.second.get(c.view.second.length - 1), 'b' + ${n - 1})
-})`
+})
+
+function openMultiple (store) {
+  return {
+    first: store.get('first', { valueEncoding: 'json' }),
+    second: store.get('second', { valueEncoding: 'json' })
+  }
+}
+
+async function applyMultiple (batch, view, base) {
+  for (const { value } of batch) {
+    if (value.add) {
+      await base.addWriter(Buffer.from(value.add, 'hex'))
+      continue
+    }
+
+    if (value.index === 1) {
+      await view.first.append(value.data)
+    } else if (value.index === 2) {
+      await view.second.append(value.data)
+    }
+  }
+}
+`
 }
 
 function openMultiple (store) {
