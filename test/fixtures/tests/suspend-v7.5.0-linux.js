@@ -11,7 +11,7 @@ const skip = os.platform() !== 'linux' // fixture was generated on linux
 const { createBase, replicateAndSync } = require('../../helpers')
 
 test('suspend - restart from v7.5.0 fixture', { skip }, async t => {
-  const fixturePath = path.join(__dirname, '../data/suspend/corestore-v7.5.0')
+  const fixturePath = path.join(__dirname, '../data/suspend/linux/corestore-v7.5.0')
 
   const bdir = await tmpDir(t)
   const cdir = await tmpDir(t)
@@ -37,7 +37,7 @@ test('suspend - restart from v7.5.0 fixture', { skip }, async t => {
 
   // invariant
   const exp = {
-    key: b4a.from('73ffce640728d0a0ca7f72c9655d5e8825b5c877c1972f5165ee9a4a8808027b', 'hex'),
+    key: b4a.from('584fa632b638b94ebca6433dfa9716fedce754118f5f9da5d256b9064019dc1e', 'hex'),
     length: 83
   }
 

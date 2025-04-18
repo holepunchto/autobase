@@ -113,7 +113,7 @@ const skip = os.platform() !== '${platform}' // fixture was generated on ${platf
 const { createBase, replicateAndSync } = require('../../helpers')
 
 test('suspend - restart from v${version} fixture', { skip }, async t => {
-  const fixturePath = path.join(__dirname, '../data/suspend/corestore-v${version}')
+  const fixturePath = path.join(__dirname, '../data/suspend/${platform}/corestore-v${version}')
 
   const bdir = await tmpDir(t)
   const cdir = await tmpDir(t)
