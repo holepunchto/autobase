@@ -1,5 +1,6 @@
 // Generate suspend fixtures
 
+const os = require('os')
 const fs = require('fs/promises')
 const path = require('path')
 const Corestore = require('corestore')
@@ -29,8 +30,10 @@ async function main () {
 
   const [a] = bases
 
-  const testPath = path.resolve(__dirname, '..', `tests/suspend-v${version}.js`)
-  const fixturePath = path.join(__dirname, '..', `data/suspend/corestore-v${version}`)
+  const platform = os.platform()
+
+  const testPath = path.resolve(__dirname, '..', `tests/suspend-v${version}-${platform}.js`)
+  const fixturePath = path.join(__dirname, '..', `data/suspend/${platform}/corestore-v${version}`)
 
   const bstore = new Corestore(path.join(fixturePath, 'b'))
   const cstore = new Corestore(path.join(fixturePath, 'c'))
@@ -83,7 +86,7 @@ async function main () {
 
   await shutdown
 
-  await fs.writeFile(testPath, generate(version, n, exp))
+  await fs.writeFile(testPath, generate(version, n, exp, os.platform()))
 
   console.log('Test was written to:', testPath)
 
@@ -96,17 +99,20 @@ async function main () {
   }
 }
 
-function generate (version, n, exp) {
+function generate (version, n, exp, platform) {
   return `const fs = require('fs/promises')
+const os = require('os')
 const path = require('path')
 const Corestore = require('corestore')
 const test = require('brittle')
 const tmpDir = require('test-tmp')
 const b4a = require('b4a')
 
+const skip = os.platform() !== '${platform}' // fixture was generated on ${platform}
+
 const { createBase, replicateAndSync } = require('../../helpers')
 
-test('suspend - restart from v${version} fixture', async t => {
+test('suspend - restart from v${version} fixture', { skip }, async t => {
   const fixturePath = path.join(__dirname, '../data/suspend/corestore-v${version}')
 
   const bdir = await tmpDir(t)

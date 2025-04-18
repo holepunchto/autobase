@@ -1,13 +1,16 @@
 const fs = require('fs/promises')
+const os = require('os')
 const path = require('path')
 const Corestore = require('corestore')
 const test = require('brittle')
 const tmpDir = require('test-tmp')
 const b4a = require('b4a')
 
+const skip = os.platform() !== 'linux' // fixture was generated on linux
+
 const { createBase, replicateAndSync } = require('../../helpers')
 
-test('suspend - restart from v7.5.0 fixture', async t => {
+test('suspend - restart from v7.5.0 fixture', { skip }, async t => {
   const fixturePath = path.join(__dirname, '../data/suspend/corestore-v7.5.0')
 
   const bdir = await tmpDir(t)
@@ -34,7 +37,7 @@ test('suspend - restart from v7.5.0 fixture', async t => {
 
   // invariant
   const exp = {
-    key: b4a.from('0f5016881fa0b6801e59f842fe10d2d2acb10b531dc590e783655c9140adfdea', 'hex'),
+    key: b4a.from('73ffce640728d0a0ca7f72c9655d5e8825b5c877c1972f5165ee9a4a8808027b', 'hex'),
     length: 83
   }
 
