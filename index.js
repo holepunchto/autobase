@@ -395,7 +395,9 @@ module.exports = class Autobase extends ReadyResource {
 
   async setLocal (key, { keyPair } = {}) {
     const manifest = keyPair ? { version: this.store.manifestVersion, signers: [{ publicKey: keyPair.publicKey }] } : null
-    const local = this.store.get({ key, manifest, active: false, exclusive: true, valueEncoding: messages.OplogMessage })
+    const encryption = this.encryptionKey ? this.getWriterEncryption() : null
+
+    const local = this.store.get({ key, manifest, active: false, exclusive: true, encryption, valueEncoding: messages.OplogMessage })
     await local.ready()
 
     this._updateLocalCore = local
