@@ -30,7 +30,7 @@ async function main () {
   const [a] = bases
 
   const testPath = path.resolve(__dirname, '..', `tests/suspend-v${version}.js`)
-  const fixturePath = path.join(__dirname, '..', `fixtures/suspend/corestore-v${version}`)
+  const fixturePath = path.join(__dirname, '..', `data/suspend/corestore-v${version}`)
 
   const bstore = new Corestore(path.join(fixturePath, 'b'))
   const cstore = new Corestore(path.join(fixturePath, 'c'))
@@ -104,12 +104,10 @@ const test = require('brittle')
 const tmpDir = require('test-tmp')
 const b4a = require('b4a')
 
-const Autobase = require('../../..')
-
 const { createBase, replicateAndSync } = require('../../helpers')
 
 test('suspend - restart from v${version} fixture', async t => {
-  const fixturePath = path.join(__dirname, '../fixtures/suspend/corestore-v${version}')
+  const fixturePath = path.join(__dirname, '../data/suspend/corestore-v${version}')
 
   const bdir = await tmpDir(t)
   const cdir = await tmpDir(t)

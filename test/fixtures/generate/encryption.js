@@ -24,7 +24,7 @@ async function main () {
   const t = { teardown }
 
   const testPath = path.resolve(__dirname, '..', `tests/encryption-v${version}.js`)
-  const fixturePath = path.join(__dirname, '..', `fixtures/encryption/v${version}.json`)
+  const fixturePath = path.join(__dirname, '..', `data/encryption/v${version}.json`)
 
   const keyPair = crypto.keyPair(b4a.alloc(32, 1))
 
@@ -85,7 +85,7 @@ const b4a = require('b4a')
 
 const Autobase = require('../../..')
 
-const fixture = require('../fixtures/encryption/v${version}.json')
+const fixture = require('../data/encryption/v${version}.json')
 
 test('encryption - v${version}', async t => {
   const keyPair = crypto.keyPair(b4a.alloc(32, 1))

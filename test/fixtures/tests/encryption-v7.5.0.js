@@ -6,7 +6,7 @@ const b4a = require('b4a')
 
 const Autobase = require('../../..')
 
-const fixture = require('../fixtures/encryption/v7.5.0.json')
+const fixture = require('../data/encryption/v7.5.0.json')
 
 test('encryption - v7.5.0', async t => {
   const keyPair = crypto.keyPair(b4a.alloc(32, 1))

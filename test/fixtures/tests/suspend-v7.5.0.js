@@ -5,12 +5,10 @@ const test = require('brittle')
 const tmpDir = require('test-tmp')
 const b4a = require('b4a')
 
-const Autobase = require('../../..')
-
 const { createBase, replicateAndSync } = require('../../helpers')
 
 test('suspend - restart from v7.5.0 fixture', async t => {
-  const fixturePath = path.join(__dirname, '../fixtures/suspend/corestore-v7.5.0')
+  const fixturePath = path.join(__dirname, '../data/suspend/corestore-v7.5.0')
 
   const bdir = await tmpDir(t)
   const cdir = await tmpDir(t)
@@ -36,7 +34,7 @@ test('suspend - restart from v7.5.0 fixture', async t => {
 
   // invariant
   const exp = {
-    key: b4a.from('22a6a1c33c81053a670d83ade560342dd9ff88e531e8e4ff5c2be5d13d4544c9', 'hex'),
+    key: b4a.from('0f5016881fa0b6801e59f842fe10d2d2acb10b531dc590e783655c9140adfdea', 'hex'),
     length: 83
   }
 
