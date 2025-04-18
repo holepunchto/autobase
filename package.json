@@ -6,6 +6,7 @@
   "scripts": {
     "test": "standard && brittle test/all.js",
     "test:encrypted": "standard && brittle test/all.js --encrypt-all",
+    "test:fixtures": "standard && brittle test/fixtures.js",
     "test:bare": "bare test/all.js",
     "fuzz:generated": "brittle test/reference/fuzz/generated/*.js",
     "fuzz:main": "node test/fuzz/index.js",

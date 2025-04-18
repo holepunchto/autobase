@@ -1,12 +1,9 @@
 const test = require('brittle')
 const tmpDir = require('test-tmp')
 const Corestore = require('corestore')
-const crypto = require('hypercore-crypto')
 const b4a = require('b4a')
 
 const Autobase = require('..')
-
-const fixture = require('./fixtures/encryption.js')
 
 test('encryption - basic', async t => {
   const tmp = await tmpDir(t)
@@ -91,48 +88,6 @@ test('encryption - expect encryption key', async t => {
   await store.close()
 
   await closing
-})
-
-test('encryption - fixture', async t => {
-  const keyPair = crypto.keyPair(b4a.alloc(32, 1))
-  const storage = await tmpDir()
-  const store = new Corestore(storage)
-
-  const base = new Autobase(store, {
-    keyPair,
-    apply,
-    open,
-    ackInterval: 0,
-    ackThreshold: 0,
-    encryptionKey: b4a.alloc(32).fill('secret')
-  })
-
-  await base.append('encrypted data')
-  await base.append('that should be')
-  await base.append('determinstically')
-  await base.append('encrypted')
-
-  t.comment('local')
-  await compareFixture(base.local, fixture.local)
-
-  t.comment('system')
-  await compareFixture(base.core, fixture.system)
-
-  t.comment('view')
-  await compareFixture(base.view, fixture.view)
-
-  const closing = base.close()
-  await store.close()
-
-  await closing
-
-  async function compareFixture (core, fixture) {
-    t.is(core.length, fixture.length)
-    for (let i = 0; i < core.length; i++) {
-      const block = await core.get(i, { raw: true })
-      t.is(b4a.toString(block, 'hex'), fixture[i], 'index ' + i)
-    }
-  }
 })
 
 function open (store) {
