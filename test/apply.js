@@ -501,6 +501,7 @@ test('apply - uncaught exception', async t => {
 
   const error = new Promise((resolve, reject) => {
     uncaughts.on(reject)
+    t.teardown(() => uncaughts.off(reject))
   })
 
   const a = new Autobase(store.session(), null, {

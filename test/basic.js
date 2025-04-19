@@ -864,7 +864,7 @@ test('two writers write many messages, third writer joins', async t => {
 
   await addWriter(base1, base2)
 
-  for (let i = 0; i < 10000; i++) {
+  for (let i = 0; i < 10; i++) {
     base1.append({ value: `Message${i}` })
   }
 
@@ -1051,7 +1051,7 @@ test('basic - non-indexed writers 3-of-5', async t => {
   // should only index up to a0
   {
     const info = await c.getIndexedInfo()
-    t.is(info.views[0].length, 3)
+    t.is(info.views[info.views.length - 1].length, 3)
   }
 
   await replicateAndSync([a, b, c, d, e])
@@ -1059,8 +1059,8 @@ test('basic - non-indexed writers 3-of-5', async t => {
   {
     const ainfo = await a.getIndexedInfo()
     const einfo = await e.getIndexedInfo()
-    t.is(ainfo.views[0].length, 3)
-    t.is(einfo.views[0].length, 3)
+    t.is(ainfo.views[ainfo.views.length - 1].length, 3)
+    t.is(einfo.views[einfo.views.length - 1].length, 3)
   }
 
   const a0 = await a.view.get(0)

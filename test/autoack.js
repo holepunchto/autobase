@@ -37,11 +37,8 @@ test('autoack - simple', async t => {
   t.not(a.local.length, 1)
   t.not(b.local.length, 1)
 
-  const ainfo = await a.getIndexedInfo()
-  const binfo = await b.getIndexedInfo()
-
-  t.is(ainfo.views[0].length, 1)
-  t.is(binfo.views[0].length, 1)
+  t.is(await getIndexedViewLength(a), 1)
+  t.is(await getIndexedViewLength(b), 1)
 })
 
 // TODO: unflake this test (skipping to avoid false positives on canary)
@@ -137,19 +134,11 @@ test.skip('autoack - concurrent', async t => {
 
   // TODO: autoack should ensure views are fully signed
 
-  {
-    const ainfo = await a.getIndexedInfo()
-    const binfo = await b.getIndexedInfo()
-    const cinfo = await c.getIndexedInfo()
-    const dinfo = await d.getIndexedInfo()
-    const einfo = await e.getIndexedInfo()
-
-    t.is(ainfo.views[0].length, 50)
-    t.is(binfo.views[0].length, 50)
-    t.is(cinfo.views[0].length, 50)
-    t.is(dinfo.views[0].length, 50)
-    t.is(einfo.views[0].length, 50)
-  }
+  t.is(await getIndexedViewLength(a), 50)
+  t.is(await getIndexedViewLength(b), 50)
+  t.is(await getIndexedViewLength(c), 50)
+  t.is(await getIndexedViewLength(d), 50)
+  t.is(await getIndexedViewLength(e), 50)
 
   const alen = a.local.length
   const blen = b.local.length
@@ -290,9 +279,7 @@ test('autoack - value beneath null values', async t => {
   t.not(a.local.length, alen) // a should ack
   t.is(b.local.length, blen) // b0 is indexed by a's ack (all indexes acked)
 
-  const info = await a.getIndexedInfo()
-
-  t.is(info.views[0].length, a.view.length)
+  t.is(await getIndexedViewLength(a), a.view.length)
   t.is(b.view.length, a.view.length)
 })
 
@@ -594,4 +581,10 @@ function poll (fn, interval) {
       resolve()
     }
   })
+}
+
+async function getIndexedViewLength (base, index = -1) {
+  const info = await base.getIndexedInfo()
+  if (index === -1) index = info.views.length - 1
+  return info.views[index] ? info.views[index].length : 0
 }
