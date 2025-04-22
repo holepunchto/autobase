@@ -388,6 +388,7 @@ module.exports = class Autobase extends ReadyResource {
     await local.setUserData('referrer', this.key)
     if (this.encryptionKey) await local.setUserData('autobase/encryption', this.encryptionKey) // legacy support
     await local.setUserData('autobase/boot', await this.local.getUserData('autobase/boot'))
+    await this._primaryBootstrap.setUserData('autobase/local', local.key)
 
     this.local = local
     await this.local.close()
