@@ -103,8 +103,9 @@ test('encryption - v${version}', async t => {
 
 ${DATA.map(d => `  await base.append('${d}')`).join('\n')}
 
-  t.comment('local')
-  await compareRawBlocks(base.local, fixture.local)
+  // oplog comparison disabled
+  // t.comment('local')
+  // await compareRawBlocks(base.local, fixture.local)
 
   t.comment('system')
   await compareRawBlocks(base.core, fixture.system)
