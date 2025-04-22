@@ -1397,6 +1397,8 @@ module.exports = class Autobase extends ReadyResource {
 
     // ensure we re-evalute our state
     this._bootstrapWritersChanged = true
+    this._needsWakeup = true
+
     this.updating = true
     this._queueBump()
   }
@@ -1583,10 +1585,15 @@ module.exports = class Autobase extends ReadyResource {
 
     // warmup all the below gets
     if (this._needsWakeup) {
-      for (const { key } of this._wakeup) {
-        if (this.activeWriters.has(key)) continue
+      for (const { key, length } of this._wakeup) {
+        const w = this.activeWriters.get(key)
+        if (w) {
+          if (w.length < length) w.seen(length)
+          continue
+        }
         promises.push(this._applyState.system.get(key))
       }
+
       if (this._needsWakeupHeads) {
         for (const { key } of await this._applyState.system.heads) {
           if (this.activeWriters.has(key)) continue
@@ -1611,9 +1618,9 @@ module.exports = class Autobase extends ReadyResource {
     if (this._needsWakeup === true) {
       this._needsWakeup = false
 
-      for (const { key } of this._wakeup) {
+      for (const { key, length } of this._wakeup) {
         if (this.activeWriters.has(key)) continue
-        await this._wakeupWriter(key, 0)
+        await this._wakeupWriter(key, length)
       }
 
       if (this._needsWakeupHeads === true) {
