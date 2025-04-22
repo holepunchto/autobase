@@ -715,7 +715,7 @@ module.exports = class Autobase extends ReadyResource {
     this.emit('error', err)
   }
 
-  async _closeWriter (w, now) {
+  async _closeWriter (w) {
     this.activeWriters.delete(w)
     await w.close()
   }
@@ -737,7 +737,7 @@ module.exports = class Autobase extends ReadyResource {
       if (!unqueued || w.isActiveIndexer) continue
       if (this.localWriter === w) continue
 
-      await this._closeWriter(w, false)
+      await this._closeWriter(w)
     }
 
     await this._wakeup.flush()
@@ -1409,7 +1409,7 @@ module.exports = class Autobase extends ReadyResource {
   _unsetLocalWriter () {
     if (!this.localWriter) return
 
-    this._closeWriter(this.localWriter, true)
+    this._closeWriter(this.localWriter)
     if (this.localWriter.isActiveIndexer) this._clearLocalIndexer()
 
     this.localWriter = null
@@ -1785,7 +1785,7 @@ module.exports = class Autobase extends ReadyResource {
   async _closeAllActiveWriters () {
     for (const w of this.activeWriters) {
       if (this.localWriter === w) continue
-      await this._closeWriter(w, true)
+      await this._closeWriter(w)
     }
   }
 
