@@ -715,7 +715,7 @@ module.exports = class Autobase extends ReadyResource {
     this.emit('error', err)
   }
 
-  async _closeWriter (w, now) {
+  async _closeWriter (w) {
     this.activeWriters.delete(w)
     await w.close()
   }
@@ -737,7 +737,7 @@ module.exports = class Autobase extends ReadyResource {
       if (!unqueued || w.isActiveIndexer) continue
       if (this.localWriter === w) continue
 
-      await this._closeWriter(w, false)
+      await this._closeWriter(w)
     }
 
     await this._wakeup.flush()
@@ -1397,6 +1397,8 @@ module.exports = class Autobase extends ReadyResource {
 
     // ensure we re-evalute our state
     this._bootstrapWritersChanged = true
+    this._needsWakeup = true
+
     this.updating = true
     this._queueBump()
   }
@@ -1409,7 +1411,7 @@ module.exports = class Autobase extends ReadyResource {
   _unsetLocalWriter () {
     if (!this.localWriter) return
 
-    this._closeWriter(this.localWriter, true)
+    this._closeWriter(this.localWriter)
     if (this.localWriter.isActiveIndexer) this._clearLocalIndexer()
 
     this.localWriter = null
@@ -1583,10 +1585,15 @@ module.exports = class Autobase extends ReadyResource {
 
     // warmup all the below gets
     if (this._needsWakeup) {
-      for (const { key } of this._wakeup) {
-        if (this.activeWriters.has(key)) continue
+      for (const { key, length } of this._wakeup) {
+        const w = this.activeWriters.get(key)
+        if (w) {
+          if (w.length < length) w.seen(length)
+          continue
+        }
         promises.push(this._applyState.system.get(key))
       }
+
       if (this._needsWakeupHeads) {
         for (const { key } of await this._applyState.system.heads) {
           if (this.activeWriters.has(key)) continue
@@ -1611,9 +1618,9 @@ module.exports = class Autobase extends ReadyResource {
     if (this._needsWakeup === true) {
       this._needsWakeup = false
 
-      for (const { key } of this._wakeup) {
+      for (const { key, length } of this._wakeup) {
         if (this.activeWriters.has(key)) continue
-        await this._wakeupWriter(key, 0)
+        await this._wakeupWriter(key, length)
       }
 
       if (this._needsWakeupHeads === true) {
@@ -1785,7 +1792,7 @@ module.exports = class Autobase extends ReadyResource {
   async _closeAllActiveWriters () {
     for (const w of this.activeWriters) {
       if (this.localWriter === w) continue
-      await this._closeWriter(w, true)
+      await this._closeWriter(w)
     }
   }
 
