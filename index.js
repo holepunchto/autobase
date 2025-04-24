@@ -518,7 +518,8 @@ module.exports = class Autobase extends ReadyResource {
     return {
       key: boot.key,
       indexers: info.indexers,
-      views: info.views
+      views: info.views,
+      entropy: info.entropy
     }
   }
 
@@ -1226,13 +1227,15 @@ module.exports = class Autobase extends ReadyResource {
     const from = this.core.signedLength
     const store = this._viewStore.atomize()
     const views = this.fastForwardTo.views
+    const manifestVersion = this.fastForwardTo.manifestVersion
+    const entropy = this.fastForwardTo.entropy
     const internalViews = this.fastForwardTo.internalViews
 
     const ffed = new Set()
     const migrated = !b4a.equals(this.fastForwardTo.key, this.core.key)
 
     for (const v of internalViews.concat(views)) {
-      const ref = await this._viewStore.findViewByKey(v.key, this.fastForwardTo.indexers)
+      const ref = await this._viewStore.findViewByKey(v.key, this.fastForwardTo.indexers, manifestVersion, entropy)
       if (!ref) continue // unknown, view ignored
       ffed.add(ref)
 
@@ -1250,7 +1253,7 @@ module.exports = class Autobase extends ReadyResource {
 
       for (const [name, ref] of this._viewStore.byName) {
         if (ffed.has(ref)) continue
-        await this._migrateView(manifests, name, 0)
+        await this._migrateView(manifests, null, name, 0, manifestVersion, entropy, [])
       }
     }
 
@@ -1335,7 +1338,7 @@ module.exports = class Autobase extends ReadyResource {
     ref.migrated(this, next)
   }
 
-  async _migrateView (indexerManifests, name, indexedLength, linked) {
+  async _migrateView (indexerManifests, name, indexedLength, manifestVersion, entropy, linked) {
     const ref = this._viewStore.byName.get(name)
 
     const core = ref.batch || ref.core
@@ -1345,7 +1348,7 @@ module.exports = class Autobase extends ReadyResource {
       ? null
       : { length: indexedLength, hash: await core.treeHash(indexedLength) }
 
-    const next = this._viewStore.getViewCore(indexerManifests, name, prologue, this._applyState.system.core.manifest.version, linked)
+    const next = this._viewStore.getViewCore(indexerManifests, name, prologue, manifestVersion, entropy, linked)
     await next.ready()
 
     if (indexedLength > 0) {
@@ -1380,6 +1383,8 @@ module.exports = class Autobase extends ReadyResource {
 
     const { views, internalViews } = this._applyState
 
+    const manifestVersion = this._applyState.system.core.manifest.version
+
     for (let i = 0; i < views.length; i++) {
       const view = views[i]
       const name = views[i].name
@@ -1387,7 +1392,7 @@ module.exports = class Autobase extends ReadyResource {
       const v = this._applyState.getViewFromSystem(view, info)
       const indexedLength = v ? v.length : 0
 
-      await this._migrateView(indexerManifests, name, indexedLength, null)
+      await this._migrateView(indexerManifests, view.name, indexedLength, manifestVersion, info.entropy, null)
     }
 
     let linked = null
@@ -1396,12 +1401,12 @@ module.exports = class Autobase extends ReadyResource {
       if (linked === null) linked = []
 
       const { ref, indexedLength } = internalViews[i]
-      const next = await this._migrateView(indexerManifests, ref.name, indexedLength, null)
+      const next = await this._migrateView(indexerManifests, ref.name, indexedLength, manifestVersion, info.entropy, null)
 
       linked.push(next.core.key)
     }
 
-    const ref = await this._migrateView(indexerManifests, '_system', length, linked)
+    const ref = await this._migrateView(indexerManifests, '_system', length, manifestVersion, info.entropy, linked)
 
     // start soft shutdown
 
