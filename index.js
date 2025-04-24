@@ -61,7 +61,10 @@ class WakeupHandler {
   }
 
   onannounce (wakeup, peer, session) {
-    if (this.base.isFastForwarding()) return
+    if (this.base.isFastForwarding()) {
+      this.base._needsWakeupRequest = true
+      return
+    }
     this.base.hintWakeup(wakeup)
   }
 }
@@ -131,6 +134,7 @@ module.exports = class Autobase extends ReadyResource {
     this._updateLocalCore = null
     this._lock = mutexify()
 
+    this._needsWakeupRequest = false
     this._needsWakeup = true
     this._needsWakeupHeads = true
 
@@ -1763,6 +1767,16 @@ module.exports = class Autobase extends ReadyResource {
     if (this._applyState) {
       if (this.isFastForwarding()) this._applyState.pause()
       else this._applyState.resume()
+    }
+
+    // in case we ignored wakeups case we were fast forwarding, request them now if not
+    if (this._needsWakeupRequest && !this.isFastForwarding() && this.wakeupSession) {
+      this._needsWakeupRequest = false
+
+      this.wakeupSession.broadcastLookup({})
+      // tmp, will be removed
+      const sys = this._viewStore.getSystemView()
+      if (sys.compatExtension) sys.compatExtension.broadcast()
     }
   }
 
