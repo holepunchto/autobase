@@ -152,6 +152,7 @@ module.exports = class Autobase extends ReadyResource {
     })
 
     this._onremotewriterchangeBound = this._onremotewriterchange.bind(this)
+    this._onlocalwriterchangeBound = this._onlocalwriterchange.bind(this)
 
     this.maxSupportedVersion = AUTOBASE_VERSION // working version
 
@@ -328,6 +329,8 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this.nukeTip) await this._nukeTip()
 
+    this.local.on('append', this._onlocalwriterchangeBound)
+
     this.wakeupCapability = (await this._handlers.wakeupCapability) || { key: this.key, discoveryKey: this.discoveryKey }
     this.setWakeup(this.wakeupCapability.key, this.wakeupCapability.discoveryKey)
   }
@@ -390,8 +393,15 @@ module.exports = class Autobase extends ReadyResource {
     await local.setUserData('autobase/boot', await this.local.getUserData('autobase/boot'))
     await this._primaryBootstrap.setUserData('autobase/local', local.key)
 
+    const current = this.local
+
     this.local = local
-    await this.local.close()
+    this.local.on('append', this._onlocalwriterchangeBound)
+
+    this.localWriter = null
+    this._updateLocalCore = null
+
+    await current.close()
   }
 
   async setLocal (key, { keyPair } = {}) {
@@ -777,6 +787,10 @@ module.exports = class Autobase extends ReadyResource {
     } catch {}
   }
 
+  _onlocalwriterchange () {
+    if (!this.localWriter || this.localWriter.isRemoved) this._queueBump()
+  }
+
   _onwakeup () {
     this._needsWakeup = true
     this._queueBump()
@@ -1087,7 +1101,6 @@ module.exports = class Autobase extends ReadyResource {
       return w
     }
 
-    core.on('ready', this._onremotewriterchangeBound)
     core.on('append', this._onremotewriterchangeBound)
     core.on('download', this._onremotewriterchangeBound)
     core.on('manifest', this._onremotewriterchangeBound)
