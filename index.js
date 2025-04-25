@@ -32,7 +32,8 @@ const inspect = Symbol.for('nodejs.util.inspect.custom')
 const INTERRUPT = new Error('Apply interrupted')
 const BINARY_ENCODING = c.from('binary')
 
-const AUTOBASE_VERSION = 1
+const DEFAULT_AUTOBASE_VERSION = 1 // default
+const MAX_AUTOBASE_VERSION = 2 // optional fork support
 
 const RECOVERIES = 3
 const FF_RECOVERY = 1
@@ -159,7 +160,7 @@ module.exports = class Autobase extends ReadyResource {
     this._onremotewriterchangeBound = this._onremotewriterchange.bind(this)
     this._onlocalwriterchangeBound = this._onlocalwriterchange.bind(this)
 
-    this.maxSupportedVersion = AUTOBASE_VERSION // working version
+    this.maxSupportedVersion = DEFAULT_AUTOBASE_VERSION // working version
 
     this._preopen = null
 
@@ -499,7 +500,7 @@ module.exports = class Autobase extends ReadyResource {
     await batch.close()
     await core.close()
 
-    if (info.version > AUTOBASE_VERSION) {
+    if (info.version > MAX_AUTOBASE_VERSION) {
       throw new Error('Autobase upgrade required.')
     }
 
@@ -918,8 +919,8 @@ module.exports = class Autobase extends ReadyResource {
 
   static encodeValue (value, opts = {}) {
     const block = c.encode(messages.OplogMessage, {
-      version: AUTOBASE_VERSION,
-      maxSupportedVersion: AUTOBASE_VERSION,
+      version: opts.version || DEFAULT_AUTOBASE_VERSION,
+      maxSupportedVersion: opts.maxVersion || DEFAULT_AUTOBASE_VERSION,
       digest: null,
       checkpoint: null,
       optimistic: !!opts.optimistic,
@@ -1415,98 +1416,16 @@ module.exports = class Autobase extends ReadyResource {
     const sysCore = this._applyState.internalViews[0].ref.batch
     const ref = await this._migrateView(indexerManifests, sysCore, '_system', length, manifestVersion, info.entropy, linked, null, null)
 
-    // start soft shutdown
+    return this._reboot(ref.core.key)
+  }
 
+  async _reboot (key) {
     await this._clearWriters()
     await this._makeLinearizerFromViewState()
 
-    await this._applyState.finalize(ref.core.key)
+    await this._applyState.finalize(key)
 
     this._applyState = new ApplyState(this)
-
-    await this._applyState.ready()
-    await this._applyState.catchup(this.linearizer)
-
-    // end soft shutdown
-
-    this._queueFastForward()
-
-    this._rebooted()
-  }
-
-  async _fork ({ indexers, length }) {
-    await this._applyState.finalize(this._applyState.system.core.key)
-
-    const store = this._viewStore.atomize()
-
-    const manifests = await store.getIndexerManifests(indexers)
-
-    const sysCore = store.get({ name: '_system' })
-    const encCore = store.get({ name: '_encryption' })
-
-    await sysCore.truncate(length)
-
-    const system = new SystemView(sysCore)
-    const encryption = new EncryptionView(this, encCore)
-
-    await system.ready()
-    await encryption.ready()
-
-    const entropy = system.getEntropy(indexers)
-
-    const manifestVersion = 2 // needed to signal new encryption
-
-    const views = []
-    for (const view of this._applyState.views) {
-      const v = this._applyState.getViewFromSystem(view, system)
-      const indexedLength = v ? v.length : 0
-
-      const session = store.get({ name: view.name })
-      await session.ready()
-
-      await session.truncate(indexedLength)
-
-      const manifestData = session.manifest.version <= 1 ? c.encode(messages.ManifestData, { encryption: { legacyBlocks: indexedLength } }) : null
-      const ref = await this._migrateView(manifests, session, view.name, session.length, manifestVersion, entropy, null, manifestData)
-
-      // update key
-      views.push({ key: ref.core.key, length: indexedLength })
-    }
-
-    // internal views are explicitly migrated
-
-    await encryption.update(entropy)
-    const encRef = await this._migrateView(manifests, encCore, '_encryption', encCore.length, manifestVersion, entropy, null, null)
-
-    const sysEncryption = encryption.getSystemEncryption({ forceNonCompat: sysCore.length })
-
-    await system.fork(indexers, manifests, views, sysEncryption)
-    const manifestData = system.core.manifest.version <= 1 ? c.encode(messages.ManifestData, { encryption: { legacyBlocks: length } }) : null
-
-    const ref = await this._migrateView(manifests, system.core, '_system', length, manifestVersion, entropy, [encRef.core.key], manifestData)
-
-    const local = store.getLocal()
-    await local.ready()
-
-    const pointer = c.encode(messages.BootRecord, {
-      key: ref.core.key,
-      internalViews: [sysCore.length, encCore.length],
-      indexersUpdated: true,
-      fastForwarding: false,
-      recoveries: this.recoveries
-    })
-
-    await local.setUserData('autobase/boot', pointer)
-
-    await store.flush()
-
-    // start soft shutdown
-    await this._clearWriters()
-    await this._makeLinearizer(system)
-
-    await store.close()
-
-    this._applyState = new ApplyState(this, system)
 
     await this._applyState.ready()
     await this._applyState.catchup(this.linearizer)
@@ -1650,9 +1569,9 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const u = this.linearizer.update()
-      const updated = u ? await this._applyState.update(u, localNodes) : false
+      const update = u ? await this._applyState.update(u, localNodes) : { reboot: false }
 
-      if (!updated) {
+      if (!update.reboot) {
         if (this._applyState.shouldFlush()) {
           await this._applyState.flush()
           this.updating = true
@@ -1668,8 +1587,8 @@ module.exports = class Autobase extends ReadyResource {
 
       await this._gcWriters()
 
-      if (updated.fork) await this._fork(updated.fork)
-      else await this._migrate()
+      if (update.migrated) await this._migrate()
+      else await this._reboot(this._applyState.system.core.key)
     }
 
     // emit state changes post drain

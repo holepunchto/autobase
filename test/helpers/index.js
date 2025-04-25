@@ -196,7 +196,7 @@ async function addWriterAndSync (base, add, indexer = true, bases = [base, add])
 }
 
 async function confirm (bases, options = {}) {
-  await helpers.replicateAndSync(bases)
+  await helpers.replicateAndSync(bases, options.hash)
 
   for (let i = 0; i < 2; i++) {
     const writers = bases.filter(b => !!b.localWriter)
@@ -205,11 +205,11 @@ async function confirm (bases, options = {}) {
       if (!writers[j].ackable) continue
 
       await writers[j].append(null)
-      await helpers.replicateAndSync(bases)
+      await helpers.replicateAndSync(bases, options.hash)
     }
   }
 
-  await helpers.replicateAndSync(bases)
+  await helpers.replicateAndSync(bases, options.hash)
 }
 
 async function compare (a, b, full = false) {
