@@ -197,7 +197,7 @@ test('fork - add old indexer back', async t => {
   await t.execution(b.append('post fork'))
 
   await addWriter(b, a, true)
-  await replicateAndSync([a, b], false)
+  await replicateAndSync([a, b], { checkHash: false })
 
   t.is(b.view.length, 4)
 
@@ -237,7 +237,7 @@ test('fork - fork to multiple indexers', async t => {
   t.alike(b.system.indexers[0].key, b.local.key)
   t.alike(b.system.indexers[1].key, c.local.key)
 
-  await replicateAndSync([b, c], false)
+  await replicateAndSync([b, c], { checkHash: false })
 
   t.is(b.view.length, 5)
 
@@ -330,7 +330,7 @@ test('fork - competing forks', async t => {
   t.is(b.view.signedLength, 5)
   t.is(c.view.signedLength, 3)
 
-  await replicateAndSync([b, c], false)
+  await replicateAndSync([b, c], { checkHash: false })
 
   t.is(b.system.indexers.length, 1)
   t.unlike(b.system.indexers, c.system.indexers)
@@ -405,7 +405,7 @@ test('fork - fast forward after fork', async t => {
   await confirm(bases)
 
   await fork(b, [b, c])
-  await replicateAndSync([b, c], false)
+  await replicateAndSync([b, c], { checkHash: false })
 
   t.alike(b.system.indexers, c.system.indexers)
 
