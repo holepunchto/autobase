@@ -544,7 +544,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _interrupt (reason) {
-    assert(this._applyState.applying, 'Interrupt is only allowed in apply')
+    assert(!!this._applyState.applying, 'Interrupt is only allowed in apply')
     this._interrupting = true
     if (reason) this.interrupted = reason
     throw INTERRUPT
@@ -1856,7 +1856,7 @@ module.exports = class Autobase extends ReadyResource {
 
   // triggered from apply
   async _addWriter (key, sys) { // just compat for old version
-    assert(this._applyState.applying, 'System changes are only allowed in apply')
+    assert(!!this._applyState.applying, 'System changes are only allowed in apply')
 
     const writer = (await this._getWriterByKey(key, -1, 0, false, true, sys)) || this._makeWriter(key, 0, true, false)
     await writer.ready()
