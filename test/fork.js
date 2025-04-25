@@ -151,7 +151,7 @@ test('fork - migration after fork', async t => {
   await t.execution(b.append('post fork'))
 
   await addWriter(b, c, true)
-  await confirm([a, b, c], { hash: false })
+  await confirm([a, b, c], { checkHash: false })
 
   t.is(b.system.indexers.length, 2)
   t.alike(b.system.indexers[0].key, b.local.key)
@@ -461,7 +461,7 @@ test('fork - migration after fork', async t => {
   await t.execution(b.append('post fork'))
 
   await addWriter(b, c, true)
-  await confirm([a, b, c], { hash: false })
+  await confirm([a, b, c], { checkHash: false })
 
   t.is(b.system.indexers.length, 2)
   t.alike(b.system.indexers[0].key, b.local.key)
