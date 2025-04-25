@@ -26,9 +26,13 @@ test('fork - one writer to another', async t => {
 
         if (value.fork) {
           const indexers = value.fork.indexers.map(key => b4a.from(key, 'hex'))
-          value.fork.system.key = b4a.from(value.fork.system.key, 'hex')
 
-          t.is(await host.fork(indexers, value.fork.system), !forked)
+          const system = {
+            key: b4a.from(value.fork.system.key, 'hex'),
+            length: value.fork.system.length
+          }
+
+          t.is(await host.fork(indexers, system), !forked)
           forked = true
 
           continue
@@ -265,9 +269,13 @@ test('fork - invalid fork should fail', async t => {
 
         if (value.fork) {
           const indexers = value.fork.indexers.map(key => b4a.from(key, 'hex'))
-          value.fork.system.key = b4a.from(value.fork.system.key, 'hex')
 
-          t.absent(await host.fork(indexers, value.fork.system))
+          const system = {
+            key: b4a.from(value.fork.system.key, 'hex'),
+            length: value.fork.system.length
+          }
+
+          t.absent(await host.fork(indexers, system))
           continue
         }
 
@@ -502,9 +510,13 @@ async function applyFork (batch, view, host) {
 
     if (value.fork) {
       const indexers = value.fork.indexers.map(key => b4a.from(key, 'hex'))
-      value.fork.system.key = b4a.from(value.fork.system.key, 'hex')
 
-      await host.fork(indexers, value.fork.system)
+      const system = {
+        key: b4a.from(value.fork.system.key, 'hex'),
+        length: value.fork.system.length
+      }
+
+      await host.fork(indexers, system)
       continue
     }
 
