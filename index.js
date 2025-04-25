@@ -1569,7 +1569,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const u = this.linearizer.update()
-      const update = u ? await this._applyState.update(u, localNodes) : { reboot: false }
+      const update = u ? await this._applyState.update(u, localNodes) : { reboot: false, migrated: false }
 
       if (!update.reboot) {
         if (this._applyState.shouldFlush()) {
