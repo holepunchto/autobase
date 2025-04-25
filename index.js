@@ -32,7 +32,8 @@ const inspect = Symbol.for('nodejs.util.inspect.custom')
 const INTERRUPT = new Error('Apply interrupted')
 const BINARY_ENCODING = c.from('binary')
 
-const AUTOBASE_VERSION = 1
+const DEFAULT_AUTOBASE_VERSION = 1 // default
+const MAX_AUTOBASE_VERSION = 2 // optional fork support
 
 const RECOVERIES = 3
 const FF_RECOVERY = 1
@@ -159,7 +160,7 @@ module.exports = class Autobase extends ReadyResource {
     this._onremotewriterchangeBound = this._onremotewriterchange.bind(this)
     this._onlocalwriterchangeBound = this._onlocalwriterchange.bind(this)
 
-    this.maxSupportedVersion = AUTOBASE_VERSION // working version
+    this.maxSupportedVersion = DEFAULT_AUTOBASE_VERSION // working version
 
     this._preopen = null
 
@@ -499,7 +500,7 @@ module.exports = class Autobase extends ReadyResource {
     await batch.close()
     await core.close()
 
-    if (info.version > AUTOBASE_VERSION) {
+    if (info.version > MAX_AUTOBASE_VERSION) {
       throw new Error('Autobase upgrade required.')
     }
 
@@ -518,7 +519,8 @@ module.exports = class Autobase extends ReadyResource {
     return {
       key: boot.key,
       indexers: info.indexers,
-      views: info.views
+      views: info.views,
+      entropy: info.entropy
     }
   }
 
@@ -542,7 +544,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _interrupt (reason) {
-    assert(this._applyState.applying, 'Interrupt is only allowed in apply')
+    assert(!!this._applyState.applying, 'Interrupt is only allowed in apply')
     this._interrupting = true
     if (reason) this.interrupted = reason
     throw INTERRUPT
@@ -922,8 +924,8 @@ module.exports = class Autobase extends ReadyResource {
 
   static encodeValue (value, opts = {}) {
     const block = c.encode(messages.OplogMessage, {
-      version: AUTOBASE_VERSION,
-      maxSupportedVersion: AUTOBASE_VERSION,
+      version: opts.version || DEFAULT_AUTOBASE_VERSION,
+      maxSupportedVersion: opts.maxVersion || DEFAULT_AUTOBASE_VERSION,
       digest: null,
       checkpoint: null,
       optimistic: !!opts.optimistic,
@@ -1231,13 +1233,15 @@ module.exports = class Autobase extends ReadyResource {
     const from = this.core.signedLength
     const store = this._viewStore.atomize()
     const views = this.fastForwardTo.views
+    const manifestVersion = this.fastForwardTo.manifestVersion
+    const entropy = this.fastForwardTo.entropy
     const internalViews = this.fastForwardTo.internalViews
 
     const ffed = new Set()
     const migrated = !b4a.equals(this.fastForwardTo.key, this.core.key)
 
     for (const v of internalViews.concat(views)) {
-      const ref = await this._viewStore.findViewByKey(v.key, this.fastForwardTo.indexers)
+      const ref = await this._viewStore.findViewByKey(v.key, this.fastForwardTo.indexers, manifestVersion, entropy)
       if (!ref) continue // unknown, view ignored
       ffed.add(ref)
 
@@ -1255,7 +1259,7 @@ module.exports = class Autobase extends ReadyResource {
 
       for (const [name, ref] of this._viewStore.byName) {
         if (ffed.has(ref)) continue
-        await this._migrateView(manifests, name, 0)
+        await this._migrateView(manifests, null, name, 0, manifestVersion, entropy, [], null)
       }
     }
 
@@ -1340,21 +1344,22 @@ module.exports = class Autobase extends ReadyResource {
     ref.migrated(this, next)
   }
 
-  async _migrateView (indexerManifests, name, indexedLength, linked) {
+  async _migrateView (indexerManifests, source, name, indexedLength, manifestVersion, entropy, linked, manifestData) {
     const ref = this._viewStore.byName.get(name)
-
-    const core = ref.batch || ref.core
-    await core.ready()
 
     const prologue = indexedLength === 0
       ? null
-      : { length: indexedLength, hash: await core.treeHash(indexedLength) }
+      : { length: indexedLength, hash: await source.treeHash(indexedLength) }
 
-    const next = this._viewStore.getViewCore(indexerManifests, name, prologue, this._applyState.system.core.manifest.version, linked)
+    if (manifestData === null && ref.core.manifest.userData !== null) {
+      manifestData = ref.core.manifest.userData
+    }
+
+    const next = this._viewStore.getViewCore(indexerManifests, name, prologue, manifestVersion, entropy, linked, manifestData)
     await next.ready()
 
     if (indexedLength > 0) {
-      await next.core.copyPrologue(core.state)
+      await next.core.copyPrologue(source.state)
     }
 
     // remake the batch, reset from our prologue in case it replicated inbetween
@@ -1362,13 +1367,13 @@ module.exports = class Autobase extends ReadyResource {
     const batch = next.session({ name: 'batch', overwrite: true, checkout: indexedLength })
     await batch.ready()
 
-    if (core.length > batch.length) {
-      for (let i = batch.length; i < core.length; i++) {
-        await batch.append(await core.get(i))
+    if (source !== null) {
+      while (batch.length < source.length) {
+        await batch.append(await source.get(batch.length))
       }
     }
 
-    await ref.batch.state.moveTo(batch, core.length)
+    await ref.batch.state.moveTo(batch, batch.length)
     await batch.close()
 
     ref.migrated(this, next)
@@ -1385,14 +1390,17 @@ module.exports = class Autobase extends ReadyResource {
 
     const { views, internalViews } = this._applyState
 
-    for (let i = 0; i < views.length; i++) {
-      const view = views[i]
-      const name = views[i].name
+    const manifestVersion = this._applyState.system.core.manifest.version
 
+    for (const view of views) {
       const v = this._applyState.getViewFromSystem(view, info)
       const indexedLength = v ? v.length : 0
 
-      await this._migrateView(indexerManifests, name, indexedLength, null)
+      const ref = this._viewStore.getViewByName(view.name)
+      const source = ref.batch || ref.core
+      await source.ready()
+
+      await this._migrateView(indexerManifests, source, view.name, indexedLength, manifestVersion, info.entropy, null, null)
     }
 
     let linked = null
@@ -1401,19 +1409,26 @@ module.exports = class Autobase extends ReadyResource {
       if (linked === null) linked = []
 
       const { ref, indexedLength } = internalViews[i]
-      const next = await this._migrateView(indexerManifests, ref.name, indexedLength, null)
+
+      const source = ref.batch || ref.core
+      await source.ready()
+
+      const next = await this._migrateView(indexerManifests, source, ref.name, indexedLength, manifestVersion, info.entropy, null, null)
 
       linked.push(next.core.key)
     }
 
-    const ref = await this._migrateView(indexerManifests, '_system', length, linked)
+    const sysCore = this._applyState.internalViews[0].ref.batch
+    const ref = await this._migrateView(indexerManifests, sysCore, '_system', length, manifestVersion, info.entropy, linked, null, null)
 
-    // start soft shutdown
+    return this._reboot(ref.core.key)
+  }
 
+  async _reboot (key) {
     await this._clearWriters()
     await this._makeLinearizerFromViewState()
 
-    await this._applyState.finalize(ref.core.key)
+    await this._applyState.finalize(key)
 
     this._applyState = new ApplyState(this)
 
@@ -1561,9 +1576,9 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const u = this.linearizer.update()
-      const indexersUpdated = u ? await this._applyState.update(u, localNodes) : false
+      const update = u ? await this._applyState.update(u, localNodes) : { reboot: false, migrated: false }
 
-      if (!indexersUpdated) {
+      if (!update.reboot) {
         if (this._applyState.shouldFlush()) {
           await this._applyState.flush()
           this.updating = true
@@ -1578,7 +1593,9 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       await this._gcWriters()
-      await this._migrate()
+
+      if (update.migrated) await this._migrate()
+      else await this._reboot(this._applyState.system.core.key)
     }
 
     // emit state changes post drain
@@ -1846,7 +1863,7 @@ module.exports = class Autobase extends ReadyResource {
 
   // triggered from apply
   async _addWriter (key, sys) { // just compat for old version
-    assert(this._applyState.applying, 'System changes are only allowed in apply')
+    assert(!!this._applyState.applying, 'System changes are only allowed in apply')
 
     const writer = (await this._getWriterByKey(key, -1, 0, false, true, sys)) || this._makeWriter(key, 0, true, false)
     await writer.ready()
