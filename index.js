@@ -437,6 +437,8 @@ module.exports = class Autobase extends ReadyResource {
 
     // done, soft reboot
 
+    await this._viewStore.updateLocal()
+
     this._applyState = new ApplyState(this)
     await this._applyState.ready()
 
