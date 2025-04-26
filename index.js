@@ -391,23 +391,61 @@ module.exports = class Autobase extends ReadyResource {
     if (this._coupler) this._coupler.update(peer.stream)
   }
 
-  async _rotateLocalWriter (local) {
-    assert(!this.writable, 'Cannot rotate a local writer if a current one is open')
+  async _rotateLocalWriter (newLocal) {
+    assert(!this.writable, 'Cannot rotate a newLocal writer if a current one is open')
 
-    await local.setUserData('referrer', this.key)
-    if (this.encryptionKey) await local.setUserData('autobase/encryption', this.encryptionKey) // legacy support
-    await local.setUserData('autobase/boot', await this.local.getUserData('autobase/boot'))
-    await this._primaryBootstrap.setUserData('autobase/local', local.key)
+    const oldLocal = this.local
 
-    const current = this.local
+    if (this._applyState) await this._applyState.close()
 
-    this.local = local
+    this.local = newLocal
     this.local.on('append', this._onlocalwriterchangeBound)
 
     this.localWriter = null
     this._updateLocalCore = null
 
-    await current.close()
+    const store = this._viewStore.atomize()
+
+    const local = store.getLocal()
+    await local.ready()
+
+    const tx = local.state.storage.write()
+
+    // reset linearizer incase rotating back
+    tx.deleteLocalRange(b4a.from([messages.LINEARIZER_PREFIX]), b4a.from([messages.LINEARIZER_PREFIX + 1]))
+
+    const gte = b4a.from([messages.LINEARIZER_PREFIX_V0])
+    const lt = b4a.from([messages.LINEARIZER_PREFIX + 1])
+
+    // copy over existing state
+    for await (const data of oldLocal.state.storage.createLocalStream({ gte, lt })) {
+      tx.putLocal(data.key, data.value)
+    }
+
+    await tx.flush()
+
+    await local.setUserData('referrer', this.key)
+    if (this.encryptionKey) await local.setUserData('autobase/encryption', this.encryptionKey)
+    await local.setUserData('autobase/boot', await oldLocal.getUserData('autobase/boot'))
+
+    await tx.flush()
+    await store.flush()
+    await store.close()
+
+    await this._primaryBootstrap.setUserData('autobase/local', local.key)
+
+    await oldLocal.close()
+
+    // done, soft reboot
+
+    await this._viewStore.updateLocal()
+
+    this._applyState = new ApplyState(this)
+    await this._applyState.ready()
+
+    this._caughtup = false
+
+    this._rebooted()
   }
 
   async setLocal (key, { keyPair } = {}) {
