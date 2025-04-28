@@ -12,6 +12,7 @@ const ProtomuxWakeup = require('protomux-wakeup')
 const rrp = require('resolve-reject-promise')
 const crypto = require('hypercore-crypto')
 
+const LocalState = require('./lib/local-state.js')
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
 const { EncryptionView } = require('./lib/encryption.js')
@@ -361,9 +362,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const boot = c.decode(messages.BootRecord, pointer)
 
-    const tx = this.local.state.storage.write()
-    tx.deleteLocalRange(b4a.from([messages.LINEARIZER_PREFIX]), b4a.from([messages.LINEARIZER_PREFIX + 1]))
-    await tx.flush()
+    await LocalState.clear(this.local)
 
     await this._nukeTipBatch(boot.key, boot.indexedLength)
 
@@ -409,26 +408,11 @@ module.exports = class Autobase extends ReadyResource {
     const local = store.getLocal()
     await local.ready()
 
-    const tx = local.state.storage.write()
-
-    // reset linearizer incase rotating back
-    tx.deleteLocalRange(b4a.from([messages.LINEARIZER_PREFIX]), b4a.from([messages.LINEARIZER_PREFIX + 1]))
-
-    const gte = b4a.from([messages.LINEARIZER_PREFIX_V0])
-    const lt = b4a.from([messages.LINEARIZER_PREFIX + 1])
-
-    // copy over existing state
-    for await (const data of oldLocal.state.storage.createLocalStream({ gte, lt })) {
-      tx.putLocal(data.key, data.value)
-    }
-
-    await tx.flush()
+    await LocalState.moveTo(oldLocal, local)
 
     await local.setUserData('referrer', this.key)
     if (this.encryptionKey) await local.setUserData('autobase/encryption', this.encryptionKey)
-    await local.setUserData('autobase/boot', await oldLocal.getUserData('autobase/boot'))
 
-    await tx.flush()
     await store.flush()
     await store.close()
 
@@ -1308,10 +1292,7 @@ module.exports = class Autobase extends ReadyResource {
     await local.ready()
     await local.setUserData('autobase/boot', value)
 
-    const tx = local.state.storage.write()
-    // reset linearizer
-    tx.deleteLocalRange(b4a.from([messages.LINEARIZER_PREFIX]), b4a.from([messages.LINEARIZER_PREFIX + 1]))
-    await tx.flush()
+    await LocalState.clear(local)
 
     if (changes) changes.finalise()
 
