@@ -425,6 +425,8 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._viewStore.updateLocal()
 
+    await this._clearWriters()
+
     this._applyState = new ApplyState(this)
     await this._applyState.ready()
 
@@ -688,16 +690,6 @@ module.exports = class Autobase extends ReadyResource {
     this._queueBump()
   }
 
-  async _closeLocalCores () {
-    const closing = []
-    if (this._primaryBootstrap) closing.push(this._primaryBootstrap.close())
-    if (this.localWriter) closing.push(this._unsetLocalWriter())
-    closing.push(this._closeAllActiveWriters())
-    if (this.localWriter) await this.localWriter.close()
-    await Promise.all(closing)
-    await this.local.close()
-  }
-
   async _close () {
     this._interrupting = true
     await Promise.resolve() // defer one tick
@@ -714,7 +706,10 @@ module.exports = class Autobase extends ReadyResource {
     await this.activeWriters.clear()
 
     const closing = this._advancing ? this._advancing.catch(safetyCatch) : null
-    await this._closeLocalCores()
+
+    await this._clearWriters()
+    if (this._primaryBootstrap) await this._primaryBootstrap.close()
+    await this.local.close()
 
     if (this._ackTimer) {
       this._ackTimer.stop()
@@ -1872,13 +1867,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this._bumpAckTimer()
     this._queueBump()
-  }
-
-  async _closeAllActiveWriters () {
-    for (const w of this.activeWriters) {
-      if (this.localWriter === w) continue
-      await this._closeWriter(w)
-    }
   }
 
   // triggered from apply
