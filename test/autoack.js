@@ -11,6 +11,8 @@ const {
   // eventFlush
 } = require('./helpers')
 
+main()
+
 // test('autoack - simple', async t => {
 //   t.plan(6)
 
@@ -251,38 +253,42 @@ const {
 //   }, 1000)
 // })
 
-for (let i = 0; i < 1000; i++) {
-  test('autoack - value beneath null values', async t => {
-    t.plan(4)
+async function main () {
+  for (let i = 0; i < 300; i++) {
+    const result = await test('autoack - value beneath null values', async t => {
+      t.plan(4)
 
-    const { bases } = await create(2, t, {
-      ackInterval: 10,
-      ackThreshold: 0
+      const { bases } = await create(2, t, {
+        ackInterval: 10,
+        ackThreshold: 0
+      })
+
+      const [a, b] = bases
+
+      t.teardown(await replicate([a, b]))
+
+      await addWriterAndSync(a, b)
+      await confirm([a, b])
+
+      await b.append('b0')
+      await b.append(null) // place null value above tail
+
+      await sync([a, b])
+
+      const alen = a.local.length
+      const blen = b.local.length
+
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
+      t.not(a.local.length, alen) // a should ack
+      t.is(b.local.length, blen) // b0 is indexed by a's ack (all indexes acked)
+
+      t.is(await getIndexedViewLength(a), a.view.length)
+      t.is(b.view.length, a.view.length)
     })
 
-    const [a, b] = bases
-
-    t.teardown(await replicate([a, b]))
-
-    await addWriterAndSync(a, b)
-    await confirm([a, b])
-
-    await b.append('b0')
-    await b.append(null) // place null value above tail
-
-    await sync([a, b])
-
-    const alen = a.local.length
-    const blen = b.local.length
-
-    await new Promise(resolve => setTimeout(resolve, 1000))
-
-    t.not(a.local.length, alen) // a should ack
-    t.is(b.local.length, blen) // b0 is indexed by a's ack (all indexes acked)
-
-    t.is(await getIndexedViewLength(a), a.view.length)
-    t.is(b.view.length, a.view.length)
-  })
+    if (!result) break
+  }
 }
 
 // test('autoack - merge', async t => {
@@ -429,7 +435,6 @@ for (let i = 0; i < 1000; i++) {
 //   })
 
 //   const [a, b] = bases
-
 //   t.teardown(await replicate([a, b]))
 
 //   await addWriter(a, b)
