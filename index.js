@@ -869,6 +869,11 @@ module.exports = class Autobase extends ReadyResource {
     this._acking = false
   }
 
+  views () {
+    if (this._applyState) return this._applyState.store.listViews()
+    return this._viewStore.listViews()
+  }
+
   async append (value, opts) {
     if (this.opened === false) await this.ready()
     if (this._interrupting) throw new Error('Autobase is closing')
@@ -1412,6 +1417,8 @@ module.exports = class Autobase extends ReadyResource {
   _rebooted () {
     this.recouple()
     this._updateActivity()
+
+    this.emit('reboot')
 
     // ensure we re-evalute our state
     this._bootstrapWritersChanged = true
