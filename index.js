@@ -418,6 +418,7 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._primaryBootstrap.setUserData('autobase/local', local.key)
 
+    await this._clearWriters()
     await oldLocal.close()
 
     // done, soft reboot
