@@ -266,13 +266,14 @@ test('autoack - value beneath null values', async t => {
   await addWriterAndSync(a, b)
   await confirm([a, b])
 
+  const alen = a.local.length
+
   await b.append('b0')
   await b.append(null) // place null value above tail
 
-  await sync([a, b])
-
-  const alen = a.local.length
   const blen = b.local.length
+
+  await sync([a, b])
 
   await new Promise(resolve => setTimeout(resolve, 1000))
 
