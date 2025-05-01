@@ -429,6 +429,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._applyState = new ApplyState(this)
     await this._applyState.ready()
+    await this._makeLinearizerFromViewState()
 
     this._caughtup = false
 
