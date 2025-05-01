@@ -508,7 +508,7 @@ module.exports = class Autobase extends ReadyResource {
     if (!boot.key) return null
 
     const migrated = !!boot.heads
-    const indexedLength = boot.internalViews[0]
+    const indexedLength = boot.systemLength
 
     if (migrated) { // ensure system batch is consistent on initial migration
       await this._migrate6(boot.key, indexedLength)
@@ -558,7 +558,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const boot = pointer
       ? c.decode(messages.BootRecord, pointer)
-      : { key: null, internalViews: [], indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
+      : { key: null, systemLength: 0, encryptionLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
 
     if (boot.heads) {
       const len = await this._getMigrationPointer(boot.key, boot.indexedLength)
@@ -1249,31 +1249,45 @@ module.exports = class Autobase extends ReadyResource {
     // close existing state
     if (this._applyState) await this._applyState.close()
 
+    const {
+      key,
+      length,
+      views,
+      indexers,
+      manifestVersion,
+      entropy,
+      encryptionLength
+    } = this.fastForwardTo
+
     const from = this.core.signedLength
     const store = this._viewStore.atomize()
-    const views = this.fastForwardTo.views
-    const manifestVersion = this.fastForwardTo.manifestVersion
-    const entropy = this.fastForwardTo.entropy
-    const internalViews = this.fastForwardTo.internalViews
 
     const ffed = new Set()
-    const migrated = !b4a.equals(this.fastForwardTo.key, this.core.key)
+    const migrated = !b4a.equals(key, this.core.key)
 
-    for (const v of internalViews.concat(views)) {
-      const ref = await this._viewStore.findViewByKey(v.key, this.fastForwardTo.indexers, manifestVersion, entropy)
+    const systemRef = await this._viewStore.findViewByKey(key, indexers, manifestVersion, entropy)
+    ffed.add(systemRef)
+
+    if (migrated) {
+      await this._applyFastForwardMigration(systemRef, { key, length })
+    } else {
+      await systemRef.catchup(store.atom, length)
+    }
+
+    for (const v of views) {
+      const ref = await this._viewStore.findViewByKey(v.key, indexers, manifestVersion, entropy)
       if (!ref) continue // unknown, view ignored
       ffed.add(ref)
 
-      if (b4a.equals(ref.core.key, v.key)) {
-        await ref.catchup(store.atom, v.length)
-      } else {
+      if (migrated) {
         await this._applyFastForwardMigration(ref, v)
+      } else {
+        await ref.catchup(store.atom, v.length)
       }
     }
 
     // migrate zero length cores
     if (migrated) {
-      const indexers = this.fastForwardTo.indexers
       const manifests = await this._viewStore.getIndexerManifests(indexers)
 
       for (const [name, ref] of this._viewStore.byName) {
@@ -1283,8 +1297,9 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const value = c.encode(messages.BootRecord, {
-      key: this.fastForwardTo.key,
-      internalViews: internalViews.map(v => v.length),
+      key,
+      systemLength: length,
+      encryptionLength,
       indexersUpdated: false,
       fastForwarding: true,
       recoveries: RECOVERIES
@@ -1404,7 +1419,7 @@ module.exports = class Autobase extends ReadyResource {
     const info = await system.getIndexedInfo(length)
     const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
 
-    const { views, internalViews } = this._applyState
+    const { views, systemView, encryptionView } = this._applyState
 
     const manifestVersion = this._applyState.system.core.manifest.version
 
@@ -1419,22 +1434,14 @@ module.exports = class Autobase extends ReadyResource {
       await this._migrateView(indexerManifests, source, view.name, indexedLength, manifestVersion, info.entropy, null, null)
     }
 
-    let linked = null
+    const source = encryptionView.ref.batch || encryptionView.ref.core
+    await source.ready()
 
-    for (let i = 1; i < internalViews.length; i++) {
-      if (linked === null) linked = []
+    const enc = await this._migrateView(indexerManifests, source, '_encryption', encryptionView.indexedLength, manifestVersion, info.entropy, null, null)
 
-      const { ref, indexedLength } = internalViews[i]
+    const linked = [enc.core.key]
 
-      const source = ref.batch || ref.core
-      await source.ready()
-
-      const next = await this._migrateView(indexerManifests, source, ref.name, indexedLength, manifestVersion, info.entropy, null, null)
-
-      linked.push(next.core.key)
-    }
-
-    const sysCore = this._applyState.internalViews[0].ref.batch
+    const sysCore = systemView.ref.batch
     const ref = await this._migrateView(indexerManifests, sysCore, '_system', length, manifestVersion, info.entropy, linked, null, null)
 
     return this._reboot(ref.core.key)
