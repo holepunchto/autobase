@@ -28,13 +28,11 @@ const AutoStore = require('./lib/store.js')
 const ApplyState = require('./lib/apply-state.js')
 const { PublicApplyCalls } = require('./lib/apply-calls.js')
 const boot = require('./lib/boot.js')
+const { DEFAULT_AUTOBASE_VERSION, MAX_AUTOBASE_VERSION } = require('./lib/caps.js')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 const INTERRUPT = new Error('Apply interrupted')
 const BINARY_ENCODING = c.from('binary')
-
-const DEFAULT_AUTOBASE_VERSION = 1 // default
-const MAX_AUTOBASE_VERSION = 2 // optional fork support
 
 const RECOVERIES = 3
 const FF_RECOVERY = 1
