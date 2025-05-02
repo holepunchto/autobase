@@ -25,7 +25,7 @@ autobase.register({
 autobase.register({
   name: 'clock',
   array: true,
-  type: '@autobase/checkout',
+  type: '@autobase/checkout'
 })
 
 autobase.register({
