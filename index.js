@@ -435,6 +435,9 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async setLocal (key, { keyPair } = {}) {
+    if (!this.opened) await this.ready()
+    if (b4a.equals(key, this.local.key)) return
+
     const manifest = keyPair ? { version: this.store.manifestVersion, signers: [{ publicKey: keyPair.publicKey }] } : null
     const encryption = this.encryptionKey ? this.getWriterEncryption() : null
 
