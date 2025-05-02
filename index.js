@@ -558,7 +558,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const boot = pointer
       ? c.decode(messages.BootRecord, pointer)
-      : { key: null, systemLength: 0, encryptionLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
+      : { key: null, systemLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
 
     if (boot.heads) {
       const len = await this._getMigrationPointer(boot.key, boot.indexedLength)
@@ -1255,8 +1255,7 @@ module.exports = class Autobase extends ReadyResource {
       views,
       indexers,
       manifestVersion,
-      entropy,
-      encryptionLength
+      entropy
     } = this.fastForwardTo
 
     const from = this.core.signedLength
@@ -1299,7 +1298,6 @@ module.exports = class Autobase extends ReadyResource {
     const value = c.encode(messages.BootRecord, {
       key,
       systemLength: length,
-      encryptionLength,
       indexersUpdated: false,
       fastForwarding: true,
       recoveries: RECOVERIES
@@ -1437,7 +1435,7 @@ module.exports = class Autobase extends ReadyResource {
     const source = encryptionView.ref.batch || encryptionView.ref.core
     await source.ready()
 
-    const enc = await this._migrateView(indexerManifests, source, '_encryption', encryptionView.indexedLength, manifestVersion, info.entropy, null, null)
+    const enc = await this._migrateView(indexerManifests, source, '_encryption', info.encryptionLength, manifestVersion, info.entropy, null, null)
 
     const linked = [enc.core.key]
 
