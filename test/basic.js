@@ -46,53 +46,53 @@ test('basic - single writer', async t => {
 test('basic - two writers', async t => {
   const { bases } = await create(3, t, { open: null })
 
-  const [base1, base2, base3] = bases
+  const [a, b, c] = bases
 
   let added = false
-  base2.once('is-indexer', () => { added = true })
+  b.once('is-indexer', () => { added = true })
 
-  await addWriter(base1, base2)
-  await confirm([base1, base2, base3])
+  await addWriter(a, b)
+  await confirm([a, b, c])
 
   t.ok(added)
 
   added = false
-  base3.once('is-indexer', () => { added = true })
+  c.once('is-indexer', () => { added = true })
 
-  await addWriter(base2, base3)
-  await confirm([base1, base2, base3])
+  await addWriter(b, c)
+  await confirm([a, b, c])
 
   t.ok(added)
 
-  t.is(base2.system.members, 3)
-  t.is(base2.system.members, base3.system.members)
-  t.is(base2.system.members, base2.activeWriters.size)
-  t.is(base3.system.members, base3.activeWriters.size)
+  t.is(b.system.members, 3)
+  t.is(b.system.members, c.system.members)
+  t.is(b.system.members, b.activeWriters.size)
+  t.is(c.system.members, c.activeWriters.size)
 
-  t.ok(base1.isIndexer)
-  t.ok(base2.isIndexer)
-  t.ok(base3.isIndexer)
+  t.ok(a.isIndexer)
+  t.ok(b.isIndexer)
+  t.ok(c.isIndexer)
 
-  t.not(base1.system.core.manifest, null)
+  t.not(a.system.core.manifest, null)
   // tests skipped: fix with linearizer update - batching
 
-  // t.alike(await base1.system.checkpoint(), await base2.system.checkpoint())
-  // t.alike(await base1.system.checkpoint(), await base3.system.checkpoint())
+  // t.alike(await a.system.checkpoint(), await b.system.checkpoint())
+  // t.alike(await a.system.checkpoint(), await c.system.checkpoint())
 })
 
 test('basic - wait for writable', async t => {
   const { bases } = await create(3, t, { open: null })
 
-  const [base1, base2, base3] = bases
+  const [a, b, c] = bases
 
-  const p1 = base2.waitForWritable()
-  const p2 = base3.waitForWritable()
+  const p1 = b.waitForWritable()
+  const p2 = c.waitForWritable()
 
-  await addWriter(base1, base2)
-  await confirm([base1, base2, base3])
+  await addWriter(a, b)
+  await confirm([a, b, c])
 
-  await addWriter(base2, base3)
-  await confirm([base1, base2, base3])
+  await addWriter(b, c)
+  await confirm([a, b, c])
 
   await p1
   await p2
@@ -102,72 +102,72 @@ test('basic - wait for writable', async t => {
 
 test('basic - no truncates when history is linear', async t => {
   const { bases } = await create(3, t)
-  const [base1, base2, base3] = bases
+  const [a, b, c] = bases
 
-  await addWriter(base1, base2, false)
+  await addWriter(a, b, false)
 
-  await confirm([base1, base2, base3])
+  await confirm([a, b, c])
 
-  await addWriter(base2, base3, false)
+  await addWriter(b, c, false)
 
-  await confirm([base1, base2, base3])
+  await confirm([a, b, c])
 
-  await base2.append('hello')
+  await b.append('hello')
 
-  await replicateAndSync([base1, base2, base3])
+  await replicateAndSync([a, b, c])
 
-  await base1.append('world')
+  await a.append('world')
 
-  await replicateAndSync([base1, base2, base3])
+  await replicateAndSync([a, b, c])
 
-  await base3.append('hej')
+  await c.append('hej')
 
-  await replicateAndSync([base1, base2, base3])
+  await replicateAndSync([a, b, c])
 
-  await base1.append('verden')
+  await a.append('verden')
 
   const all = []
-  for (let i = 0; i < base1.view.length; i++) {
-    all.push(await base1.view.get(i))
+  for (let i = 0; i < a.view.length; i++) {
+    all.push(await a.view.get(i))
   }
 
   t.alike(all, ['hello', 'world', 'hej', 'verden'])
-  t.is(base1.view.fork, 0)
-  t.is(base2.view.fork, 0)
-  t.is(base3.view.fork, 0)
+  t.is(a.view.fork, 0)
+  t.is(b.view.fork, 0)
+  t.is(c.view.fork, 0)
 })
 
 test('basic - truncates when history is not linear', async t => {
   const { bases } = await create(3, t)
-  const [base1, base2, base3] = bases
+  const [a, b, c] = bases
 
-  await addWriter(base1, base2, false)
-  await confirm([base1, base2, base3])
+  await addWriter(a, b, false)
+  await confirm([a, b, c])
 
-  await addWriter(base2, base3, false)
-  await confirm([base1, base2, base3])
+  await addWriter(b, c, false)
+  await confirm([a, b, c])
 
-  await base2.append('hello')
-  await base1.append('world')
+  await b.append('hello')
+  await a.append('world')
 
-  await replicateAndSync([base1, base2, base3])
-  await confirm([base1, base2, base3])
+  await replicateAndSync([a, b, c])
+  await confirm([a, b, c])
 
-  t.ok(base2.view.fork > 0 || base1.view.fork > 0)
+  t.ok(b.view.fork > 0 || a.view.fork > 0)
 })
 
 test('basic - writable event fires', async t => {
   t.plan(1)
   const { bases } = await create(2, t, { open: null })
-  const [base1, base2] = bases
+  const [a, b] = bases
 
-  base2.on('writable', () => {
-    t.ok(base2.writable, 'Writable event fired when autobase writable')
+  b.on('writable', () => {
+    t.ok(b.writable, 'Writable event fired when autobase writable')
   })
 
-  await addWriter(base1, base2)
+  await addWriter(a, b)
 
-  await confirm([base1, base2])
+  await confirm([a, b])
 })
 
 test('basic - local key pair', async t => {
@@ -188,12 +188,12 @@ test('basic - local key pair', async t => {
 
   await base.close()
 
-  const base2 = createBase(store, key, t)
-  await base2.ready()
+  const b = createBase(store, key, t)
+  await b.ready()
 
-  t.alike(base2.local.key, base.local.key)
-  t.alike(await base2.view.get(0), block)
-  t.alike(base2.local.manifest.signers[0].publicKey, keyPair.publicKey)
+  t.alike(b.local.key, base.local.key)
+  t.alike(await b.view.get(0), block)
+  t.alike(b.local.manifest.signers[0].publicKey, keyPair.publicKey)
 })
 
 test('basic - local key pair promise', async t => {
@@ -214,12 +214,12 @@ test('basic - local key pair promise', async t => {
 
   await base.close()
 
-  const base2 = createBase(store, key, t)
-  await base2.ready()
+  const b = createBase(store, key, t)
+  await b.ready()
 
-  t.alike(base2.local.key, base.local.key)
-  t.alike(await base2.view.get(0), block)
-  t.alike(base2.local.manifest.signers[0].publicKey, keyPair.publicKey)
+  t.alike(b.local.key, base.local.key)
+  t.alike(await b.view.get(0), block)
+  t.alike(b.local.manifest.signers[0].publicKey, keyPair.publicKey)
 })
 
 test('basic - view', async t => {
@@ -266,14 +266,14 @@ test('basic - view with close', async t => {
 
 test('basic - view/writer userdata is set', async t => {
   const { bases } = await create(2, t)
-  const [base1, base2] = bases
+  const [a, b] = bases
 
-  await addWriter(base1, base2)
+  await addWriter(a, b)
 
   await confirm(bases)
 
-  await verifyUserData(base1)
-  await verifyUserData(base2)
+  await verifyUserData(a)
+  await verifyUserData(b)
 
   async function verifyUserData (base) {
     const systemData = await Autobase.getUserData(base.system.core)
@@ -860,24 +860,24 @@ test('sequential restarts', { timeout: 120_000 }, async t => {
 test('two writers write many messages, third writer joins', async t => {
   t.timeout(120_000)
   const { bases } = await create(3, t)
-  const [base1, base2, base3] = bases
+  const [a, b, c] = bases
 
-  await addWriter(base1, base2)
+  await addWriter(a, b)
 
   for (let i = 0; i < 10; i++) {
-    base1.append({ value: `Message${i}` })
+    a.append({ value: `Message${i}` })
   }
 
-  await base1.update()
+  await a.update()
   t.pass('added nodes')
 
-  await confirm([base1, base2])
-  await addWriter(base1, base3)
+  await confirm([a, b])
+  await addWriter(a, c)
 
-  await confirm([base1, base2, base3])
+  await confirm([a, b, c])
   t.pass('confirming did not throw')
 
-  await compareViews([base1, base2, base3], t)
+  await compareViews([a, b, c], t)
 })
 
 test('basic - gc indexed nodes', async t => {
@@ -903,24 +903,24 @@ test('basic - gc indexed nodes', async t => {
 
 test('basic - isAutobase', async t => {
   const { bases } = await create(3, t, { open: null })
-  const [base1, base2, base3] = bases
+  const [a, b, c] = bases
 
-  await addWriter(base1, base2)
+  await addWriter(a, b)
 
-  await confirm([base1, base2, base3])
+  await confirm([a, b, c])
 
-  await t.exception(Autobase.isAutobase(base3.local, { wait: false }))
+  await t.exception(Autobase.isAutobase(c.local, { wait: false }))
 
-  await addWriter(base2, base3)
+  await addWriter(b, c)
 
-  await confirm([base1, base2, base3])
+  await confirm([a, b, c])
 
-  t.is(await Autobase.isAutobase(base1.local), true)
-  t.is(await Autobase.isAutobase(base2.local), true)
+  t.is(await Autobase.isAutobase(a.local), true)
+  t.is(await Autobase.isAutobase(b.local), true)
 
-  await base3.append('hello')
+  await c.append('hello')
 
-  t.is(await Autobase.isAutobase(base3.local), true)
+  t.is(await Autobase.isAutobase(c.local), true)
 })
 
 test('basic - non-indexed writer', async t => {
@@ -1132,28 +1132,28 @@ test('autobase should not detach the original store', async t => {
 
 test('basic - oplog digest', async t => {
   const { bases } = await create(2, t, { open: null })
-  const [base1, base2] = bases
+  const [a, b] = bases
 
-  await base1.append({
-    add: base2.local.key.toString('hex'),
+  await a.append({
+    add: b.local.key.toString('hex'),
     debug: 'this is adding b'
   })
 
-  await replicateAndSync([base1, base2])
-  await base2.append(null)
+  await replicateAndSync([a, b])
+  await b.append(null)
 
-  await replicateAndSync([base1, base2])
-  await base1.append(null)
-  await replicateAndSync([base1, base2])
+  await replicateAndSync([a, b])
+  await a.append(null)
+  await replicateAndSync([a, b])
 
   // TODO: remove me, just because we atomically set local nodes now,
   // but we can predict the sys key. but also not super importnat
-  await base1.append(null)
-  const last = await base1.local.get(base1.local.length - 1)
+  await a.append(null)
+  const last = await a.local.get(a.local.length - 1)
 
   t.is(last.digest.pointer, 0)
-  t.is(base2.system.core.manifest.signers.length, 2)
-  t.alike(last.digest.key, base2.system.core.key)
+  t.is(b.system.core.manifest.signers.length, 2)
+  t.alike(last.digest.key, b.system.core.key)
 })
 
 // todo: use normal helper once we have hypercore session manager
