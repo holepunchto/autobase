@@ -11,6 +11,7 @@ const mutexify = require('mutexify/promise')
 const ProtomuxWakeup = require('protomux-wakeup')
 const rrp = require('resolve-reject-promise')
 const crypto = require('hypercore-crypto')
+const Hypercore = require('hypercore')
 
 const LocalState = require('./lib/local-state.js')
 const Linearizer = require('./lib/linearizer.js')
@@ -435,7 +436,13 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async setLocal (key, { keyPair } = {}) {
+    if (!this.opened) await this.ready()
+
     const manifest = keyPair ? { version: this.store.manifestVersion, signers: [{ publicKey: keyPair.publicKey }] } : null
+    if (!key) key = Hypercore.key(manifest)
+    // If the keys are the same, no need to rotate
+    if (b4a.equals(key, this.local.key)) return
+
     const encryption = this.encryptionKey ? this.getWriterEncryption() : null
 
     const local = this.store.get({ key, manifest, active: false, exclusive: true, encryption, valueEncoding: messages.OplogMessage })
