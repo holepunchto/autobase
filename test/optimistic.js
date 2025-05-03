@@ -33,3 +33,33 @@ test('optimistic - two writer', async t => {
   t.is(await b.view.get(0), 'hello')
   t.is(await b.view.get(1), 'optimistic')
 })
+
+test('optimistic - truncate to 0', async t => {
+  const { bases } = await create(2, t, {
+    optimistic: true,
+    async apply (nodes, view, base) {
+      for (const node of nodes) {
+        if (node.length === 1 && !node.from.key.equals(base.key)) {
+          await base.addWriter(node.from.key, { isIndexer: false })
+        }
+        await view.append(node.value)
+      }
+    }
+  })
+
+  await bases[0].append('world', { optimistic: true })
+  await bases[1].append('hello', { optimistic: true })
+  await replicateAndSync(bases)
+
+  {
+    const all = []
+    for await (const data of bases[0].view.createReadStream()) all.push(data)
+    t.alike(all, ['world', 'hello'])
+  }
+
+  {
+    const all = []
+    for await (const data of bases[1].view.createReadStream()) all.push(data)
+    t.alike(all, ['world', 'hello'])
+  }
+})
