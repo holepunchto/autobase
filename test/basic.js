@@ -1176,7 +1176,7 @@ test('basic - close during apply', async t => {
     valueEncoding: 'json'
   })
 
-  await a.ready()
+  await a.update() // clear all bumps
 
   const promise = a.append('trigger')
   setImmediate(() => a.close())
