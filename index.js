@@ -903,6 +903,8 @@ module.exports = class Autobase extends ReadyResource {
 
   async append (value, opts) {
     if (this.opened === false) await this.ready()
+    if (this._advancing !== null) await this._advancing
+
     if (this._interrupting) throw new Error('Autobase is closing')
     if (value && this.valueEncoding !== BINARY_ENCODING) value = normalize(this.valueEncoding, value)
 
