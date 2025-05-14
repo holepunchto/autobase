@@ -30,7 +30,11 @@ const AutoStore = require('./lib/store.js')
 const ApplyState = require('./lib/apply-state.js')
 const { PublicApplyCalls } = require('./lib/apply-calls.js')
 const boot = require('./lib/boot.js')
-const { DEFAULT_AUTOBASE_VERSION, MAX_AUTOBASE_VERSION } = require('./lib/caps.js')
+const {
+  DEFAULT_AUTOBASE_VERSION,
+  MAX_AUTOBASE_VERSION,
+  BOOT_RECORD_VERSION
+} = require('./lib/caps.js')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 const INTERRUPT = new Error('Apply interrupted')
@@ -564,7 +568,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const boot = pointer
       ? c.decode(messages.BootRecord, pointer)
-      : { key: null, systemLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
+      : { version: BOOT_RECORD_VERSION, key: null, systemLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
 
     if (boot.heads) {
       const len = await this._getMigrationPointer(boot.key, boot.systemLength)
@@ -1308,6 +1312,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const value = c.encode(messages.BootRecord, {
+      version: BOOT_RECORD_VERSION,
       key,
       systemLength: length,
       indexersUpdated: false,

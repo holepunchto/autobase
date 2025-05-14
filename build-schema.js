@@ -1,9 +1,12 @@
+const path = require('path')
 const Hyperschema = require('hyperschema')
 
 const SPEC = './spec/autobase'
 
 const schema = Hyperschema.from(SPEC, { versioned: true })
 const autobase = schema.namespace('autobase')
+
+autobase.require(path.join(__dirname, 'lib/encodings.js'))
 
 autobase.register({
   name: 'checkout',
@@ -60,7 +63,7 @@ autobase.register({
       required: true
     },
     {
-      name: 'type',
+      name: 'writers',
       type: '@autobase/clock',
       required: false
     }
@@ -79,11 +82,6 @@ autobase.register({
     {
       name: 'key',
       type: 'fixed32',
-      required: true
-    },
-    {
-      name: 'systemLength',
-      type: 'uint',
       required: true
     },
     {
@@ -338,7 +336,7 @@ autobase.register({
     {
       name: 'entropy',
       type: 'fixed32',
-      required: true
+      required: false
     }
   ]
 })
@@ -367,18 +365,10 @@ autobase.register({
 
 // TODO: index-encoder
 
-// autobase.register({
-//   name: 'linearizerKey',
-//   compact: true,
-//   fields: [
-//     {
-//       name: 'isIndexer',
-//       type: 'bool',
-//       required: true
-//     },
-
-//   ]
-// })
+autobase.register({
+  name: 'linearizerKey',
+  external: 'LinearizerKey'
+})
 
 autobase.register({
   name: 'linearizerUpdate',
