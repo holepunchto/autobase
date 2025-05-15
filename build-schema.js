@@ -49,7 +49,12 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'wakeup',
+  name: 'wakeupLegacy',
+  external: 'Wakeup'
+})
+
+autobase.register({
+  name: 'wakeupv2',
   compact: false,
   fields: [
     {
@@ -71,7 +76,26 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'bootRecord',
+  name: 'wakeup',
+  versions: [
+    {
+      version: 1,
+      type: '@autobase/wakeupLegacy'
+    },
+    {
+      version: 2,
+      type: '@autobase/wakeupv2'
+    }
+  ]
+})
+
+autobase.register({
+  name: 'bootRecordLegacy',
+  external: 'BootRecord'
+})
+
+autobase.register({
+  name: 'bootRecordv4',
   compact: false,
   fields: [
     {
@@ -103,6 +127,20 @@ autobase.register({
       name: 'recoveries',
       type: 'uint',
       required: false
+    }
+  ]
+})
+
+autobase.register({
+  name: 'bootRecord',
+  versions: [
+    {
+      version: 3,
+      type: '@autobase/bootRecordLegacy'
+    },
+    {
+      version: 4,
+      type: '@autobase/bootRecordv4'
     }
   ]
 })
@@ -252,14 +290,14 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'oplogMessage',
+  name: 'oplogMessageLegacy',
+  external: 'OplogMessage'
+})
+
+autobase.register({
+  name: 'oplogMessagev2',
   compact: false,
   fields: [
-    {
-      name: 'version',
-      type: 'uint',
-      required: true
-    },
     {
       name: 'checkpoint',
       type: '@autobase/checkpoint',
@@ -283,9 +321,17 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'pendingIndexers',
-  array: true,
-  type: 'fixed32'
+  name: 'oplogMessage',
+  versions: [
+    {
+      version: 1,
+      type: '@autobase/oplogMessageLegacy'
+    },
+    {
+      version: 2,
+      type: '@autobase/oplogMessagev2'
+    }
+  ]
 })
 
 autobase.register({
@@ -295,7 +341,18 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'info',
+  name: 'pendingIndexers',
+  array: true,
+  type: 'fixed32'
+})
+
+autobase.register({
+  name: 'infoLegacy',
+  external: 'Info'
+})
+
+autobase.register({
+  name: 'infov2',
   compact: false,
   fields: [
     {
@@ -342,6 +399,20 @@ autobase.register({
 })
 
 autobase.register({
+  name: 'info',
+  versions: [
+    {
+      version: 1,
+      type: '@autobase/infoLegacy'
+    },
+    {
+      version: 2,
+      type: '@autobase/infov2'
+    }
+  ]
+})
+
+autobase.register({
   name: 'member',
   compact: false,
   fields: [
@@ -363,15 +434,18 @@ autobase.register({
   ]
 })
 
-// TODO: index-encoder
-
 autobase.register({
   name: 'linearizerKey',
   external: 'LinearizerKey'
 })
 
 autobase.register({
-  name: 'linearizerUpdate',
+  name: 'linearizerUpdateLegacy',
+  external: 'LinearizerUpdate'
+})
+
+autobase.register({
+  name: 'linearizerUpdatev1',
   compact: false,
   fields: [
     {
@@ -397,6 +471,20 @@ autobase.register({
     {
       name: 'indexers',
       type: 'bool'
+    }
+  ]
+})
+
+autobase.register({
+  name: 'linearizerUpdate',
+  versions: [
+    {
+      version: 0,
+      type: '@autobase/linearizerUpdateLegacy'
+    },
+    {
+      version: 1,
+      type: '@autobase/linearizerUpdatev1'
     }
   ]
 })
