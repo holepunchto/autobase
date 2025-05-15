@@ -58,11 +58,6 @@ autobase.register({
   compact: false,
   fields: [
     {
-      name: 'version',
-      type: 'uint',
-      required: true
-    },
-    {
       name: 'type',
       type: 'uint',
       required: true
@@ -98,11 +93,6 @@ autobase.register({
   name: 'bootRecordv4',
   compact: false,
   fields: [
-    {
-      name: 'version',
-      type: 'uint',
-      required: true
-    },
     {
       name: 'key',
       type: 'fixed32',
@@ -356,11 +346,6 @@ autobase.register({
   compact: false,
   fields: [
     {
-      name: 'version',
-      type: 'uint',
-      required: true
-    },
-    {
       name: 'members',
       type: 'uint',
       required: true
@@ -440,12 +425,7 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'linearizerUpdateLegacy',
-  external: 'LinearizerUpdate'
-})
-
-autobase.register({
-  name: 'linearizerUpdatev1',
+  name: 'linearizerUpdate',
   compact: false,
   fields: [
     {
@@ -471,20 +451,6 @@ autobase.register({
     {
       name: 'indexers',
       type: 'bool'
-    }
-  ]
-})
-
-autobase.register({
-  name: 'linearizerUpdate',
-  versions: [
-    {
-      version: 0,
-      type: '@autobase/linearizerUpdateLegacy'
-    },
-    {
-      version: 1,
-      type: '@autobase/linearizerUpdatev1'
     }
   ]
 })
