@@ -4,7 +4,7 @@
 /* eslint-disable quotes */
 
 const { c } = require('hyperschema/runtime')
-const external0 = require('../../lib/encodings.js')
+const external0 = require('../../lib/legacy-encodings.js')
 
 const VERSION = 1
 
@@ -75,6 +75,7 @@ const encoding4 = {
     if (m.writers) encoding1.encode(state, m.writers)
   },
   decode (state, version) {
+    if (version === undefined) version = c.uint.decode(state)
     const r0 = c.uint.decode(state)
     const flags = c.uint.decode(state)
 
@@ -158,6 +159,7 @@ const encoding7 = {
     if (m.recoveries) c.uint.encode(state, m.recoveries)
   },
   decode (state, version) {
+    if (version === undefined) version = c.uint.decode(state)
     const r0 = c.fixed32.decode(state)
     const r1 = c.uint.decode(state)
     const flags = c.uint.decode(state)
@@ -450,6 +452,7 @@ const encoding19 = {
     encoding15.encode(state, m.node)
   },
   decode (state, version) {
+    if (version === undefined) version = c.uint.decode(state)
     const flags = c.uint.decode(state)
 
     return {
@@ -542,6 +545,7 @@ const encoding23 = {
     if (m.entropy) c.fixed32.encode(state, m.entropy)
   },
   decode (state, version) {
+    if (version === undefined) version = c.uint.decode(state)
     const r0 = c.uint.decode(state)
     const r1 = encoding21.decode(state)
     const r2 = encoding1.decode(state)

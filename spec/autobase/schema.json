@@ -78,11 +78,13 @@
       "versions": [
         {
           "type": "@autobase/wakeupLegacy",
-          "map": null
+          "map": null,
+          "version": 1
         },
         {
           "type": "@autobase/wakeupv2",
-          "map": null
+          "map": null,
+          "version": 2
         }
       ]
     },
@@ -135,11 +137,13 @@
       "versions": [
         {
           "type": "@autobase/bootRecordLegacy",
-          "map": null
+          "map": null,
+          "version": 3
         },
         {
           "type": "@autobase/bootRecordv4",
-          "map": null
+          "map": null,
+          "version": 4
         }
       ]
     },
@@ -353,11 +357,13 @@
       "versions": [
         {
           "type": "@autobase/oplogMessageLegacy",
-          "map": null
+          "map": null,
+          "version": 1
         },
         {
           "type": "@autobase/oplogMessagev2",
-          "map": null
+          "map": null,
+          "version": 2
         }
       ]
     },
@@ -428,11 +434,13 @@
       "versions": [
         {
           "type": "@autobase/infoLegacy",
-          "map": null
+          "map": null,
+          "version": 1
         },
         {
           "type": "@autobase/infov2",
-          "map": null
+          "map": null,
+          "version": 2
         }
       ]
     },
