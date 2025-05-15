@@ -6,7 +6,7 @@ const SPEC = './spec/autobase'
 const schema = Hyperschema.from(SPEC, { versioned: true })
 const autobase = schema.namespace('autobase')
 
-autobase.require(path.join(__dirname, 'lib/encodings.js'))
+autobase.require(path.join(__dirname, 'lib/legacy-encodings.js'))
 
 autobase.register({
   name: 'checkout',
