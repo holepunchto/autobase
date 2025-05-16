@@ -1,12 +1,12 @@
 const path = require('path')
 const Hyperschema = require('hyperschema')
 
-const SPEC = './spec/autobase'
+const SPEC = path.join(__dirname, 'spec/autobase')
 
 const schema = Hyperschema.from(SPEC, { versioned: true })
 const autobase = schema.namespace('autobase')
 
-autobase.require(path.join(__dirname, 'lib/legacy-encodings.js'))
+autobase.require(path.join(__dirname, './legacy.js'))
 
 autobase.register({
   name: 'checkout',
@@ -49,49 +49,17 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'wakeupLegacy',
+  name: 'wakeup',
   external: 'Wakeup'
 })
 
 autobase.register({
-  name: 'wakeupv2',
-  compact: false,
-  fields: [
-    {
-      name: 'type',
-      type: 'uint',
-      required: true
-    },
-    {
-      name: 'writers',
-      type: '@autobase/clock',
-      required: false
-    }
-  ]
+  name: 'bootRecordV0',
+  external: 'BootRecordV0'
 })
 
 autobase.register({
-  name: 'wakeup',
-  versions: [
-    {
-      version: 1,
-      type: '@autobase/wakeupLegacy'
-    },
-    {
-      version: 2,
-      type: '@autobase/wakeupv2'
-    }
-  ]
-})
-
-autobase.register({
-  name: 'bootRecordLegacy',
-  external: 'BootRecord'
-})
-
-autobase.register({
-  name: 'bootRecordv4',
-  compact: false,
+  name: 'bootRecordRaw',
   fields: [
     {
       name: 'key',
@@ -125,12 +93,12 @@ autobase.register({
   name: 'bootRecord',
   versions: [
     {
-      version: 3,
-      type: '@autobase/bootRecordLegacy'
+      version: 0,
+      type: '@autobase/bootRecordV0'
     },
     {
-      version: 4,
-      type: '@autobase/bootRecordv4'
+      version: 3,
+      type: '@autobase/bootRecordRaw'
     }
   ]
 })
@@ -248,44 +216,17 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'additionalData',
-  compact: false,
-  fields: [
-    {
-      name: 'encryptionId',
-      type: 'bool'
-    },
-    {
-      name: 'abi',
-      type: 'bool'
-    }
-  ]
+  name: 'oplogMessageV0',
+  external: 'OplogMessageV0'
 })
 
 autobase.register({
-  name: 'additional',
-  compact: true,
-  fields: [
-    {
-      name: 'pointer',
-      type: 'uint',
-      required: true
-    },
-    {
-      name: 'data',
-      type: '@autobase/additionalData',
-      required: false
-    }
-  ]
+  name: 'oplogMessageV1',
+  external: 'OplogMessageV1'
 })
 
 autobase.register({
-  name: 'oplogMessageLegacy',
-  external: 'OplogMessage'
-})
-
-autobase.register({
-  name: 'oplogMessagev2',
+  name: 'oplogMessageV2',
   compact: false,
   fields: [
     {
@@ -314,24 +255,23 @@ autobase.register({
   name: 'oplogMessage',
   versions: [
     {
+      version: 0,
+      type: '@autobase/oplogMessageV0'
+    },
+    {
       version: 1,
-      type: '@autobase/oplogMessageLegacy'
+      type: '@autobase/oplogMessageV1'
     },
     {
       version: 2,
-      type: '@autobase/oplogMessagev2'
+      type: '@autobase/oplogMessageV2'
     }
   ]
 })
 
 autobase.register({
   name: 'pendingIndexers',
-  array: true,
-  type: 'fixed32'
-})
-
-autobase.register({
-  name: 'pendingIndexers',
+  compact: true,
   array: true,
   type: 'fixed32'
 })
@@ -342,8 +282,38 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'infov2',
-  compact: false,
+  name: 'infoV1',
+  fields: [
+    {
+      name: 'members',
+      type: 'uint',
+      required: true
+    },
+    {
+      name: 'pendingIndexers',
+      type: '@autobase/pendingIndexers',
+      required: true
+    },
+    {
+      name: 'indexers',
+      type: '@autobase/clock',
+      required: true
+    },
+    {
+      name: 'heads',
+      type: '@autobase/clock',
+      required: true
+    },
+    {
+      name: 'views',
+      type: '@autobase/clock',
+      required: true
+    }
+  ]
+})
+
+autobase.register({
+  name: 'infoV2',
   fields: [
     {
       name: 'members',
@@ -387,19 +357,19 @@ autobase.register({
   name: 'info',
   versions: [
     {
-      version: 1,
-      type: '@autobase/infoLegacy'
+      type: '@autobase/infoV1',
+      map: 'infoLegacyMap',
+      version: 1
     },
     {
-      version: 2,
-      type: '@autobase/infov2'
+      type: '@autobase/infoV2',
+      version: 2
     }
   ]
 })
 
 autobase.register({
   name: 'member',
-  compact: false,
   fields: [
     {
       name: 'isIndexer',
@@ -426,7 +396,6 @@ autobase.register({
 
 autobase.register({
   name: 'linearizerUpdate',
-  compact: false,
   fields: [
     {
       name: 'key',
@@ -457,7 +426,6 @@ autobase.register({
 
 autobase.register({
   name: 'encryptionDescriptor',
-  compact: true,
   fields: [
     {
       name: 'type',

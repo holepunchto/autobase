@@ -1,5 +1,4 @@
 const c = require('compact-encoding')
-const assert = require('nanoassert')
 const IndexEncoder = require('index-encoder')
 
 const Checkout = {
@@ -130,7 +129,7 @@ const Wakeup = {
   }
 }
 
-const V0BootRecord = {
+const BootRecordV0 = {
   preencode () {
     throw new Error('version 0 records cannot be encoded')
   },
@@ -143,40 +142,6 @@ const V0BootRecord = {
 
     // one cause initial recover is not ff recovery
     return { version: 0, key: indexed.key, indexedLength: indexed.length, indexersUpdated: false, fastForwarding: false, recoveries: 1, heads }
-  }
-}
-
-const BootRecord = {
-  preencode (state, m) {
-    c.fixed32.preencode(state, m.key)
-    c.uint.preencode(state, m.systemLength)
-    c.uint.preencode(state, 1) // always 1b
-    if (m.recoveries) c.uint.preencode(state, m.recoveries)
-  },
-  encode (state, m) {
-    c.fixed32.encode(state, m.key)
-    c.uint.encode(state, m.systemLength)
-    c.uint.encode(state, (m.indexersUpdated ? 1 : 0) | (m.fastForwarding ? 2 : 0) | (m.recoveries ? 4 : 0))
-    if (m.recoveries) c.uint.encode(state, m.recoveries)
-  },
-  decode (state, version) {
-    if (version === 0) return V0BootRecord.decode(state)
-
-    assert(version <= 3, 'Unsupported version: ' + version)
-
-    const key = c.fixed32.decode(state)
-    const systemLength = c.uint.decode(state)
-    const flags = c.uint.decode(state)
-
-    return {
-      version,
-      key,
-      systemLength,
-      indexersUpdated: (flags & 1) !== 0,
-      fastForwarding: (flags & 2) !== 0,
-      recoveries: (flags & 4) !== 0 ? c.uint.decode(state) : 0,
-      heads: null // only used for compat
-    }
   }
 }
 
@@ -201,30 +166,6 @@ const Checkpointer = {
 }
 
 const CheckpointerArray = c.array(Checkpointer)
-
-const Checkpoint = {
-  preencode (state, chk) {
-    c.uint.preencode(state, 1) // flags
-    if (chk.system) Checkpointer.preencode(state, chk.system)
-    if (chk.encryption) Checkpointer.preencode(state, chk.encryption)
-    if (chk.user) CheckpointerArray.preencode(state, chk.user)
-  },
-  encode (state, chk) {
-    c.uint.encode(state, (chk.system ? 1 : 0) | (chk.encryption ? 2 : 0) | (chk.user ? 4 : 0)) // flags
-    if (chk.system) Checkpointer.encode(state, chk.system)
-    if (chk.encryption) Checkpointer.encode(state, chk.encryption)
-    if (chk.user) CheckpointerArray.encode(state, chk.user)
-  },
-  decode (state) {
-    const flags = c.uint.decode(state)
-
-    return {
-      system: flags & 1 ? Checkpointer.decode(state) : null,
-      encryption: flags & 2 ? Checkpointer.decode(state) : null,
-      user: flags & 4 ? CheckpointerArray.decode(state) : null
-    }
-  }
-}
 
 const Indexer = {
   preencode (state, m) {
@@ -350,86 +291,6 @@ const AdditionalData = {
   }
 }
 
-const OplogMessage = {
-  preencode (state, m) {
-    c.uint.preencode(state, m.maxSupportedVersion)
-
-    const isCheckpointer = m.digest !== null && m.checkpoint !== null
-
-    let flags = 0
-    if (isCheckpointer) flags |= 1
-    if (m.optimistic) flags |= 2
-
-    c.uint.preencode(state, flags)
-
-    if (isCheckpointer) {
-      Checkpoint.preencode(state, m.checkpoint)
-      Digest.preencode(state, m.digest)
-    }
-
-    Node.preencode(state, m.node)
-  },
-  encode (state, m) {
-    c.uint.encode(state, m.maxSupportedVersion)
-
-    const isCheckpointer = m.digest !== null && m.checkpoint !== null
-
-    let flags = 0
-    if (isCheckpointer) flags |= 1
-    if (m.optimistic) flags |= 2
-
-    c.uint.encode(state, flags)
-
-    if (isCheckpointer) {
-      Checkpoint.encode(state, m.checkpoint)
-      Digest.encode(state, m.digest)
-    }
-
-    Node.encode(state, m.node)
-  },
-  decode (state, version) {
-    if (version < 2) {
-      const m = version === 1
-        ? OplogMessageV1.decode(state)
-        : OplogMessageV0.decode(state)
-
-      const chk = m.checkpoint
-      const checkpoint = chk
-        ? { system: chk[0], encryption: null, user: chk.slice(1) }
-        : null
-
-      return {
-        version,
-        maxSupportedVersion: m.maxSupportedVersion,
-        digest: version === 1 ? m.digest : null,
-        checkpoint,
-        optimistic: version === 1 ? m.optimistic : false,
-        node: m.node
-      }
-    }
-
-    const maxSupportedVersion = c.uint.decode(state)
-
-    const flags = c.uint.decode(state)
-
-    const isCheckpointer = (flags & 1) !== 0
-
-    const checkpoint = isCheckpointer ? Checkpoint.decode(state) : null
-    const digest = isCheckpointer ? Digest.decode(state) : null
-
-    const node = Node.decode(state)
-
-    return {
-      version,
-      maxSupportedVersion,
-      digest,
-      checkpoint,
-      optimistic: (flags & 2) !== 0,
-      node
-    }
-  }
-}
-
 const OplogMessageV1 = {
   preencode (state, m) {
     throw new Error('Encoding not supported')
@@ -444,7 +305,7 @@ const OplogMessageV1 = {
 
     const isCheckpointer = (flags & 1) !== 0
 
-    const checkpoint = isCheckpointer ? CheckpointerArray.decode(state) : null
+    const chk = isCheckpointer ? CheckpointerArray.decode(state) : null
     const digest = isCheckpointer ? Digest.decode(state) : null
 
     const node = Node.decode(state)
@@ -453,7 +314,7 @@ const OplogMessageV1 = {
       version: 1,
       maxSupportedVersion,
       digest,
-      checkpoint,
+      checkpoint: chk ? { system: chk[0], encryption: null, user: chk.slice(1) } : null,
       optimistic: (flags & 2) !== 0,
       node
     }
@@ -472,58 +333,19 @@ const OplogMessageV0 = {
 
     const isCheckpointer = (flags & 1) !== 0
 
-    const digest = isCheckpointer ? DigestV0.decode(state) : null
-    const checkpoint = isCheckpointer ? CheckpointerArray.decode(state) : null
+    if (isCheckpointer) DigestV0.decode(state)
+    const chk = isCheckpointer ? CheckpointerArray.decode(state) : null
     const node = Node.decode(state)
-    const additional = Additional.decode(state)
+    Additional.decode(state)
     const maxSupportedVersion = state.start < state.end ? c.uint.decode(state) : 0
 
     return {
       version: 0,
-      digest,
-      checkpoint,
-      node,
-      additional,
-      maxSupportedVersion
-    }
-  }
-}
-
-const PendingIndexers = c.array(c.fixed32)
-
-const Info = {
-  preencode (state, m) {
-    c.uint.preencode(state, m.members)
-    PendingIndexers.preencode(state, m.pendingIndexers)
-    Clock.preencode(state, m.indexers)
-    Clock.preencode(state, m.heads)
-    Clock.preencode(state, m.views)
-    if (m.version >= 2) {
-      c.uint.preencode(state, m.encryptionLength)
-      c.fixed32.preencode(state, m.entropy)
-    }
-  },
-  encode (state, m) {
-    c.uint.encode(state, m.members)
-    PendingIndexers.encode(state, m.pendingIndexers)
-    Clock.encode(state, m.indexers)
-    Clock.encode(state, m.heads)
-    Clock.encode(state, m.views)
-    if (m.version >= 2) {
-      c.uint.encode(state, m.encryptionLength)
-      c.fixed32.encode(state, m.entropy)
-    }
-  },
-  decode (state, version) {
-    return {
-      version,
-      members: c.uint.decode(state),
-      pendingIndexers: PendingIndexers.decode(state),
-      indexers: Clock.decode(state),
-      heads: Clock.decode(state),
-      views: Clock.decode(state),
-      encryptionLength: version >= 2 ? c.uint.decode(state) : 0,
-      entropy: version >= 2 ? c.fixed32.decode(state) : null
+      maxSupportedVersion,
+      digest: null,
+      checkpoint: chk ? { system: chk[0], encryption: null, user: chk.slice(1) } : null,
+      optimistic: null,
+      node
     }
   }
 }
@@ -546,10 +368,24 @@ const LinearizerKey = {
   }
 }
 
+function infoLegacyMap (info) {
+  return {
+    version: info.version,
+    members: info.members,
+    pendingIndexers: info.pendingIndexers,
+    indexers: info.indexers,
+    heads: info.heads,
+    views: info.views,
+    encryptionLength: 0,
+    entropy: null
+  }
+}
+
 module.exports = {
   Wakeup,
-  Info,
-  BootRecord,
-  OplogMessage,
-  LinearizerKey
+  BootRecordV0,
+  OplogMessageV0,
+  OplogMessageV1,
+  LinearizerKey,
+  infoLegacyMap
 }
