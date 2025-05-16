@@ -48,53 +48,17 @@
       ]
     },
     {
-      "name": "wakeupLegacy",
+      "name": "wakeup",
       "namespace": "autobase",
       "external": "Wakeup"
     },
     {
-      "name": "wakeupv2",
+      "name": "bootRecordV0",
       "namespace": "autobase",
-      "compact": false,
-      "flagsPosition": 1,
-      "fields": [
-        {
-          "name": "type",
-          "required": true,
-          "type": "uint",
-          "version": 1
-        },
-        {
-          "name": "writers",
-          "required": false,
-          "type": "@autobase/clock",
-          "version": 1
-        }
-      ]
+      "external": "BootRecordV0"
     },
     {
-      "name": "wakeup",
-      "namespace": "autobase",
-      "versions": [
-        {
-          "type": "@autobase/wakeupLegacy",
-          "map": null,
-          "version": 1
-        },
-        {
-          "type": "@autobase/wakeupv2",
-          "map": null,
-          "version": 2
-        }
-      ]
-    },
-    {
-      "name": "bootRecordLegacy",
-      "namespace": "autobase",
-      "external": "BootRecord"
-    },
-    {
-      "name": "bootRecordv4",
+      "name": "bootRecordRaw",
       "namespace": "autobase",
       "compact": false,
       "flagsPosition": 2,
@@ -136,14 +100,14 @@
       "namespace": "autobase",
       "versions": [
         {
-          "type": "@autobase/bootRecordLegacy",
+          "type": "@autobase/bootRecordV0",
           "map": null,
-          "version": 3
+          "version": 0
         },
         {
-          "type": "@autobase/bootRecordv4",
+          "type": "@autobase/bootRecordRaw",
           "map": null,
-          "version": 4
+          "version": 3
         }
       ]
     },
@@ -278,50 +242,17 @@
       ]
     },
     {
-      "name": "additionalData",
+      "name": "oplogMessageV0",
       "namespace": "autobase",
-      "compact": false,
-      "flagsPosition": 0,
-      "fields": [
-        {
-          "name": "encryptionId",
-          "type": "bool",
-          "version": 1
-        },
-        {
-          "name": "abi",
-          "type": "bool",
-          "version": 1
-        }
-      ]
+      "external": "OplogMessageV0"
     },
     {
-      "name": "additional",
+      "name": "oplogMessageV1",
       "namespace": "autobase",
-      "compact": true,
-      "flagsPosition": 1,
-      "fields": [
-        {
-          "name": "pointer",
-          "required": true,
-          "type": "uint",
-          "version": 1
-        },
-        {
-          "name": "data",
-          "required": false,
-          "type": "@autobase/additionalData",
-          "version": 1
-        }
-      ]
+      "external": "OplogMessageV1"
     },
     {
-      "name": "oplogMessageLegacy",
-      "namespace": "autobase",
-      "external": "OplogMessage"
-    },
-    {
-      "name": "oplogMessagev2",
+      "name": "oplogMessageV2",
       "namespace": "autobase",
       "compact": false,
       "flagsPosition": 0,
@@ -356,12 +287,17 @@
       "namespace": "autobase",
       "versions": [
         {
-          "type": "@autobase/oplogMessageLegacy",
+          "type": "@autobase/oplogMessageV0",
+          "map": null,
+          "version": 0
+        },
+        {
+          "type": "@autobase/oplogMessageV1",
           "map": null,
           "version": 1
         },
         {
-          "type": "@autobase/oplogMessagev2",
+          "type": "@autobase/oplogMessageV2",
           "map": null,
           "version": 2
         }
@@ -379,7 +315,45 @@
       "external": "Info"
     },
     {
-      "name": "infov2",
+      "name": "infoV1",
+      "namespace": "autobase",
+      "compact": false,
+      "flagsPosition": -1,
+      "fields": [
+        {
+          "name": "members",
+          "required": true,
+          "type": "uint",
+          "version": 1
+        },
+        {
+          "name": "pendingIndexers",
+          "required": true,
+          "type": "@autobase/pendingIndexers",
+          "version": 1
+        },
+        {
+          "name": "indexers",
+          "required": true,
+          "type": "@autobase/clock",
+          "version": 1
+        },
+        {
+          "name": "heads",
+          "required": true,
+          "type": "@autobase/clock",
+          "version": 1
+        },
+        {
+          "name": "views",
+          "required": true,
+          "type": "@autobase/clock",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "name": "infoV2",
       "namespace": "autobase",
       "compact": false,
       "flagsPosition": 6,
@@ -433,12 +407,12 @@
       "namespace": "autobase",
       "versions": [
         {
-          "type": "@autobase/infoLegacy",
-          "map": null,
+          "type": "@autobase/infoV1",
+          "map": "infoLegacyMap",
           "version": 1
         },
         {
-          "type": "@autobase/infov2",
+          "type": "@autobase/infoV2",
           "map": null,
           "version": 2
         }
@@ -515,7 +489,7 @@
     {
       "name": "encryptionDescriptor",
       "namespace": "autobase",
-      "compact": true,
+      "compact": false,
       "flagsPosition": -1,
       "fields": [
         {
