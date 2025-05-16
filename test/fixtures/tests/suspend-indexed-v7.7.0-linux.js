@@ -49,7 +49,7 @@ test('suspend - restart from v7.7.0 fixture', { skip }, async t => {
   await replicateAndSync([b, c])
 
   t.is(await c.view.first.get(c.view.first.length - 1), 'c-last')
-t.is(await c.view.second.get(c.view.second.length - 1), 'c99')
+  t.is(await c.view.second.get(c.view.second.length - 1), 'c99')
 })
 
 function openMultiple (store) {

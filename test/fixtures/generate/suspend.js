@@ -240,7 +240,7 @@ test('suspend - restart from v${version} fixture', { skip }, async t => {
 
   await replicateAndSync([b, c])
 
-  ${assertions.map(a => a.padStart(2, ' ')).join('\n')}
+${assertions.map(a => '  ' + a).join('\n')}
 })
 
 function openMultiple (store) {
