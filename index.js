@@ -363,7 +363,7 @@ module.exports = class Autobase extends ReadyResource {
 
     await LocalState.clear(this.local)
 
-    await this._nukeTipBatch(boot.key, boot.indexedLength)
+    await this._nukeTipBatch(boot.key, boot.systemLength)
 
     const core = this.store.get({ key: boot.key, active: false, encryption: null })
     const encCore = await EncryptionView.setSystemEncryption(this, core)
@@ -371,7 +371,7 @@ module.exports = class Autobase extends ReadyResource {
     const batch = core.session({ name: 'batch' })
     await batch.ready()
 
-    const info = await SystemView.getIndexedInfo(batch, boot.indexedLength)
+    const info = await SystemView.getIndexedInfo(batch, boot.systemLength)
     await batch.close()
 
     for (const view of info.views) { // ensure any views ref'ed by system are consistent as well
@@ -566,9 +566,9 @@ module.exports = class Autobase extends ReadyResource {
       : { key: null, systemLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
 
     if (boot.heads) {
-      const len = await this._getMigrationPointer(boot.key, boot.indexedLength)
-      if (len !== boot.indexedLength) this._warn(new Error('Invalid pointer in migration, correcting (' + len + ' vs ' + boot.indexedLength + ')'))
-      boot.indexedLength = len
+      const len = await this._getMigrationPointer(boot.key, boot.systemLength)
+      if (len !== boot.systemLength) this._warn(new Error('Invalid pointer in migration, correcting (' + len + ' vs ' + boot.systemLength + ')'))
+      boot.systemLength = len
     }
 
     return boot
