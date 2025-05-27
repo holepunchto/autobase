@@ -132,12 +132,6 @@
       ]
     },
     {
-      "name": "checkpointerArray",
-      "namespace": "autobase",
-      "array": true,
-      "type": "@autobase/checkpointer"
-    },
-    {
       "name": "checkpoint",
       "namespace": "autobase",
       "compact": false,
@@ -158,42 +152,11 @@
         {
           "name": "user",
           "required": false,
-          "type": "@autobase/checkpointerArray",
+          "array": true,
+          "type": "@autobase/checkpointer",
           "version": 1
         }
       ]
-    },
-    {
-      "name": "indexer",
-      "namespace": "autobase",
-      "compact": true,
-      "flagsPosition": -1,
-      "fields": [
-        {
-          "name": "signature",
-          "required": true,
-          "type": "uint",
-          "version": 1
-        },
-        {
-          "name": "namespace",
-          "required": true,
-          "type": "fixed32",
-          "version": 1
-        },
-        {
-          "name": "publicKey",
-          "required": true,
-          "type": "fixed32",
-          "version": 1
-        }
-      ]
-    },
-    {
-      "name": "indexers",
-      "namespace": "autobase",
-      "array": true,
-      "type": "@autobase/indexer"
     },
     {
       "name": "digest",
@@ -255,8 +218,14 @@
       "name": "oplogMessageV2",
       "namespace": "autobase",
       "compact": false,
-      "flagsPosition": 0,
+      "flagsPosition": 1,
       "fields": [
+        {
+          "name": "node",
+          "required": true,
+          "type": "@autobase/node",
+          "version": 1
+        },
         {
           "name": "checkpoint",
           "required": false,
@@ -272,12 +241,6 @@
         {
           "name": "optimistic",
           "type": "bool",
-          "version": 1
-        },
-        {
-          "name": "node",
-          "required": true,
-          "type": "@autobase/node",
           "version": 1
         }
       ]
@@ -304,12 +267,6 @@
       ]
     },
     {
-      "name": "pendingIndexers",
-      "namespace": "autobase",
-      "array": true,
-      "type": "fixed32"
-    },
-    {
       "name": "infoLegacy",
       "namespace": "autobase",
       "external": "Info"
@@ -329,7 +286,8 @@
         {
           "name": "pendingIndexers",
           "required": true,
-          "type": "@autobase/pendingIndexers",
+          "array": true,
+          "type": "fixed32",
           "version": 1
         },
         {
@@ -367,7 +325,8 @@
         {
           "name": "pendingIndexers",
           "required": true,
-          "type": "@autobase/pendingIndexers",
+          "array": true,
+          "type": "fixed32",
           "version": 1
         },
         {

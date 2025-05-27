@@ -121,12 +121,6 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'checkpointerArray',
-  array: true,
-  type: '@autobase/checkpointer'
-})
-
-autobase.register({
   name: 'checkpoint',
   compact: false,
   fields: [
@@ -142,38 +136,11 @@ autobase.register({
     },
     {
       name: 'user',
-      type: '@autobase/checkpointerArray',
+      type: '@autobase/checkpointer',
+      array: true,
       required: false
     }
   ]
-})
-
-autobase.register({
-  name: 'indexer',
-  compact: true,
-  fields: [
-    {
-      name: 'signature',
-      type: 'uint',
-      required: true
-    },
-    {
-      name: 'namespace',
-      type: 'fixed32',
-      required: true
-    },
-    {
-      name: 'publicKey',
-      type: 'fixed32',
-      required: true
-    }
-  ]
-})
-
-autobase.register({
-  name: 'indexers',
-  array: true,
-  type: '@autobase/indexer'
 })
 
 autobase.register({
@@ -230,6 +197,11 @@ autobase.register({
   compact: false,
   fields: [
     {
+      name: 'node',
+      type: '@autobase/node',
+      required: true
+    },
+    {
       name: 'checkpoint',
       type: '@autobase/checkpoint',
       required: false
@@ -242,11 +214,6 @@ autobase.register({
     {
       name: 'optimistic',
       type: 'bool'
-    },
-    {
-      name: 'node',
-      type: '@autobase/node',
-      required: true
     }
   ]
 })
@@ -270,13 +237,6 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'pendingIndexers',
-  compact: true,
-  array: true,
-  type: 'fixed32'
-})
-
-autobase.register({
   name: 'infoLegacy',
   external: 'Info'
 })
@@ -291,7 +251,8 @@ autobase.register({
     },
     {
       name: 'pendingIndexers',
-      type: '@autobase/pendingIndexers',
+      type: 'fixed32',
+      array: true,
       required: true
     },
     {
@@ -322,7 +283,8 @@ autobase.register({
     },
     {
       name: 'pendingIndexers',
-      type: '@autobase/pendingIndexers',
+      type: 'fixed32',
+      array: true,
       required: true
     },
     {
