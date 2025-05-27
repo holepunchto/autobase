@@ -33,7 +33,7 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'indexCheckpoint',
+  name: 'index-checkpoint',
   compact: true,
   fields: [
     {
@@ -55,12 +55,12 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'bootRecordV0',
+  name: 'boot-record-v0',
   external: 'BootRecordV0'
 })
 
 autobase.register({
-  name: 'bootRecordRaw',
+  name: 'boot-record-raw',
   fields: [
     {
       name: 'key',
@@ -91,15 +91,15 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'bootRecord',
+  name: 'boot-record',
   versions: [
     {
       version: 0,
-      type: '@autobase/bootRecordV0'
+      type: '@autobase/boot-record-v0'
     },
     {
       version: 3,
-      type: '@autobase/bootRecordRaw'
+      type: '@autobase/boot-record-raw'
     }
   ]
 })
@@ -115,7 +115,7 @@ autobase.register({
     },
     {
       name: 'checkpoint',
-      type: '@autobase/indexCheckpoint',
+      type: '@autobase/index-checkpoint',
       required: false
     }
   ]
@@ -184,17 +184,17 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'oplogMessageV0',
+  name: 'oplog-message-v0',
   external: 'OplogMessageV0'
 })
 
 autobase.register({
-  name: 'oplogMessageV1',
+  name: 'oplog-message-v1',
   external: 'OplogMessageV1'
 })
 
 autobase.register({
-  name: 'oplogMessageV2',
+  name: 'oplog-message-v2',
   compact: false,
   fields: [
     {
@@ -220,30 +220,25 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'oplogMessage',
+  name: 'oplog-message',
   versions: [
     {
       version: 0,
-      type: '@autobase/oplogMessageV0'
+      type: '@autobase/oplog-message-v0'
     },
     {
       version: 1,
-      type: '@autobase/oplogMessageV1'
+      type: '@autobase/oplog-message-v1'
     },
     {
       version: 2,
-      type: '@autobase/oplogMessageV2'
+      type: '@autobase/oplog-message-v2'
     }
   ]
 })
 
 autobase.register({
-  name: 'infoLegacy',
-  external: 'Info'
-})
-
-autobase.register({
-  name: 'infoV1',
+  name: 'info-v1',
   fields: [
     {
       name: 'members',
@@ -275,7 +270,7 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'infoV2',
+  name: 'info-v2',
   fields: [
     {
       name: 'members',
@@ -320,12 +315,12 @@ autobase.register({
   name: 'info',
   versions: [
     {
-      type: '@autobase/infoV1',
+      type: '@autobase/info-v1',
       map: 'infoLegacyMap',
       version: 1
     },
     {
-      type: '@autobase/infoV2',
+      type: '@autobase/info-v2',
       version: 2
     }
   ]
@@ -353,12 +348,12 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'linearizerKey',
+  name: 'linearizer-key',
   external: 'LinearizerKey'
 })
 
 autobase.register({
-  name: 'linearizerUpdate',
+  name: 'linearizer-update',
   fields: [
     {
       name: 'key',
@@ -388,7 +383,7 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'encryptionDescriptor',
+  name: 'encryption-descriptor',
   fields: [
     {
       name: 'type',
@@ -409,7 +404,7 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'manifestData',
+  name: 'manifest-data',
   compact: false,
   fields: [
     {

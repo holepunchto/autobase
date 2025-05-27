@@ -28,7 +28,7 @@
       "type": "@autobase/checkout"
     },
     {
-      "name": "indexCheckpoint",
+      "name": "index-checkpoint",
       "namespace": "autobase",
       "compact": true,
       "flagsPosition": -1,
@@ -53,12 +53,12 @@
       "external": "Wakeup"
     },
     {
-      "name": "bootRecordV0",
+      "name": "boot-record-v0",
       "namespace": "autobase",
       "external": "BootRecordV0"
     },
     {
-      "name": "bootRecordRaw",
+      "name": "boot-record-raw",
       "namespace": "autobase",
       "compact": false,
       "flagsPosition": 2,
@@ -96,16 +96,16 @@
       ]
     },
     {
-      "name": "bootRecord",
+      "name": "boot-record",
       "namespace": "autobase",
       "versions": [
         {
-          "type": "@autobase/bootRecordV0",
+          "type": "@autobase/boot-record-v0",
           "map": null,
           "version": 0
         },
         {
-          "type": "@autobase/bootRecordRaw",
+          "type": "@autobase/boot-record-raw",
           "map": null,
           "version": 3
         }
@@ -126,7 +126,7 @@
         {
           "name": "checkpoint",
           "required": false,
-          "type": "@autobase/indexCheckpoint",
+          "type": "@autobase/index-checkpoint",
           "version": 1
         }
       ]
@@ -205,17 +205,17 @@
       ]
     },
     {
-      "name": "oplogMessageV0",
+      "name": "oplog-message-v0",
       "namespace": "autobase",
       "external": "OplogMessageV0"
     },
     {
-      "name": "oplogMessageV1",
+      "name": "oplog-message-v1",
       "namespace": "autobase",
       "external": "OplogMessageV1"
     },
     {
-      "name": "oplogMessageV2",
+      "name": "oplog-message-v2",
       "namespace": "autobase",
       "compact": false,
       "flagsPosition": 1,
@@ -246,33 +246,28 @@
       ]
     },
     {
-      "name": "oplogMessage",
+      "name": "oplog-message",
       "namespace": "autobase",
       "versions": [
         {
-          "type": "@autobase/oplogMessageV0",
+          "type": "@autobase/oplog-message-v0",
           "map": null,
           "version": 0
         },
         {
-          "type": "@autobase/oplogMessageV1",
+          "type": "@autobase/oplog-message-v1",
           "map": null,
           "version": 1
         },
         {
-          "type": "@autobase/oplogMessageV2",
+          "type": "@autobase/oplog-message-v2",
           "map": null,
           "version": 2
         }
       ]
     },
     {
-      "name": "infoLegacy",
-      "namespace": "autobase",
-      "external": "Info"
-    },
-    {
-      "name": "infoV1",
+      "name": "info-v1",
       "namespace": "autobase",
       "compact": false,
       "flagsPosition": -1,
@@ -311,7 +306,7 @@
       ]
     },
     {
-      "name": "infoV2",
+      "name": "info-v2",
       "namespace": "autobase",
       "compact": false,
       "flagsPosition": 6,
@@ -366,12 +361,12 @@
       "namespace": "autobase",
       "versions": [
         {
-          "type": "@autobase/infoV1",
+          "type": "@autobase/info-v1",
           "map": "infoLegacyMap",
           "version": 1
         },
         {
-          "type": "@autobase/infoV2",
+          "type": "@autobase/info-v2",
           "map": null,
           "version": 2
         }
@@ -404,12 +399,12 @@
       ]
     },
     {
-      "name": "linearizerKey",
+      "name": "linearizer-key",
       "namespace": "autobase",
       "external": "LinearizerKey"
     },
     {
-      "name": "linearizerUpdate",
+      "name": "linearizer-update",
       "namespace": "autobase",
       "compact": false,
       "flagsPosition": 4,
@@ -446,7 +441,7 @@
       ]
     },
     {
-      "name": "encryptionDescriptor",
+      "name": "encryption-descriptor",
       "namespace": "autobase",
       "compact": false,
       "flagsPosition": -1,
@@ -472,7 +467,7 @@
       ]
     },
     {
-      "name": "manifestData",
+      "name": "manifest-data",
       "namespace": "autobase",
       "compact": false,
       "flagsPosition": 1,

@@ -35,7 +35,7 @@ const encoding0 = {
 // @autobase/clock
 const encoding1 = c.array(encoding0)
 
-// @autobase/indexCheckpoint
+// @autobase/index-checkpoint
 const encoding2 = {
   preencode (state, m) {
     c.fixed64.preencode(state, m.signature)
@@ -60,7 +60,7 @@ const encoding3 = external0.Wakeup
 
 const encoding4 = external0.BootRecordV0
 
-// @autobase/bootRecordRaw
+// @autobase/boot-record-raw
 const encoding5 = {
   preencode (state, m) {
     c.fixed32.preencode(state, m.key)
@@ -98,7 +98,7 @@ const encoding5 = {
   }
 }
 
-// @autobase/bootRecord
+// @autobase/boot-record
 const encoding6 = {
   preencode (state, m) {
     c.uint.preencode(state, m.version)
@@ -267,12 +267,12 @@ const encoding11 = external0.OplogMessageV0
 
 const encoding12 = external0.OplogMessageV1
 
-// @autobase/oplogMessageV2.checkpoint
+// @autobase/oplog-message-v2.checkpoint
 const encoding13_1 = c.frame(encoding8)
-// @autobase/oplogMessageV2.digest
+// @autobase/oplog-message-v2.digest
 const encoding13_2 = c.frame(encoding9)
 
-// @autobase/oplogMessageV2
+// @autobase/oplog-message-v2
 const encoding13 = {
   preencode (state, m) {
     encoding10.preencode(state, m.node)
@@ -308,7 +308,7 @@ const encoding13 = {
   }
 }
 
-// @autobase/oplogMessage
+// @autobase/oplog-message
 const encoding14 = {
   preencode (state, m) {
     c.uint.preencode(state, m.version)
@@ -363,23 +363,21 @@ const encoding14 = {
   }
 }
 
-const encoding15 = external0.Info
+// @autobase/info-v1.pendingIndexers
+const encoding15_1 = c.array(c.fixed32)
 
-// @autobase/infoV1.pendingIndexers
-const encoding16_1 = c.array(c.fixed32)
-
-// @autobase/infoV1
-const encoding16 = {
+// @autobase/info-v1
+const encoding15 = {
   preencode (state, m) {
     c.uint.preencode(state, m.members)
-    encoding16_1.preencode(state, m.pendingIndexers)
+    encoding15_1.preencode(state, m.pendingIndexers)
     encoding1.preencode(state, m.indexers)
     encoding1.preencode(state, m.heads)
     encoding1.preencode(state, m.views)
   },
   encode (state, m) {
     c.uint.encode(state, m.members)
-    encoding16_1.encode(state, m.pendingIndexers)
+    encoding15_1.encode(state, m.pendingIndexers)
     encoding1.encode(state, m.indexers)
     encoding1.encode(state, m.heads)
     encoding1.encode(state, m.views)
@@ -387,7 +385,7 @@ const encoding16 = {
   decode (state, version) {
     if (version === undefined) version = c.uint.decode(state)
     const r0 = c.uint.decode(state)
-    const r1 = encoding16_1.decode(state)
+    const r1 = encoding15_1.decode(state)
     const r2 = encoding1.decode(state)
     const r3 = encoding1.decode(state)
     const r4 = encoding1.decode(state)
@@ -403,14 +401,14 @@ const encoding16 = {
   }
 }
 
-// @autobase/infoV2.pendingIndexers
-const encoding17_1 = encoding16_1
+// @autobase/info-v2.pendingIndexers
+const encoding16_1 = encoding15_1
 
-// @autobase/infoV2
-const encoding17 = {
+// @autobase/info-v2
+const encoding16 = {
   preencode (state, m) {
     c.uint.preencode(state, m.members)
-    encoding17_1.preencode(state, m.pendingIndexers)
+    encoding16_1.preencode(state, m.pendingIndexers)
     encoding1.preencode(state, m.indexers)
     encoding1.preencode(state, m.heads)
     encoding1.preencode(state, m.views)
@@ -423,7 +421,7 @@ const encoding17 = {
     const flags = m.entropy ? 1 : 0
 
     c.uint.encode(state, m.members)
-    encoding17_1.encode(state, m.pendingIndexers)
+    encoding16_1.encode(state, m.pendingIndexers)
     encoding1.encode(state, m.indexers)
     encoding1.encode(state, m.heads)
     encoding1.encode(state, m.views)
@@ -435,7 +433,7 @@ const encoding17 = {
   decode (state, version) {
     if (version === undefined) version = c.uint.decode(state)
     const r0 = c.uint.decode(state)
-    const r1 = encoding17_1.decode(state)
+    const r1 = encoding16_1.decode(state)
     const r2 = encoding1.decode(state)
     const r3 = encoding1.decode(state)
     const r4 = encoding1.decode(state)
@@ -456,16 +454,16 @@ const encoding17 = {
 }
 
 // @autobase/info
-const encoding18 = {
+const encoding17 = {
   preencode (state, m) {
     c.uint.preencode(state, m.version)
     switch (m.version) {
       case 0:
       case 1:
-        encoding16.preencode(state, m)
+        encoding15.preencode(state, m)
         break
       case 2:
-        encoding17.preencode(state, m)
+        encoding16.preencode(state, m)
         break
       default:
         throw new Error('Unsupported version')
@@ -476,10 +474,10 @@ const encoding18 = {
     switch (m.version) {
       case 0:
       case 1:
-        encoding16.encode(state, m)
+        encoding15.encode(state, m)
         break
       case 2:
-        encoding17.encode(state, m)
+        encoding16.encode(state, m)
         break
       default:
         throw new Error('Unsupported version')
@@ -490,12 +488,12 @@ const encoding18 = {
     switch (version) {
       case 0:
       case 1: {
-        const decoded = encoding16.decode(state, version)
+        const decoded = encoding15.decode(state, version)
         const map = external0.infoLegacyMap
         return map(decoded)
       }
       case 2: {
-        const decoded = encoding17.decode(state, version)
+        const decoded = encoding16.decode(state, version)
         return decoded
       }
       default:
@@ -505,7 +503,7 @@ const encoding18 = {
 }
 
 // @autobase/member
-const encoding19 = {
+const encoding18 = {
   preencode (state, m) {
     state.end++ // max flag is 2 so always one byte
     c.uint.preencode(state, m.length)
@@ -529,10 +527,10 @@ const encoding19 = {
   }
 }
 
-const encoding20 = external0.LinearizerKey
+const encoding19 = external0.LinearizerKey
 
-// @autobase/linearizerUpdate
-const encoding21 = {
+// @autobase/linearizer-update
+const encoding20 = {
   preencode (state, m) {
     c.fixed32.preencode(state, m.key)
     c.uint.preencode(state, m.length)
@@ -566,8 +564,8 @@ const encoding21 = {
   }
 }
 
-// @autobase/encryptionDescriptor
-const encoding22 = {
+// @autobase/encryption-descriptor
+const encoding21 = {
   preencode (state, m) {
     c.uint.preencode(state, m.type)
     c.uint.preencode(state, m.version)
@@ -591,8 +589,8 @@ const encoding22 = {
   }
 }
 
-// @autobase/manifestData
-const encoding23 = {
+// @autobase/manifest-data
+const encoding22 = {
   preencode (state, m) {
     c.uint.preencode(state, m.version)
     state.end++ // max flag is 1 so always one byte
@@ -642,28 +640,27 @@ function getEncoding (name) {
   switch (name) {
     case '@autobase/checkout': return encoding0
     case '@autobase/clock': return encoding1
-    case '@autobase/indexCheckpoint': return encoding2
+    case '@autobase/index-checkpoint': return encoding2
     case '@autobase/wakeup': return encoding3
-    case '@autobase/bootRecordV0': return encoding4
-    case '@autobase/bootRecordRaw': return encoding5
-    case '@autobase/bootRecord': return encoding6
+    case '@autobase/boot-record-v0': return encoding4
+    case '@autobase/boot-record-raw': return encoding5
+    case '@autobase/boot-record': return encoding6
     case '@autobase/checkpointer': return encoding7
     case '@autobase/checkpoint': return encoding8
     case '@autobase/digest': return encoding9
     case '@autobase/node': return encoding10
-    case '@autobase/oplogMessageV0': return encoding11
-    case '@autobase/oplogMessageV1': return encoding12
-    case '@autobase/oplogMessageV2': return encoding13
-    case '@autobase/oplogMessage': return encoding14
-    case '@autobase/infoLegacy': return encoding15
-    case '@autobase/infoV1': return encoding16
-    case '@autobase/infoV2': return encoding17
-    case '@autobase/info': return encoding18
-    case '@autobase/member': return encoding19
-    case '@autobase/linearizerKey': return encoding20
-    case '@autobase/linearizerUpdate': return encoding21
-    case '@autobase/encryptionDescriptor': return encoding22
-    case '@autobase/manifestData': return encoding23
+    case '@autobase/oplog-message-v0': return encoding11
+    case '@autobase/oplog-message-v1': return encoding12
+    case '@autobase/oplog-message-v2': return encoding13
+    case '@autobase/oplog-message': return encoding14
+    case '@autobase/info-v1': return encoding15
+    case '@autobase/info-v2': return encoding16
+    case '@autobase/info': return encoding17
+    case '@autobase/member': return encoding18
+    case '@autobase/linearizer-key': return encoding19
+    case '@autobase/linearizer-update': return encoding20
+    case '@autobase/encryption-descriptor': return encoding21
+    case '@autobase/manifest-data': return encoding22
     default: throw new Error('Encoder not found ' + name)
   }
 }
