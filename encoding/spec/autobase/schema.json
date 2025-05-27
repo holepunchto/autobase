@@ -453,12 +453,6 @@
           "version": 1
         },
         {
-          "name": "version",
-          "required": true,
-          "type": "uint",
-          "version": 1
-        },
-        {
           "name": "payload",
           "required": true,
           "type": "buffer",

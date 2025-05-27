@@ -568,23 +568,19 @@ const encoding20 = {
 const encoding21 = {
   preencode (state, m) {
     c.uint.preencode(state, m.type)
-    c.uint.preencode(state, m.version)
     c.buffer.preencode(state, m.payload)
   },
   encode (state, m) {
     c.uint.encode(state, m.type)
-    c.uint.encode(state, m.version)
     c.buffer.encode(state, m.payload)
   },
   decode (state) {
     const r0 = c.uint.decode(state)
-    const r1 = c.uint.decode(state)
-    const r2 = c.buffer.decode(state)
+    const r1 = c.buffer.decode(state)
 
     return {
       type: r0,
-      version: r1,
-      payload: r2
+      payload: r1
     }
   }
 }

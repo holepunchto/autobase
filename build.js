@@ -391,11 +391,6 @@ autobase.register({
       required: true
     },
     {
-      name: 'version',
-      type: 'uint',
-      required: true
-    },
-    {
       name: 'payload',
       type: 'buffer',
       required: true
