@@ -31,7 +31,7 @@ const ApplyState = require('./lib/apply-state.js')
 const { PublicApplyCalls } = require('./lib/apply-calls.js')
 const boot = require('./lib/boot.js')
 const {
-  DEFAULT_AUTOBASE_VERSION,
+  OPLOG_VERSION,
   MAX_AUTOBASE_VERSION,
   BOOT_RECORD_VERSION
 } = require('./lib/caps.js')
@@ -164,8 +164,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this._onremotewriterchangeBound = this._onremotewriterchange.bind(this)
     this._onlocalwriterchangeBound = this._onlocalwriterchange.bind(this)
-
-    this.maxSupportedVersion = DEFAULT_AUTOBASE_VERSION // working version
 
     this._preopen = null
 
@@ -959,8 +957,7 @@ module.exports = class Autobase extends ReadyResource {
 
   static encodeValue (value, opts = {}) {
     const block = c.encode(messages.OplogMessage, {
-      version: opts.version || DEFAULT_AUTOBASE_VERSION,
-      maxSupportedVersion: opts.maxVersion || DEFAULT_AUTOBASE_VERSION,
+      version: opts.version || OPLOG_VERSION,
       digest: null,
       checkpoint: null,
       optimistic: !!opts.optimistic,
@@ -1547,7 +1544,7 @@ module.exports = class Autobase extends ReadyResource {
       const batch = this._appending.length - i
       const value = this._appending[i]
 
-      const node = this.localWriter.append(value, heads, batch, deps, this.maxSupportedVersion, this._optimistic === 0)
+      const node = this.localWriter.append(value, heads, batch, deps, OPLOG_VERSION, this._optimistic === 0)
 
       this.linearizer.addHead(node)
       nodes[i] = node
