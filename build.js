@@ -1,12 +1,13 @@
 const path = require('path')
 const Hyperschema = require('hyperschema')
 
-const SPEC = path.join(__dirname, 'spec/autobase')
+const DIR = path.join(__dirname, 'encoding')
+const SPEC = path.join(DIR, 'spec/autobase')
 
 const schema = Hyperschema.from(SPEC, { versioned: true })
 const autobase = schema.namespace('autobase')
 
-autobase.require(path.join(__dirname, './legacy.js'))
+autobase.require(path.join(DIR, 'legacy.js'))
 
 autobase.register({
   name: 'checkout',

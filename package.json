@@ -15,7 +15,8 @@
   },
   "files": [
     "index.js",
-    "lib/**"
+    "lib/**",
+    "encoding/**"
   ],
   "imports": {
     "events": {
