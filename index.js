@@ -30,7 +30,11 @@ const AutoStore = require('./lib/store.js')
 const ApplyState = require('./lib/apply-state.js')
 const { PublicApplyCalls } = require('./lib/apply-calls.js')
 const boot = require('./lib/boot.js')
-const { DEFAULT_AUTOBASE_VERSION, MAX_AUTOBASE_VERSION } = require('./lib/caps.js')
+const {
+  OPLOG_VERSION,
+  MAX_AUTOBASE_VERSION,
+  BOOT_RECORD_VERSION
+} = require('./lib/caps.js')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 const INTERRUPT = new Error('Apply interrupted')
@@ -160,8 +164,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this._onremotewriterchangeBound = this._onremotewriterchange.bind(this)
     this._onlocalwriterchangeBound = this._onlocalwriterchange.bind(this)
-
-    this.maxSupportedVersion = DEFAULT_AUTOBASE_VERSION // working version
 
     this._preopen = null
 
@@ -564,7 +566,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const boot = pointer
       ? c.decode(messages.BootRecord, pointer)
-      : { key: null, systemLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
+      : { version: BOOT_RECORD_VERSION, key: null, systemLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
 
     if (boot.heads) {
       const len = await this._getMigrationPointer(boot.key, boot.systemLength)
@@ -955,8 +957,7 @@ module.exports = class Autobase extends ReadyResource {
 
   static encodeValue (value, opts = {}) {
     const block = c.encode(messages.OplogMessage, {
-      version: opts.version || DEFAULT_AUTOBASE_VERSION,
-      maxSupportedVersion: opts.maxVersion || DEFAULT_AUTOBASE_VERSION,
+      version: opts.version || OPLOG_VERSION,
       digest: null,
       checkpoint: null,
       optimistic: !!opts.optimistic,
@@ -1308,6 +1309,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const value = c.encode(messages.BootRecord, {
+      version: BOOT_RECORD_VERSION,
       key,
       systemLength: length,
       indexersUpdated: false,
@@ -1542,7 +1544,7 @@ module.exports = class Autobase extends ReadyResource {
       const batch = this._appending.length - i
       const value = this._appending[i]
 
-      const node = this.localWriter.append(value, heads, batch, deps, this.maxSupportedVersion, this._optimistic === 0)
+      const node = this.localWriter.append(value, heads, batch, deps, OPLOG_VERSION, this._optimistic === 0)
 
       this.linearizer.addHead(node)
       nodes[i] = node
