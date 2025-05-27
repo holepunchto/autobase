@@ -19,6 +19,11 @@ const {
 main().catch(console.error)
 
 async function main () {
+  await unindexed()
+  await indexed()
+}
+
+async function unindexed () {
   const closing = []
   const t = { teardown }
 
@@ -30,10 +35,11 @@ async function main () {
 
   const [a] = bases
 
+  const title = 'unindexed'
   const platform = os.platform()
 
-  const testPath = path.resolve(__dirname, '..', `tests/suspend-v${version}-${platform}.js`)
-  const fixturePath = path.join(__dirname, '..', `data/suspend/${platform}/corestore-v${version}`)
+  const testPath = path.resolve(__dirname, '..', `tests/suspend-${title}-v${version}-${platform}.js`)
+  const fixturePath = path.join(__dirname, '..', `data/suspend/${title}/${platform}/corestore-v${version}`)
 
   const bstore = new Corestore(path.join(fixturePath, 'b'))
   const cstore = new Corestore(path.join(fixturePath, 'c'))
@@ -86,7 +92,12 @@ async function main () {
 
   await shutdown
 
-  await fs.writeFile(testPath, generate(version, n, exp, os.platform()))
+  const assertions = [
+    "t.is(await c.view.first.get(c.view.first.length - 1), 'c-last')",
+    `t.is(await c.view.second.get(c.view.second.length - 1), 'b${n - 1}')`
+  ]
+
+  await fs.writeFile(testPath, generate(version, assertions, exp, title, os.platform()))
 
   console.log('Test was written to:', testPath)
 
@@ -99,7 +110,86 @@ async function main () {
   }
 }
 
-function generate (version, n, exp, platform) {
+async function indexed () {
+  const closing = []
+  const t = { teardown }
+
+  const { bases } = await create(1, t, {
+    apply: applyMultiple,
+    open: openMultiple,
+    encryptionKey: b4a.alloc(32).fill('secret')
+  })
+
+  const [a] = bases
+
+  const title = 'indexed'
+  const platform = os.platform()
+
+  const testPath = path.resolve(__dirname, '..', `tests/suspend-${title}-v${version}-${platform}.js`)
+  const fixturePath = path.join(__dirname, '..', `data/suspend/${title}/${platform}/corestore-v${version}`)
+
+  const bstore = new Corestore(path.join(fixturePath, 'b'))
+  const cstore = new Corestore(path.join(fixturePath, 'c'))
+
+  const b = await createBase(bstore.session(), a.local.key, t, {
+    apply: applyMultiple,
+    open: openMultiple,
+    encryptionKey: b4a.alloc(32).fill('secret')
+  })
+
+  const c = await createBase(cstore.session(), a.local.key, t, {
+    apply: applyMultiple,
+    open: openMultiple,
+    encryptionKey: b4a.alloc(32).fill('secret')
+  })
+
+  await b.ready()
+  await c.ready()
+
+  await addWriterAndSync(a, b, false)
+  await addWriterAndSync(a, c, true)
+
+  await replicateAndSync([a, b, c])
+  await c.append('c0')
+  await confirm([a, b, c])
+
+  let n = 0
+
+  // writer has indexed nodes
+  for (let i = 0; i < 100; i++) await c.append({ index: (i % 2) + 1, data: 'c' + n++ })
+
+  await confirm([a, b, c])
+  await c.append(null)
+
+  const exp = { key: b4a.toString(c.local.key, 'hex'), length: c.local.length }
+
+  await c.close()
+  await b.close()
+
+  await bstore.close()
+  await cstore.close()
+
+  await shutdown
+
+  const assertions = [
+    "t.is(await c.view.first.get(c.view.first.length - 1), 'c-last')",
+    `t.is(await c.view.second.get(c.view.second.length - 1), 'c${n - 1}')`
+  ]
+
+  await fs.writeFile(testPath, generate(version, assertions, exp, title, os.platform()))
+
+  console.log('Test was written to:', testPath)
+
+  function teardown (fn) {
+    closing.push(fn)
+  }
+
+  function shutdown () {
+    return Promise.all(closing.map(fn => fn()))
+  }
+}
+
+function generate (version, assertions, exp, dir, platform) {
   return `const fs = require('fs/promises')
 const os = require('os')
 const path = require('path')
@@ -113,7 +203,7 @@ const skip = os.platform() !== '${platform}' // fixture was generated on ${platf
 const { createBase, replicateAndSync } = require('../../helpers')
 
 test('suspend - restart from v${version} fixture', { skip }, async t => {
-  const fixturePath = path.join(__dirname, '../data/suspend/${platform}/corestore-v${version}')
+  const fixturePath = path.join(__dirname, '../data/suspend/${dir}/${platform}/corestore-v${version}')
 
   const bdir = await tmpDir(t)
   const cdir = await tmpDir(t)
@@ -143,15 +233,14 @@ test('suspend - restart from v${version} fixture', { skip }, async t => {
     length: ${exp.length}
   }
 
-  await c.append({ index: 1, data: 'c' + ${n} })
+  await c.append({ index: 1, data: 'c-last' })
 
   const last = await c.local.get(c.local.length - 1)
   t.alike(last.node.heads, [exp])
 
   await replicateAndSync([b, c])
 
-  t.is(await c.view.first.get(c.view.first.length - 1), 'c' + ${n})
-  t.is(await c.view.second.get(c.view.second.length - 1), 'b' + ${n - 1})
+${assertions.map(a => '  ' + a).join('\n')}
 })
 
 function openMultiple (store) {
@@ -164,7 +253,7 @@ function openMultiple (store) {
 async function applyMultiple (batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
-      await base.addWriter(Buffer.from(value.add, 'hex'))
+      await base.addWriter(Buffer.from(value.add, 'hex'), { indexer: !!value.indexer })
       continue
     }
 
@@ -188,7 +277,7 @@ function openMultiple (store) {
 async function applyMultiple (batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
-      await base.addWriter(Buffer.from(value.add, 'hex'))
+      await base.addWriter(Buffer.from(value.add, 'hex'), { indexer: value.indexer })
       continue
     }
 
