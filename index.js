@@ -10,7 +10,6 @@ const CoreCoupler = require('core-coupler')
 const mutexify = require('mutexify/promise')
 const ProtomuxWakeup = require('protomux-wakeup')
 const rrp = require('resolve-reject-promise')
-const crypto = require('hypercore-crypto')
 const Hypercore = require('hypercore')
 
 const LocalState = require('./lib/local-state.js')
