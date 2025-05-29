@@ -411,6 +411,11 @@ autobase.register({
       name: 'legacyBlocks',
       type: 'uint',
       required: false
+    },
+    {
+      name: 'entropy',
+      type: 'fixed32',
+      required: false
     }
   ]
 })

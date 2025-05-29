@@ -477,6 +477,12 @@
           "required": false,
           "type": "uint",
           "version": 1
+        },
+        {
+          "name": "entropy",
+          "required": false,
+          "type": "fixed32",
+          "version": 1
         }
       ]
     }
