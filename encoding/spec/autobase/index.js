@@ -65,7 +65,7 @@ const encoding5 = {
   preencode (state, m) {
     c.fixed32.preencode(state, m.key)
     c.uint.preencode(state, m.systemLength)
-    state.end++ // max flag is 8 so always one byte
+    state.end++ // max flag is 4 so always one byte
 
     if (m.recoveries) c.uint.preencode(state, m.recoveries)
   },
@@ -73,8 +73,7 @@ const encoding5 = {
     const flags =
       (m.indexersUpdated ? 1 : 0) |
       (m.fastForwarding ? 2 : 0) |
-      (m.recoveries ? 4 : 0) |
-      (m.migrating ? 8 : 0)
+      (m.recoveries ? 4 : 0)
 
     c.fixed32.encode(state, m.key)
     c.uint.encode(state, m.systemLength)
@@ -94,8 +93,7 @@ const encoding5 = {
       systemLength: r1,
       indexersUpdated: (flags & 1) !== 0,
       fastForwarding: (flags & 2) !== 0,
-      recoveries: (flags & 4) !== 0 ? c.uint.decode(state) : 0,
-      migrating: (flags & 8) !== 0
+      recoveries: (flags & 4) !== 0 ? c.uint.decode(state) : 0
     }
   }
 }
