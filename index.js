@@ -674,6 +674,10 @@ module.exports = class Autobase extends ReadyResource {
       throw err
     }
 
+    if (await this._applyState.shouldMigrate()) {
+      await this._migrate()
+    }
+
     try {
       await this._openLinearizer()
       await this.core.ready()
