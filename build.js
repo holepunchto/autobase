@@ -29,6 +29,7 @@ autobase.register({
 autobase.register({
   name: 'clock',
   array: true,
+  compact: true,
   type: '@autobase/checkout'
 })
 
@@ -75,16 +76,21 @@ autobase.register({
     {
       name: 'indexersUpdated',
       type: 'bool',
-      required: true
+      required: false
     },
     {
       name: 'fastForwarding',
       type: 'bool',
-      required: true
+      required: false
     },
     {
       name: 'recoveries',
       type: 'uint',
+      required: false
+    },
+    {
+      name: 'migrating',
+      type: 'bool',
       required: false
     }
   ]
@@ -111,7 +117,7 @@ autobase.register({
     {
       name: 'checkpointer',
       type: 'uint',
-      required: true
+      required: false
     },
     {
       name: 'checkpoint',
@@ -151,7 +157,7 @@ autobase.register({
     {
       name: 'pointer',
       type: 'uint',
-      required: true
+      required: false
     },
     {
       name: 'key',
@@ -214,7 +220,8 @@ autobase.register({
     },
     {
       name: 'optimistic',
-      type: 'bool'
+      type: 'bool',
+      required: false
     }
   ]
 })
@@ -377,7 +384,8 @@ autobase.register({
     },
     {
       name: 'indexers',
-      type: 'bool'
+      type: 'bool',
+      required: false
     }
   ]
 })

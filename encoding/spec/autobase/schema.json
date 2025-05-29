@@ -92,6 +92,12 @@
           "required": false,
           "type": "uint",
           "version": 1
+        },
+        {
+          "name": "migrating",
+          "required": false,
+          "type": "bool",
+          "version": 1
         }
       ]
     },
@@ -115,11 +121,11 @@
       "name": "checkpointer",
       "namespace": "autobase",
       "compact": true,
-      "flagsPosition": 1,
+      "flagsPosition": 0,
       "fields": [
         {
           "name": "checkpointer",
-          "required": true,
+          "required": false,
           "type": "uint",
           "version": 1
         },
@@ -162,11 +168,11 @@
       "name": "digest",
       "namespace": "autobase",
       "compact": false,
-      "flagsPosition": 1,
+      "flagsPosition": 0,
       "fields": [
         {
           "name": "pointer",
-          "required": true,
+          "required": false,
           "type": "uint",
           "version": 1
         },
@@ -240,6 +246,7 @@
         },
         {
           "name": "optimistic",
+          "required": false,
           "type": "bool",
           "version": 1
         }
@@ -435,6 +442,7 @@
         },
         {
           "name": "indexers",
+          "required": false,
           "type": "bool",
           "version": 1
         }

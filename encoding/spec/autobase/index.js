@@ -65,7 +65,7 @@ const encoding5 = {
   preencode (state, m) {
     c.fixed32.preencode(state, m.key)
     c.uint.preencode(state, m.systemLength)
-    state.end++ // max flag is 4 so always one byte
+    state.end++ // max flag is 8 so always one byte
 
     if (m.recoveries) c.uint.preencode(state, m.recoveries)
   },
@@ -73,7 +73,8 @@ const encoding5 = {
     const flags =
       (m.indexersUpdated ? 1 : 0) |
       (m.fastForwarding ? 2 : 0) |
-      (m.recoveries ? 4 : 0)
+      (m.recoveries ? 4 : 0) |
+      (m.migrating ? 8 : 0)
 
     c.fixed32.encode(state, m.key)
     c.uint.encode(state, m.systemLength)
@@ -93,7 +94,8 @@ const encoding5 = {
       systemLength: r1,
       indexersUpdated: (flags & 1) !== 0,
       fastForwarding: (flags & 2) !== 0,
-      recoveries: (flags & 4) !== 0 ? c.uint.decode(state) : 0
+      recoveries: (flags & 4) !== 0 ? c.uint.decode(state) : 0,
+      migrating: (flags & 8) !== 0
     }
   }
 }
@@ -152,26 +154,27 @@ const encoding6 = {
 // @autobase/checkpointer
 const encoding7 = {
   preencode (state, m) {
-    c.uint.preencode(state, m.checkpointer)
-    state.end++ // max flag is 1 so always one byte
+    state.end++ // max flag is 2 so always one byte
 
+    if (m.checkpointer) c.uint.preencode(state, m.checkpointer)
     if (m.checkpoint) encoding2.preencode(state, m.checkpoint)
   },
   encode (state, m) {
-    const flags = m.checkpoint ? 1 : 0
+    const flags =
+      (m.checkpointer ? 1 : 0) |
+      (m.checkpoint ? 2 : 0)
 
-    c.uint.encode(state, m.checkpointer)
     c.uint.encode(state, flags)
 
+    if (m.checkpointer) c.uint.encode(state, m.checkpointer)
     if (m.checkpoint) encoding2.encode(state, m.checkpoint)
   },
   decode (state) {
-    const r0 = c.uint.decode(state)
     const flags = c.uint.decode(state)
 
     return {
-      checkpointer: r0,
-      checkpoint: (flags & 1) !== 0 ? encoding2.decode(state) : null
+      checkpointer: (flags & 1) !== 0 ? c.uint.decode(state) : 0,
+      checkpoint: (flags & 2) !== 0 ? encoding2.decode(state) : null
     }
   }
 }
@@ -214,26 +217,27 @@ const encoding8 = {
 // @autobase/digest
 const encoding9 = {
   preencode (state, m) {
-    c.uint.preencode(state, m.pointer)
-    state.end++ // max flag is 1 so always one byte
+    state.end++ // max flag is 2 so always one byte
 
+    if (m.pointer) c.uint.preencode(state, m.pointer)
     if (m.key) c.fixed32.preencode(state, m.key)
   },
   encode (state, m) {
-    const flags = m.key ? 1 : 0
+    const flags =
+      (m.pointer ? 1 : 0) |
+      (m.key ? 2 : 0)
 
-    c.uint.encode(state, m.pointer)
     c.uint.encode(state, flags)
 
+    if (m.pointer) c.uint.encode(state, m.pointer)
     if (m.key) c.fixed32.encode(state, m.key)
   },
   decode (state) {
-    const r0 = c.uint.decode(state)
     const flags = c.uint.decode(state)
 
     return {
-      pointer: r0,
-      key: (flags & 1) !== 0 ? c.fixed32.decode(state) : null
+      pointer: (flags & 1) !== 0 ? c.uint.decode(state) : 0,
+      key: (flags & 2) !== 0 ? c.fixed32.decode(state) : null
     }
   }
 }
