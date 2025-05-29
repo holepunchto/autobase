@@ -87,11 +87,6 @@ autobase.register({
       name: 'recoveries',
       type: 'uint',
       required: false
-    },
-    {
-      name: 'migrating',
-      type: 'bool',
-      required: false
     }
   ]
 })

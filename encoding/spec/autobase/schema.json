@@ -92,12 +92,6 @@
           "required": false,
           "type": "uint",
           "version": 1
-        },
-        {
-          "name": "migrating",
-          "required": false,
-          "type": "bool",
-          "version": 1
         }
       ]
     },

@@ -674,10 +674,6 @@ module.exports = class Autobase extends ReadyResource {
       throw err
     }
 
-    if (await this._applyState.shouldMigrate()) {
-      await this._migrate()
-    }
-
     try {
       await this._openLinearizer()
       await this.core.ready()
@@ -1428,7 +1424,7 @@ module.exports = class Autobase extends ReadyResource {
     return ref
   }
 
-  async _migrate () {
+  async _premigrate () {
     const length = this._applyState.indexedLength
     const system = this._applyState.system
 
@@ -1444,23 +1440,27 @@ module.exports = class Autobase extends ReadyResource {
       const indexedLength = v ? v.length : 0
 
       const ref = this._viewStore.getViewByName(view.name)
-      const source = ref.batch || ref.core
+      const source = ref.getCore()
       await source.ready()
 
       await this._migrateView(indexerManifests, source, view.name, indexedLength, manifestVersion, info.entropy, null, null)
     }
 
-    const source = encryptionView.ref.batch || encryptionView.ref.core
+    const source = encryptionView.ref.getCore()
     await source.ready()
 
     const enc = await this._migrateView(indexerManifests, source, '_encryption', info.encryptionLength, manifestVersion, info.entropy, null, null)
 
     const linked = [enc.core.key]
 
-    const sysCore = systemView.ref.batch
+    const sysCore = systemView.ref.getCore()
     const ref = await this._migrateView(indexerManifests, sysCore, '_system', length, manifestVersion, info.entropy, linked, null, null)
 
-    return this._reboot(ref.core.key)
+    return ref.core.key
+  }
+
+  async _migrate () {
+    return this._reboot(await this._premigrate())
   }
 
   async _reboot (key) {
@@ -1632,9 +1632,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       await this._gcWriters()
-
-      if (update.migrated) await this._migrate()
-      else await this._reboot(this._applyState.system.core.key)
+      await this._reboot(this._applyState.key)
     }
 
     // emit state changes post drain
