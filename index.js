@@ -20,7 +20,7 @@ const UpdateChanges = require('./lib/updates.js')
 const messages = require('./lib/messages.js')
 const Timer = require('./lib/timer.js')
 const Writer = require('./lib/writer.js')
-const { encodeValue, decodeValue } = require('./lib/encode-value.js')
+const { encodeValue, decodeValue } = require('./lib/values.js')
 const ActiveWriters = require('./lib/active-writers.js')
 const AutoWakeup = require('./lib/wakeup.js')
 
