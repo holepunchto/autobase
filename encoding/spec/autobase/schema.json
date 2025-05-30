@@ -479,7 +479,7 @@
           "version": 1
         },
         {
-          "name": "entropy",
+          "name": "namespace",
           "required": false,
           "type": "fixed32",
           "version": 1

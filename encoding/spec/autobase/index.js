@@ -592,18 +592,18 @@ const encoding22 = {
     state.end++ // max flag is 2 so always one byte
 
     if (m.legacyBlocks) c.uint.preencode(state, m.legacyBlocks)
-    if (m.entropy) c.fixed32.preencode(state, m.entropy)
+    if (m.namespace) c.fixed32.preencode(state, m.namespace)
   },
   encode (state, m) {
     const flags =
       (m.legacyBlocks ? 1 : 0) |
-      (m.entropy ? 2 : 0)
+      (m.namespace ? 2 : 0)
 
     c.uint.encode(state, m.version)
     c.uint.encode(state, flags)
 
     if (m.legacyBlocks) c.uint.encode(state, m.legacyBlocks)
-    if (m.entropy) c.fixed32.encode(state, m.entropy)
+    if (m.namespace) c.fixed32.encode(state, m.namespace)
   },
   decode (state) {
     const r0 = c.uint.decode(state)
@@ -612,7 +612,7 @@ const encoding22 = {
     return {
       version: r0,
       legacyBlocks: (flags & 1) !== 0 ? c.uint.decode(state) : 0,
-      entropy: (flags & 2) !== 0 ? c.fixed32.decode(state) : null
+      namespace: (flags & 2) !== 0 ? c.fixed32.decode(state) : null
     }
   }
 }

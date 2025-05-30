@@ -413,7 +413,7 @@ autobase.register({
       required: false
     },
     {
-      name: 'entropy',
+      name: 'namespace',
       type: 'fixed32',
       required: false
     }
