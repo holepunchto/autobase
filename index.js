@@ -1127,6 +1127,8 @@ module.exports = class Autobase extends ReadyResource {
     core.on('download', this._onremotewriterchangeBound)
     core.on('manifest', this._onremotewriterchangeBound)
 
+    this.emit('writer', core, { length, isActive, isRemoved })
+
     return w
   }
 
