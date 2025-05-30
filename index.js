@@ -129,6 +129,9 @@ module.exports = class Autobase extends ReadyResource {
     this._bootstrapWriters = [] // might contain dups, but thats ok
     this._bootstrapWritersChanged = false
 
+    this._flushSignal = new SignalPromise()
+    this._flushing = 0
+
     this._checkWriters = []
     this._optimistic = -1
     this._appended = 0
@@ -245,6 +248,10 @@ module.exports = class Autobase extends ReadyResource {
 
   get length () {
     return this.core.length
+  }
+
+  get flushing () {
+    return this._flushing > 0
   }
 
   hash () {
@@ -585,6 +592,11 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async flush () {
+    if (this._flushing === 0) return
+    return this._flushSignal.wait()
+  }
+
+  async advance () {
     if (this.opened === false) await this.ready()
     await this._advancing
   }
@@ -700,6 +712,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _close () {
+    await this.flush() // flush all pending non network io
     this._interrupting = true
     await Promise.resolve() // defer one tick
 
@@ -1256,108 +1269,113 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
-    const changes = this._hasUpdate ? new UpdateChanges(this) : null
-    if (changes) changes.track(this._applyState)
+    this._flushing++
+    try {
+      const changes = this._hasUpdate ? new UpdateChanges(this) : null
+      if (changes) changes.track(this._applyState)
 
-    // close existing state
-    if (this._applyState) await this._applyState.close()
+      // close existing state
+      if (this._applyState) await this._applyState.close()
 
-    const {
-      key,
-      length,
-      views,
-      indexers,
-      manifestVersion,
-      entropy
-    } = this.fastForwardTo
+      const {
+        key,
+        length,
+        views,
+        indexers,
+        manifestVersion,
+        entropy
+      } = this.fastForwardTo
 
-    const from = this.core.signedLength
-    const store = this._viewStore.atomize()
+      const from = this.core.signedLength
+      const store = this._viewStore.atomize()
 
-    const ffed = new Set()
-    const migrated = !b4a.equals(key, this.core.key)
+      const ffed = new Set()
+      const migrated = !b4a.equals(key, this.core.key)
 
-    const systemRef = await this._viewStore.findViewByKey(key, indexers, manifestVersion, entropy)
-    ffed.add(systemRef)
-
-    if (migrated) {
-      await this._applyFastForwardMigration(systemRef, { key, length })
-    } else {
-      await systemRef.catchup(store.atom, length)
-    }
-
-    for (const v of views) {
-      const ref = await this._viewStore.findViewByKey(v.key, indexers, manifestVersion, entropy)
-      if (!ref) continue // unknown, view ignored
-      ffed.add(ref)
+      const systemRef = await this._viewStore.findViewByKey(key, indexers, manifestVersion, entropy)
+      ffed.add(systemRef)
 
       if (migrated) {
-        await this._applyFastForwardMigration(ref, v)
+        await this._applyFastForwardMigration(systemRef, { key, length })
       } else {
-        await ref.catchup(store.atom, v.length)
+        await systemRef.catchup(store.atom, length)
       }
-    }
 
-    // migrate zero length cores
-    if (migrated) {
-      const manifests = await this._viewStore.getIndexerManifests(indexers)
+      for (const v of views) {
+        const ref = await this._viewStore.findViewByKey(v.key, indexers, manifestVersion, entropy)
+        if (!ref) continue // unknown, view ignored
+        ffed.add(ref)
 
-      for (const [name, ref] of this._viewStore.byName) {
-        if (ffed.has(ref)) continue
-        await this._migrateView(manifests, null, name, 0, manifestVersion, entropy, [], null)
+        if (migrated) {
+          await this._applyFastForwardMigration(ref, v)
+        } else {
+          await ref.catchup(store.atom, v.length)
+        }
       }
+
+      // migrate zero length cores
+      if (migrated) {
+        const manifests = await this._viewStore.getIndexerManifests(indexers)
+
+        for (const [name, ref] of this._viewStore.byName) {
+          if (ffed.has(ref)) continue
+          await this._migrateView(manifests, null, name, 0, manifestVersion, entropy, [], null)
+        }
+      }
+
+      const value = c.encode(messages.BootRecord, {
+        version: BOOT_RECORD_VERSION,
+        key,
+        systemLength: length,
+        indexersUpdated: false,
+        fastForwarding: true,
+        recoveries: RECOVERIES
+      })
+
+      const local = store.getLocal()
+      await local.ready()
+      await local.setUserData('autobase/boot', value)
+
+      await LocalState.clear(local)
+
+      if (changes) changes.finalise()
+
+      await store.flush()
+      await store.close()
+
+      const to = this.core.signedLength
+
+      for (const ref of ffed) await ref.release()
+
+      this.recoveries = RECOVERIES
+      this.fastForwardTo = null
+      this._queueFastForward()
+
+      await this._clearWriters()
+
+      this._applyState = new ApplyState(this)
+      await this._applyState.ready()
+
+      if (changes) await this._handlers.update(this._applyState.view, changes)
+
+      if (await this._applyState.shouldMigrate()) {
+        await this._migrate()
+      } else {
+        await this._makeLinearizerFromViewState()
+        await this._applyState.catchup(this.linearizer)
+      }
+
+      if (!this.localWriter || this.localWriter.closed) {
+        await this._updateLocalWriter(this._applyState.system)
+      }
+
+      this._caughtup = true
+
+      this._rebooted()
+      this.emit('fast-forward', to, from)
+    } finally {
+      if (--this._flushing === 0) this._flushSignal.notify()
     }
-
-    const value = c.encode(messages.BootRecord, {
-      version: BOOT_RECORD_VERSION,
-      key,
-      systemLength: length,
-      indexersUpdated: false,
-      fastForwarding: true,
-      recoveries: RECOVERIES
-    })
-
-    const local = store.getLocal()
-    await local.ready()
-    await local.setUserData('autobase/boot', value)
-
-    await LocalState.clear(local)
-
-    if (changes) changes.finalise()
-
-    await store.flush()
-    await store.close()
-
-    const to = this.core.signedLength
-
-    for (const ref of ffed) await ref.release()
-
-    this.recoveries = RECOVERIES
-    this.fastForwardTo = null
-    this._queueFastForward()
-
-    await this._clearWriters()
-
-    this._applyState = new ApplyState(this)
-    await this._applyState.ready()
-
-    if (changes) await this._handlers.update(this._applyState.view, changes)
-
-    if (await this._applyState.shouldMigrate()) {
-      await this._migrate()
-    } else {
-      await this._makeLinearizerFromViewState()
-      await this._applyState.catchup(this.linearizer)
-    }
-
-    if (!this.localWriter || this.localWriter.closed) {
-      await this._updateLocalWriter(this._applyState.system)
-    }
-
-    this._caughtup = true
-
-    this._rebooted()
-    this.emit('fast-forward', to, from)
   }
 
   // TODO: not atomic in regards to the ff, fix that
@@ -1425,38 +1443,43 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _premigrate () {
-    const length = this._applyState.indexedLength
-    const system = this._applyState.system
+    this._flushing++
+    try {
+      const length = this._applyState.indexedLength
+      const system = this._applyState.system
 
-    const info = await system.getIndexedInfo(length)
-    const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
+      const info = await system.getIndexedInfo(length)
+      const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
 
-    const { views, systemView, encryptionView } = this._applyState
+      const { views, systemView, encryptionView } = this._applyState
 
-    const manifestVersion = this._applyState.system.core.manifest.version
+      const manifestVersion = this._applyState.system.core.manifest.version
 
-    for (const view of views) {
-      const v = this._applyState.getViewFromSystem(view, info)
-      const indexedLength = v ? v.length : 0
+      for (const view of views) {
+        const v = this._applyState.getViewFromSystem(view, info)
+        const indexedLength = v ? v.length : 0
 
-      const ref = this._viewStore.getViewByName(view.name)
-      const source = ref.getCore()
+        const ref = this._viewStore.getViewByName(view.name)
+        const source = ref.getCore()
+        await source.ready()
+
+        await this._migrateView(indexerManifests, source, view.name, indexedLength, manifestVersion, info.entropy, null, null)
+      }
+
+      const source = encryptionView.ref.getCore()
       await source.ready()
 
-      await this._migrateView(indexerManifests, source, view.name, indexedLength, manifestVersion, info.entropy, null, null)
+      const enc = await this._migrateView(indexerManifests, source, '_encryption', info.encryptionLength, manifestVersion, info.entropy, null, null)
+
+      const linked = [enc.core.key]
+
+      const sysCore = systemView.ref.getCore()
+      const ref = await this._migrateView(indexerManifests, sysCore, '_system', length, manifestVersion, info.entropy, linked, null, null)
+
+      return ref.core.key
+    } finally {
+      if (--this._flushing === 0) this._flushSignal.notify()
     }
-
-    const source = encryptionView.ref.getCore()
-    await source.ready()
-
-    const enc = await this._migrateView(indexerManifests, source, '_encryption', info.encryptionLength, manifestVersion, info.entropy, null, null)
-
-    const linked = [enc.core.key]
-
-    const sysCore = systemView.ref.getCore()
-    const ref = await this._migrateView(indexerManifests, sysCore, '_system', length, manifestVersion, info.entropy, linked, null, null)
-
-    return ref.core.key
   }
 
   async _migrate () {
