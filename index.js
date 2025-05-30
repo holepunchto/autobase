@@ -16,6 +16,7 @@ const LocalState = require('./lib/local-state.js')
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
 const { EncryptionView } = require('./lib/encryption.js')
+const { Migration } = require('./lib/migrations.js')
 const UpdateChanges = require('./lib/updates.js')
 const messages = require('./lib/messages.js')
 const Timer = require('./lib/timer.js')
@@ -642,7 +643,10 @@ module.exports = class Autobase extends ReadyResource {
 
   async _catchupApplyState () {
     if (await this._applyState.shouldMigrate()) {
-      await this._migrate()
+      const migration = new Migration(this, this._applyState)
+      const success = await migration.upgrade()
+
+      assert(success === true, 'Catchup migration failed')
     } else {
       await this._applyState.catchup(this.linearizer)
     }
@@ -1296,7 +1300,7 @@ module.exports = class Autobase extends ReadyResource {
 
         for (const [name, ref] of this._viewStore.byName) {
           if (ffed.has(ref)) continue
-          await this._migrateView(manifests, null, name, 0, manifestVersion, entropy, [], null)
+          await this._migrateZeroLengthView(manifests, name, manifestVersion, entropy, null)
         }
       }
 
@@ -1336,7 +1340,9 @@ module.exports = class Autobase extends ReadyResource {
       if (changes) await this._handlers.update(this._applyState.view, changes)
 
       if (await this._applyState.shouldMigrate()) {
-        await this._migrate()
+        const migration = new Migration(this, this._applyState)
+        const success = await migration.upgrade()
+        assert(success, 'Migration failed')
       } else {
         await this._makeLinearizerFromViewState()
         await this._applyState.catchup(this.linearizer)
@@ -1382,34 +1388,20 @@ module.exports = class Autobase extends ReadyResource {
     ref.migrated(this, next)
   }
 
-  async _migrateView (indexerManifests, source, name, indexedLength, manifestVersion, entropy, linked, manifestData) {
+  async _migrateZeroLengthView (indexerManifests, name, manifestVersion, entropy, manifestData) {
     const ref = this._viewStore.byName.get(name)
-
-    const prologue = indexedLength === 0
-      ? null
-      : { length: indexedLength, hash: await source.treeHash(indexedLength) }
 
     if (manifestData === null && ref.core.manifest.userData !== null) {
       manifestData = ref.core.manifest.userData
     }
 
-    const next = this._viewStore.getViewCore(indexerManifests, name, prologue, manifestVersion, entropy, linked, manifestData)
+    const next = this._viewStore.getViewCore(indexerManifests, name, null, manifestVersion, entropy, null, manifestData)
     await next.ready()
-
-    if (indexedLength > 0) {
-      await next.core.copyPrologue(source.state)
-    }
 
     // remake the batch, reset from our prologue in case it replicated inbetween
     // TODO: we should really have an HC function for this
-    const batch = next.session({ name: 'batch', overwrite: true, checkout: indexedLength })
+    const batch = next.session({ name: 'batch', overwrite: true, checkout: 0 })
     await batch.ready()
-
-    if (source !== null) {
-      while (batch.length < source.length) {
-        await batch.append(await source.get(batch.length))
-      }
-    }
 
     await ref.batch.state.moveTo(batch, batch.length)
     await batch.close()
@@ -1417,50 +1409,6 @@ module.exports = class Autobase extends ReadyResource {
     ref.migrated(this, next)
 
     return ref
-  }
-
-  async _premigrate () {
-    this._flushing++
-    try {
-      const length = this._applyState.indexedLength
-      const system = this._applyState.system
-
-      const info = await system.getIndexedInfo(length)
-      const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
-
-      const { views, systemView, encryptionView } = this._applyState
-
-      const manifestVersion = this._applyState.system.core.manifest.version
-
-      for (const view of views) {
-        const v = this._applyState.getViewFromSystem(view, info)
-        const indexedLength = v ? v.length : 0
-
-        const ref = this._viewStore.getViewByName(view.name)
-        const source = ref.getCore()
-        await source.ready()
-
-        await this._migrateView(indexerManifests, source, view.name, indexedLength, manifestVersion, info.entropy, null, null)
-      }
-
-      const source = encryptionView.ref.getCore()
-      await source.ready()
-
-      const enc = await this._migrateView(indexerManifests, source, '_encryption', info.encryptionLength, manifestVersion, info.entropy, null, null)
-
-      const linked = [enc.core.key]
-
-      const sysCore = systemView.ref.getCore()
-      const ref = await this._migrateView(indexerManifests, sysCore, '_system', length, manifestVersion, info.entropy, linked, null, null)
-
-      return ref.core.key
-    } finally {
-      if (--this._flushing === 0) this._flushSignal.notify()
-    }
-  }
-
-  async _migrate () {
-    return this._reboot(await this._premigrate())
   }
 
   async _reboot (key) {
@@ -1615,9 +1563,9 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const u = this.linearizer.update()
-      const update = u ? await this._applyState.update(u, localNodes) : { reboot: false, migrated: false }
+      const reboot = !!u && await this._applyState.update(u, localNodes)
 
-      if (!update.reboot) {
+      if (!reboot) {
         if (this._applyState.shouldFlush()) {
           await this._applyState.flush()
           this.updating = true
