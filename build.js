@@ -414,6 +414,11 @@ autobase.register({
       name: 'legacyBlocks',
       type: 'uint',
       required: false
+    },
+    {
+      name: 'namespace',
+      type: 'fixed32',
+      required: false
     }
   ]
 })

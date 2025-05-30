@@ -10,7 +10,6 @@ const CoreCoupler = require('core-coupler')
 const mutexify = require('mutexify/promise')
 const ProtomuxWakeup = require('protomux-wakeup')
 const rrp = require('resolve-reject-promise')
-const crypto = require('hypercore-crypto')
 const Hypercore = require('hypercore')
 
 const LocalState = require('./lib/local-state.js')
@@ -21,7 +20,7 @@ const UpdateChanges = require('./lib/updates.js')
 const messages = require('./lib/messages.js')
 const Timer = require('./lib/timer.js')
 const Writer = require('./lib/writer.js')
-const decodeValue = require('./lib/decode-value.js')
+const { encodeValue, decodeValue } = require('./lib/values.js')
 const ActiveWriters = require('./lib/active-writers.js')
 const AutoWakeup = require('./lib/wakeup.js')
 
@@ -968,30 +967,8 @@ module.exports = class Autobase extends ReadyResource {
     return decodeValue(value, opts)
   }
 
-  static encodeValue (value, opts = {}) {
-    const block = c.encode(messages.OplogMessage, {
-      version: opts.version || OPLOG_VERSION,
-      digest: null,
-      checkpoint: null,
-      optimistic: !!opts.optimistic,
-      node: {
-        heads: opts.heads || [],
-        batch: 1,
-        value
-      }
-    })
-
-    if (!opts.encrypted) return block
-
-    if (!opts.optimistic) {
-      throw new Error('Encoding an encrypted value is not supported')
-    }
-
-    const padding = b4a.alloc(16) // min hash length is 16
-    crypto.hash(block, padding)
-    padding[0] = 0
-
-    return b4a.concat([padding.subarray(0, 8), block])
+  static encodeValue (value, opts) {
+    return encodeValue(value, opts)
   }
 
   static async getLocalKey (store, opts = {}) {

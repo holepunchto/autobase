@@ -479,6 +479,12 @@
           "required": false,
           "type": "uint",
           "version": 1
+        },
+        {
+          "name": "namespace",
+          "required": false,
+          "type": "fixed32",
+          "version": 1
         }
       ]
     }
