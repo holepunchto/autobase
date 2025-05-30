@@ -29,7 +29,7 @@ test('anchor - simple', async t => {
     for (const node of nodes) {
       await view.append(node.value.data)
       if (node.value.anchor) {
-        anchor = await base.createAnchor(node.from.core.key, node.length)
+        anchor = await base.createAnchor()
       }
     }
   }
@@ -68,7 +68,7 @@ test('anchor - same anchor', async t => {
       await view.append(node.value.data)
 
       if (node.value.anchor) {
-        const anchor = await base.createAnchor(node.from.core.key, node.length)
+        const anchor = await base.createAnchor()
 
         if (existing) {
           t.alike(existing, anchor)
