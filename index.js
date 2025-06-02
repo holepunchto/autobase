@@ -16,7 +16,7 @@ const LocalState = require('./lib/local-state.js')
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
 const { EncryptionView } = require('./lib/encryption.js')
-const { Migration } = require('./lib/migrations.js')
+const { Migration, FastForwardMigration } = require('./lib/migrations.js')
 const UpdateChanges = require('./lib/updates.js')
 const messages = require('./lib/messages.js')
 const Timer = require('./lib/timer.js')
@@ -1277,30 +1277,19 @@ module.exports = class Autobase extends ReadyResource {
       ffed.add(systemRef)
 
       if (migrated) {
-        await this._applyFastForwardMigration(systemRef, { key, length })
+        const migration = new FastForwardMigration(this, store, this.fastForwardTo, length)
+        const success = await migration.upgrade()
+
+        if (!success) throw new Error('Fast forward migration failed')
       } else {
         await systemRef.catchup(store.atom, length)
-      }
 
-      for (const v of views) {
-        const ref = await this._viewStore.findViewByKey(v.key, indexers, manifestVersion, entropy)
-        if (!ref) continue // unknown, view ignored
-        ffed.add(ref)
+        for (const v of views) {
+          const ref = await this._viewStore.findViewByKey(v.key, indexers, manifestVersion, entropy)
+          if (!ref) continue // unknown, view ignored
+          ffed.add(ref)
 
-        if (migrated) {
-          await this._applyFastForwardMigration(ref, v)
-        } else {
           await ref.catchup(store.atom, v.length)
-        }
-      }
-
-      // migrate zero length cores
-      if (migrated) {
-        const manifests = await this._viewStore.getIndexerManifests(indexers)
-
-        for (const [name, ref] of this._viewStore.byName) {
-          if (ffed.has(ref)) continue
-          await this._migrateZeroLengthView(manifests, name, manifestVersion, entropy, null)
         }
       }
 
@@ -1359,56 +1348,6 @@ module.exports = class Autobase extends ReadyResource {
     } finally {
       if (--this._flushing === 0) this._flushSignal.notify()
     }
-  }
-
-  // TODO: not atomic in regards to the ff, fix that
-  async _applyFastForwardMigration (ref, v) {
-    const next = this.store.get(v.key)
-    await next.ready()
-
-    const prologue = next.manifest && next.manifest.prologue
-
-    if (prologue && prologue.length > 0 && ref.core.length >= prologue.length) {
-      try {
-        await next.core.copyPrologue(ref.core.state)
-      } catch {
-        // we might be missing some nodes for this, just ignore, only an optimisation
-      }
-    }
-
-    const batch = next.session({ name: 'batch', overwrite: true, checkout: v.length })
-    await batch.ready()
-
-    // remake the batch, reset from our prologue in case it replicated inbetween
-    // TODO: we should really have an HC function for this
-
-    await ref.batch.state.moveTo(batch, batch.length)
-    await batch.close()
-
-    ref.migrated(this, next)
-  }
-
-  async _migrateZeroLengthView (indexerManifests, name, manifestVersion, entropy, manifestData) {
-    const ref = this._viewStore.byName.get(name)
-
-    if (manifestData === null && ref.core.manifest.userData !== null) {
-      manifestData = ref.core.manifest.userData
-    }
-
-    const next = this._viewStore.getViewCore(indexerManifests, name, null, manifestVersion, entropy, null, manifestData)
-    await next.ready()
-
-    // remake the batch, reset from our prologue in case it replicated inbetween
-    // TODO: we should really have an HC function for this
-    const batch = next.session({ name: 'batch', overwrite: true, checkout: 0 })
-    await batch.ready()
-
-    await ref.batch.state.moveTo(batch, batch.length)
-    await batch.close()
-
-    ref.migrated(this, next)
-
-    return ref
   }
 
   async _reboot (key) {
