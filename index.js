@@ -643,10 +643,13 @@ module.exports = class Autobase extends ReadyResource {
 
   async _catchupApplyState () {
     if (await this._applyState.shouldMigrate()) {
-      const migration = new Migration(this, this._applyState)
+      const length = this._applyState.indexedLength
+      const info = await this._applyState.system.getIndexedInfo(length)
+
+      const migration = new Migration(this, this._applyState.store, info, length)
       const success = await migration.upgrade()
 
-      assert(success === true, 'Catchup migration failed')
+      assert(!!success, 'Catchup migration failed')
     } else {
       await this._applyState.catchup(this.linearizer)
     }
@@ -1277,10 +1280,9 @@ module.exports = class Autobase extends ReadyResource {
       ffed.add(systemRef)
 
       if (migrated) {
-        const migration = new FastForwardMigration(this, store, this.fastForwardTo, length)
-        const success = await migration.upgrade()
-
-        if (!success) throw new Error('Fast forward migration failed')
+        const migration = new FastForwardMigration(this, store, this.fastForwardTo)
+        await migration.premigrate()
+        await migration.finalize(store)
       } else {
         await systemRef.catchup(store.atom, length)
 
@@ -1329,9 +1331,12 @@ module.exports = class Autobase extends ReadyResource {
       if (changes) await this._handlers.update(this._applyState.view, changes)
 
       if (await this._applyState.shouldMigrate()) {
-        const migration = new Migration(this, this._applyState)
+        const info = await this._applyState.system.getIndexedInfo(length)
+
+        const migration = new Migration(this, this.store, info, length)
         const success = await migration.upgrade()
-        assert(success, 'Migration failed')
+
+        assert(!!success, 'Migration failed')
       } else {
         await this._makeLinearizerFromViewState()
         await this._applyState.catchup(this.linearizer)
