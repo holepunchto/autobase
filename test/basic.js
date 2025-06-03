@@ -1146,12 +1146,7 @@ test('basic - oplog digest', async t => {
   await a.append(null)
   await replicateAndSync([a, b])
 
-  // TODO: remove me, just because we atomically set local nodes now,
-  // but we can predict the sys key. but also not super importnat
-  await a.append(null)
-
-  let last = await a.local.get(a.local.length - 1)
-  if (last.digest.pointer) last = await a.local.get(a.local.length - 1 - last.digest.pointer)
+  const last = await a.local.get(a.local.length - 1)
 
   t.is(last.digest.pointer, 0)
   t.is(b.system.core.manifest.signers.length, 2)
