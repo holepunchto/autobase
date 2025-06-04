@@ -81,8 +81,8 @@ test('optimistic - reorgs', async t => {
     for await (const data of b.view.createReadStream()) allB.push(data)
 
     t.alike(allB, allA)
-  }}
-)
+  }
+})
 
 test('optimistic - no empty heads', async t => {
   const { bases } = await create(2, t, {
