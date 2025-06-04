@@ -1,4 +1,5 @@
 const test = require('brittle')
+const b4a = require('b4a')
 
 const {
   create,
@@ -34,8 +35,8 @@ test('optimistic - two writer', async t => {
   t.is(await b.view.get(1), 'optimistic')
 })
 
-test('optimistic - truncate to 0', async t => {
-  const { bases } = await create(2, t, {
+test('optimistic - reorgs', async t => {
+  const { bases } = await create(4, t, {
     optimistic: true,
     async apply (nodes, view, base) {
       for (const node of nodes) {
@@ -47,19 +48,105 @@ test('optimistic - truncate to 0', async t => {
     }
   })
 
-  await bases[0].append('world', { optimistic: true })
-  await bases[1].append('hello', { optimistic: true })
+  const [a, b, c, d] = bases
+
+  await a.append('root')
+
+  await replicateAndSync(bases)
+
+  await c.append('hello', { optimistic: true })
+  await d.append('world', { optimistic: true })
+
+  await replicateAndSync([a, c])
+  await replicateAndSync([b, d])
+
+  {
+    const all = []
+    for await (const data of a.view.createReadStream()) all.push(data)
+    t.alike(all, ['root', 'hello'])
+  }
+
+  {
+    const all = []
+    for await (const data of b.view.createReadStream()) all.push(data)
+    t.alike(all, ['root', 'world'])
+  }
+
   await replicateAndSync(bases)
 
   {
-    const all = []
-    for await (const data of bases[0].view.createReadStream()) all.push(data)
-    t.alike(all, ['world', 'hello'])
-  }
+    const allA = []
+    const allB = []
+    for await (const data of a.view.createReadStream()) allA.push(data)
+    for await (const data of b.view.createReadStream()) allB.push(data)
 
-  {
-    const all = []
-    for await (const data of bases[1].view.createReadStream()) all.push(data)
-    t.alike(all, ['world', 'hello'])
+    t.alike(allB, allA)
   }
+})
+
+test('optimistic - no empty heads', async t => {
+  const { bases } = await create(2, t, {
+    optimistic: true,
+    async apply (nodes, view, base) {
+      for (const node of nodes) {
+        if (node.value === 'optimistic' && view.length === 0) {
+          await base.ackWriter(node.from.key)
+        }
+
+        await view.append(node.value)
+      }
+    }
+  })
+
+  bases[1].on('error', err => {
+    t.pass()
+    t.is(err.message, 'Invalid node: empty heads only allowed for genesis')
+  })
+
+  await bases[1].append('optimistic', { optimistic: true })
+})
+
+test('optimistic - write on top of rejected node', async t => {
+  const { bases } = await create(3, t, {
+    optimistic: true,
+    async apply (nodes, view, base) {
+      for (const node of nodes) {
+        if (node.value.add) {
+          await base.addWriter(b4a.from(node.value.add, 'hex'), { isIndexer: false })
+          continue
+        }
+
+        if (node.value === 'optimistic' && view.length === 0) {
+          await base.ackWriter(node.from.key)
+        }
+
+        await view.append(node.value)
+      }
+    }
+  })
+
+  const [a, b, c] = bases
+
+  await a.append({ add: b4a.toString(b.local.key, 'hex') })
+  await replicateAndSync([a, b, c])
+
+  await a.append('reorg') // triggers reorg for other writers
+  await c.append('optimistic', { optimistic: true })
+
+  await replicateAndSync([b, c])
+  await b.append('data')
+
+  t.is(b.view.length, 2)
+  t.is(await b.view.get(0), 'optimistic')
+  t.is(await b.view.get(1), 'data')
+
+  await replicateAndSync([a, b, c])
+
+  t.is(a.view.length, 2)
+  t.is(await a.view.get(0), 'reorg')
+  t.is(await a.view.get(1), 'data')
+
+  t.is(b.view.length, 2)
+  t.is(await b.view.get(0), 'reorg')
+  t.is(await b.view.get(1), 'data')
 })
