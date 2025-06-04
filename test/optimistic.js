@@ -1,4 +1,5 @@
 const test = require('brittle')
+const b4a = require('b4a')
 
 const {
   create,
@@ -84,4 +85,49 @@ test('optimistic - no empty heads', async t => {
   })
 
   await bases[1].append('optimistic', { optimistic: true })
+})
+
+test('optimistic - write on top of rejected node', async t => {
+  const { bases } = await create(3, t, {
+    optimistic: true,
+    async apply (nodes, view, base) {
+      for (const node of nodes) {
+        if (node.value.add) {
+          await base.addWriter(b4a.from(node.value.add, 'hex'), { isIndexer: false })
+          continue
+        }
+
+        if (node.value === 'optimistic' && view.length === 0) {
+          await base.ackWriter(node.from.key)
+        }
+
+        await view.append(node.value)
+      }
+    }
+  })
+
+  const [a, b, c] = bases
+
+  await a.append({ add: b4a.toString(b.local.key, 'hex') })
+  await replicateAndSync([a, b, c])
+
+  await a.append('reorg') // triggers reorg for other writers
+  await c.append('optimistic', { optimistic: true })
+
+  await replicateAndSync([b, c])
+  await b.append('data')
+
+  t.is(b.view.length, 2)
+  t.is(await b.view.get(0), 'optimistic')
+  t.is(await b.view.get(1), 'data')
+
+  await replicateAndSync([a, b, c])
+
+  t.is(a.view.length, 2)
+  t.is(await a.view.get(0), 'reorg')
+  t.is(await a.view.get(1), 'data')
+
+  t.is(b.view.length, 2)
+  t.is(await b.view.get(0), 'reorg')
+  t.is(await b.view.get(1), 'data')
 })
