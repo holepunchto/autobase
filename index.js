@@ -30,7 +30,6 @@ const ApplyState = require('./lib/apply-state.js')
 const { PublicApplyCalls } = require('./lib/apply-calls.js')
 const boot = require('./lib/boot.js')
 const {
-  OPLOG_VERSION,
   MAX_AUTOBASE_VERSION,
   BOOT_RECORD_VERSION
 } = require('./lib/caps.js')
@@ -1555,7 +1554,7 @@ module.exports = class Autobase extends ReadyResource {
       const batch = this._appending.length - i
       const value = this._appending[i]
 
-      const node = this.localWriter.append(value, heads, batch, deps, OPLOG_VERSION, this._optimistic === 0)
+      const node = this.localWriter.append(value, heads, batch, deps, this._optimistic === 0)
 
       this.linearizer.addHead(node)
       nodes[i] = node
