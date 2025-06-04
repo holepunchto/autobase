@@ -63,3 +63,25 @@ test('optimistic - truncate to 0', async t => {
     t.alike(all, ['world', 'hello'])
   }
 })
+
+test('optimistic - no empty heads', async t => {
+  const { bases } = await create(2, t, {
+    optimistic: true,
+    async apply (nodes, view, base) {
+      for (const node of nodes) {
+        if (node.value === 'optimistic' && view.length === 0) {
+          await base.ackWriter(node.from.key)
+        }
+
+        await view.append(node.value)
+      }
+    }
+  })
+
+  bases[1].on('error', err => {
+    t.pass()
+    t.is(err.message, 'Invalid node: empty heads only allowed for genesis')
+  })
+
+  await bases[1].append('optimistic', { optimistic: true })
+})
