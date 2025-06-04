@@ -2030,6 +2030,19 @@ test('basic - rotate local writer', async t => {
   await base.close()
 })
 
+test('basic - getBootRecord statically', async t => {
+  const { bases } = await create(1, t)
+  const [base] = bases
+
+  await base.append('hello')
+  await base.append('world')
+
+  const boot = await Autobase.getBootRecord(base.store, base.key)
+  t.ok(boot)
+
+  await base.close()
+})
+
 async function applyWithRemove (batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {

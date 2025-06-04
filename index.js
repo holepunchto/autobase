@@ -583,6 +583,13 @@ module.exports = class Autobase extends ReadyResource {
     return boot
   }
 
+  static async getBootRecord (store, key) {
+    const result = await boot(store, key, { exclusive: false })
+    await result.bootstrap.close()
+    await result.local.close()
+    return result.boot
+  }
+
   _interrupt (reason) {
     assert(!!this._applyState.applying, 'Interrupt is only allowed in apply')
     this._interrupting = true
