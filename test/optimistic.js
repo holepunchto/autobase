@@ -35,8 +35,8 @@ test('optimistic - two writer', async t => {
   t.is(await b.view.get(1), 'optimistic')
 })
 
-test('optimistic - truncate to 0', async t => {
-  const { bases } = await create(2, t, {
+test('optimistic - reorgs', async t => {
+  const { bases } = await create(4, t, {
     optimistic: true,
     async apply (nodes, view, base) {
       for (const node of nodes) {
@@ -48,22 +48,41 @@ test('optimistic - truncate to 0', async t => {
     }
   })
 
-  await bases[0].append('world', { optimistic: true })
-  await bases[1].append('hello', { optimistic: true })
+  const [a, b, c, d] = bases
+
+  await a.append('root')
+
+  await replicateAndSync(bases)
+
+  await c.append('hello', { optimistic: true })
+  await d.append('world', { optimistic: true })
+
+  await replicateAndSync([a, c])
+  await replicateAndSync([b, d])
+
+  {
+    const all = []
+    for await (const data of a.view.createReadStream()) all.push(data)
+    t.alike(all, ['root', 'hello'])
+  }
+
+  {
+    const all = []
+    for await (const data of b.view.createReadStream()) all.push(data)
+    t.alike(all, ['root', 'world'])
+  }
+
   await replicateAndSync(bases)
 
   {
-    const all = []
-    for await (const data of bases[0].view.createReadStream()) all.push(data)
-    t.alike(all, ['world', 'hello'])
-  }
+    const allA = []
+    const allB = []
+    for await (const data of a.view.createReadStream()) allA.push(data)
+    for await (const data of b.view.createReadStream()) allB.push(data)
 
-  {
-    const all = []
-    for await (const data of bases[1].view.createReadStream()) all.push(data)
-    t.alike(all, ['world', 'hello'])
-  }
-})
+    t.alike(allB, allA)
+  }}
+)
 
 test('optimistic - no empty heads', async t => {
   const { bases } = await create(2, t, {

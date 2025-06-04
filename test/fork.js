@@ -407,6 +407,8 @@ test('fork - fast forward after fork', async t => {
   await addWriter(a, b, false)
   await addWriter(a, c, false)
 
+  await replicateAndSync([a, b, c])
+
   await b.append(null)
   await c.append(null)
 
