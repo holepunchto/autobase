@@ -563,6 +563,28 @@ test('topolist - optimistic', function (t) {
   t.is(tip.shared, 1)
 })
 
+test('topolist - optimistic 2', function (t) {
+  const tip = new Topolist()
+
+  const h0 = makeNode('h', 0, [])
+  const i0 = makeNode('i', 0, [h0])
+  const a0 = makeNode('a', 0, [], { optimistic: true })
+  const b0 = makeNode('b', 0, [a0], { optimistic: true })
+  const c0 = makeNode('c', 0, [a0], { optimistic: true })
+  const d0 = makeNode('d', 0, [c0, b0], { optimistic: true })
+  const e0 = makeNode('e', 0, [d0])
+
+  tip.add(h0)
+  tip.add(i0)
+  tip.add(a0)
+  tip.add(c0)
+  tip.add(b0)
+  tip.add(d0)
+  tip.add(e0)
+
+  t.alike(tip.tip, [h0, i0, a0, b0, c0, d0, e0])
+})
+
 function makeNode (key, length, dependencies, { version = 0, value = key + length, optimistic = false } = {}) {
   const node = {
     writer: { core: { key: b4a.from(key) } },
