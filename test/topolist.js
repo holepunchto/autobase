@@ -534,13 +534,43 @@ test('topolist - with versions', function (t) {
   t.is(tip.undo, 0)
 })
 
-function makeNode (key, length, dependencies, { version = 0, value = key + length } = {}) {
+test('topolist - optimistic', function (t) {
+  const tip = new Topolist()
+
+  const x0 = makeNode('x', 0, [])
+  const h0 = makeNode('h', 0, [], { optimistic: true })
+  const i0 = makeNode('i', 0, [h0])
+  const a0 = makeNode('a', 0, [], { optimistic: true })
+  const b0 = makeNode('b', 0, [], { optimistic: true })
+  const d0 = makeNode('d', 0, [a0, x0])
+  const c0 = makeNode('c', 0, [a0, b0, i0])
+
+  tip.add(x0)
+  tip.add(h0)
+  tip.add(i0)
+  tip.add(b0)
+  tip.add(a0)
+  tip.add(c0)
+
+  t.alike(tip.tip, [x0, h0, i0, a0, b0, c0])
+
+  tip.mark()
+  tip.add(d0)
+
+  t.alike(tip.tip, [x0, a0, d0, h0, i0, b0, c0])
+
+  t.is(tip.undo, 5)
+  t.is(tip.shared, 1)
+})
+
+function makeNode (key, length, dependencies, { version = 0, value = key + length, optimistic = false } = {}) {
   const node = {
     writer: { core: { key: b4a.from(key) } },
     length,
     dependents: new Set(),
     dependencies,
     version,
+    optimistic,
     value
   }
 
