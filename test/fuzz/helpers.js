@@ -13,10 +13,11 @@ module.exports = {
 // classes for making dag outline
 
 class SkeletonNode {
-  constructor (key, seq, links = []) {
+  constructor (key, seq, optimistic) {
     this.key = key
     this.seq = seq
-    this.links = links
+    this.links = []
+    this.optimistic = optimistic === true
     this.clock = new Map()
   }
 
@@ -27,8 +28,9 @@ class SkeletonNode {
   toDetails () {
     return {
       ref: this.ref,
-      args: [this.key, this.seq],
-      deps: this.links.map(l => l.ref)
+      args: [this.key, this.seq, this.optimistic],
+      deps: this.links.map(l => l.ref),
+      optimistic: this.optimistic
       // clock: this.clock
     }
   }
@@ -46,15 +48,15 @@ class SkeletonNode {
 }
 
 class SkeletonWriter {
-  constructor (key, majority, indexer) {
+  constructor (key, indexer, added) {
     this.key = key
     this.seq = 0
     this.head = null
-    this.majority = majority
     this.isActiveIndexer = !!indexer
+    this.isAdded = !!added
   }
 
-  add (links = []) {
+  add (links = [], optimistic = false) {
     const check = updateClock(new Map(), ...links)
     if (this.head && !clockContains(check, this.head)) {
       links.push(this.head)
@@ -62,7 +64,9 @@ class SkeletonWriter {
 
     links.sort(nodeByClock)
 
-    const node = new SkeletonNode(this.key, this.seq++)
+    if (this.isAdded) optimistic = false
+
+    const node = new SkeletonNode(this.key, this.seq++, optimistic)
     for (const link of links) node.addLink(link)
 
     if (node.links.length === 1 && node.links[0].key === this.key) {
@@ -105,7 +109,7 @@ class Writer {
 
 // fuzzer
 
-function fuzz (w, idx, n, b, logLevel, dir) {
+function fuzz (w, idx, n, b, o, logLevel, dir) {
   const start = Date.now()
   for (let i = 0; true; i++) {
     // timing
@@ -122,14 +126,14 @@ function fuzz (w, idx, n, b, logLevel, dir) {
 
     const midway = result.nodes.length
     const majority = writers.slice(0, (writers.length >>> 1) + 1)
-    continueWriting(nodes, majority, n, b)
+    continueWriting(nodes, majority, n, b, o)
 
     let more = rollBack(w, idx, nodes.map(n => n.toDetails()), 3)
     if (!more.pass) return fail(more, w, nodes.map(n => n.toDetails()))
 
     let retry = 0
     while (more.nodes.length === midway) {
-      continueWriting(nodes, majority, n, b)
+      continueWriting(nodes, majority, n, b, o)
       const dag = nodes.map(n => n.toDetails())
 
       more = rollBack(w, idx, dag, 3)
@@ -181,21 +185,24 @@ function rollBack (n, idx, steps, batch = 3, result = []) {
   let pos = 0
 
   for (let i = 0; i < steps.length; i++) {
-    const { args, deps, ref } = steps[i]
+    const { args, deps, ref, optimistic } = steps[i]
 
     const dependencies = new Set()
     for (const d of deps) {
       if (nodes.has(d)) dependencies.add(nodes.get(d))
     }
 
-    const w = writers[args[0]]
+    let w = writers[args[0]]
+    if (args[2]) w = new Writer(Buffer.from(args[0], false))
+
     const node = Linearizer.createNode(
       w,
       w.length + 1,
       ref,
       [],
       1,
-      dependencies
+      dependencies,
+      optimistic
     )
     w.nodes.nodes.push(node)
 
@@ -264,12 +271,20 @@ function rollBack (n, idx, steps, batch = 3, result = []) {
 
 // generating dags
 
-function dagGen (w = 3, idx = w, size = 10, branchFactor = 0.3) {
-  const writers = []
-  const majority = Math.floor(w / 2) + 1
-  for (let i = 0; i < w; i++) writers.push(new SkeletonWriter(String.fromCharCode(0x61 + i), majority, i < idx))
+function optimisticWrite (links) {
+  const tag = Math.random().toString()
+  const w = new SkeletonWriter(tag, false, false)
 
-  return createDag(writers, size, branchFactor)
+  const node = w.add(links, true)
+
+  return node
+}
+
+function dagGen (w = 3, idx = w, size = 10, branchFactor = 0.3, optimisticFactor = 0) {
+  const writers = []
+  for (let i = 0; i < w; i++) writers.push(new SkeletonWriter(String.fromCharCode(0x61 + i), i < idx, true))
+
+  return createDag(writers, size, branchFactor, optimisticFactor)
 }
 
 function printGraph (graph) {
@@ -294,20 +309,23 @@ function printGraph (graph) {
   return str
 }
 
-function createDag (writers, size, branch) {
+function createDag (writers, size, branch, optimistic) {
   const nodes = []
 
   const tails = new Set()
 
   while (nodes.length < size) {
-    const links = []
     const writer = writers[Math.floor(Math.random() * writers.length)]
 
+    const links = []
     for (const tail of tails) {
       if (Math.random() >= branch) links.push(tail)
     }
 
-    const node = writer.add(links)
+    const node = Math.random() < optimistic
+      ? optimisticWrite(writers, links)
+      : writer.add(links, false)
+
     if (!node) continue
 
     tails.add(node)
@@ -323,7 +341,7 @@ function createDag (writers, size, branch) {
   return { nodes, writers }
 }
 
-function continueWriting (nodes, writers, size, branch) {
+function continueWriting (nodes, writers, size, branch, optimistic) {
   const tails = nodes.reduce((tails, node) => {
     if (nodes.findIndex(n => n.links.includes(node)) < 0) {
       tails.add(node)
@@ -333,14 +351,17 @@ function continueWriting (nodes, writers, size, branch) {
 
   const length = nodes.length + size
   while (nodes.length < length) {
-    const links = []
     const writer = writers[Math.floor(Math.random() * writers.length)]
 
+    const links = []
     for (const tail of tails) {
       if (Math.random() >= branch) links.push(tail)
     }
 
-    const node = writer.add(links)
+    const node = Math.random() < optimistic
+      ? optimisticWrite(links)
+      : writer.add(links, false)
+
     if (!node) continue
 
     tails.add(node)
