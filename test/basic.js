@@ -2043,6 +2043,24 @@ test('basic - getBootRecord statically', async t => {
   await base.close()
 })
 
+test('basic - append returns local length', async t => {
+  const { bases } = await create(1, t)
+  const [base] = bases
+
+  t.is(await base.append('hello'), 1)
+  t.is(await base.append('world'), 2)
+
+  const a = base.append('a')
+  const b = base.append('b')
+  const c = base.append('c')
+
+  t.is(await a, 3)
+  t.is(await b, 4)
+  t.is(await c, 5)
+
+  await base.close()
+})
+
 async function applyWithRemove (batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {

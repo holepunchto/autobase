@@ -938,11 +938,14 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this._appending === null) this._appending = []
 
+    let len = 0
     if (Array.isArray(value)) {
-      for (const v of value) this._append(v)
+      for (const v of value) len = this._append(v)
     } else {
-      this._append(value)
+      len = this._append(value)
     }
+
+    const localLength = this.local.length
 
     if (optimistic) this._optimistic = this._appending.length - 1
     const target = this._appended + this._appending.length
@@ -954,19 +957,21 @@ module.exports = class Autobase extends ReadyResource {
     while (this._appended < target && !this._interrupting) {
       await this._bump()
       // safety
-      if (this.localWriter && this.localWriter.idle()) return
+      if (this.localWriter && this.localWriter.idle()) break
     }
+
+    return localLength + len
   }
 
   _append (value) {
     // if prev value is an ack that hasnt been flushed, skip it
     if (this._appending.length > 0) {
-      if (value === null) return
+      if (value === null) return this._appending.length
       if (this._appending[this._appending.length - 1] === null) {
         this._appending.pop()
       }
     }
-    this._appending.push(value)
+    return this._appending.push(value)
   }
 
   static decodeValue (value, opts) {
