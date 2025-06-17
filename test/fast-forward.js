@@ -16,6 +16,41 @@ const {
   createBase
 } = require('./helpers')
 
+test('fast-forward - signal preferred ff', { timeout: 999999999 }, async t => {
+  t.plan(1)
+
+  let slow = false
+
+  const { bases } = await create(2, t, {
+    fastForward: true,
+    storage: () => tmpDir(t),
+    async apply (nodes, view, host) {
+      for (const node of nodes) {
+        await view.append(node.value)
+        if (slow) {
+          host.preferFastForward()
+          await view.get(1000) // just a hack to pretend a network stall
+          t.fail('should not get here')
+        }
+      }
+    }
+  })
+
+  const [a, b] = bases
+
+  await a.append('a0')
+
+  await replicateAndSync([a, b])
+
+  await a.append('a1')
+
+  slow = true // pretend replication stalls
+
+  await replicateAndSync([a, b])
+
+  t.is(b.core.length, a.core.length, 'did not get stuck, length is ' + b.core.length)
+})
+
 test('fast-forward - simple', async t => {
   t.plan(1)
 

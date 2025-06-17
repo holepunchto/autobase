@@ -123,6 +123,7 @@ module.exports = class Autobase extends ReadyResource {
     this.fastForwarding = null
     this.fastForwardTo = null
     this.fastForwardFailedAt = 0
+    this.fastForwardMinimum = FastForward.MINIMUM
 
     this._bootstrapWriters = [] // might contain dups, but thats ok
     this._bootstrapWritersChanged = false
@@ -1250,7 +1251,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _applyFastForward () {
-    if (!this.fastForwardTo.force && this.fastForwardTo.length < this.core.length + FastForward.MINIMUM) {
+    if (!this.fastForwardTo.force && this.fastForwardTo.length < this.core.length + this.fastForwardTo.minimum) {
       this.fastForwardTo = null
       this._updateActivity()
       // still not worth it
@@ -1764,6 +1765,16 @@ module.exports = class Autobase extends ReadyResource {
     return this._writable.promise
   }
 
+  async _drainWithInterupt () {
+    try {
+      await this._drain()
+    } catch (err) {
+      if (this.closing || !this.fastForwardTo) throw err
+      // if an FF is enabled retry
+      await this._drain()
+    }
+  }
+
   async _advance () {
     if (this.opened === false) await this.ready()
     if (this.paused || this._interrupting) return
@@ -1781,7 +1792,7 @@ module.exports = class Autobase extends ReadyResource {
     const local = this.local.length
 
     try {
-      await this._drain()
+      await this._drainWithInterupt()
 
       // must run post drain so the linearizer is caught up
       if (this._caughtup && (this._needsWakeup === true || this._wakeupHints.size > 0)) await this._drainWakeup()
@@ -1845,11 +1856,12 @@ module.exports = class Autobase extends ReadyResource {
     const latestSignedLength = this.core.core.state.length
 
     if (!this.fastForwardEnabled || this.fastForwarding !== null || this._interrupting) return
-    if (latestSignedLength - this.core.length < FastForward.MINIMUM) return
+
+    if (latestSignedLength - this.core.length < this.fastForwardMinimum) return
     if (this.fastForwardTo !== null) return
     if ((Date.now() - this.fastForwardFailedAt) < MIN_FF_WAIT) return
 
-    this._runFastForward(new FastForward(this, this.core.key)).catch(noop)
+    this._runFastForward(new FastForward(this, this.core.key, { minimum: this.fastForwardMinimum })).catch(noop)
   }
 
   _queueStaticFastForward (key) {
@@ -1878,6 +1890,15 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
+  _preferFastForward () {
+    this.fastForwardMinimum = 1
+    this._queueFastForward()
+  }
+
+  _postApply () {
+    this.fastForwardMinimum = FastForward.MINIMUM
+  }
+
   async _runFastForward (ff) {
     this.fastForwarding = ff
 
@@ -1897,6 +1918,10 @@ module.exports = class Autobase extends ReadyResource {
 
     this.fastForwardFailedAt = 0
     this.fastForwardTo = result
+
+    if (this._applyState && this._applyState.applying && this.fastForwardMinimum === 1) {
+      await this._applyState.close()
+    }
 
     this._bumpAckTimer()
     this._queueBump()
