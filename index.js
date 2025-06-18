@@ -954,11 +954,13 @@ module.exports = class Autobase extends ReadyResource {
     // await in case append is in current tick
     if (this._advancing) await this._advancing
 
+    let runs = 0
+
     // bump until we've flushed the nodes
     while (this._appended < target && !this._interrupting) {
       await this._bump()
       // safety
-      if (this.localWriter && this.localWriter.idle()) break
+      if (runs++ >= 16 && this.localWriter && this.localWriter.idle()) break
     }
 
     if (this._advancing) await this._advancing
