@@ -1,6 +1,6 @@
 {
   "name": "autobase",
-  "version": "7.13.0",
+  "version": "7.13.1",
   "description": "A multiwriter data structure for Hypercore",
   "main": "index.js",
   "scripts": {
