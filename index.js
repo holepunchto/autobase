@@ -961,6 +961,8 @@ module.exports = class Autobase extends ReadyResource {
       if (this.localWriter && this.localWriter.idle()) break
     }
 
+    if (this._advancing) await this._advancing
+
     return localLength + len
   }
 
