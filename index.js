@@ -1570,12 +1570,14 @@ module.exports = class Autobase extends ReadyResource {
       nodes[i] = node
     }
 
-    this._appended += length
+    return nodes
+  }
+
+  _flushLocalHeads (length) {
     this._appending = length === this._appending.length ? null : this._appending.slice(length)
+    this._appended += length
 
     if (this._optimistic > -1 && this._optimistic < length) this._optimistic = -1
-
-    return nodes
   }
 
   async _addRemoteHeads () {
@@ -1632,6 +1634,8 @@ module.exports = class Autobase extends ReadyResource {
 
       const u = this.linearizer.update()
       const update = u ? await this._applyState.update(u, localNodes) : { reboot: false, migrated: false }
+
+      if (localNodes) this._flushLocalHeads(localNodes.length)
 
       if (!update.reboot) {
         if (this._applyState.shouldFlush()) {
@@ -1770,12 +1774,14 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _drainWithInterupt () {
-    try {
-      await this._drain()
-    } catch (err) {
-      if (this.closing || !this.fastForwardTo) throw err
-      // if an FF is enabled retry
-      await this._drain()
+    while (true) {
+      try {
+        await this._drain()
+        return
+      } catch (err) {
+        if (this.closing || !this.fastForwardTo) throw err
+        // if an FF is enabled retry
+      }
     }
   }
 
