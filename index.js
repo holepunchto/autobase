@@ -1267,7 +1267,7 @@ module.exports = class Autobase extends ReadyResource {
 
   async _resetRecovery () {
     this._pendingAssertion = null
-    this._bootRecovery = null
+    this._bootRecovery = false
   }
 
   async _applyFastForward () {
