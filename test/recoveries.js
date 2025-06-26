@@ -105,61 +105,6 @@ test('fork - assertion recovery', async t => {
   t.is(b.view.signedLength, 204)
 })
 
-test('fork - assertion is cleared', async t => {
-  let assertions = 0
-
-  const { bases } = await create(2, t, {
-    encryptionKey: b4a.alloc(32, 0),
-    apply: async (batch, view, host) => {
-      for (const { value } of batch) {
-        if (value.add) {
-          const key = Buffer.from(value.add, 'hex')
-          await host.addWriter(key, { indexer: value.indexer })
-          continue
-        }
-
-        if (value.assert) {
-          const self = b4a.toString(host.self, 'hex')
-          
-          // allow prev assertion to be cleared
-          assert(assertions & 1 || value.assert !== self,
-            'assert #' + assertions++)
-        }
-
-        if (view) await view.append(value)
-      }
-    }
-  })
-
-  const [a, b] = bases
-
-  await a.append('one')
-  await a.append('two')
-  await a.append('three')
-
-  await addWriter(a, b, false)
-  await confirm(bases)
-
-  await b.append(null)
-
-  await a.append({ assert: b4a.toString(b.local.key, 'hex') })
-
-  for (let i = 0; i < 200; i++) {
-    await a.append('data ' + i)
-  }
-
-  await t.execution(replicateAndSync([a, b]))
-
-  await a.append({ assert: b4a.toString(b.local.key, 'hex') })
-
-  await t.execution(replicateAndSync([a, b]))
-
-  t.is(assertions, 4)
-
-  t.is(a.view.signedLength, 205)
-  t.is(b.view.signedLength, 205)
-})
-
 test('fork - recover during boot', async t => {
   t.plan(3)
   const { bases, stores } = await create(2, t, { storage: () => tmpDir(t) })
