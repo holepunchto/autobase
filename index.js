@@ -318,11 +318,6 @@ module.exports = class Autobase extends ReadyResource {
 
     const pointer = await result.local.getUserData('autobase/boot')
 
-    if (pointer) {
-      const { recoveries } = c.decode(messages.BootRecord, pointer)
-      this.recoveries = recoveries
-    }
-
     this._primaryBootstrap = result.bootstrap
     this.local = result.local
 
@@ -572,7 +567,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const boot = pointer
       ? c.decode(messages.BootRecord, pointer)
-      : { version: BOOT_RECORD_VERSION, key: null, systemLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: MAX_RECOVERIES, heads: null }
+      : { version: BOOT_RECORD_VERSION, key: null, systemLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: 0, heads: null }
 
     if (boot.heads) {
       const len = await this._getMigrationPointer(boot.key, boot.systemLength)
@@ -1350,7 +1345,7 @@ module.exports = class Autobase extends ReadyResource {
         systemLength: length,
         indexersUpdated: false,
         fastForwarding: true,
-        recoveries: MAX_RECOVERIES
+        recoveries: 0 // back compat
       })
 
       const local = store.getLocal()
