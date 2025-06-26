@@ -27,10 +27,11 @@ test('fork - assertion no recovery', async t => {
           continue
         }
 
-
         if (value.assert) {
           const self = b4a.toString(host.self, 'hex')
-          assert(value.assert !== self, 'assert #' + assertions++)
+          if (value.assert === self) {
+            assert(false, 'assert #' + assertions++)
+          }
         }
 
         if (view) await view.append(value)
@@ -44,22 +45,17 @@ test('fork - assertion no recovery', async t => {
   await a.append('two')
   await a.append('three')
 
-  await addWriter(a, b, false)
+  await addWriter(a, b, true)
   await confirm(bases)
 
-  await b.append(null)
-
+  // unindexed so it is always reapplied
   await a.append({ assert: b4a.toString(b.local.key, 'hex') })
-
-  for (let i = 0; i < 200; i++) {
-    await a.append('data ' + i)
-  }
 
   await t.exception(replicateAndSync([a, b]), 'assert #1')
 
   t.is(assertions, 2)
-  t.is(a.view.signedLength, 204)
-  t.is(b.view.signedLength, 3)
+  t.is(a.view.length, 4)
+  t.is(b.view.length, 3)
 })
 
 test('fork - assertion recovery', async t => {
@@ -231,9 +227,64 @@ test('fork - recovery fails during boot', async t => {
   })
 
   await t.exception(assertion, 'assert #1')
-  t.is(assertions, 2)
+  t.is(assertions, 1)
 
   await new Promise(setImmediate) // allow tick to close
 
   t.is(b2.closed, true)
+})
+
+test('fork - update hook on recovery', async t => {
+  let assertions = 0
+  let from = -1
+
+  const { bases } = await create(2, t, {
+    encryptionKey: b4a.alloc(32, 0),
+    update: (view, changes, host) => {
+      const sys = changes.get('_system')
+      if (sys.from === from) t.is(sys.to, a.core.signedLength, 'recovery triggered update')
+    },
+    apply: async (batch, view, host) => {
+      for (const { value } of batch) {
+        if (value.add) {
+          const key = Buffer.from(value.add, 'hex')
+          await host.addWriter(key, { indexer: value.indexer })
+          continue
+        }
+
+        if (value.assert) {
+          const self = b4a.toString(host.self, 'hex')
+
+          assert(value.assert !== self && (assertions++ & 1) === 0,
+            'assert #' + assertions)
+        }
+
+        if (view) await view.append(value)
+      }
+    }
+  })
+
+  const [a, b] = bases
+
+  await a.append('one')
+  await a.append('two')
+  await a.append('three')
+
+  await addWriter(a, b, false)
+  await confirm(bases)
+
+  await b.append(null)
+
+  await a.append({ assert: b4a.toString(b.local.key, 'hex') })
+
+  for (let i = 0; i < 200; i++) {
+    await a.append('data ' + i)
+  }
+
+  from = b.core.signedLength
+
+  await t.execution(replicateAndSync([a, b]))
+
+  t.is(a.view.signedLength, 204)
+  t.is(b.view.signedLength, 204)
 })

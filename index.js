@@ -38,7 +38,7 @@ const inspect = Symbol.for('nodejs.util.inspect.custom')
 const INTERRUPT = new Error('Apply interrupted')
 const BINARY_ENCODING = c.from('binary')
 
-const RECOVERIES = 3
+const MAX_RECOVERIES = 3
 
 // default is to automatically ack
 const DEFAULT_ACK_INTERVAL = 10_000
@@ -182,7 +182,7 @@ module.exports = class Autobase extends ReadyResource {
     this.core = null
     this.version = -1
     this.interrupted = null
-    this.recoveries = RECOVERIES
+    this.recoveries = 0
 
     const {
       ackInterval = DEFAULT_ACK_INTERVAL,
@@ -572,7 +572,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const boot = pointer
       ? c.decode(messages.BootRecord, pointer)
-      : { version: BOOT_RECORD_VERSION, key: null, systemLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
+      : { version: BOOT_RECORD_VERSION, key: null, systemLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: MAX_RECOVERIES, heads: null }
 
     if (boot.heads) {
       const len = await this._getMigrationPointer(boot.key, boot.systemLength)
@@ -684,7 +684,7 @@ module.exports = class Autobase extends ReadyResource {
       this._warn(new Error('Failed to boot due to: ' + err.message))
 
       if (!this._bootRecovery) {
-        this._bootRecovery = true
+        this._pendingAssertion = err
         this._queueBump()
         return
       }
@@ -1261,17 +1261,29 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _recoverMaybe () {
+    if (++this.recoveries > MAX_RECOVERIES) {
+      return this._onError(this._pendingAssertion)
+    }
+
     await this._runForceFastForward()
     this._queueBump()
   }
 
-  async _resetRecovery () {
+  _isRecovering () {
+    return this._bootRecovery || this._pendingAssertion !== null
+  }
+
+  _resetRecovery () {
     this._pendingAssertion = null
     this._bootRecovery = false
+    this.recoveries = 0
   }
 
   async _applyFastForward () {
-    if (!this.fastForwardTo.force && this.fastForwardTo.length < this.core.length + this.fastForwardTo.minimum) {
+    const ff = this.fastForwardTo
+    const same = b4a.equals(ff.key, this.core.key) && ff.length === this.core.signedLength
+
+    if (same || (!ff.force && ff.length < this.core.length + ff.minimum)) {
       this.fastForwardTo = null
       this._updateActivity()
       // still not worth it
@@ -1338,7 +1350,7 @@ module.exports = class Autobase extends ReadyResource {
         systemLength: length,
         indexersUpdated: false,
         fastForwarding: true,
-        recoveries: RECOVERIES
+        recoveries: MAX_RECOVERIES
       })
 
       const local = store.getLocal()
@@ -1356,16 +1368,16 @@ module.exports = class Autobase extends ReadyResource {
 
       for (const ref of ffed) await ref.release()
 
-      this.recoveries = RECOVERIES
       this.fastForwardTo = null
       this._queueFastForward()
+      this._resetRecovery()
 
       await this._clearWriters()
 
       this._applyState = new ApplyState(this)
       await this._applyState.ready()
 
-      if (changes) await this._handlers.update(this._applyState.view, changes)
+      if (changes) await this._handlers.update(this._applyState.view, changes, this)
 
       if (await this._applyState.shouldMigrate()) {
         await this._migrate()
@@ -1630,8 +1642,12 @@ module.exports = class Autobase extends ReadyResource {
     while (!this._interrupting && !this.paused) {
       if (this.fastForwardTo !== null) {
         await this._applyFastForward()
-        this._resetRecovery() // in case of ff recovery
         continue // revaluate conditions...
+      }
+
+      if (this._isRecovering()) {
+        await this._recoverMaybe()
+        continue
       }
 
       // we defer this to post ready so its not blocking reading the views
@@ -2042,5 +2058,5 @@ function normalize (valueEncoding, value) {
 }
 
 function isAssertion (err) {
-  return err.code === 'ERR_ASSERTION'
+  return err.name === 'AssertionError'
 }
