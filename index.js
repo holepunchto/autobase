@@ -39,7 +39,6 @@ const INTERRUPT = new Error('Apply interrupted')
 const BINARY_ENCODING = c.from('binary')
 
 const RECOVERIES = 3
-const FF_RECOVERY = 1
 
 // default is to automatically ack
 const DEFAULT_ACK_INTERVAL = 10_000
@@ -156,6 +155,7 @@ module.exports = class Autobase extends ReadyResource {
     this._advancing = null
     this._interrupting = false
     this._caughtup = false
+    this._pendingAssertion = null
 
     this.paused = false
 
@@ -683,7 +683,7 @@ module.exports = class Autobase extends ReadyResource {
 
       this._warn(new Error('Failed to boot due to: ' + err.message))
 
-      if (this.recoveries < RECOVERIES) {
+      if (!this._bootRecovery) {
         this._bootRecovery = true
         this._queueBump()
         return
@@ -765,6 +765,17 @@ module.exports = class Autobase extends ReadyResource {
       this.emit('interrupt', this.interrupted)
       this.emit('update')
       return
+    }
+
+    if (!this.bootRecovery && isAssertion(err)) {
+      if (!this._pendingAssertion) {
+        this._pendingAssertion = err
+        this._queueBump()
+        return
+      }
+
+      // throw original assertion
+      err = this._pendingAssertion
     }
 
     this.close().catch(safetyCatch)
@@ -1250,20 +1261,13 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _recoverMaybe () {
-    if (!this._applyState) {
-      if (!this._bootRecovery) return
-      await this._runForceFastForward()
-      this._queueBump()
-      return
-    }
-
-    this._bootRecovery = false
-
-    const ff = await this._applyState.recoverAt()
-    if (!ff || this.fastForwardTo) return
-
-    this.fastForwardTo = ff
+    await this._runForceFastForward()
     this._queueBump()
+  }
+
+  async _resetRecovery () {
+    this._pendingAssertion = null
+    this._bootRecovery = null
   }
 
   async _applyFastForward () {
@@ -1626,6 +1630,7 @@ module.exports = class Autobase extends ReadyResource {
     while (!this._interrupting && !this.paused) {
       if (this.fastForwardTo !== null) {
         await this._applyFastForward()
+        this._resetRecovery() // in case of ff recovery
         continue // revaluate conditions...
       }
 
@@ -1803,7 +1808,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._draining = true
 
-    if (this.recoveries < FF_RECOVERY || this._bootRecovery) {
+    if (this._pendingAssertion || this._bootRecovery) {
       await this._recoverMaybe()
     }
 
@@ -1826,8 +1831,7 @@ module.exports = class Autobase extends ReadyResource {
 
       this._draining = false
     } catch (err) {
-      this._onError(err)
-      return
+      return this._onError(err)
     }
 
     if (this._interrupting) return
@@ -2035,4 +2039,8 @@ function normalize (valueEncoding, value) {
   valueEncoding.encode(state, value)
   state.start = 0
   return valueEncoding.decode(state)
+}
+
+function isAssertion (err) {
+  return err.code === 'ERR_ASSERTION'
 }
