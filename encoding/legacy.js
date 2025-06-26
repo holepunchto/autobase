@@ -141,7 +141,7 @@ const BootRecordV0 = {
     const heads = Clock.decode(state)
 
     // one cause initial recover is not ff recovery
-    return { version: 0, key: indexed.key, indexedLength: indexed.length, indexersUpdated: false, fastForwarding: false, recoveries: 1, migrating: false, heads }
+    return { version: 0, key: indexed.key, systemLength: indexed.length, indexersUpdated: false, fastForwarding: false, recoveries: 1, migrating: false, heads }
   }
 }
 
