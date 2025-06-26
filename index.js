@@ -198,7 +198,6 @@ module.exports = class Autobase extends ReadyResource {
     this._acking = false
 
     this._waiting = new SignalPromise()
-    this._bootRecovery = false
 
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, new PublicApplyCalls(this)) : null
     this.core = this._viewStore.get({ name: '_system' })
@@ -315,8 +314,6 @@ module.exports = class Autobase extends ReadyResource {
       encrypt: this.encrypt,
       keyPair: this.keyPair
     })
-
-    const pointer = await result.local.getUserData('autobase/boot')
 
     this._primaryBootstrap = result.bootstrap
     this.local = result.local
@@ -678,7 +675,7 @@ module.exports = class Autobase extends ReadyResource {
 
       this._warn(new Error('Failed to boot due to: ' + err.message))
 
-      if (!this._bootRecovery) {
+      if (!this._pendingAssertion) {
         this._pendingAssertion = err
         this._queueBump()
         return
@@ -1265,12 +1262,11 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   _isRecovering () {
-    return this._bootRecovery || this._pendingAssertion !== null
+    return this._pendingAssertion !== null
   }
 
   _resetRecovery () {
     this._pendingAssertion = null
-    this._bootRecovery = false
     this.recoveries = 0
   }
 
@@ -1819,7 +1815,8 @@ module.exports = class Autobase extends ReadyResource {
 
     this._draining = true
 
-    if (this._pendingAssertion || this._bootRecovery) {
+    if (this._pendingAssertion) {
+      this._warn(this._pendingAssertion)
       await this._recoverMaybe()
     }
 
