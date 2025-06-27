@@ -11,6 +11,7 @@ const mutexify = require('mutexify/promise')
 const ProtomuxWakeup = require('protomux-wakeup')
 const rrp = require('resolve-reject-promise')
 const Hypercore = require('hypercore')
+const { INVALID_OPERATION } = require('hypercore-errors')
 
 const LocalState = require('./lib/local-state.js')
 const Linearizer = require('./lib/linearizer.js')
@@ -759,7 +760,7 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
-    if (!this.bootRecovery && isAssertion(err)) {
+    if (!this.bootRecovery && isRecoverable(err)) {
       if (!this._pendingAssertion) {
         this._pendingAssertion = err
         this._queueBump()
@@ -2049,6 +2050,6 @@ function normalize (valueEncoding, value) {
   return valueEncoding.decode(state)
 }
 
-function isAssertion (err) {
-  return err.name === 'AssertionError'
+function isRecoverable (err) {
+  return err instanceof INVALID_OPERATION || err.name === 'AssertionError'
 }

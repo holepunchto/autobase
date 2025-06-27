@@ -43,6 +43,7 @@
     "hyperbee": "^2.22.0",
     "hypercore": "^11.4.0",
     "hypercore-crypto": "^3.4.0",
+    "hypercore-errors": "^1.4.0",
     "hypercore-id-encoding": "^1.2.0",
     "hyperschema": "^1.12.1",
     "index-encoder": "^3.3.2",
