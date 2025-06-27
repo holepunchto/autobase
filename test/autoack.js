@@ -1,4 +1,5 @@
 const test = require('brittle')
+const b4a = require('b4a')
 
 const {
   create,
@@ -583,6 +584,45 @@ function poll (fn, interval) {
     }
   })
 }
+
+test('autoack - flush all pending indexers', async t => {
+  const { bases } = await create(7, t, { apply, ackInterval: 10, ackThreshold: 0 })
+  const [a, b, c, d, e, f, g] = bases
+
+  await a.append('first')
+
+  await replicateAndSync(bases)
+
+  await a.append({
+    add: [
+      { key: b4a.toString(b.local.key, 'hex'), indexer: true },
+      { key: b4a.toString(c.local.key, 'hex'), indexer: true },
+      { key: b4a.toString(d.local.key, 'hex'), indexer: true },
+      { key: b4a.toString(e.local.key, 'hex'), indexer: true },
+      { key: b4a.toString(f.local.key, 'hex'), indexer: true },
+      { key: b4a.toString(g.local.key, 'hex'), indexer: true }
+    ]
+  })
+
+  await confirm(bases)
+
+  t.is(a.linearizer.indexers.length, 7)
+  t.is(b.linearizer.indexers.length, 7)
+  t.is(c.linearizer.indexers.length, 7)
+
+  async function apply (nodes, view, base) {
+    for (const node of nodes) {
+      if (node.value.add) {
+        for (const { key, indexer } of node.value.add) {
+          await base.addWriter(b4a.from(key, 'hex'), { indexer })
+        }
+        continue
+      }
+
+      await view.append(node.value)
+    }
+  }
+})
 
 async function getIndexedViewLength (base, index = -1) {
   const info = await base.getIndexedInfo()
