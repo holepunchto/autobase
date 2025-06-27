@@ -38,8 +38,7 @@ const inspect = Symbol.for('nodejs.util.inspect.custom')
 const INTERRUPT = new Error('Apply interrupted')
 const BINARY_ENCODING = c.from('binary')
 
-const RECOVERIES = 3
-const FF_RECOVERY = 1
+const MAX_RECOVERIES = 3
 
 // default is to automatically ack
 const DEFAULT_ACK_INTERVAL = 10_000
@@ -156,6 +155,7 @@ module.exports = class Autobase extends ReadyResource {
     this._advancing = null
     this._interrupting = false
     this._caughtup = false
+    this._pendingAssertion = null
 
     this.paused = false
 
@@ -182,7 +182,7 @@ module.exports = class Autobase extends ReadyResource {
     this.core = null
     this.version = -1
     this.interrupted = null
-    this.recoveries = RECOVERIES
+    this.recoveries = 0
 
     const {
       ackInterval = DEFAULT_ACK_INTERVAL,
@@ -198,7 +198,6 @@ module.exports = class Autobase extends ReadyResource {
     this._acking = false
 
     this._waiting = new SignalPromise()
-    this._bootRecovery = false
 
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, new PublicApplyCalls(this)) : null
     this.core = this._viewStore.get({ name: '_system' })
@@ -315,13 +314,6 @@ module.exports = class Autobase extends ReadyResource {
       encrypt: this.encrypt,
       keyPair: this.keyPair
     })
-
-    const pointer = await result.local.getUserData('autobase/boot')
-
-    if (pointer) {
-      const { recoveries } = c.decode(messages.BootRecord, pointer)
-      this.recoveries = recoveries
-    }
 
     this._primaryBootstrap = result.bootstrap
     this.local = result.local
@@ -572,7 +564,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const boot = pointer
       ? c.decode(messages.BootRecord, pointer)
-      : { version: BOOT_RECORD_VERSION, key: null, systemLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
+      : { version: BOOT_RECORD_VERSION, key: null, systemLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: 0, heads: null }
 
     if (boot.heads) {
       const len = await this._getMigrationPointer(boot.key, boot.systemLength)
@@ -683,8 +675,8 @@ module.exports = class Autobase extends ReadyResource {
 
       this._warn(new Error('Failed to boot due to: ' + err.message))
 
-      if (this.recoveries < RECOVERIES) {
-        this._bootRecovery = true
+      if (!this._pendingAssertion) {
+        this._pendingAssertion = err
         this._queueBump()
         return
       }
@@ -765,6 +757,17 @@ module.exports = class Autobase extends ReadyResource {
       this.emit('interrupt', this.interrupted)
       this.emit('update')
       return
+    }
+
+    if (!this.bootRecovery && isRecoverable(err)) {
+      if (!this._pendingAssertion) {
+        this._pendingAssertion = err
+        this._queueBump()
+        return
+      }
+
+      // throw original assertion
+      err = this._pendingAssertion
     }
 
     this.close().catch(safetyCatch)
@@ -1250,24 +1253,28 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _recoverMaybe () {
-    if (!this._applyState) {
-      if (!this._bootRecovery) return
-      await this._runForceFastForward()
-      this._queueBump()
-      return
+    if (++this.recoveries > MAX_RECOVERIES) {
+      return this._onError(this._pendingAssertion)
     }
 
-    this._bootRecovery = false
-
-    const ff = await this._applyState.recoverAt()
-    if (!ff || this.fastForwardTo) return
-
-    this.fastForwardTo = ff
+    await this._runForceFastForward()
     this._queueBump()
   }
 
+  _isRecovering () {
+    return this._pendingAssertion !== null
+  }
+
+  _resetRecovery () {
+    this._pendingAssertion = null
+    this.recoveries = 0
+  }
+
   async _applyFastForward () {
-    if (!this.fastForwardTo.force && this.fastForwardTo.length < this.core.length + this.fastForwardTo.minimum) {
+    const ff = this.fastForwardTo
+    const same = b4a.equals(ff.key, this.core.key) && ff.length === this.core.signedLength
+
+    if (same || (!ff.force && ff.length < this.core.length + ff.minimum)) {
       this.fastForwardTo = null
       this._updateActivity()
       // still not worth it
@@ -1334,7 +1341,7 @@ module.exports = class Autobase extends ReadyResource {
         systemLength: length,
         indexersUpdated: false,
         fastForwarding: true,
-        recoveries: RECOVERIES
+        recoveries: 0 // back compat
       })
 
       const local = store.getLocal()
@@ -1352,16 +1359,16 @@ module.exports = class Autobase extends ReadyResource {
 
       for (const ref of ffed) await ref.release()
 
-      this.recoveries = RECOVERIES
       this.fastForwardTo = null
       this._queueFastForward()
+      this._resetRecovery()
 
       await this._clearWriters()
 
       this._applyState = new ApplyState(this)
       await this._applyState.ready()
 
-      if (changes) await this._handlers.update(this._applyState.view, changes)
+      if (changes) await this._handlers.update(this._applyState.view, changes, this)
 
       if (await this._applyState.shouldMigrate()) {
         await this._migrate()
@@ -1629,6 +1636,11 @@ module.exports = class Autobase extends ReadyResource {
         continue // revaluate conditions...
       }
 
+      if (this._isRecovering()) {
+        await this._recoverMaybe()
+        continue
+      }
+
       // we defer this to post ready so its not blocking reading the views
       if (this._caughtup === false) {
         await this._catchupApplyState()
@@ -1803,7 +1815,8 @@ module.exports = class Autobase extends ReadyResource {
 
     this._draining = true
 
-    if (this.recoveries < FF_RECOVERY || this._bootRecovery) {
+    if (this._pendingAssertion) {
+      this._warn(this._pendingAssertion)
       await this._recoverMaybe()
     }
 
@@ -1826,8 +1839,7 @@ module.exports = class Autobase extends ReadyResource {
 
       this._draining = false
     } catch (err) {
-      this._onError(err)
-      return
+      return this._onError(err)
     }
 
     if (this._interrupting) return
@@ -2035,4 +2047,8 @@ function normalize (valueEncoding, value) {
   valueEncoding.encode(state, value)
   state.start = 0
   return valueEncoding.decode(state)
+}
+
+function isRecoverable (err) {
+  return err.code === 'ERR_ASSERTION' || err.code === 'INVALID_OPERATION' || err.name === 'AssertionError'
 }
