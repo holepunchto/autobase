@@ -11,7 +11,6 @@ const mutexify = require('mutexify/promise')
 const ProtomuxWakeup = require('protomux-wakeup')
 const rrp = require('resolve-reject-promise')
 const Hypercore = require('hypercore')
-const { INVALID_OPERATION } = require('hypercore-errors')
 
 const LocalState = require('./lib/local-state.js')
 const Linearizer = require('./lib/linearizer.js')
@@ -2051,5 +2050,5 @@ function normalize (valueEncoding, value) {
 }
 
 function isRecoverable (err) {
-  return err instanceof INVALID_OPERATION || err.name === 'AssertionError'
+  return err.code === 'ERR_ASSERTION' || err.code === 'INVALID_OPERATION' || err.name === 'AssertionError'
 }
