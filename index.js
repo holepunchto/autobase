@@ -767,6 +767,9 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
+    // just in case error is thrown while actually interrupting
+    if (this._interrupting) return
+
     this.close().catch(safetyCatch)
 
     // if no one is listening we should crash! we cannot rely on the EE here
@@ -1050,7 +1053,8 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this._interrupting) {
       release()
-      throw new Error('Autobase is closing')
+      if (this.closing) throw new Error('Autobase is closing')
+      throw INTERRUPT
     }
 
     try {
