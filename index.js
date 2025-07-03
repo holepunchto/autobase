@@ -901,8 +901,9 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     const alwaysWrite = isPendingIndexer || this._applyState.shouldWrite()
+    const hasPendingIndexers = this._applyState.system.indexers.length > this.linearizer.indexers.length
 
-    if (alwaysWrite || this.linearizer.shouldAck(this.localWriter, false)) {
+    if (alwaysWrite || this.linearizer.shouldAck(this.localWriter, hasPendingIndexers)) {
       try {
         if (this.localWriter && !this.localWriter.closed) await this.append(null)
       } catch (err) {
