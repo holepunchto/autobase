@@ -46,7 +46,6 @@
     "hypercore-id-encoding": "^1.2.0",
     "hyperschema": "^1.12.1",
     "index-encoder": "^3.3.2",
-    "mutexify": "^1.4.0",
     "nanoassert": "^2.0.0",
     "protomux-wakeup": "^2.0.0",
     "ready-resource": "^1.0.0",
