@@ -7,10 +7,10 @@ const hypercoreId = require('hypercore-id-encoding')
 const assert = require('nanoassert')
 const SignalPromise = require('signal-promise')
 const CoreCoupler = require('core-coupler')
-const mutexify = require('mutexify/promise')
 const ProtomuxWakeup = require('protomux-wakeup')
 const rrp = require('resolve-reject-promise')
 const Hypercore = require('hypercore')
+const ScopeLock = require('scope-lock')
 
 const LocalState = require('./lib/local-state.js')
 const Linearizer = require('./lib/linearizer.js')
@@ -27,6 +27,7 @@ const AutoWakeup = require('./lib/wakeup.js')
 const FastForward = require('./lib/fast-forward.js')
 const AutoStore = require('./lib/store.js')
 const ApplyState = require('./lib/apply-state.js')
+const AppendBatch = require('./lib/append-batch.js')
 const { PublicApplyCalls } = require('./lib/apply-calls.js')
 const boot = require('./lib/boot.js')
 const {
@@ -141,7 +142,7 @@ module.exports = class Autobase extends ReadyResource {
     this._coupler = null
 
     this._updateLocalCore = null
-    this._lock = mutexify()
+    this._lock = new ScopeLock()
 
     this._needsWakeupRequest = false
     this._needsWakeup = true
@@ -924,10 +925,18 @@ module.exports = class Autobase extends ReadyResource {
     return this._viewStore.listViews()
   }
 
+  batch () {
+    return new AppendBatch(this)
+  }
+
   async append (value, opts) {
     if (this.opened === false) await this.ready()
     if (this._advancing !== null) await this._advancing
+    while (this.activeBatch) await this.activeBatch.flushed()
+    return this._appendBatch(value, opts)
+  }
 
+  async _appendBatch (value, opts) {
     if (this._interrupting) throw new Error('Autobase is closing')
     if (value && this.valueEncoding !== BINARY_ENCODING) value = normalize(this.valueEncoding, value)
 
@@ -1047,10 +1056,10 @@ module.exports = class Autobase extends ReadyResource {
   async _getWriterByKey (key, len, seen, allowGC, isAdded, system) {
     assert(this._draining === true || (this.opening && !this.opened) || this._optimistic > -1)
 
-    const release = await this._lock()
+    await this._lock.lock()
 
     if (this._interrupting) {
-      release()
+      this._lock.unlock()
       throw new Error('Autobase is closing')
     }
 
@@ -1115,7 +1124,7 @@ module.exports = class Autobase extends ReadyResource {
       w.updateActivity()
       return w
     } finally {
-      release()
+      this._lock.unlock()
     }
   }
 
