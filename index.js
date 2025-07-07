@@ -103,6 +103,8 @@ module.exports = class Autobase extends ReadyResource {
     this.encryptionKey = handlers.encryptionKey || null
     this.encryption = null
 
+    this.activeBatch = null // maintained by the append-batch
+
     this.local = null
     this.localWriter = null
     this.isIndexer = false
