@@ -4,6 +4,7 @@ const b4a = require('b4a')
 const tmpDir = require('test-tmp')
 const crypto = require('hypercore-crypto')
 const Rache = require('rache')
+const TaskBackoff = require('task-backoff')
 
 const Autobase = require('..')
 
@@ -2059,6 +2060,25 @@ test('basic - append returns local length', async t => {
   t.is(await c, 5)
 
   await base.close()
+})
+
+test('basic - apply supports backoff', async t => {
+  const backoff = new TaskBackoff({ maxDelay: 20 })
+
+  const tmp = await tmpDir(t)
+  const store = new Corestore(tmp)
+  const base = new Autobase(store, {
+    backoff,
+    open: openMultiple,
+    apply: applyMultiple,
+    valueEncoding: 'json'
+  })
+
+  for (let i = 0; i < 1e3; i++) {
+    await base.append({ index: 2, data: 'a' + i })
+  }
+
+  backoff.destroy()
 })
 
 async function applyWithRemove (batch, view, base) {

@@ -64,6 +64,7 @@
     "rache": "^1.0.0",
     "same-data": "^1.0.0",
     "standard": "^17.0.0",
+    "task-backoff": "^1.0.0",
     "test-tmp": "^1.2.0",
     "uncaughts": "^1.1.0"
   },

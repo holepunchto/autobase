@@ -91,6 +91,7 @@ module.exports = class Autobase extends ReadyResource {
     this.id = null
     this.key = key
     this.discoveryKey = null
+    this.backoff = handlers.backoff || null
 
     this.keyPair = null
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
