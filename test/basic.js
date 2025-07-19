@@ -2079,6 +2079,8 @@ test('basic - apply supports backoff', async t => {
   }
 
   backoff.destroy()
+  await base.close()
+  await store.close()
 })
 
 async function applyWithRemove (batch, view, base) {
