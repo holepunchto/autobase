@@ -14,6 +14,7 @@ module.exports = {
   create,
   addWriter,
   addWriterAndSync,
+  open,
   apply,
   confirm,
   printIndexerTip,
