@@ -231,6 +231,14 @@ Pauses the autobase prevent the next apply from running.
 
 Resumes a paused autobase and will check for an update.
 
+#### `await base.setUserData(key, value)`
+
+Sets the [User Data](https://github.com/holepunchto/hypercore#user-data) value for the provided `key`. `key` is a string. `value` can be either a string or a buffer.
+
+#### `const value = await base.getUserData(key)`
+
+Returns the [User Data](https://github.com/holepunchto/hypercore#user-data) value for the provided `key`. `key` is a string.
+
 #### `const core = Autobase.getLocalCore(store, handlers, encryptionKey)`
 
 Generate a local core to be used for an Autobase.
