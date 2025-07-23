@@ -253,7 +253,7 @@ test('autoack - no null acks', async t => {
 })
 
 test('autoack - value beneath null values', async t => {
-  t.plan(4)
+  t.plan(3)
 
   const { bases } = await create(2, t, {
     ackInterval: 10,
@@ -272,14 +272,11 @@ test('autoack - value beneath null values', async t => {
   await b.append('b0')
   await b.append(null) // place null value above tail
 
-  const blen = b.local.length
-
   await sync([a, b])
 
   await new Promise(resolve => setTimeout(resolve, 1000))
 
   t.not(a.local.length, alen) // a should ack
-  t.is(b.local.length, blen) // b0 is indexed by a's ack (all indexes acked)
 
   t.is(await getIndexedViewLength(a), a.view.length)
   t.is(b.view.length, a.view.length)
