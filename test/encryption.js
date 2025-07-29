@@ -8,7 +8,9 @@ const Autobase = require('..')
 test('encryption - basic', async t => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
+
   const base = new Autobase(store, { apply, open, ackInterval: 0, ackThreshold: 0, encryptionKey: b4a.alloc(32).fill('secret') })
+  await base.ready()
 
   t.ok(base.encryptionKey)
 
@@ -40,7 +42,9 @@ test('encryption - basic', async t => {
 test('encryption - restart', async t => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
+
   const base = new Autobase(store, { apply, open, ackInterval: 0, ackThreshold: 0, encryptionKey: b4a.alloc(32).fill('secret') })
+  await base.ready()
 
   t.ok(base.encryptionKey)
 
@@ -88,6 +92,43 @@ test('encryption - expect encryption key', async t => {
   await store.close()
 
   await closing
+})
+
+test('encryption - pass as promise', async t => {
+  const tmp = await tmpDir(t)
+  const store = new Corestore(tmp)
+
+  const key = b4a.alloc(32).fill('secret')
+  const encryptionKey = new Promise(resolve => setTimeout(resolve, 1000, key))
+
+  const base = new Autobase(store, { apply, open, ackInterval: 0, ackThreshold: 0, encryptionKey })
+  await base.ready()
+
+  t.alike(base.encryptionKey, key)
+
+  await base.append('you should not see me')
+
+  t.alike(await base.view.get(0), 'you should not see me')
+  t.is(base.view.signedLength, 1)
+  t.is(base.system.core.signedLength, 3)
+
+  let found = false
+
+  for (const core of store.cores) {
+    const session = store.get(core.key)
+    await session.setEncryptionKey(null) // ensure no auto decryption
+
+    for (let i = 0; i < core.length; i++) {
+      const buf = await session.get(i, { valueEncoding: 'ascii' })
+      if (buf.indexOf('you should not see me') > -1) found = true
+    }
+
+    await session.close()
+  }
+
+  t.absent(found)
+
+  await base.close()
 })
 
 function open (store) {
