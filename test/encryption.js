@@ -8,7 +8,9 @@ const Autobase = require('..')
 test('encryption - basic', async t => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
+
   const base = new Autobase(store, { apply, open, ackInterval: 0, ackThreshold: 0, encryptionKey: b4a.alloc(32).fill('secret') })
+  await base.ready()
 
   t.ok(base.encryptionKey)
 
@@ -40,7 +42,9 @@ test('encryption - basic', async t => {
 test('encryption - restart', async t => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
+
   const base = new Autobase(store, { apply, open, ackInterval: 0, ackThreshold: 0, encryptionKey: b4a.alloc(32).fill('secret') })
+  await base.ready()
 
   t.ok(base.encryptionKey)
 

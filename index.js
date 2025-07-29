@@ -101,7 +101,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this.encrypted = handlers.encrypted || !!handlers.encryptionKey
     this.encrypt = !!handlers.encrypt
-    this.encryptionKey = handlers.encryptionKey || null
+    this.encryptionKey = null
     this.encryption = null
 
     this.activeBatch = null // maintained by the append-batch
@@ -314,7 +314,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this.keyPair = (await this._handlers.keyPair) || null
 
-    if (!this.encryptionKey && this._handlers.encryptionKey) {
+    if (this._handlers.encryptionKey !== null) {
       this.encryptionKey = await this._handlers.encryptionKey
     }
 
