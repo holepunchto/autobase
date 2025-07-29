@@ -314,6 +314,10 @@ module.exports = class Autobase extends ReadyResource {
 
     this.keyPair = (await this._handlers.keyPair) || null
 
+    if (!this.encryptionKey && this._handlers.encryptionKey) {
+      this.encryptionKey = await this._handlers.encryptionKey
+    }
+
     const result = await boot(this.store, this.key, {
       encryptionKey: this.encryptionKey,
       encrypt: this.encrypt,
