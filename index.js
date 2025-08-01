@@ -40,7 +40,6 @@ const INTERRUPT = new Error('Apply interrupted')
 const BINARY_ENCODING = c.from('binary')
 
 const RECOVERIES = 3
-const FF_RECOVERY = 1
 
 // default is to automatically ack
 const DEFAULT_ACK_INTERVAL = 10_000
@@ -202,7 +201,6 @@ module.exports = class Autobase extends ReadyResource {
     this._acking = false
 
     this._waiting = new SignalPromise()
-    this._bootRecovery = false
 
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, new PublicApplyCalls(this)) : null
     this.core = this._viewStore.get({ name: '_system' })
@@ -323,13 +321,6 @@ module.exports = class Autobase extends ReadyResource {
       encrypt: this.encrypt,
       keyPair: this.keyPair
     })
-
-    const pointer = await result.local.getUserData('autobase/boot')
-
-    if (pointer) {
-      const { recoveries } = c.decode(messages.BootRecord, pointer)
-      this.recoveries = recoveries
-    }
 
     this._primaryBootstrap = result.bootstrap
     this.local = result.local
@@ -688,14 +679,6 @@ module.exports = class Autobase extends ReadyResource {
 
       this._applyState = null
       if (this.closing) return
-
-      this._warn(new Error('Failed to boot due to: ' + err.message))
-
-      if (this.recoveries < RECOVERIES) {
-        this._bootRecovery = true
-        this._queueBump()
-        return
-      }
 
       throw err
     }
@@ -1266,23 +1249,6 @@ module.exports = class Autobase extends ReadyResource {
     await this.update()
   }
 
-  async _recoverMaybe () {
-    if (!this._applyState) {
-      if (!this._bootRecovery) return
-      await this._runForceFastForward()
-      this._queueBump()
-      return
-    }
-
-    this._bootRecovery = false
-
-    const ff = await this._applyState.recoverAt()
-    if (!ff || this.fastForwardTo) return
-
-    this.fastForwardTo = ff
-    this._queueBump()
-  }
-
   async _applyFastForward () {
     if (!this.fastForwardTo.force && this.fastForwardTo.length < this.core.length + this.fastForwardTo.minimum) {
       this.fastForwardTo = null
@@ -1819,10 +1785,6 @@ module.exports = class Autobase extends ReadyResource {
     if (this.paused || this._interrupting) return
 
     this._draining = true
-
-    if (this.recoveries < FF_RECOVERY || this._bootRecovery) {
-      await this._recoverMaybe()
-    }
 
     if (this._updateLocalCore !== null) {
       await this._rotateLocalWriter(this._updateLocalCore)
