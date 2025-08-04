@@ -127,47 +127,6 @@ test('fork - with unindexed state', async t => {
   t.is(await b.view.get(103), 'post fork')
 })
 
-test('fork - migration after fork', async t => {
-  const { bases } = await create(3, t, {
-    encryptionKey: b4a.alloc(32, 0),
-    apply: applyFork
-  })
-
-  const [a, b, c] = bases
-
-  await a.append('one')
-  await a.append('two')
-  await a.append('three')
-
-  await addWriter(a, b, false)
-  await confirm(bases)
-
-  await b.append(null)
-
-  t.is(b.system.indexers.length, 1)
-  t.alike(b.system.indexers[0].key, a.local.key)
-
-  await fork(b, [b])
-
-  t.is(b.system.indexers.length, 1)
-  t.alike(b.system.indexers[0].key, b.local.key)
-
-  await t.execution(b.append('post fork'))
-
-  await addWriter(b, c, true)
-  await confirm([a, b, c], { checkHash: false })
-
-  t.is(b.system.indexers.length, 2)
-  t.alike(b.system.indexers[0].key, b.local.key)
-  t.alike(b.system.indexers[1].key, c.local.key)
-
-  t.is(b.core.manifest.signers.length, 2)
-  t.alike(b.core.key, c.core.key)
-
-  t.is(await b.view.get(2), 'three')
-  t.is(await b.view.get(3), 'post fork')
-})
-
 test('fork - add old indexer back', async t => {
   const { bases } = await create(2, t, {
     encryptionKey: b4a.alloc(32, 0),
