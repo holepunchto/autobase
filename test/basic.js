@@ -2120,3 +2120,52 @@ async function applyMultiple (batch, view, base) {
     }
   }
 }
+
+async function applyRotateKey (nodes, view, base) {
+  for (const node of nodes) {
+    if (node.value.type === 'addIndexer' && node.value.add) {
+      await base.addWriter(b4a.from(node.value.add, 'hex'), { isIndexer: true })
+    }
+    if (node.value.type === 'rotateIndexer' && node.value.remove && node.value.add) {
+      await base.removeWriter(b4a.from(node.value.remove, 'hex'))
+      await base.addWriter(b4a.from(node.value.add, 'hex'), { isIndexer: true })
+    }
+  }
+}
+
+test('basic - rotate indexing writer no bootstrap', async t => {
+  const { bases } = await create(6, t, { apply: applyRotateKey })
+  const [a, b, c, d, e, f] = bases
+  const newKey = f.local.key
+  const oldKey = a.local.key
+
+  await a.append({ type: 'addIndexer', add: b.local.key.toString('hex') })
+  await a.append({ type: 'addIndexer', add: c.local.key.toString('hex') })
+  await a.append({ type: 'addIndexer', add: d.local.key.toString('hex') })
+  await a.append({ type: 'addIndexer', add: e.local.key.toString('hex') })
+  await confirm([a, b, c, d, e]) // we assume that f node did not join yet
+
+  t.is(a.system.indexers.length, 5, 'should have 5 indexers initially')
+  t.ok(a.system.indexers.some(indexer => indexer.key.equals(a.local.key)), 'a should be an indexer')
+  t.ok(a.system.indexers.some(indexer => indexer.key.equals(b.local.key)), 'b should be an indexer')
+
+  await a.close() // a lost access to state. Destroyed.
+  await f.ready()
+  await replicateAndSync([b, c, d, e, f]) // f joins and requests to become an indexer
+  t.absent(b.system.indexers.some(indexer => indexer.key.equals(f.local.key)), 'f should not be an indexer yet')
+
+  await b.append({ type: 'rotateIndexer', remove: oldKey.toString('hex'), add: newKey.toString('hex') })
+  await confirm([b, c, d, e, f])
+
+  t.absent(b.system.indexers.some(indexer => indexer.key.equals(oldKey)), 'old key should be removed')
+  t.ok(b.system.indexers.some(indexer => indexer.key.equals(newKey)), 'new key should be added')
+
+  t.absent(f.system.indexers.some(indexer => indexer.key.equals(oldKey)), 'old key should be removed')
+  t.ok(f.system.indexers.some(indexer => indexer.key.equals(newKey)), 'new key should be added')
+
+  t.ok(b.isIndexer, 'b should remain an indexer')
+  t.ok(c.isIndexer, 'c should remain an indexer')
+  t.ok(d.isIndexer, 'd should remain an indexer')
+  t.ok(e.isIndexer, 'e should remain an indexer')
+  t.ok(f.isIndexer, 'f should become an indexer')
+})
