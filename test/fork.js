@@ -311,6 +311,63 @@ test('fork - competing forks', async t => {
   t.is(c.view.signedLength, 5)
 })
 
+test('fork - competing forks stay diverged', async t => {
+  const { bases } = await create(3, t, {
+    encryptionKey: b4a.alloc(32, 0),
+    apply: applyFork
+  })
+
+  const [a, b, c] = bases
+
+  await a.append('one')
+  await a.append('two')
+  await a.append('three')
+
+  await addWriter(a, b, false)
+  await addWriter(a, c, false)
+  await confirm(bases)
+
+  await b.append('b pre fork')
+  await c.append('c pre fork')
+
+  await replicateAndSync([b, c])
+
+  t.is(b.view.length, 5)
+  t.is(c.view.length, 5)
+
+  await fork(b, [b])
+  await fork(c, [c])
+
+  t.is(b.system.indexers.length, 1)
+  t.is(c.system.indexers.length, 1)
+
+  // Confirm so each fork moves to their indexers
+  await confirm([b])
+  await confirm([c])
+  t.is(b.view.signedLength, 5)
+  t.is(c.view.signedLength, 5)
+
+  await replicateAndSync([b, c], { checkHash: false })
+
+  t.unlike(a.system.indexers[0].key, c.local.key, 'c is not a\'s indexer')
+  t.is(b.system.indexers.length, 1)
+  t.unlike(b.system.indexers, c.system.indexers)
+
+  await replicateAndSync([b, a], { checkHash: false })
+
+  t.alike(a.system.indexers[0].key, c.local.key, 'a picked c')
+  t.is(a.system.indexers.length, c.system.indexers.length, 'a and c have the same # of indexers')
+
+  await confirm(bases, { checkHash: false })
+
+  t.alike(a.system.indexers[0].key, c.local.key, 'a still picked c')
+  t.is(b.system.indexers.length, c.system.indexers.length, 'b and c have the same # of indexers')
+  t.unlike(b.system.indexers[0].key, c.local.key, 'b has a different system than c')
+
+  t.is(b.view.signedLength, 5)
+  t.is(c.view.signedLength, 5)
+})
+
 test('fork - initial fast forward', async t => {
   const { bases } = await create(2, t, {
     encryptionKey: b4a.alloc(32, 0),
