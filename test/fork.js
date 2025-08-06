@@ -5,6 +5,7 @@ const {
   create,
   createStores,
   createBase,
+  compareViews,
   addWriter,
   replicate,
   replicateAndSync,
@@ -286,6 +287,7 @@ test('fork - competing forks', async t => {
 
   t.is(b.view.length, 5)
   t.is(c.view.length, 5)
+  t.alike(await b.hash(), await c.hash(), 'b & c hashes match before fork')
 
   await fork(b, [b])
   await fork(c, [c])
@@ -309,6 +311,11 @@ test('fork - competing forks', async t => {
 
   t.is(b.view.signedLength, 5)
   t.is(c.view.signedLength, 5)
+
+  t.alike(b.system.key, c.system.key)
+  t.alike(await b.hash(), await c.hash(), 'b & c hashes match')
+
+  await compareViews([b, c], t)
 })
 
 test.skip('fork - competing forks stay diverged if reconciled at different lengths', async t => {
