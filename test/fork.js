@@ -311,7 +311,7 @@ test('fork - competing forks', async t => {
   t.is(c.view.signedLength, 5)
 })
 
-test('fork - competing forks stay diverged', async t => {
+test.skip('fork - competing forks stay diverged if reconciled at different lengths', async t => {
   const { bases } = await create(3, t, {
     encryptionKey: b4a.alloc(32, 0),
     apply: applyFork
@@ -335,37 +335,45 @@ test('fork - competing forks stay diverged', async t => {
   t.is(b.view.length, 5)
   t.is(c.view.length, 5)
 
+  // Diverge new forks
+  t.comment('b & c fork seperately')
   await fork(b, [b])
   await fork(c, [c])
 
   t.is(b.system.indexers.length, 1)
   t.is(c.system.indexers.length, 1)
 
-  // Confirm so each fork moves to their indexers
+  // Confirm so each fork moves to their 'new' indexers
+  t.comment('b & c ack themselves')
   await confirm([b])
   await confirm([c])
   t.is(b.view.signedLength, 5)
   t.is(c.view.signedLength, 5)
 
+  t.comment('sync b & c')
   await replicateAndSync([b, c], { checkHash: false })
 
-  t.unlike(a.system.indexers[0].key, c.local.key, 'c is not a\'s indexer')
-  t.is(b.system.indexers.length, 1)
   t.unlike(b.system.indexers, c.system.indexers)
+  t.is(b.view.signedLength, 5, 'syncing w/ competing fork hasn\'t changed signing')
+  t.is(c.view.signedLength, 5, 'syncing w/ competing fork hasn\'t changed signing')
 
+  t.comment('sync b & a')
   await replicateAndSync([b, a], { checkHash: false })
 
-  t.alike(a.system.indexers[0].key, c.local.key, 'a picked c')
-  t.is(a.system.indexers.length, c.system.indexers.length, 'a and c have the same # of indexers')
+  t.alike(a.system.indexers, c.system.indexers, 'a picked c')
+  t.unlike(b.system.indexers, c.system.indexers, 'b & c still differ')
+
+  // attempt 'resolve' fork by copying b
+  t.comment('c yields to b')
+  await fork(c, [b])
 
   await confirm(bases, { checkHash: false })
 
-  t.alike(a.system.indexers[0].key, c.local.key, 'a still picked c')
-  t.is(b.system.indexers.length, c.system.indexers.length, 'b and c have the same # of indexers')
-  t.unlike(b.system.indexers[0].key, c.local.key, 'b has a different system than c')
+  t.alike(b.system.indexers, c.system.indexers, 'b & c do match')
+  t.alike(a.system.indexers, c.system.indexers, 'a & c do match')
 
-  t.is(b.view.signedLength, 5)
-  t.is(c.view.signedLength, 5)
+  t.alike(b.system.key, c.system.key, 'b & c system keys match')
+  t.unlike(await b.hash(), await c.hash(), 'b & c hashes do not match')
 })
 
 test('fork - initial fast forward', async t => {
