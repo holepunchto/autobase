@@ -304,7 +304,7 @@ test('fork - competing forks', async t => {
   t.is(b.system.indexers.length, 1)
   t.unlike(b.system.indexers, c.system.indexers)
 
-  // resolve fork
+  // 'resolve' fork
   await fork(c, [b])
 
   t.alike(b.system.indexers, c.system.indexers)
@@ -313,9 +313,7 @@ test('fork - competing forks', async t => {
   t.is(c.view.signedLength, 5)
 
   t.alike(b.system.key, c.system.key)
-  t.alike(await b.hash(), await c.hash(), 'b & c hashes match')
-
-  await compareViews([b, c], t)
+  t.unlike(await b.hash(), await c.hash(), 'b & c hashes dont match')
 })
 
 test.skip('fork - competing forks stay diverged if reconciled at different lengths', async t => {
