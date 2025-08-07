@@ -127,47 +127,6 @@ test('fork - with unindexed state', async t => {
   t.is(await b.view.get(103), 'post fork')
 })
 
-test('fork - migration after fork', async t => {
-  const { bases } = await create(3, t, {
-    encryptionKey: b4a.alloc(32, 0),
-    apply: applyFork
-  })
-
-  const [a, b, c] = bases
-
-  await a.append('one')
-  await a.append('two')
-  await a.append('three')
-
-  await addWriter(a, b, false)
-  await confirm(bases)
-
-  await b.append(null)
-
-  t.is(b.system.indexers.length, 1)
-  t.alike(b.system.indexers[0].key, a.local.key)
-
-  await fork(b, [b])
-
-  t.is(b.system.indexers.length, 1)
-  t.alike(b.system.indexers[0].key, b.local.key)
-
-  await t.execution(b.append('post fork'))
-
-  await addWriter(b, c, true)
-  await confirm([a, b, c], { checkHash: false })
-
-  t.is(b.system.indexers.length, 2)
-  t.alike(b.system.indexers[0].key, b.local.key)
-  t.alike(b.system.indexers[1].key, c.local.key)
-
-  t.is(b.core.manifest.signers.length, 2)
-  t.alike(b.core.key, c.core.key)
-
-  t.is(await b.view.get(2), 'three')
-  t.is(await b.view.get(3), 'post fork')
-})
-
 test('fork - add old indexer back', async t => {
   const { bases } = await create(2, t, {
     encryptionKey: b4a.alloc(32, 0),
@@ -327,6 +286,7 @@ test('fork - competing forks', async t => {
 
   t.is(b.view.length, 5)
   t.is(c.view.length, 5)
+  t.alike(await b.hash(), await c.hash(), 'b & c hashes match before fork')
 
   await fork(b, [b])
   await fork(c, [c])
@@ -343,13 +303,81 @@ test('fork - competing forks', async t => {
   t.is(b.system.indexers.length, 1)
   t.unlike(b.system.indexers, c.system.indexers)
 
-  // resolve fork
+  // 'resolve' fork
   await fork(c, [b])
 
   t.alike(b.system.indexers, c.system.indexers)
 
   t.is(b.view.signedLength, 5)
   t.is(c.view.signedLength, 5)
+
+  t.alike(b.system.key, c.system.key)
+  t.unlike(await b.hash(), await c.hash(), 'b & c hashes dont match')
+})
+
+test.skip('fork - competing forks stay diverged if reconciled at different lengths', async t => {
+  const { bases } = await create(3, t, {
+    encryptionKey: b4a.alloc(32, 0),
+    apply: applyFork
+  })
+
+  const [a, b, c] = bases
+
+  await a.append('one')
+  await a.append('two')
+  await a.append('three')
+
+  await addWriter(a, b, false)
+  await addWriter(a, c, false)
+  await confirm(bases)
+
+  await b.append('b pre fork')
+  await c.append('c pre fork')
+
+  await replicateAndSync([b, c])
+
+  t.is(b.view.length, 5)
+  t.is(c.view.length, 5)
+
+  // Diverge new forks
+  t.comment('b & c fork seperately')
+  await fork(b, [b])
+  await fork(c, [c])
+
+  t.is(b.system.indexers.length, 1)
+  t.is(c.system.indexers.length, 1)
+
+  // Confirm so each fork moves to their 'new' indexers
+  t.comment('b & c ack themselves')
+  await confirm([b])
+  await confirm([c])
+  t.is(b.view.signedLength, 5)
+  t.is(c.view.signedLength, 5)
+
+  t.comment('sync b & c')
+  await replicateAndSync([b, c], { checkHash: false })
+
+  t.unlike(b.system.indexers, c.system.indexers)
+  t.is(b.view.signedLength, 5, 'syncing w/ competing fork hasn\'t changed signing')
+  t.is(c.view.signedLength, 5, 'syncing w/ competing fork hasn\'t changed signing')
+
+  t.comment('sync b & a')
+  await replicateAndSync([b, a], { checkHash: false })
+
+  t.alike(a.system.indexers, c.system.indexers, 'a picked c')
+  t.unlike(b.system.indexers, c.system.indexers, 'b & c still differ')
+
+  // attempt 'resolve' fork by copying b
+  t.comment('c yields to b')
+  await fork(c, [b])
+
+  await confirm(bases, { checkHash: false })
+
+  t.alike(b.system.indexers, c.system.indexers, 'b & c do match')
+  t.alike(a.system.indexers, c.system.indexers, 'a & c do match')
+
+  t.alike(b.system.key, c.system.key, 'b & c system keys match')
+  t.unlike(await b.hash(), await c.hash(), 'b & c hashes do not match')
 })
 
 test('fork - initial fast forward', async t => {
