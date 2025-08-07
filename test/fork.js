@@ -5,7 +5,6 @@ const {
   create,
   createStores,
   createBase,
-  compareViews,
   addWriter,
   replicate,
   replicateAndSync,
