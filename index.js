@@ -964,6 +964,7 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     if (this._advancing) await this._advancing
+    if (this._interrupting) throw new Error('Autobase is closing')
 
     return localLength + len
   }
