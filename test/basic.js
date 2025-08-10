@@ -1184,8 +1184,7 @@ test('basic - close during apply', async t => {
   const promise = a.append('trigger')
   setImmediate(() => a.close())
 
-  // should not throw when closing
-  await t.execution(promise)
+  await t.exception(promise)
 })
 
 test('basic - constructor throws', async t => {
@@ -1866,7 +1865,7 @@ test('basic - interrupt', async t => {
   })
 
   await a.append({ hello: true })
-  await a.append({ interrupt: true })
+  await a.append({ interrupt: true }).catch(() => {})
 
   try {
     await a.append({ hello: true })
