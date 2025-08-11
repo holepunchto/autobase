@@ -2120,7 +2120,76 @@ test('basic - setActive', async t => {
   t.is(b.system.core.length, a.system.core.length)
   t.not(c.system.core.length, a.system.core.length)
 
-  t.not(c.wakeupSession.peers.some((p) => p.active), 'all peers are deactivated in protomux-wakeup')
+  t.ok(a.wakeupSession.peers.some((p) => !p.active), 'a has an inactive peer')
+  t.ok(b.wakeupSession.peers.some((p) => !p.active), 'b has an inactive peer')
+  t.absent(c.wakeupSession.topic.isActive, 'c\'s topic is deactivated')
+  t.absent(c.wakeupSession.isActive, 'c\'s session is deactivated')
+
+  allCoresNotDownloading(c, t)
+})
+
+test('basic - inactive base can be reactivated', async t => {
+  const { bases } = await create(4, t)
+
+  const [a, b, c, d] = bases
+
+  await addWriter(a, b, false)
+  await addWriter(a, c, false)
+
+  await confirm([a, b, c])
+
+  const unreplicate = replicate([a, b, c])
+
+  await a.append('a1')
+
+  t.ok(c.isActive)
+
+  await new Promise(resolve => setTimeout(resolve, 1000))
+
+  t.is(c.system.core.length, a.system.core.length)
+
+  await unreplicate()
+
+  c.setActive(false)
+  t.absent(c.isActive)
+
+  t.absent(c.wakeupSession.isActive, 'c\'s session is deactivated')
+
+  await a.append('a2')
+
+  const unreplicate2 = replicate([a, b, c, d])
+
+  // Add d while c's inactive to add wakeup message
+  await addWriter(a, d, false)
+
+  await new Promise(resolve => setTimeout(resolve, 1000))
+
+  await b.update()
+  await c.update()
+
+  t.is(b.system.core.length, a.system.core.length)
+  t.not(c.system.core.length, a.system.core.length)
+
+  t.absent(c.wakeupSession.isActive, 'c\'s session is deactivated')
+
+  allCoresNotDownloading(c, t)
+
+  await unreplicate2()
+
+  c.setActive(true)
+  t.ok(c.isActive)
+
+  t.teardown(replicate([a, b, c, d]))
+
+  await new Promise(resolve => setTimeout(resolve, 1000))
+
+  await b.update()
+  await c.update()
+
+  t.is(c.system.core.length, a.system.core.length)
+
+  t.ok(c.wakeupSession.isActive, 'c\'s session is activated')
+  t.ok(c.wakeupSession.topic.isActive, 'c\'s topic is activated')
 })
 
 async function applyWithRemove (batch, view, base) {
@@ -2158,5 +2227,21 @@ async function applyMultiple (batch, view, base) {
     } else if (value.index === 2) {
       await view.second.append(value.data)
     }
+  }
+}
+
+function allCoresNotDownloading (base, t) {
+  for (const view of base._viewStore.byName.values()) {
+    t.absent(view.core.core.replicator.downloading, `view ${view.name} not downloading`)
+  }
+
+  t.absent(base._primaryBootstrap.core.replicator.downloading, 'primary bootstrap not downloading')
+
+  for (const writer of base.activeWriters) {
+    t.absent(writer.core.core.replicator.downloading, 'writer not downloading')
+  }
+
+  for (const chk of base._applyState.checkpoints) {
+    t.absent(chk.core.replicator.downloading, 'checkpoint not downloading')
   }
 }
