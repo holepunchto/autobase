@@ -2083,15 +2083,8 @@ test('basic - apply supports backoff', async t => {
   await store.close()
 })
 
-test.skip('basic - setActive', async t => {
-  const { bases } = await create(3, t, {
-    notDownloadingLinger: 0,
-    open (store) {
-      return store.get('view', {
-        valueEncoding: 'json'
-      })
-    }
-  })
+test('basic - setActive', async t => {
+  const { bases } = await create(3, t)
 
   const [a, b, c] = bases
 
