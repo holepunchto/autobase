@@ -310,6 +310,12 @@ module.exports = class Autobase extends ReadyResource {
       chk.core.setActive(bool)
     }
 
+    if (bool) {
+      this.wakeupSession.active()
+    } else {
+      this.wakeupSession.inactive()
+    }
+
     if (bool) this._queueBump()
   }
 
