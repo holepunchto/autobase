@@ -2192,6 +2192,53 @@ test('basic - inactive base can be reactivated', async t => {
   t.ok(c.wakeupSession.topic.isActive, 'c\'s topic is activated')
 })
 
+test.skip('basic - setActive false has no replication in corestore', async t => {
+  const { bases } = await create(3, t)
+
+  const [a, b, c] = bases
+
+  await addWriter(a, b, false)
+  await addWriter(a, c, false)
+
+  await confirm([a, b, c])
+
+  const unreplicate = replicate([a, b, c])
+
+  await a.append('a1')
+
+  t.ok(c.isActive)
+
+  await new Promise(resolve => setTimeout(resolve, 1000))
+
+  t.is(c.system.core.length, a.system.core.length)
+
+  await unreplicate()
+
+  c.setActive(false)
+  t.absent(c.isActive)
+
+  await a.append('a2')
+
+  t.teardown(replicate([a, b, c]))
+
+  await new Promise(resolve => setTimeout(resolve, 1000))
+
+  await b.update()
+  await c.update()
+
+  t.is(b.system.core.length, a.system.core.length)
+  t.not(c.system.core.length, a.system.core.length)
+
+  // Test all cores in c's corestore since non-should be downloading as they are all autobase cores
+  for (const core of c.store.cores) {
+    t.absent(core.replicator.downloading, 'core not downloading')
+    if (core.replicator.downloading) {
+      console.log('is downloading core.key', core.key.toString('hex'))
+    }
+    t.is(core.replicator.activeSessions, 0, 'no active sessions')
+  }
+})
+
 async function applyWithRemove (batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
