@@ -2119,6 +2119,8 @@ test('basic - setActive', async t => {
 
   t.is(b.system.core.length, a.system.core.length)
   t.not(c.system.core.length, a.system.core.length)
+
+  t.not(c.wakeupSession.peers.some((p) => p.active), 'all peers are deactivated in protomux-wakeup')
 })
 
 async function applyWithRemove (batch, view, base) {
