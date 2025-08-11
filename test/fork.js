@@ -315,7 +315,7 @@ test('fork - competing forks', async t => {
   t.unlike(await b.hash(), await c.hash(), 'b & c hashes dont match')
 })
 
-test.skip('fork - competing forks stay diverged if reconciled at different lengths', async t => {
+test('fork - divergent forks cant reconcile', async t => {
   const { bases } = await create(3, t, {
     encryptionKey: b4a.alloc(32, 0),
     apply: applyFork
@@ -369,7 +369,8 @@ test.skip('fork - competing forks stay diverged if reconciled at different lengt
 
   // attempt 'resolve' fork by copying b
   t.comment('c yields to b')
-  await fork(c, [b])
+  await fork(c, [b, c])
+  await fork(b, [b, c])
 
   await confirm(bases, { checkHash: false })
 
@@ -378,6 +379,14 @@ test.skip('fork - competing forks stay diverged if reconciled at different lengt
 
   t.alike(b.system.key, c.system.key, 'b & c system keys match')
   t.unlike(await b.hash(), await c.hash(), 'b & c hashes do not match')
+
+  await b.append('b post merge')
+  await c.append('c post merge')
+
+  await confirm(bases, { checkHash: false })
+
+  t.is(b.view.signedLength, 5, 'views are now stuck because it cant sign')
+  t.is(c.view.signedLength, 5, 'views are now stuck because it cant sign')
 })
 
 test('fork - initial fast forward', async t => {
