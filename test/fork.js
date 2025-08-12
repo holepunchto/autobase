@@ -389,6 +389,58 @@ test('fork - divergent forks cant reconcile', async t => {
   t.is(c.view.signedLength, 5, 'views are now stuck because it cant sign')
 })
 
+test('fork - peers can fork to same indexer(s) with different unindexed state', async t => {
+  const { bases } = await create(3, t, {
+    encryptionKey: b4a.alloc(32, 0),
+    apply: applyFork
+  })
+
+  const [a, b, c] = bases
+
+  await a.append('one')
+  await a.append('two')
+  await a.append('three')
+
+  await addWriter(a, b, false)
+  await addWriter(a, c, false)
+  await confirm(bases)
+
+  await b.append('b pre fork')
+  for (let i = 0; i < 100; i++) {
+    await c.append('c pre fork' + i)
+  }
+
+  // Diverge new forks
+  t.comment('b & c seperately fork to b')
+  await fork(b, [b])
+  await fork(c, [b])
+
+  t.is(b.system.indexers.length, 1)
+  t.is(c.system.indexers.length, 1)
+
+  // Confirm so each fork moves to their 'new' indexers
+  t.comment('b & c ack themselves')
+  await confirm([b])
+  await confirm([c])
+  t.is(b.view.signedLength, 4, 'b signed new length')
+  t.is(c.view.signedLength, 3, 'c hasnt moved')
+
+  t.comment('sync & ack b & c')
+  await replicateAndSync([b, c])
+  await confirm([b, c])
+
+  t.alike(b.system.indexers, c.system.indexers)
+  t.is(b.view.signedLength, 104, 'views sync up')
+  t.is(c.view.signedLength, 104, 'views sync up')
+
+  t.comment('sync b & a')
+  await replicateAndSync([b, a])
+
+  t.alike(a.system.indexers, c.system.indexers, 'a & c indexers match')
+  t.alike(b.system.indexers, c.system.indexers, 'b & c indexers match')
+  t.alike(await b.hash(), await c.hash(), 'b & c hashes do match')
+})
+
 test('fork - initial fast forward', async t => {
   const { bases } = await create(2, t, {
     encryptionKey: b4a.alloc(32, 0),
