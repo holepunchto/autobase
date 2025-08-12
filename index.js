@@ -1258,27 +1258,28 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
+    const changes = this._hasUpdate ? new UpdateChanges(this) : null
+    if (changes) changes.track(this._applyState)
+
+    // close existing state
+    if (this._applyState) await this._applyState.close()
+
+    const {
+      key,
+      length,
+      views,
+      indexers,
+      manifestVersion,
+      entropy
+    } = this.fastForwardTo
+
+    const from = this.core.signedLength
+    const ffed = new Set()
+
     this._flushing++
     try {
-      const changes = this._hasUpdate ? new UpdateChanges(this) : null
-      if (changes) changes.track(this._applyState)
-
-      // close existing state
-      if (this._applyState) await this._applyState.close()
-
-      const {
-        key,
-        length,
-        views,
-        indexers,
-        manifestVersion,
-        entropy
-      } = this.fastForwardTo
-
-      const from = this.core.signedLength
       const store = this._viewStore.atomize()
 
-      const ffed = new Set()
       const migrated = !b4a.equals(key, this.core.key)
 
       const systemRef = await this._viewStore.findViewByKey(key, indexers, manifestVersion, entropy)
@@ -1331,40 +1332,40 @@ module.exports = class Autobase extends ReadyResource {
 
       await store.flush()
       await store.close()
-
-      const to = this.core.signedLength
-
-      for (const ref of ffed) await ref.release()
-
-      this.recoveries = RECOVERIES
-      this.fastForwardTo = null
-      this._queueFastForward()
-
-      await this._clearWriters()
-
-      this._applyState = new ApplyState(this)
-      await this._applyState.ready()
-
-      if (changes) await this._handlers.update(this._applyState.view, changes)
-
-      if (await this._applyState.shouldMigrate()) {
-        await this._migrate()
-      } else {
-        await this._makeLinearizerFromViewState()
-        await this._applyState.catchup(this.linearizer)
-      }
-
-      if (!this.localWriter || this.localWriter.closed) {
-        await this._updateLocalWriter(this._applyState.system)
-      }
-
-      this._caughtup = true
-
-      this._rebooted()
-      this.emit('fast-forward', to, from)
     } finally {
       if (--this._flushing === 0) this._flushSignal.notify()
     }
+
+    const to = this.core.signedLength
+
+    for (const ref of ffed) await ref.release()
+
+    this.recoveries = RECOVERIES
+    this.fastForwardTo = null
+    this._queueFastForward()
+
+    await this._clearWriters()
+
+    this._applyState = new ApplyState(this)
+    await this._applyState.ready()
+
+    if (changes) await this._handlers.update(this._applyState.view, changes)
+
+    if (await this._applyState.shouldMigrate()) {
+      await this._migrate()
+    } else {
+      await this._makeLinearizerFromViewState()
+      await this._applyState.catchup(this.linearizer)
+    }
+
+    if (!this.localWriter || this.localWriter.closed) {
+      await this._updateLocalWriter(this._applyState.system)
+    }
+
+    this._caughtup = true
+
+    this._rebooted()
+    this.emit('fast-forward', to, from)
   }
 
   // TODO: not atomic in regards to the ff, fix that
