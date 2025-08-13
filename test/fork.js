@@ -311,7 +311,7 @@ test('fork - competing forks', async t => {
   t.is(b.view.signedLength, 5)
   t.is(c.view.signedLength, 5)
 
-  t.alike(b.system.key, c.system.key)
+  t.unlike(b.system.core.key, c.system.core.key)
   t.unlike(await b.hash(), await c.hash(), 'b & c hashes dont match')
 })
 
@@ -377,7 +377,7 @@ test('fork - divergent forks cant reconcile', async t => {
   t.alike(b.system.indexers, c.system.indexers, 'b & c do match')
   t.alike(a.system.indexers, c.system.indexers, 'a & c do match')
 
-  t.alike(b.system.key, c.system.key, 'b & c system keys match')
+  t.unlike(b.system.core.key, c.system.core.key, 'b & c system keys dont match')
   t.unlike(await b.hash(), await c.hash(), 'b & c hashes do not match')
 
   await b.append('b post merge')
