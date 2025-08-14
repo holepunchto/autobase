@@ -231,6 +231,10 @@ module.exports = class Autobase extends ReadyResource {
     return [this.bootstrap]
   }
 
+  get appending () {
+    return this._appending !== null && this._appending.length > 0
+  }
+
   get writable () {
     return this.localWriter !== null && !this.localWriter.isRemoved
   }
@@ -398,7 +402,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _rotateLocalWriter (newLocal) {
-    assert(!this.writable, 'Cannot rotate a newLocal writer if a current one is open')
+    assert(!this.appending, 'Cannot rotate a newLocal writer if an append is in progress')
 
     const oldLocal = this.local
 
@@ -458,6 +462,8 @@ module.exports = class Autobase extends ReadyResource {
 
     this._updateLocalCore = local
 
+    let runs = 0
+    while (!this._interrupting && this.appending && runs++ < 16) await this.update()
     await this._bump()
   }
 
