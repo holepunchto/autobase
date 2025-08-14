@@ -462,7 +462,8 @@ module.exports = class Autobase extends ReadyResource {
 
     this._updateLocalCore = local
 
-    while (this.appending) await this.update()
+    let runs = 0
+    while (!this._interrupting && this.appending && runs++ < 16) await this.update()
     await this._bump()
   }
 
