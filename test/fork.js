@@ -499,6 +499,55 @@ test('fork - migration after fork', async t => {
   await replicateAndSync([b, c])
 })
 
+test('fork - fast forward to different fork', async t => {
+  const { bases } = await create(3, t, {
+    encryptionKey: b4a.alloc(32, 0),
+    apply: applyFork
+  })
+
+  const [a, b, c] = bases
+
+  await a.append('one')
+  await a.append('two')
+  await a.append('three')
+
+  await addWriter(a, b, false)
+  await addWriter(a, c, false)
+  await confirm(bases)
+
+  await b.append('b pre fork')
+  await c.append('c pre fork')
+
+  await replicateAndSync([b, c])
+
+  t.is(b.view.length, 5)
+  t.is(c.view.length, 5)
+
+  await fork(b, [b])
+  await fork(c, [c])
+
+  t.is(b.system.indexers.length, 1)
+  t.is(c.system.indexers.length, 1)
+
+  await confirm([b])
+  t.is(b.view.signedLength, 5)
+  t.is(c.view.signedLength, 3)
+
+  await replicateAndSync([b, c], { checkHash: false })
+
+  t.is(b.system.indexers.length, 1)
+  t.unlike(b.system.indexers, c.system.indexers)
+
+  t.teardown(replicate([b, c]))
+
+  await c.forceFastForward(b.core.key)
+
+  t.alike(b.system.indexers, c.system.indexers)
+
+  t.is(b.view.signedLength, 5)
+  t.is(c.view.signedLength, 5)
+})
+
 async function applyFork (batch, view, host) {
   for (const { value } of batch) {
     if (value.add) {
