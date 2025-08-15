@@ -1244,16 +1244,17 @@ module.exports = class Autobase extends ReadyResource {
     await sys.close()
   }
 
-  async _runForceFastForward () {
+  async _runForceFastForward (key) {
     await this.core.ready()
     if (this.closing) return
-    await this._runFastForward(new FastForward(this, this.core.key, { force: true }))
+    await this._runFastForward(new FastForward(this, key, { force: true, verified: false }))
   }
 
-  async forceFastForward () {
-    if (this.isFastForwarding()) return
-    await this._runForceFastForward()
+  async forceFastForward (key) {
+    if (this.isFastForwarding()) return false
+    await this._runForceFastForward(key)
     await this.update()
+    return true
   }
 
   async _applyFastForward () {
