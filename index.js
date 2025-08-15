@@ -1353,6 +1353,9 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._clearWriters()
 
+    // clear cache in case of forks
+    if (this.encryption) this.encryption.reset()
+
     this._applyState = new ApplyState(this)
     await this._applyState.ready()
 
