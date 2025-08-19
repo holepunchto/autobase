@@ -1768,7 +1768,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async _inflateWakeupHints () {
-    const buffer = await this.local.getUserData('autobase/wakeup-hints', buffer)
+    const buffer = await this.local.getUserData('autobase/wakeup-hints')
     const state = { start: 0, end: buffer.byteLength, buffer }
 
     const len = c.uint64.decode(state)
