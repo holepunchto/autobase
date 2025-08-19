@@ -11,6 +11,8 @@ const {
   confirm
 } = require('./helpers')
 
+const PeerSet = require('../lib/peer-set')
+
 test('fork - one writer to another', async t => {
   let forked = false
 
@@ -548,6 +550,62 @@ test('fork - fast forward to different fork', async t => {
   t.is(c.view.signedLength, 5)
 })
 
+test('fork - fast forward to different fork', async t => {
+  const { bases } = await create(6, t, {
+    encryptionKey: b4a.alloc(32, 0),
+    apply: applyFork
+  })
+
+  const [a, b, c, d, e, reader] = bases
+
+  await a.append('one')
+  await a.append('two')
+  await a.append('three')
+
+  await addWriter(a, b, true)
+  await addWriter(a, c, true)
+  await addWriter(a, d, false)
+  await addWriter(a, e, false)
+
+  await confirm(bases)
+
+  const peers = new PeerSet(reader)
+
+  peers.once('update', key => { t.alike(key, d.core.key) })
+
+  peers.add(c.local.key)
+  peers.add(d.local.key)
+  peers.add(e.local.key)
+
+  await b.append('b pre fork')
+  await c.append('c pre fork')
+
+  await replicateAndSync([b, c])
+
+  t.is(b.view.length, 5)
+  t.is(c.view.length, 5)
+
+  // only d and e will fork
+  await fork(d, [b], [d, e])
+  await replicateAndSync([d, e])
+
+  await d.append('d post fork')
+  await e.append('e post fork')
+
+  t.is(d.system.indexers.length, 1)
+  t.is(e.system.indexers.length, 1)
+
+  await replicateAndSync([reader, c], { checkHash: false })
+  await replicateAndSync([reader, d, e], { checkHash: false })
+
+  await peers.update()
+
+  t.unlike(peers.query(), c.core.key)
+  t.alike(peers.query(), d.core.key)
+
+  await peers.close()
+})
+
 async function applyFork (batch, view, host) {
   for (const { value } of batch) {
     if (value.add) {
@@ -558,6 +616,12 @@ async function applyFork (batch, view, host) {
     }
 
     if (value.fork) {
+      if (value.fork.targets.length) {
+        if (!value.fork.targets.includes(b4a.toString(host.base.local.key, 'hex'))) {
+          continue
+        }
+      }
+
       const indexers = value.fork.indexers.map(key => b4a.from(key, 'hex'))
 
       const system = {
@@ -573,14 +637,15 @@ async function applyFork (batch, view, host) {
   }
 }
 
-async function fork (base, indexers) {
+async function fork (base, indexers, targets) {
   return base.append({
     fork: {
       indexers: indexers.map(idx => b4a.toString(idx.local.key, 'hex')),
       system: {
         key: b4a.toString(base.system.core.key, 'hex'),
         length: base.indexedLength
-      }
+      },
+      targets: targets ? targets.map(t => b4a.toString(t.local.key, 'hex')) : []
     }
   })
 }
