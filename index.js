@@ -352,6 +352,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this.wakeupCapability = (await this._handlers.wakeupCapability) || { key: this.key, discoveryKey: this.discoveryKey }
     this.setWakeup(this.wakeupCapability.key, this.wakeupCapability.discoveryKey)
+    await this._inflateWakeupHints()
   }
 
   async _nukeTipBatch (key, length) {
@@ -1766,6 +1767,32 @@ module.exports = class Autobase extends ReadyResource {
     this._wakeupHints.clear()
   }
 
+  async _inflateWakeupHints () {
+    const buffer = await this.local.getUserData('autobase/wakeup-hints', buffer)
+    const state = { start: 0, end: buffer.byteLength, buffer }
+
+    const len = c.uint64.decode(state)
+    for (let i = 0; i < len; i++) {
+      const hex = c.raw.hex.decode(state)
+      const length = c.uint64.encode(state)
+
+      this._wakeupHints.set(hex, length)
+    }
+  }
+
+  _storeWakeupHints () {
+    const buffer = b4a.alloc(8 + this._wakeupHints.size * 40)
+    const state = { start: 0, end: 0, buffer }
+
+    c.uint64.encode(state, this._wakuepHints.size)
+    for (const [hex, length] of this._wakeupHints) {
+      c.raw.hex.encode(state, hex)
+      c.uint64.encode(state, length)
+    }
+
+    return this.local.setUserData('autobase/wakeup-hints', buffer)
+  }
+
   pause () {
     this.paused = true
   }
@@ -1806,6 +1833,8 @@ module.exports = class Autobase extends ReadyResource {
     const local = this.local.length
 
     try {
+      if (this._needsWakeup === true || this._wakeupHints.size > 0) await this._storeWakeup()
+
       await this._drainWithInterupt()
 
       // must run post drain so the linearizer is caught up
