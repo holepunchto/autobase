@@ -1769,6 +1769,8 @@ module.exports = class Autobase extends ReadyResource {
 
   async _inflateWakeupHints () {
     const buffer = await this.local.getUserData('autobase/wakeup-hints')
+    if (!buffer) return
+
     const state = { start: 0, end: buffer.byteLength, buffer }
 
     const len = c.uint64.decode(state)
@@ -1784,7 +1786,7 @@ module.exports = class Autobase extends ReadyResource {
     const buffer = b4a.alloc(8 + this._wakeupHints.size * 40)
     const state = { start: 0, end: 0, buffer }
 
-    c.uint64.encode(state, this._wakuepHints.size)
+    c.uint64.encode(state, this._wakeupHints.size)
     for (const [hex, length] of this._wakeupHints) {
       c.raw.hex.encode(state, hex)
       c.uint64.encode(state, length)
@@ -1833,7 +1835,7 @@ module.exports = class Autobase extends ReadyResource {
     const local = this.local.length
 
     try {
-      if (this._needsWakeup === true || this._wakeupHints.size > 0) await this._storeWakeup()
+      if (this._needsWakeup === true || this._wakeupHints.size > 0) await this._storeWakeupHints()
 
       await this._drainWithInterupt()
 
