@@ -14,6 +14,7 @@ module.exports = {
   create,
   addWriter,
   addWriterAndSync,
+  applyNode,
   apply,
   confirm,
   printIndexerTip,
@@ -226,15 +227,19 @@ async function compare (a, b, full = false) {
   }
 }
 
-async function apply (batch, view, base) {
-  for (const { value } of batch) {
-    if (value.add) {
-      const key = Buffer.from(value.add, 'hex')
-      await base.addWriter(key, { indexer: value.indexer })
-      continue
-    }
+async function applyNode (node, view, base) {
+  if (node.value.add) {
+    const key = Buffer.from(node.value.add, 'hex')
+    await base.addWriter(key, { indexer: node.value.indexer })
+    return
+  }
 
-    if (view) await view.append(value)
+  if (view) await view.append(node.value)
+}
+
+async function apply (batch, view, base) {
+  for (const node of batch) {
+    await applyNode(node, view, base)
   }
 }
 
