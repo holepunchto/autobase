@@ -521,7 +521,7 @@ test('fork - forking to the future is invalid', async t => {
 
   await b.append({
     fork: {
-      indexers: [b].map(idx => b4a.toString(idx.local.key, 'hex')),
+      indexers: [b4a.toString(b.local.key, 'hex')],
       system: {
         key: b4a.toString(b.system.core.key, 'hex'),
         length: 1337 // A dramatically future length
