@@ -2119,3 +2119,71 @@ async function applyMultiple (batch, view, base) {
     }
   }
 }
+
+async function applyRotateKey (nodes, view, base) {
+  for (const node of nodes) {
+    if (node.value.type === 'addIndexer' && node.value.add) {
+      await base.addWriter(b4a.from(node.value.add, 'hex'), { isIndexer: true })
+    }
+    if (node.value.type === 'rotateIndexer' && node.value.remove && node.value.add) {
+      await base.removeWriter(b4a.from(node.value.remove, 'hex'))
+      await base.addWriter(b4a.from(node.value.add, 'hex'), { isIndexer: true })
+    }
+  }
+}
+
+test('basic - indexer list transition [a, b, c, d, e] -> [b, c, d, e, f]', async t => {
+  const { bases } = await create(6, t, { apply: applyRotateKey })
+  const [a, b, c, d, e, f] = bases
+
+  await a.append({ type: 'addIndexer', add: b.local.key.toString('hex') })
+  await replicateAndSync([a, b, c, d, e, f])
+  await confirm([a, b, c, d, e, f])
+  await a.append({ type: 'addIndexer', add: c.local.key.toString('hex') })
+  await replicateAndSync([a, b, c, d, e, f])
+  await confirm([a, b, c, d, e, f])
+  await a.append({ type: 'addIndexer', add: d.local.key.toString('hex') })
+  await replicateAndSync([a, b, c, d, e, f])
+  await confirm([a, b, c, d, e, f])
+  await a.append({ type: 'addIndexer', add: e.local.key.toString('hex') })
+  await replicateAndSync([a, b, c, d, e, f])
+  await confirm([a, b, c, d, e, f])
+
+  const initialIndexers = a.system.indexers.map(indexer => indexer.key.toString('hex'))
+  const expectedInitialIndexers = [
+    a.local.key,
+    b.local.key,
+    c.local.key,
+    d.local.key,
+    e.local.key
+  ].map(key => key.toString('hex'))
+
+  t.alike(initialIndexers, expectedInitialIndexers, 'indexers list order before rotation is correct')
+
+  await b.append({ type: 'rotateIndexer', remove: a.local.key.toString('hex'), add: f.local.key.toString('hex') })
+  await confirm([a, b, c, d, e, f])
+
+  const afterRotationIndexers = b.system.indexers.map(indexer => indexer.key.toString('hex')).sort()
+  const expectedAfterRotationIndexers = [
+    b.local.key,
+    c.local.key,
+    d.local.key,
+    e.local.key,
+    f.local.key
+  ].map(key => key.toString('hex')).sort()
+
+  t.alike(afterRotationIndexers, expectedAfterRotationIndexers, 'indexers order after rotation is correct')
+
+  const expectedIndexers = [
+    b.local.key,
+    c.local.key,
+    d.local.key,
+    e.local.key,
+    f.local.key
+  ].map(key => key.toString('hex'))
+
+  for (const node of [a, b, c, d, e, f]) {
+    const nodeIndexers = node.system.indexers.map(indexer => indexer.key.toString('hex'))
+    t.alike(nodeIndexers, expectedIndexers, `Node ${node.local.key.toString('hex')} has the correct order of the indexers`)
+  }
+})
