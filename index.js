@@ -1315,8 +1315,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       if (ffed.size !== store.getViewCount()) {
-        const all = new Set(store.getViews())
-        for (const ref of all) {
+        for (const ref of store.getViews()) {
           if (ffed.has(ref)) continue
           await ref.catchup(store.atom, 0) // its gone
         }
