@@ -1314,6 +1314,14 @@ module.exports = class Autobase extends ReadyResource {
         }
       }
 
+      if (ffed.size !== this.store.getViewCount()) {
+        const all = new Set(this.store.getViews())
+        for (const ref of all) {
+          if (ffed.has(ref)) continue
+          await ref.catchup(store.atom, 0) // its gone
+        }
+      }
+
       // migrate zero length cores
       if (migrated) {
         const manifests = await this._viewStore.getIndexerManifests(indexers)
