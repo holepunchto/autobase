@@ -324,3 +324,20 @@ Interrupts are an escape hatch to stop the apply function and resolve the issue 
 #### `host.removeable(key)`
 
 Returns whether the writer for the given `key` can be removed. The last indexer cannot be removed.
+
+#### `const forked = await host.fork(indexerKeys, system)`
+
+Attempts to soft fork the autobase setting the existing writers in `indexerKeys` to be the new indexers starting from the `system` reference. The `system` is an object like so:
+
+```
+{
+  key: Buffer, // The system core's key, usually the current system core's key via `base.system.core.key` outside of the apply function appended as a writer block
+  length: Number // The length of the system core to fork from. This is usually `base.indexedLength` outside of the apply function appended as a writer block. The length must not be greater than the current system core length.
+}
+```
+
+The function returns a boolean for whether the fork should be successful. An error can be thrown when the fork validates but fails.
+
+A soft fork is primarily for coordinating moving away from existing indexers when it is not possible via normal methods like `addWriter(key, { indexer: true })` & `removeWriter(key)`, such as indexer devices being lost or indexers abandoning their role. Soft forking should be done as a last resort as changing indexers can cause competing forks if not correctly coordinated.
+
+Picking new indexers will depend on the application logic, but indexers need to be writers that have appended at least one block at the time of forking and must be writers at the system length to be forked from.
