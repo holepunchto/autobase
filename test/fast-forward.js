@@ -927,6 +927,59 @@ test('fast-forward - initial ff with zero length view', async t => {
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
 
+test.solo('fast-forward - ff removes a view', async t => {
+  t.plan(3)
+
+  const { bases } = await create(3, t, {
+    fastForward: true,
+    open: openMultiple,
+    apply: applyMultiple,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b, c] = bases
+
+  await addWriter(a, b, false)
+  await addWriter(a, c, false)
+
+  await a.append({ index: 1, data: 'a1' })
+
+  t.is(a.core.signedLength, a.core.length)
+
+  await replicateAndSync([a, b, c])
+
+  for (let i = 0; i < 200; i++) {
+    await a.append({ index: 1, data: 'a' + i })
+  }
+
+  for (let i = 0; i < 200; i++) {
+    await b.append({ index: 1, data: 'b' + i })
+  }
+
+  await replicateAndSync([a, b])
+
+  c.on('fast-forward', async () => {
+    console.log(c.view.second.length, c.view.second.signedLength, await c.view.second.treeHash())
+  })
+  await c.append({ index: 2, data: 'c1' })
+
+  await replicateAndSync([b, c])
+
+  await a.append({ index: 2, data: 'trigger' })
+  console.log(await a.view.second.treeHash())
+
+  await replicateAndSync([a, c])
+
+  const core = c.core
+  const sparse = await isSparse(core)
+
+  t.alike(b.view.key, a.view.key)
+
+  t.ok(sparse > 0)
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+})
+
 async function isSparse (core) {
   let n = 0
   for (let i = 0; i < core.length; i++) {
