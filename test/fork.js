@@ -117,6 +117,8 @@ test.solo('fork - with indexer active', async t => {
   const whenQuorumReached = a.indexedLength
   await a.append(`i agree, b should be in charge as of ${whenQuorumReached}`)
 
+  t.not(a.indexedLength, whenQuorumReached, 'indexers indexedLength progresses from fork system length')
+
   // Voting "Quorum" is reached so signal fork using
   await a.append({
     fork: {
