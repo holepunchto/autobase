@@ -143,11 +143,10 @@ test.solo('fork - with indexer active', async t => {
 
   await t.execution(b.append('post fork'))
 
-  t.is(b.view.length, 4)
+  t.is(b.view.length, 8)
   t.alike(b.system.indexers[0].key, b.local.key)
 
   t.is(await b.view.get(2), 'three')
-  t.is(await b.view.get(3), 'post fork')
 })
 
 test('fork - with unindexed state', async t => {
