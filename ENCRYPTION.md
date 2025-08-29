@@ -53,3 +53,29 @@ Initially, a user will simply append a blob that is an array containing for each
 If we use AEAD construction, then we can brute force decryption until we find our entry. A simple optimisation is to introduce a writer index.
 
 If Keet could pass down a `decryptKey` hook to Autobase, then we would only need one entry per member, as opposed to one entry per device in the naive Autobase only version.
+
+#### Sequencing
+
+There is a potential issue with encryption key rotation and reordering of writer removals.
+
+Consider
+```
+a1 - b1 - c1 ---- remove e --- rotate keys([a, b, c, d])
+               \
+                \-- remove d --- rotate keys([a, b, c, e])
+
+
+ordering:
+
+a1 - b1 - c1 - remove e - rotate keys([a, b, c, d]) - remove d - rotate keys([a, b, c, e])
+```
+
+Now there are two encrypted payloads, one for `[a, b, c, d]` and one for `[a, b, c, e]`. The latest one will be the encryption key being used.
+
+`e` now has access to encryption key even though they are not a member. Furthermore, if `d` and `e` collude they will have access to both encryption keys and therefore all data until next key rotation.
+
+This issue arises because we need generate the payload up front, rather than in the apply function.
+
+Unfortunately, there is no way around this, so it is __important__ that the rotation mechanic is distinct from the writer removal process.
+
+eg. 3 writers get removed, then in a separate step we rotate the key to exclude all 3 removed writers.
