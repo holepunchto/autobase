@@ -28,6 +28,9 @@ jobs:
       - run: npm install
       - run: npm test
       - run: npm test -- --encrypt-all
+      - run: npm run test:fixtures
+      - run: npm i -g bare
+      - run: npm run test:bare
   trigger_canary:
     if: startsWith(github.ref, 'refs/tags/') # Only run when a new package is published (detects when a new tag is pushed)
     runs-on: ubuntu-latest

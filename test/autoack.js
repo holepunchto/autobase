@@ -1,4 +1,5 @@
 const test = require('brittle')
+const b4a = require('b4a')
 
 const {
   create,
@@ -37,11 +38,8 @@ test('autoack - simple', async t => {
   t.not(a.local.length, 1)
   t.not(b.local.length, 1)
 
-  const ainfo = await a.getIndexedInfo()
-  const binfo = await b.getIndexedInfo()
-
-  t.is(ainfo.views[0].length, 1)
-  t.is(binfo.views[0].length, 1)
+  t.is(await getIndexedViewLength(a), 1)
+  t.is(await getIndexedViewLength(b), 1)
 })
 
 // TODO: unflake this test (skipping to avoid false positives on canary)
@@ -137,19 +135,11 @@ test.skip('autoack - concurrent', async t => {
 
   // TODO: autoack should ensure views are fully signed
 
-  {
-    const ainfo = await a.getIndexedInfo()
-    const binfo = await b.getIndexedInfo()
-    const cinfo = await c.getIndexedInfo()
-    const dinfo = await d.getIndexedInfo()
-    const einfo = await e.getIndexedInfo()
-
-    t.is(ainfo.views[0].length, 50)
-    t.is(binfo.views[0].length, 50)
-    t.is(cinfo.views[0].length, 50)
-    t.is(dinfo.views[0].length, 50)
-    t.is(einfo.views[0].length, 50)
-  }
+  t.is(await getIndexedViewLength(a), 50)
+  t.is(await getIndexedViewLength(b), 50)
+  t.is(await getIndexedViewLength(c), 50)
+  t.is(await getIndexedViewLength(d), 50)
+  t.is(await getIndexedViewLength(e), 50)
 
   const alen = a.local.length
   const blen = b.local.length
@@ -263,7 +253,7 @@ test('autoack - no null acks', async t => {
 })
 
 test('autoack - value beneath null values', async t => {
-  t.plan(4)
+  t.plan(3)
 
   const { bases } = await create(2, t, {
     ackInterval: 10,
@@ -277,22 +267,18 @@ test('autoack - value beneath null values', async t => {
   await addWriterAndSync(a, b)
   await confirm([a, b])
 
+  const alen = a.local.length
+
   await b.append('b0')
   await b.append(null) // place null value above tail
 
   await sync([a, b])
 
-  const alen = a.local.length
-  const blen = b.local.length
-
   await new Promise(resolve => setTimeout(resolve, 1000))
 
   t.not(a.local.length, alen) // a should ack
-  t.is(b.local.length, blen) // b0 is indexed by a's ack (all indexes acked)
 
-  const info = await a.getIndexedInfo()
-
-  t.is(info.views[0].length, a.view.length)
+  t.is(await getIndexedViewLength(a), a.view.length)
   t.is(b.view.length, a.view.length)
 })
 
@@ -594,4 +580,49 @@ function poll (fn, interval) {
       resolve()
     }
   })
+}
+
+test('autoack - flush all pending indexers', async t => {
+  const { bases } = await create(7, t, { apply, ackInterval: 10, ackThreshold: 0 })
+  const [a, b, c, d, e, f, g] = bases
+
+  await a.append('first')
+
+  await replicateAndSync(bases)
+
+  await a.append({
+    add: [
+      { key: b4a.toString(b.local.key, 'hex'), indexer: true },
+      { key: b4a.toString(c.local.key, 'hex'), indexer: true },
+      { key: b4a.toString(d.local.key, 'hex'), indexer: true },
+      { key: b4a.toString(e.local.key, 'hex'), indexer: true },
+      { key: b4a.toString(f.local.key, 'hex'), indexer: true },
+      { key: b4a.toString(g.local.key, 'hex'), indexer: true }
+    ]
+  })
+
+  await confirm(bases)
+
+  t.is(a.linearizer.indexers.length, 7)
+  t.is(b.linearizer.indexers.length, 7)
+  t.is(c.linearizer.indexers.length, 7)
+
+  async function apply (nodes, view, base) {
+    for (const node of nodes) {
+      if (node.value.add) {
+        for (const { key, indexer } of node.value.add) {
+          await base.addWriter(b4a.from(key, 'hex'), { indexer })
+        }
+        continue
+      }
+
+      await view.append(node.value)
+    }
+  }
+})
+
+async function getIndexedViewLength (base, index = -1) {
+  const info = await base.getIndexedInfo()
+  if (index === -1) index = info.views.length - 1
+  return info.views[index] ? info.views[index].length : 0
 }

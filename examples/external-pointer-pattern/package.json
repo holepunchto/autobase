@@ -1,0 +1,6 @@
+{
+  "main": "blob-base.mjs",
+  "devDependencies": {
+    "hyperblobs": "^2.8.0"
+  }
+}

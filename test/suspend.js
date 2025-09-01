@@ -53,6 +53,34 @@ test('suspend - pass exisiting store', async t => {
   await t.execution(replicateAndSync([base3, base1]))
 })
 
+test('suspend - update local writer', async t => {
+  const { stores, bases } = await create(2, t)
+
+  const [base1] = bases
+
+  const next = base1.store.get({ name: 'next' })
+  await next.ready()
+
+  const keyPair = next.keyPair
+
+  await base1.append({
+    add: next.key.toString('hex'),
+    debug: 'this is adding b'
+  })
+
+  await base1.append({
+    value: 'base1'
+  })
+
+  await base1.close()
+
+  const base2 = createBase(stores[0], base1.local.key, t, { keyPair })
+  await base2.ready()
+
+  t.is(base2.system.members, 2)
+  t.is(base2.local.id, next.id)
+})
+
 test('suspend - pass exisiting fs store', async t => {
   const { bases } = await create(1, t, { open: null })
   const [base1] = bases
@@ -522,8 +550,8 @@ test('suspend - open new index after reopen', async t => {
   const an = await a.local.get(a.local.length - 1)
   const bn = await b2.local.get(b2.local.length - 1)
 
-  t.is(an.checkpoint.length, 3)
-  t.is(bn.checkpoint.length, 3)
+  t.is(an.checkpoint.user.length, 2)
+  t.is(bn.checkpoint.user.length, 2)
 
   // const acp1 = await a.localWriter.getCheckpoint(1)
   // const acp2 = await a.localWriter.getCheckpoint(2)
@@ -611,8 +639,8 @@ test('suspend - reopen multiple indexes', async t => {
   const an = await a.local.get(a.local.length - 1)
   const b2n = await b2.local.get(b2.local.length - 1)
 
-  t.is(an.checkpoint.length, 3)
-  t.is(b2n.checkpoint.length, 3)
+  t.is(an.checkpoint.user.length, 2)
+  t.is(b2n.checkpoint.user.length, 2)
 
   // const acp1 = await a.localWriter.getCheckpoint(1)
   // const acp2 = await a.localWriter.getCheckpoint(2)
@@ -766,8 +794,8 @@ test.skip('suspend - append but not indexed then reopen', async t => {
   const an = await a.local.get(a.local.length - 1)
   const c2n = await c2.local.get(c2.local.length - 1)
 
-  t.is(an.checkpoint.length, 3)
-  t.is(c2n.checkpoint.length, 3)
+  t.is(an.checkpoint.length, 4)
+  t.is(c2n.checkpoint.length, 4)
 
   const acp1 = await a.localWriter.getCheckpoint(1)
   // const acp2 = await a.localWriter.getCheckpoint(2)
@@ -838,7 +866,7 @@ test('suspend - migrations', async t => {
   await t.execution(replicateAndSync([a, b2]))
 
   const info = await b2.getIndexedInfo()
-  t.is(info.views[0].length, 4)
+  t.is(info.views[info.views.length - 1].length, 4)
   t.is(b2.view.length, order.length + 1)
 })
 

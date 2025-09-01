@@ -16,6 +16,41 @@ const {
   createBase
 } = require('./helpers')
 
+test('fast-forward - signal preferred ff', { timeout: 999999999 }, async t => {
+  t.plan(1)
+
+  let slow = false
+
+  const { bases } = await create(2, t, {
+    fastForward: true,
+    storage: () => tmpDir(t),
+    async apply (nodes, view, host) {
+      for (const node of nodes) {
+        await view.append(node.value)
+        if (slow) {
+          host.preferFastForward()
+          await view.get(1000) // just a hack to pretend a network stall
+          t.fail('should not get here')
+        }
+      }
+    }
+  })
+
+  const [a, b] = bases
+
+  await a.append('a0')
+
+  await replicateAndSync([a, b])
+
+  await a.append('a1')
+
+  slow = true // pretend replication stalls
+
+  await replicateAndSync([a, b])
+
+  t.is(b.core.length, a.core.length, 'did not get stuck, length is ' + b.core.length)
+})
+
 test('fast-forward - simple', async t => {
   t.plan(1)
 
@@ -792,18 +827,13 @@ test('fast-forward - multiple views reordered', async t => {
 
   const [a, b] = bases
 
-  await addWriterAndSync(a, b, false)
-
-  await b.append({ index: 1, data: 'b0' })
-  await a.append({ index: 2, data: 'a0' })
-
   for (let i = 0; i < 1000; i++) {
     await a.append(null)
   }
 
   await a.append({ index: 1, data: 'a1' })
 
-  t.is(a.core.signedLength, 2008)
+  t.is(a.core.signedLength, a.core.length)
 
   await addWriter(a, b, true)
   await replicateAndSync([a, b])
@@ -814,6 +844,86 @@ test('fast-forward - multiple views reordered', async t => {
   t.alike(b.view.key, a.view.key)
 
   await b.append({ index: 2, data: 'a2' })
+
+  t.ok(sparse > 0)
+  t.comment('sparse blocks: ' + sparse)
+  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+})
+
+test('fast-forward - static fast-forward', async t => {
+  const { bases } = await create(4, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b, c, d] = bases
+
+  await addWriterAndSync(a, b)
+  await addWriterAndSync(a, c, false)
+
+  await b.append('b')
+  await c.append('c')
+
+  await confirm([a, b, c])
+
+  for (let i = 0; i < 200; i++) {
+    await a.append('a' + i)
+  }
+
+  await addWriterAndSync(a, c)
+
+  for (let i = 0; i < 200; i++) {
+    await a.append('a' + i)
+  }
+
+  await confirm([a, b])
+
+  let count = 0
+  d.on('fast-forward', () => count++)
+
+  const ff = new Promise(resolve => d.once('fast-forward', resolve))
+
+  // trigger fast-forward
+  t.teardown(replicate([a, b, d]))
+
+  t.is(await ff, a.core.signedLength)
+  t.alike(d.core.key, a.core.key)
+  t.is(count, 1)
+  t.pass()
+})
+
+test('fast-forward - initial ff with zero length view', async t => {
+  t.plan(4)
+
+  const { bases } = await create(2, t, {
+    fastForward: true,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b] = bases
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append(null)
+  }
+
+  await addWriterAndSync(a, b)
+
+  t.is(a.linearizer.indexers.length, 2)
+
+  const fastForward = { key: a.core.key }
+
+  const [store] = await createStores(1, t, { offset: 2, storage: () => tmpDir(t) })
+
+  const c = createBase(store.session(), a.key, t, { fastForward })
+  await c.ready()
+
+  await replicateAndSync([a, b, c])
+
+  const core = c.core
+  const sparse = await isSparse(core)
+
+  t.is(c.linearizer.indexers.length, 2)
+  t.alike(c.view.key, a.view.key)
 
   t.ok(sparse > 0)
   t.comment('sparse blocks: ' + sparse)
