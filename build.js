@@ -185,6 +185,24 @@ autobase.register({
 })
 
 autobase.register({
+  name: 'trace',
+  compact: true,
+  fields: [
+    {
+      name: 'view',
+      type: 'uint',
+      required: true
+    },
+    {
+      name: 'blocks',
+      type: 'uint',
+      array: true,
+      required: true
+    }
+  ]
+})
+
+autobase.register({
   name: 'oplog-message-v0',
   external: 'OplogMessageV0'
 })
@@ -216,6 +234,11 @@ autobase.register({
     {
       name: 'optimistic',
       type: 'bool',
+      required: false
+    }, {
+      name: 'trace',
+      type: '@autobase/trace',
+      array: true,
       required: false
     }
   ]

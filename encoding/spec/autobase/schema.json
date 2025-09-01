@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "schema": [
     {
       "name": "checkout",
@@ -243,6 +243,13 @@
           "required": false,
           "type": "bool",
           "version": 1
+        },
+        {
+          "name": "trace",
+          "required": false,
+          "array": true,
+          "type": "@autobase/trace",
+          "version": 2
         }
       ]
     },
@@ -485,6 +492,27 @@
           "required": false,
           "type": "fixed32",
           "version": 1
+        }
+      ]
+    },
+    {
+      "name": "trace",
+      "namespace": "autobase",
+      "compact": true,
+      "flagsPosition": -1,
+      "fields": [
+        {
+          "name": "view",
+          "required": true,
+          "type": "uint",
+          "version": 2
+        },
+        {
+          "name": "blocks",
+          "required": true,
+          "array": true,
+          "type": "uint",
+          "version": 2
         }
       ]
     }
