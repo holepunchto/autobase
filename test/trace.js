@@ -98,3 +98,40 @@ test('trace - gets blocks needed from view before apply', async t => {
     }
   }
 })
+
+test('trace - MAX_TRACE_PER_VIEW', async t => {
+  const { bases } = await create(1, t, { apply })
+  const [a] = bases
+
+  const attemptedTrace = 300
+
+  const batch = []
+  for (let i = 0; i < attemptedTrace; i++) {
+    batch.push('a' + i)
+  }
+  await a.append(batch)
+
+  {
+    const node = await a.local.get(0)
+    t.absent(node.trace, 'first append has no trace')
+  }
+
+  {
+    const node = await a.local.get(299)
+    const viewTrace = node.trace.find((trace) => trace.view === 1)
+    t.alike(viewTrace.blocks.length, 256, 'later append has max traced blocks')
+  }
+
+  async function apply (batch, view, host) {
+    for (const { value } of batch) {
+      if (view.length && view.length > 256) {
+        // Request more than 256 (MAX_TRACE_PER_VIEW) blocks
+        for (let i = 0; i < Math.min(view.length, attemptedTrace); i++) {
+          await view.get(i)
+        }
+      }
+
+      await view.append(value)
+    }
+  }
+})
