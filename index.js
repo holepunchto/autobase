@@ -102,6 +102,7 @@ module.exports = class Autobase extends ReadyResource {
     this.encrypt = !!handlers.encrypt
     this.encryptionKey = null
     this.encryption = null
+    this.unpackEncryption = handlers.unpackEncryption || defaultUnpackEncryption
 
     this.activeBatch = null // maintained by the append-batch
 
@@ -178,7 +179,7 @@ module.exports = class Autobase extends ReadyResource {
     this._hasUpdate = !!this._handlers.update
     this._hasClose = !!this._handlers.close
 
-    this._viewStore = new AutoStore(this)
+    this._viewStore = new AutoStore(this, null, this.encryption)
     this._applyState = null
 
     this.view = null
@@ -204,6 +205,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this.view = this._hasOpen ? this._handlers.open(this._viewStore, new PublicApplyCalls(this)) : null
     this.core = this._viewStore.get({ name: '_system' })
+    this.encryptionCore = this._viewStore.get({ name: '_encryption' })
 
     if (this.fastForwardEnabled && isObject(handlers.fastForward)) {
       this._runFastForward(new FastForward(this, handlers.fastForward.key, { verified: false })).catch(noop)
@@ -414,7 +416,7 @@ module.exports = class Autobase extends ReadyResource {
     this.localWriter = null
     this._updateLocalCore = null
 
-    const store = this._viewStore.atomize()
+    const store = this._viewStore.atomize(this.encryption)
 
     const local = store.getLocal()
     await local.ready()
@@ -667,6 +669,8 @@ module.exports = class Autobase extends ReadyResource {
     await this._preopen
 
     if (this.closing) return
+
+    if (this.encryptionKey) await this.encryption.reload(this.encryptionCore)
 
     this._applyState = new ApplyState(this)
 
@@ -1289,7 +1293,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._flushing++
     try {
-      const store = this._viewStore.atomize()
+      const store = this._viewStore.atomize(null)
 
       const migrated = !b4a.equals(key, this.core.key)
 
@@ -2034,4 +2038,10 @@ function normalize (valueEncoding, value) {
   valueEncoding.encode(state, value)
   state.start = 0
   return valueEncoding.decode(state)
+}
+
+function defaultUnpackEncryption (desc) {
+  const { type, payload } = c.decode(EncryptionDescriptor, desc)
+  if (type > 0) throw new Error('Encryption scheme not supported')
+  return payload
 }
