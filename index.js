@@ -46,6 +46,7 @@ const DEFAULT_ACK_INTERVAL = 10_000
 const DEFAULT_ACK_THRESHOLD = 4
 
 const REMOTE_ADD_BATCH = 64
+const REMOTE_ADD_BATCH_SANITY = 4096
 const MIN_FF_WAIT = 300_000 // wait at least 5min before attempting to ff again after failure
 
 class WakeupHandler {
@@ -127,6 +128,8 @@ module.exports = class Autobase extends ReadyResource {
     this.fastForwardTo = null
     this.fastForwardFailedAt = 0
     this.fastForwardMinimum = FastForward.MINIMUM
+
+    this.bigBatches = !!handlers.bigBatches
 
     this._bootstrapWriters = [] // might contain dups, but thats ok
     this._bootstrapWritersChanged = false
@@ -303,6 +306,10 @@ module.exports = class Autobase extends ReadyResource {
       if (!prev || length === -1 || prev < length) this._wakeupHints.set(hex, length)
     }
     this._queueBump()
+  }
+
+  setBigBatches (bool = true) {
+    this.bigBatches = bool
   }
 
   _queueBump () {
@@ -1598,7 +1605,7 @@ module.exports = class Autobase extends ReadyResource {
   async _addRemoteHeads () {
     let added = 0
 
-    while (added < REMOTE_ADD_BATCH) {
+    while (added < REMOTE_ADD_BATCH || (this.bigBatches && !this._indexersIdle() && added < REMOTE_ADD_BATCH_SANITY)) {
       await this._updateAll()
 
       let advanced = 0
@@ -1616,11 +1623,37 @@ module.exports = class Autobase extends ReadyResource {
         }
       }
 
-      if (advanced === 0) break
+      if (advanced === 0) {
+        if (this.bigBatches && !this._indexersIdle() && await this._waitForIndexers()) continue
+        break
+      }
+
       added += advanced
     }
 
     return added
+  }
+
+  async _waitForIndexers () {
+    const promises = []
+
+    for (const w of this.linearizer.indexers) {
+      if (w.idle()) continue
+      promises.push(w.core.get(w.length, { timeout: 3000 }))
+    }
+
+    for (const result of await Promise.allSettled(promises)) {
+      if (result.status !== 'rejected') return true
+    }
+
+    return false
+  }
+
+  _indexersIdle () {
+    for (const w of this.linearizer.indexers) {
+      if (!w.idle()) return false
+    }
+    return true
   }
 
   async _drain () {

@@ -44,6 +44,35 @@ test('basic - single writer', async t => {
   t.not(base.system.core.manifest, null)
 })
 
+test('basic - big batches', async t => {
+  t.plan(1)
+
+  let shared = 0
+  const { bases } = await create(3, t, { update })
+
+  const [a, b, c] = bases
+
+  await addWriter(a, b)
+  await confirm([a, b, c])
+
+  shared = c.view.length
+
+  for (let i = 0; i < 1000; i++) {
+    await a.append('hello')
+    await b.append('world')
+  }
+
+  await replicateAndSync([a, b])
+
+  c.setBigBatches(true)
+
+  await replicateAndSync([a, b, c])
+
+  function update (view, changes) {
+    if (c.bigBatches) t.alike(changes.get('view'), { from: shared, to: shared + 2000, shared })
+  }
+})
+
 test('basic - two writers', async t => {
   const { bases } = await create(3, t, { open: null })
 
