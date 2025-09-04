@@ -1639,6 +1639,7 @@ module.exports = class Autobase extends ReadyResource {
 
     for (const w of this.linearizer.indexers) {
       if (w.idle()) continue
+      if (await w.core.has(w.length)) continue
       promises.push(w.core.get(w.length, { timeout: 3000 }))
     }
 
