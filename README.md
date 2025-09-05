@@ -116,6 +116,7 @@ If loading an existing Autobase then set `bootstrap` to `base.key`, otherwise pa
   encrypted: false, // Expect the base to be encrypted, will throw an error otherwise, defaults to true if encryptionKey is set
   fastForward: true, // Enable fast forwarding. If passing { key: base.core.key }, they autobase will fastforward to that key first.
   wakeup: new ProtomuxWakeup(), // Set a custom wakeup protocol for hinting which writers are active, see `protomux-wakeup` for protocol details
+  bigBatches: false, // Enable big batches. See `base.setBigBatches()` for details.
 }
 ```
 
@@ -238,6 +239,10 @@ Sets the [User Data](https://github.com/holepunchto/hypercore#user-data) value f
 #### `const value = await base.getUserData(key)`
 
 Returns the [User Data](https://github.com/holepunchto/hypercore#user-data) value for the provided `key`. `key` is a string.
+
+#### `base.setBigBatches(enable = true)`
+
+Set the autobase to enable or disable big batches. Big batches allow autobase to run the `apply` function on more blocks at once at the expense of being slower and less responsive.
 
 #### `const core = Autobase.getLocalCore(store, handlers, encryptionKey)`
 
