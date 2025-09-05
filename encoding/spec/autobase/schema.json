@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 1,
   "schema": [
     {
       "name": "checkout",
@@ -205,6 +205,27 @@
       ]
     },
     {
+      "name": "trace",
+      "namespace": "autobase",
+      "compact": true,
+      "flagsPosition": -1,
+      "fields": [
+        {
+          "name": "view",
+          "required": true,
+          "type": "uint",
+          "version": 1
+        },
+        {
+          "name": "blocks",
+          "required": true,
+          "array": true,
+          "type": "uint",
+          "version": 1
+        }
+      ]
+    },
+    {
       "name": "oplog-message-v0",
       "namespace": "autobase",
       "external": "OplogMessageV0"
@@ -249,7 +270,7 @@
           "required": false,
           "array": true,
           "type": "@autobase/trace",
-          "version": 2
+          "version": 1
         }
       ]
     },
@@ -492,27 +513,6 @@
           "required": false,
           "type": "fixed32",
           "version": 1
-        }
-      ]
-    },
-    {
-      "name": "trace",
-      "namespace": "autobase",
-      "compact": true,
-      "flagsPosition": -1,
-      "fields": [
-        {
-          "name": "view",
-          "required": true,
-          "type": "uint",
-          "version": 2
-        },
-        {
-          "name": "blocks",
-          "required": true,
-          "array": true,
-          "type": "uint",
-          "version": 2
         }
       ]
     }

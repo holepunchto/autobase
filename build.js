@@ -4,7 +4,7 @@ const Hyperschema = require('hyperschema')
 const DIR = path.join(__dirname, 'encoding')
 const SPEC = path.join(DIR, 'spec/autobase')
 
-const schema = Hyperschema.from(SPEC, { versioned: true })
+const schema = Hyperschema.from(SPEC, { versioned: false })
 const autobase = schema.namespace('autobase')
 
 autobase.require(path.join(DIR, 'legacy.js'))
