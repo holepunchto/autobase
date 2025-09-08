@@ -228,6 +228,10 @@ module.exports = class Autobase extends ReadyResource {
     return this.key
   }
 
+  get isEncrypted () {
+    return !!(this.encryptionKey || this.broadcastEncryption)
+  }
+
   // TODO: compat, will be removed
   get bootstraps () {
     return [this.bootstrap]
