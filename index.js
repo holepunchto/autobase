@@ -101,8 +101,8 @@ module.exports = class Autobase extends ReadyResource {
     this.encrypted = handlers.encrypted || !!handlers.encryptionKey
     this.encrypt = !!handlers.encrypt
     this.encryptionKey = null
-    this.encryption = null
-    this.unpackEncryption = handlers.unpackEncryption || defaultUnpackEncryption
+    this.encryption = new EncryptionView(this, null)
+    this.broadcastEncryption = handlers.broadcastEncryption || null
 
     this.activeBatch = null // maintained by the append-batch
 
@@ -342,8 +342,6 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     if (this.encryptionKey) {
-      this.encryption = new EncryptionView(this, null)
-
       this.local.setEncryption(this.getWriterEncryption())
       this._primaryBootstrap.setEncryption(this.getWriterEncryption())
     }
@@ -2038,10 +2036,4 @@ function normalize (valueEncoding, value) {
   valueEncoding.encode(state, value)
   state.start = 0
   return valueEncoding.decode(state)
-}
-
-function defaultUnpackEncryption (desc) {
-  const { type, payload } = c.decode(EncryptionDescriptor, desc)
-  if (type > 0) throw new Error('Encryption scheme not supported')
-  return payload
 }

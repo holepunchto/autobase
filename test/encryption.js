@@ -4,6 +4,7 @@ const Corestore = require('corestore')
 const b4a = require('b4a')
 
 const Autobase = require('..')
+const BroadcastEncryption = require('../lib/broadcast-encryption')
 
 test('encryption - basic', async t => {
   const tmp = await tmpDir(t)
@@ -129,6 +130,53 @@ test('encryption - pass as promise', async t => {
   t.absent(found)
 
   await base.close()
+})
+
+test.solo('encryption - rotate key', async t => {
+  const tmp = await tmpDir(t)
+  const store = new Corestore(tmp)
+
+  const encryptionKey = b4a.alloc(32).fill('secret')
+
+  const broadcast = new BroadcastEncryption()
+
+  const base = new Autobase(store, {
+    apply: applyRotate,
+    open,
+    ackInterval: 0,
+    ackThreshold: 0,
+    encryptionKey,
+    valueEncoding: 'json',
+    broadcastEncryption: broadcast
+  })
+
+  await base.ready()
+
+  broadcast.load(base)
+
+  t.alike(base.encryptionKey, encryptionKey)
+
+  await base.append('you should not see me')
+
+  await base.append({ encryption: await broadcast.rotate() })
+
+  t.alike(await base.view.get(0), 'you should not see me')
+
+  t.is(base.view.signedLength, 1)
+  t.is(base.system.core.signedLength, 3)
+
+  await base.close()
+
+  async function applyRotate (batch, view, base) {
+    for (const { value } of batch) {
+      if (value.encryption) {
+        await base.updateEncryption(Buffer.from(value.encryption))
+        continue
+      }
+
+      await view.append(value.toString())
+    }
+  }
 })
 
 function open (store) {
