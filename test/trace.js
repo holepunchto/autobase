@@ -135,3 +135,37 @@ test('trace - MAX_TRACE_PER_VIEW', async t => {
     }
   }
 })
+
+test('trace - writer references non-existent block in trace still apply', async t => {
+  const { bases } = await create(2, t)
+  const [a, b] = bases
+
+  await a.append('a1')
+
+  await addWriter(a, b, false)
+  await confirm(bases)
+
+  const futureIndex = 1e6
+
+  t.teardown(replicate([a, b]))
+  await t.execution(b._applyState._flush([
+    {
+      value: 'beep',
+      heads: [],
+      batch: 1,
+      optimistic: false,
+      trace: [{ view: 1, blocks: [futureIndex] }]
+    }
+  ]), 'peer writes block with non-existent block in trace')
+  await b.append('something else')
+
+  // a acks to update view
+  await a.append(null)
+
+  for (const peer of a.view.replicator.peers) {
+    t.is(peer.inflight, 0, 'peer has no inflights')
+  }
+
+  t.is(await a.view.get(a.view.length - 2), 'beep')
+  t.absent(await a.view.has(futureIndex), '"future" index is absent')
+})
