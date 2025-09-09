@@ -36,6 +36,42 @@ test('trace - local block includes trace', async t => {
   }
 })
 
+test('trace - local optimistic block includes trace', async t => {
+  const { bases } = await create(2, t, { apply, optimistic: true })
+  const [a, b] = bases
+
+  await a.append('beep')
+
+  await replicateAndSync(bases)
+
+  t.absent(b.writable, 'b isnt writable')
+
+  await b.append('optmistic', { optimistic: true })
+
+  {
+    const node = await a.local.get(0)
+    t.absent(node.trace, 'first append has no trace')
+  }
+
+  {
+    const node = await b.local.get(0)
+    t.alike(node.trace, [{ view: 1, blocks: [0] }], '2nd includes trace of view block from 1st append')
+  }
+
+  async function apply (batch, view, host) {
+    for (const node of batch) {
+      const { value } = node
+      let str = ''
+
+      if (node.optimistic) await host.ackWriter(node.from.key)
+      if (view.length) str += await view.get(view.length - 1)
+      str += value
+
+      await view.append(str)
+    }
+  }
+})
+
 test('trace - gets blocks needed from view before apply', async t => {
   t.plan(5)
   const { bases } = await create(3, t, { apply, fastForward: true })
