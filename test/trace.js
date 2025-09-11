@@ -5,7 +5,8 @@ const {
   addWriter,
   confirm,
   replicate,
-  replicateAndSync
+  replicateAndSync,
+  sync
 } = require('./helpers')
 
 test('trace - local block includes trace', async t => {
@@ -183,7 +184,7 @@ test('trace - writer references non-existent block in trace still apply', async 
 
   const futureIndex = 1e6
 
-  t.teardown(replicate([a, b]))
+  const done = replicate([a, b])
   await t.execution(b._applyState._flush([
     {
       value: 'beep',
@@ -195,12 +196,13 @@ test('trace - writer references non-existent block in trace still apply', async 
   ]), 'peer writes block with non-existent block in trace')
   await b.append('something else')
 
-  // a acks to update view
-  await a.append(null)
+  await sync(bases)
 
   for (const peer of a.view.replicator.peers) {
     t.is(peer.inflight, 0, 'peer has no inflights')
   }
+
+  await done
 
   t.is(await a.view.get(a.view.length - 2), 'beep')
   t.absent(await a.view.has(futureIndex), '"future" index is absent')
