@@ -2093,7 +2093,6 @@ test('basic - append returns local length', async t => {
 test('basic - optimistic append & local rotate', async t => {
   const { bases } = await create(3, t, {
     optimistic: true,
-    fastForward: false,
     async apply (nodes, view, base) {
       for (const node of nodes) {
         if (node.value === 'optimistic') {
