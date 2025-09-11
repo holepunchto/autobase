@@ -2134,7 +2134,7 @@ test('basic - rotate local after append', async t => {
   t.teardown(replicate(bases))
   await b.append('test')
 
-  t.execution(b.setLocal(null, { keyPair: crypto.keyPair() }))
+  await t.execution(b.setLocal(null, { keyPair: crypto.keyPair() }))
 })
 
 test('basic - apply supports backoff', async t => {
