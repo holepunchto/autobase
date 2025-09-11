@@ -2,6 +2,7 @@ const test = require('brittle')
 
 const {
   create,
+  createBase,
   addWriter,
   confirm,
   replicate,
@@ -252,4 +253,77 @@ test('trace - writer references non-existent block in trace still apply', async 
 
   t.is(await a.view.get(a.view.length - 2), 'beep')
   t.absent(await a.view.has(futureIndex), '"future" index is absent')
+})
+
+test('trace - non-indexed views arent traced', async t => {
+  const { bases, stores } = await create(2, t, {
+    open (store) {
+      return { v1: store.get('view1', { valueEncoding: 'json' }) }
+    },
+    async apply (batch, view, base) {
+      for (const { value } of batch) {
+        if (value.add) {
+          const key = Buffer.from(value.add, 'hex')
+          await base.addWriter(key, { indexer: value.indexer })
+          continue
+        }
+
+        if (view && view.v1) {
+          if (view.v1.length) await view.v1.get(0)
+
+          await view.v1.append(value)
+        }
+      }
+    }
+  })
+  const [a, b] = bases
+
+  await a.append('a1')
+
+  await addWriter(a, b, false)
+  await confirm(bases)
+
+  await b.close()
+
+  // Open with new view core
+  const b2 = createBase(stores[1], a.local.key, t, {
+    open (store) {
+      return {
+        v1: store.get('view1', { valueEncoding: 'json' }),
+        v2: store.get('view2', { valueEncoding: 'json' })
+      }
+    },
+    async apply (batch, view, base) {
+      for (const { value } of batch) {
+        if (value.add) {
+          const key = Buffer.from(value.add, 'hex')
+          await base.addWriter(key, { indexer: value.indexer })
+          continue
+        }
+
+        if (view && view.v1) {
+          if (view.v1.length) await view.v1.get(0)
+
+          await view.v1.append(value)
+        }
+        if (view && view.v2) {
+          if (view.v2.length) {
+            await view.v2.get(0)
+          }
+
+          await view.v2.append(value)
+        }
+      }
+    }
+  })
+  await b2.ready()
+  await b2.update()
+
+  await b2.append('b2 1') // will be first block on v2 view core
+  await b2.append('b2 2')
+
+  {
+    const node = await b2.local.get(1)
+    t.alike(node.trace, [{ view: 1, blocks: [0] }], 'no trace w/ new view core')
+  }
 })
