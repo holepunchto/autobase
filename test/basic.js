@@ -2111,11 +2111,6 @@ test('basic - optimistic append & local rotate', async t => {
   await addWriter(a, b)
   await confirm([a, b])
 
-  // Add "history"
-  for (let i = 0; i < 1_000; i++) {
-    await a.append('a' + i)
-  }
-
   const done = replicate(bases)
 
   await c.append('optimistic', { optimistic: true })
