@@ -2090,6 +2090,59 @@ test('basic - append returns local length', async t => {
   await base.close()
 })
 
+test('basic - optimistic append & local rotate', async t => {
+  const { bases } = await create(3, t, {
+    optimistic: true,
+    fastForward: false,
+    async apply (nodes, view, base) {
+      for (const node of nodes) {
+        if (node.value === 'optimistic') {
+          // Look up things to verify writer
+          view.get(0)
+          await base.ackWriter(node.from.key)
+        }
+        await view.append(node.value)
+      }
+    }
+  })
+  const [a, b, c] = bases
+
+  await a.append('a-1')
+
+  await addWriter(a, b)
+  await confirm([a, b])
+
+  // Add "history"
+  for (let i = 0; i < 1_000; i++) {
+    await a.append('a' + i)
+  }
+
+  const done = replicate(bases)
+
+  await c.append('optimistic', { optimistic: true })
+
+  const newKeyPair = crypto.keyPair()
+  await t.execution(c.setLocal(null, { keyPair: newKeyPair }))
+
+  await done
+
+  t.is(c.local.key, newKeyPair.publicKey, 'optimistic')
+  t.is(await a.view.get(a.view.length - 1), 'optimistic')
+})
+
+test('basic - rotate local after append', async t => {
+  const { bases } = await create(2, t)
+  const [a, b] = bases
+
+  await addWriter(a, b)
+  await confirm(bases)
+
+  t.teardown(replicate(bases))
+  await b.append('test')
+
+  t.execution(b.setLocal(null, { keyPair: crypto.keyPair() }))
+})
+
 test('basic - apply supports backoff', async t => {
   const backoff = new TaskBackoff({ maxDelay: 20 })
 
