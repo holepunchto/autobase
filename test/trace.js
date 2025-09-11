@@ -136,6 +136,48 @@ test('trace - gets blocks needed from view before apply', async t => {
   }
 })
 
+test('trace - skips unindex view blocks', async t => {
+  const { bases } = await create(1, t, { apply })
+  const [a] = bases
+
+  const batch = []
+  for (let i = 0; i < 100; i++) {
+    batch.push('a' + i)
+  }
+  await a.append(batch)
+
+  const postIndexingIndex = a.local.length
+  await a.append('a' + postIndexingIndex)
+
+  {
+    const node = await a.local.get(0)
+    t.absent(node.trace, 'first append has no trace')
+  }
+
+  {
+    const node = await a.local.get(1)
+    t.absent(node.trace, '2nd append also has no trace')
+  }
+
+  {
+    const node = await a.local.get(postIndexingIndex - 1)
+    t.absent(node.trace, 'last block before index still not traced')
+  }
+
+  {
+    const node = await a.local.get(postIndexingIndex)
+    t.alike(node.trace, [{ view: 1, blocks: [99] }], 'block after indexing has trace')
+  }
+
+  async function apply (batch, view, host) {
+    for (const { value } of batch) {
+      if (view.length) await view.get(view.length - 1)
+
+      await view.append(value)
+    }
+  }
+})
+
 test('trace - MAX_TRACE_PER_VIEW', async t => {
   const { bases } = await create(1, t, { apply })
   const [a] = bases
@@ -143,10 +185,14 @@ test('trace - MAX_TRACE_PER_VIEW', async t => {
   const attemptedTrace = 300
 
   const batch = []
-  for (let i = 0; i < attemptedTrace; i++) {
+  for (let i = 0; i < 256; i++) {
     batch.push('a' + i)
   }
   await a.append(batch)
+
+  for (let i = 256; i < attemptedTrace; i++) {
+    await a.append('a' + i)
+  }
 
   {
     const node = await a.local.get(0)
