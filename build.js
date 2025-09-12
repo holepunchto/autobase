@@ -185,7 +185,7 @@ autobase.register({
 })
 
 autobase.register({
-  name: 'trace',
+  name: 'user-view-trace',
   compact: true,
   fields: [
     {
@@ -196,6 +196,31 @@ autobase.register({
     {
       name: 'blocks',
       type: 'uint',
+      array: true,
+      required: true
+    }
+  ]
+})
+
+autobase.register({
+  name: 'trace',
+  compact: false,
+  fields: [
+    {
+      name: 'system',
+      type: 'uint',
+      array: true,
+      required: true
+    },
+    {
+      name: 'encryption',
+      type: 'uint',
+      array: true,
+      required: true
+    },
+    {
+      name: 'user',
+      type: '@autobase/user-view-trace',
       array: true,
       required: true
     }
@@ -238,7 +263,6 @@ autobase.register({
     }, {
       name: 'trace',
       type: '@autobase/trace',
-      array: true,
       required: false
     }
   ]

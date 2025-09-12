@@ -24,7 +24,7 @@ test('trace - local block includes trace', async t => {
 
   {
     const node = await a.local.get(1)
-    t.alike(node.trace, [{ view: 1, blocks: [0] }], '2nd includes trace of view block from 1st append')
+    t.alike(node.trace.user, [{ view: 0, blocks: [0] }], '2nd includes trace of view block from 1st append')
   }
 
   async function apply (batch, view, host) {
@@ -57,7 +57,7 @@ test('trace - local optimistic block includes trace', async t => {
 
   {
     const node = await b.local.get(0)
-    t.alike(node.trace, [{ view: 1, blocks: [0] }], '2nd includes trace of view block from 1st append')
+    t.alike(node.trace.user, [{ view: 0, blocks: [0] }], '2nd includes trace of view block from 1st append')
   }
 
   async function apply (batch, view, host) {
@@ -167,7 +167,7 @@ test('trace - skips unindex view blocks', async t => {
 
   {
     const node = await a.local.get(postIndexingIndex)
-    t.alike(node.trace, [{ view: 1, blocks: [99] }], 'block after indexing has trace')
+    t.alike(node.trace.user, [{ view: 0, blocks: [99] }], 'block after indexing has trace')
   }
 
   async function apply (batch, view, host) {
@@ -202,7 +202,7 @@ test('trace - MAX_TRACE_PER_VIEW', async t => {
 
   {
     const node = await a.local.get(299)
-    const viewTrace = node.trace.find((trace) => trace.view === 1)
+    const viewTrace = node.trace.user.find((trace) => trace.view === 0)
     t.alike(viewTrace.blocks.length, 256, 'later append has max traced blocks')
   }
 
@@ -238,7 +238,11 @@ test('trace - writer references non-existent block in trace still apply', async 
       heads: [],
       batch: 1,
       optimistic: false,
-      trace: [{ view: 1, blocks: [futureIndex] }]
+      trace: {
+        system: [],
+        encryption: [],
+        user: [{ view: 0, blocks: [futureIndex] }]
+      }
     }
   ]), 'peer writes block with non-existent block in trace')
   await b.append('something else')
@@ -324,6 +328,6 @@ test('trace - non-indexed views arent traced', async t => {
 
   {
     const node = await b2.local.get(1)
-    t.alike(node.trace, [{ view: 1, blocks: [0] }], 'no trace w/ new view core')
+    t.alike(node.trace.user, [{ view: 0, blocks: [0] }], 'no trace w/ new view core')
   }
 })

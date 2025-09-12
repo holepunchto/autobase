@@ -265,26 +265,32 @@ const encoding10 = {
   }
 }
 
-// @autobase/trace.blocks
-const encoding11_1 = c.array(c.uint)
+// @autobase/trace.system
+const encoding11_0 = c.array(c.uint)
+// @autobase/trace.encryption
+const encoding11_1 = encoding11_0
 
 // @autobase/trace
 const encoding11 = {
   preencode (state, m) {
-    c.uint.preencode(state, m.view)
-    encoding11_1.preencode(state, m.blocks)
+    encoding11_0.preencode(state, m.system)
+    encoding11_1.preencode(state, m.encryption)
+    encoding11_2.preencode(state, m.user)
   },
   encode (state, m) {
-    c.uint.encode(state, m.view)
-    encoding11_1.encode(state, m.blocks)
+    encoding11_0.encode(state, m.system)
+    encoding11_1.encode(state, m.encryption)
+    encoding11_2.encode(state, m.user)
   },
   decode (state) {
-    const r0 = c.uint.decode(state)
+    const r0 = encoding11_0.decode(state)
     const r1 = encoding11_1.decode(state)
+    const r2 = encoding11_2.decode(state)
 
     return {
-      view: r0,
-      blocks: r1
+      system: r0,
+      encryption: r1,
+      user: r2
     }
   }
 }
@@ -298,7 +304,7 @@ const encoding14_1 = c.frame(encoding8)
 // @autobase/oplog-message-v2.digest
 const encoding14_2 = c.frame(encoding9)
 // @autobase/oplog-message-v2.trace
-const encoding14_4 = c.array(encoding11)
+const encoding14_4 = c.frame(encoding11)
 
 // @autobase/oplog-message-v2
 const encoding14 = {
@@ -649,6 +655,33 @@ const encoding23 = {
   }
 }
 
+// @autobase/user-view-trace.blocks
+const encoding24_1 = encoding11_0
+
+// @autobase/user-view-trace
+const encoding24 = {
+  preencode (state, m) {
+    c.uint.preencode(state, m.view)
+    encoding24_1.preencode(state, m.blocks)
+  },
+  encode (state, m) {
+    c.uint.encode(state, m.view)
+    encoding24_1.encode(state, m.blocks)
+  },
+  decode (state) {
+    const r0 = c.uint.decode(state)
+    const r1 = encoding24_1.decode(state)
+
+    return {
+      view: r0,
+      blocks: r1
+    }
+  }
+}
+
+// @autobase/trace.user, deferred due to recusive use
+const encoding11_2 = c.array(encoding24)
+
 function setVersion (v) {
   version = v
 }
@@ -695,6 +728,7 @@ function getEncoding (name) {
     case '@autobase/linearizer-update': return encoding21
     case '@autobase/encryption-descriptor': return encoding22
     case '@autobase/manifest-data': return encoding23
+    case '@autobase/user-view-trace': return encoding24
     default: throw new Error('Encoder not found ' + name)
   }
 }
