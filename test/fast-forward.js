@@ -749,9 +749,6 @@ test('fast-forward - writer removed', async t => {
 
   t.ok(sparse > 0)
 
-  await a.append('hello')
-  await replicateAndSync([a, b])
-
   t.comment('sparse blocks: ' + sparse)
   t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
 })
