@@ -2120,7 +2120,7 @@ test('basic - optimistic append & local rotate', async t => {
 
   await done
 
-  t.is(c.local.key, newKeyPair.publicKey, 'optimistic')
+  t.is(c.local.key, newKeyPair.publicKey, 'local writer was rotated')
   t.is(await a.view.get(a.view.length - 1), 'optimistic')
 })
 
