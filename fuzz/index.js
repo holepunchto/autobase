@@ -118,14 +118,14 @@ class State {
     this._pendingIndexerAdd = 0
     this._pendingIndexerRemove = 0
 
-    this.ops = new Set([
+    this.ops = [
       { name: 'add', fn: this.add.bind(this) },
       { name: 'remove', fn: this.remove.bind(this) },
       { name: 'indexer-add', fn: this.addIndexer.bind(this) },
       { name: 'indexer-remove', fn: this.removeIndexer.bind(this) },
       { name: 'write', fn: this.write.bind(this) },
       { name: 'ack', fn: this.ack.bind(this) }
-    ])
+    ]
 
     this.trace = []
 
@@ -344,6 +344,15 @@ class Fuzzer {
     this.storage = opts.storage || (() => tmpDir(this))
 
     this.state = new State(this)
+    this.weights = new Array(this.state.ops.length)
+    this.weights.fill(1)
+
+    if (opts.weights) {
+      for (let i = 0; i < this.weights.length; i++) {
+        if (i === opts.weights.length) break
+        this.weights[i] = opts.weights[i]
+      }
+    }
 
     this.opts = {
       valueEncoding: 'json',
@@ -393,19 +402,36 @@ class Fuzzer {
   }
 
   action () {
-    let operation = randomElement(this.state.ops)
+    let operation = this.randomAction()
     while (!this.state.valid(operation)) {
-      operation = randomElement(this.state.ops)
+      operation = this.randomAction()
     }
 
     return operation.fn()
+  }
+
+  randomAction () {
+    const ops = this.state.ops
+    const total = this.weights.reduce((acc, w) => acc + w, 0)
+    const index = randomIndex(total)
+
+    let weight = 0
+    for (let i = 0; i < this.weights.length; i++) {
+      weight += this.weights[i]
+      if (weight > index) return ops[i]
+    }
+
+    return ops[ops.length - 1]
   }
 }
 
 run()
 
 async function run () {
-  const fuzzer = new Fuzzer()
+  const fuzzer = new Fuzzer({
+    weights: [1, 1, 1, 1, 30, 1]
+  })
+
   await fuzzer.ready()
 
   const b = await fuzzer.state.join()
