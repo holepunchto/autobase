@@ -298,6 +298,18 @@ module.exports = class Autobase extends ReadyResource {
     return nodes.sort(compareNodes)
   }
 
+  async export () {
+    const [localPromise, viewsPromise] = [
+      this.store.storage.export(this.local.discoveryKey),
+      this._viewStore.export()
+    ]
+
+    return {
+      local: await localPromise,
+      views: await viewsPromise
+    }
+  }
+
   hintWakeup (hints) {
     if (!Array.isArray(hints)) hints = [hints]
     for (const { key, length } of hints) {
