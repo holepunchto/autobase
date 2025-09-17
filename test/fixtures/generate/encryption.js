@@ -42,15 +42,10 @@ async function main () {
 
   for (const data of DATA) await base.append(data)
 
-  const [local, system, view] = await Promise.all([
-    getBlocks(base.local),
-    getBlocks(base.core),
-    getBlocks(base.view)
-  ])
   const fixture = {
-    local,
-    system,
-    view
+    local: await getBlocks(base.local),
+    system: await getBlocks(base.core),
+    view: await getBlocks(base.view)
   }
 
   await fs.writeFile(fixturePath, JSON.stringify(fixture))
