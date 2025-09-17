@@ -2204,3 +2204,57 @@ test('basic - indexer list transition [a, b, c, d, e] -> [b, c, d, e, f]', async
     t.alike(nodeIndexers, expectedAfterRotationIndexers, `Node ${base.local.key.toString('hex')} has the correct order of the indexers`)
   }
 })
+
+test('basic - export', async t => {
+  const { bases } = await create(1, t)
+  const [base] = bases
+
+  const append = new Promise(resolve => { base.view.on('append', resolve) })
+
+  await base.append('hello')
+  await base.append('world')
+
+  t.is(base.system.members, 1)
+  t.ok(base.isIndexer)
+
+  t.is(base.view.length, 2)
+  t.is(base.view.signedLength, 2)
+
+  t.is(base.system.core.length, 5)
+  t.is(base.system.core.signedLength, 5)
+
+  await t.execution(append)
+
+  t.not(base.system.core.manifest, null)
+
+  const exported = await base.export()
+
+  const { local, views } = exported
+
+  t.is(local.head.length, 2)
+  t.alike(local.head.rootHash, await base.local.treeHash())
+
+  t.is(local.auth.keyPair, null)
+  t.alike(local.auth.encryptionKey, base.local.encryptionKey || null)
+  t.alike(local.auth.manifest, base.local.manifest)
+
+  t.alike(local.sessions, [])
+  t.is(local.data.length, 1)
+  t.is(local.data[0].blocks.length, 2)
+  t.is(local.data[0].tree.length, 3)
+  t.is(local.data[0].bitfield.length, 1)
+
+  t.is(views.length, 3)
+
+  const sys = views.find(v => v.name === '_system')
+  const enc = views.find(v => v.name === '_encryption')
+  const view = views.find(v => v.name === 'view')
+
+  t.alike(sys.core.sessions, ['batch'])
+  t.alike(enc.core.sessions, ['batch'])
+  t.alike(view.core.sessions, ['batch'])
+
+  t.is(sys.core.data.length, 2)
+  t.is(enc.core.data.length, 2)
+  t.is(view.core.data.length, 2)
+})
