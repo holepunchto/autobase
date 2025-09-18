@@ -4,7 +4,7 @@ const Hyperschema = require('hyperschema')
 const DIR = path.join(__dirname, 'encoding')
 const SPEC = path.join(DIR, 'spec/autobase')
 
-const schema = Hyperschema.from(SPEC, { versioned: true })
+const schema = Hyperschema.from(SPEC, { versioned: false })
 const autobase = schema.namespace('autobase')
 
 autobase.require(path.join(DIR, 'legacy.js'))
@@ -185,6 +185,49 @@ autobase.register({
 })
 
 autobase.register({
+  name: 'user-view-trace',
+  compact: true,
+  fields: [
+    {
+      name: 'view',
+      type: 'uint',
+      required: true
+    },
+    {
+      name: 'blocks',
+      type: 'uint',
+      array: true,
+      required: true
+    }
+  ]
+})
+
+autobase.register({
+  name: 'trace',
+  compact: false,
+  fields: [
+    {
+      name: 'system',
+      type: 'uint',
+      array: true,
+      required: true
+    },
+    {
+      name: 'encryption',
+      type: 'uint',
+      array: true,
+      required: true
+    },
+    {
+      name: 'user',
+      type: '@autobase/user-view-trace',
+      array: true,
+      required: true
+    }
+  ]
+})
+
+autobase.register({
   name: 'oplog-message-v0',
   external: 'OplogMessageV0'
 })
@@ -216,6 +259,10 @@ autobase.register({
     {
       name: 'optimistic',
       type: 'bool',
+      required: false
+    }, {
+      name: 'trace',
+      type: '@autobase/trace',
       required: false
     }
   ]
