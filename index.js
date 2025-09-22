@@ -1953,9 +1953,6 @@ module.exports = class Autobase extends ReadyResource {
       this._needsWakeupRequest = false
 
       this.wakeupSession.broadcastLookup({})
-      // tmp, will be removed
-      const sys = this._viewStore.getSystemView()
-      if (sys.compatExtension) sys.compatExtension.broadcast()
     }
   }
 
