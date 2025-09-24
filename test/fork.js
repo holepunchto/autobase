@@ -83,7 +83,7 @@ test('fork - one writer to another', async t => {
   t.is(await b.view.get(3), 'post fork')
 })
 
-test.solo('fork - with indexer active', async t => {
+test('fork - with indexer active', async t => {
   const { bases } = await create(2, t, {
     encryptionKey: b4a.alloc(32, 0),
     apply: applyFork
@@ -107,6 +107,9 @@ test.solo('fork - with indexer active', async t => {
 
   t.is(b.system.indexers.length, 1)
   t.alike(b.system.indexers[0].key, a.local.key)
+
+  t.alike(b.core.manifest.prologue.length, 3)
+  t.alike(b.core.manifest.signers[0].publicKey, a.local.manifest.signers[0].publicKey)
 
   await b.append('start election')
 
@@ -143,11 +146,14 @@ test.solo('fork - with indexer active', async t => {
 
   await t.execution(b.append('post fork'))
 
-  t.is(b.view.length, 4)
+  t.is(b.view.length, 8)
   t.alike(b.system.indexers[0].key, b.local.key)
 
+  t.alike(b.core.manifest.prologue.length, whenQuorumReached)
+  t.alike(b.core.manifest.signers[0].publicKey, b.local.manifest.signers[0].publicKey)
+
   t.is(await b.view.get(2), 'three')
-  t.is(await b.view.get(3), 'post fork')
+  t.is(await b.view.get(3), 'b writes!')
 })
 
 test('fork - with unindexed state', async t => {
