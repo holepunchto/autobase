@@ -954,6 +954,10 @@ async function applyWithRemove (batch, view, base) {
       continue
     }
 
+    if (view.length > 0) {
+      await view.get((view.length / 2) | 0)
+    }
+
     await view.append(value)
   }
 }
