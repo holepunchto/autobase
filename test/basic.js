@@ -2111,6 +2111,51 @@ test('basic - apply supports backoff', async t => {
   await store.close()
 })
 
+test.skip('basic - setActive', async t => {
+  const { bases } = await create(3, t, {
+    notDownloadingLinger: 0,
+    open (store) {
+      return store.get('view', {
+        valueEncoding: 'json'
+      })
+    }
+  })
+
+  const [a, b, c] = bases
+
+  await addWriter(a, b, false)
+  await addWriter(a, c, false)
+
+  await confirm([a, b, c])
+
+  const unreplicate = replicate([a, b, c])
+
+  await a.append('a1')
+
+  t.ok(c.isActive)
+
+  await new Promise(resolve => setTimeout(resolve, 1000))
+
+  t.is(c.system.core.length, a.system.core.length)
+
+  await unreplicate()
+
+  c.setActive(false)
+  t.absent(c.isActive)
+
+  await a.append('a2')
+
+  t.teardown(replicate([a, b, c]))
+
+  await new Promise(resolve => setTimeout(resolve, 1000))
+
+  await b.update()
+  await c.update()
+
+  t.is(b.system.core.length, a.system.core.length)
+  t.not(c.system.core.length, a.system.core.length)
+})
+
 async function applyWithRemove (batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
