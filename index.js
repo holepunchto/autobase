@@ -913,13 +913,18 @@ module.exports = class Autobase extends ReadyResource {
 
     // avoid lumping acks together due to the bump wait here
     if (this._ackTimer && bg) await this._ackTimer.asapStandalone()
-    if (this._interrupting) {
+    if (this._interrupting || applyState.closing) {
       this._acking = false
       return
     }
 
-    const alwaysWrite = isPendingIndexer || await this._applyState.shouldWrite()
-    const hasPendingIndexers = this._applyState.system.indexers.length > this.linearizer.indexers.length
+    const alwaysWrite = isPendingIndexer || await applyState.shouldWrite()
+    if (this._interrupting || applyState.closing) {
+      this._acking = false
+      return
+    }
+
+    const hasPendingIndexers = applyState.system.indexers.length > this.linearizer.indexers.length
 
     if (alwaysWrite || this.linearizer.shouldAck(this.localWriter, hasPendingIndexers)) {
       try {
