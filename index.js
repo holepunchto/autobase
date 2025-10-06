@@ -284,6 +284,27 @@ module.exports = class Autobase extends ReadyResource {
     return this._applyState && this._applyState.system.getIndexedInfo(this._applyState.indexedLength)
   }
 
+  async listMemberPublicKeys () {
+    const members = []
+    for (const member of await SystemView.members(this.core.session({ active: false }))) {
+      if (member.value.isRemoved) continue
+
+      const core = this.store.get({ key: member.key, active: false })
+      members.push(getPublicKey(core))
+    }
+
+    return Promise.all(members)
+
+    async function getPublicKey (core) {
+      await core.ready()
+      await core.close()
+
+      if (!core.manifest) return null
+
+      return core.manifest.signers[0].publicKey
+    }
+  }
+
   _isActiveIndexer () {
     return this.localWriter ? this.localWriter.isActiveIndexer : false
   }
