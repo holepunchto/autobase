@@ -499,6 +499,39 @@ test('fork - migration after fork', async t => {
   await replicateAndSync([b, c])
 })
 
+test('fork - forking to the future is invalid', async t => {
+  const { bases } = await create(3, t, {
+    encryptionKey: b4a.alloc(32, 0),
+    apply: applyFork
+  })
+
+  const [a, b] = bases
+
+  await a.append('one')
+  await a.append('two')
+  await a.append('three')
+
+  await addWriter(a, b, false)
+  await confirm(bases)
+
+  await b.append(null)
+
+  t.is(b.system.indexers.length, 1)
+  t.alike(b.system.indexers[0].key, a.local.key)
+
+  await b.append({
+    fork: {
+      indexers: [b4a.toString(b.local.key, 'hex')],
+      system: {
+        key: b4a.toString(b.system.core.key, 'hex'),
+        length: 1337 // A dramatically future length
+      }
+    }
+  })
+
+  t.is(b.system.indexers.length, 1)
+  t.unlike(b.system.indexers[0].key, b.local.key)
+})
 async function applyFork (batch, view, host) {
   for (const { value } of batch) {
     if (value.add) {
