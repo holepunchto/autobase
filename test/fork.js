@@ -499,6 +499,37 @@ test('fork - migration after fork', async t => {
   await replicateAndSync([b, c])
 })
 
+test('fork - validateFork checks writers at forked system length', async t => {
+  const { bases } = await create(3, t, {
+    encryptionKey: b4a.alloc(32, 0),
+    apply: applyFork
+  })
+
+  const [a, b, c] = bases
+
+  await a.append('one')
+  await a.append('two')
+  await a.append('three')
+
+  await addWriter(a, b, false)
+  await confirm(bases)
+
+  await addWriter(b, c, false)
+  await replicateAndSync(bases) // Not confirmed so indexedLength in fork is earlier
+
+  await c.append('beep') // So c is a valid writer in current system
+
+  await replicateAndSync(bases)
+
+  t.is(b.system.indexers.length, 1)
+  t.alike(b.system.indexers[0].key, a.local.key)
+
+  await t.execution(fork(b, [c]))
+
+  t.is(b.system.indexers.length, 1)
+  t.unlike(b.system.indexers[0].key, c.local.key)
+})
+
 async function applyFork (batch, view, host) {
   for (const { value } of batch) {
     if (value.add) {
