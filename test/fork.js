@@ -499,6 +499,59 @@ test('fork - migration after fork', async t => {
   await replicateAndSync([b, c])
 })
 
+test('fork - validates fork length against system prologue', async t => {
+  const forkValidations = []
+
+  const { bases } = await create(3, t, {
+    encryptionKey: b4a.alloc(32, 0),
+    apply: async function applyFork (batch, view, host) {
+      for (const { value } of batch) {
+        if (value.add) {
+          const key = Buffer.from(value.add, 'hex')
+
+          await host.addWriter(key, { indexer: value.indexer })
+          continue
+        }
+
+        if (value.fork) {
+          const opInfo = value.fork
+          const indexers = opInfo.indexers.map(key => b4a.from(key, 'hex'))
+
+          const system = {
+            key: host.system.core.key, // Override key using current key
+            length: opInfo.system.length
+          }
+
+          const forked = await host.fork(indexers, system)
+          forkValidations.push(forked)
+          continue
+        }
+
+        if (view) await view.append(value)
+      }
+    }
+  })
+
+  const [a, b] = bases
+
+  await a.append('one')
+
+  await addWriter(a, b, false)
+  await confirm(bases)
+
+  await b.append(null)
+  await confirm(bases)
+
+  t.is(b.system.indexers.length, 1)
+  t.alike(b.system.indexers[0].key, a.local.key)
+
+  await fork(b, [b])
+
+  t.is(b.system.indexers.length, 1)
+  t.alike(b.system.indexers[0].key, b.local.key)
+  t.alike(forkValidations, [true, false], 'b forked then skips in reapply')
+})
+
 async function applyFork (batch, view, host) {
   for (const { value } of batch) {
     if (value.add) {
