@@ -602,7 +602,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const boot = pointer
       ? c.decode(messages.BootRecord, pointer)
-      : { version: BOOT_RECORD_VERSION, key: null, systemLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
+      : { version: BOOT_RECORD_VERSION, key: null, systemLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null, manifestVersion: 1 }
 
     if (boot.heads) {
       const len = await this._getMigrationPointer(boot.key, boot.systemLength)
@@ -1486,9 +1486,7 @@ module.exports = class Autobase extends ReadyResource {
       const info = await system.getIndexedInfo(length)
       const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
 
-      const { views, systemView, encryptionView } = this._applyState
-
-      const manifestVersion = this._applyState.system.core.manifest.version
+      const { views, systemView, encryptionView, manifestVersion } = this._applyState
 
       for (const view of views) {
         const v = this._applyState.getViewFromSystem(view, info)

@@ -87,6 +87,11 @@ autobase.register({
       name: 'recoveries',
       type: 'uint',
       required: false
+    },
+    {
+      name: 'manifestVersion',
+      type: 'uint',
+      required: false
     }
   ]
 })

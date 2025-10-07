@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "schema": [
     {
       "name": "checkout",
@@ -92,6 +92,12 @@
           "required": false,
           "type": "uint",
           "version": 1
+        },
+        {
+          "name": "manifestVersion",
+          "required": false,
+          "type": "uint",
+          "version": 2
         }
       ]
     },
