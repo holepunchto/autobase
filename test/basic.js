@@ -21,6 +21,28 @@ const {
   compareViews
 } = require('./helpers')
 
+test.solo('multi-groups', async t => {
+  const group1 = await create(2, t, { apply: applyWithRemove })
+  const [a, b] = group1.bases
+  const group2 = await create(1, t)
+  const [c] = group2.bases
+
+  // [same-group] add writer
+  t.is(a.activeWriters.size, 1)
+  await addWriterAndSync(a, b)
+  t.is(a.activeWriters.size, 2)
+
+  // [same-group] remove writer
+  await a.append({ remove: b4a.toString(b.local.key, 'hex') })
+  await confirm(group1.bases)
+  t.is(a.activeWriters.size, 1)
+
+  // [cross-group] add writer
+  t.is(c.activeWriters.size, 1)
+  await addWriterAndSync(c, b) // ERROR HERE
+  t.is(c.activeWriters.size, 2)
+})
+
 test('basic - single writer', async t => {
   const { bases } = await create(1, t)
   const [base] = bases
