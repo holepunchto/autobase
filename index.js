@@ -163,6 +163,7 @@ module.exports = class Autobase extends ReadyResource {
     this._interrupting = false
     this._caughtup = false
 
+    this.isActive = true
     this.paused = false
 
     this._bump = debounceify(() => {
@@ -289,6 +290,32 @@ module.exports = class Autobase extends ReadyResource {
     const stream = this.store.replicate(isInitiator, opts)
     this.wakeupProtocol.addStream(stream)
     return stream
+  }
+
+  setActive (bool) {
+    if (this.isActive === bool) return
+
+    this.isActive = bool
+    this._viewStore.setActive(bool)
+
+    if (bool) {
+      this._updateBootstrapWriters()
+
+      this.recouple()
+      this._queueFastForward()
+    }
+
+    this._primaryBootstrap.setActive(bool)
+
+    for (const writer of this.activeWriters) {
+      writer.setActive(bool)
+    }
+
+    for (const chk of this._applyState.checkpoints) {
+      chk.core.setActive(bool)
+    }
+
+    if (bool) this._queueBump()
   }
 
   heads () {
