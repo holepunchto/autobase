@@ -2,9 +2,10 @@ const test = require('brittle')
 const tmpDir = require('test-tmp')
 const Corestore = require('corestore')
 const b4a = require('b4a')
+const HypercoreEncryption = require('hypercore-encryption')
 
 const Autobase = require('..')
-const BroadcastEncryption = require('../lib/broadcast-encryption')
+const { replicateAndSync, createStores, create } = require('./helpers')
 
 test('encryption - basic', async t => {
   const tmp = await tmpDir(t)
@@ -132,38 +133,41 @@ test('encryption - pass as promise', async t => {
   await base.close()
 })
 
-test.solo('encryption - rotate key', async t => {
+test('encryption - rotate key', async t => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
 
   const encryptionKey = b4a.alloc(32).fill('secret')
 
-  const broadcast = new BroadcastEncryption()
-
-  const base = new Autobase(store, {
+  const base = new Autobase(store, null, {
     apply: applyRotate,
     open,
     ackInterval: 0,
     ackThreshold: 0,
     encryptionKey,
-    valueEncoding: 'json',
-    broadcastEncryption: broadcast
+    valueEncoding: 'json'
   })
 
   await base.ready()
 
-  broadcast.load(base)
-
   t.alike(base.encryptionKey, encryptionKey)
 
-  await base.append('you should not see me')
+  await base.append('encryption key 1')
 
-  await base.append({ encryption: await broadcast.rotate() })
+  const entropy = b4a.alloc(32, 2)
+  const recipients = await base.listMemberPublicKeys()
 
-  t.alike(await base.view.get(0), 'you should not see me')
+  await base.append({
+    encryption: HypercoreEncryption.broadcastEncrypt(entropy, recipients)
+  })
 
-  t.is(base.view.signedLength, 1)
-  t.is(base.system.core.signedLength, 3)
+  await base.append('encryption key 2')
+
+  t.alike(await base.view.get(0), 'encryption key 1')
+  t.alike(await base.view.get(1), 'encryption key 2')
+
+  t.is(base.view.signedLength, 2)
+  t.is(base.system.core.signedLength, 7)
 
   await base.close()
 
@@ -171,6 +175,235 @@ test.solo('encryption - rotate key', async t => {
     for (const { value } of batch) {
       if (value.encryption) {
         await base.updateEncryption(Buffer.from(value.encryption))
+        continue
+      }
+
+      await view.append(value.toString())
+    }
+  }
+})
+
+test('encryption - rotate key with replication', async t => {
+  const stores = await createStores(2, t)
+
+  const encryptionKey = b4a.alloc(32).fill('secret')
+
+  const a = new Autobase(stores[0], null, {
+    apply: applyRotate,
+    open,
+    ackInterval: 0,
+    ackThreshold: 0,
+    encryptionKey,
+    valueEncoding: 'json'
+  })
+
+  await a.ready()
+
+  const b = new Autobase(stores[1], a.key, {
+    apply: applyRotate,
+    open,
+    ackInterval: 0,
+    ackThreshold: 0,
+    encryptionKey,
+    valueEncoding: 'json'
+  })
+
+  await b.ready()
+
+  await a.append({ add: { key: b.local.key.toString('hex'), indexer: false } })
+  await a.append('encryption key 1:0')
+
+  await replicateAndSync([a, b])
+
+  const entropy = b4a.alloc(32, 2)
+  const recipients = await b.listMemberPublicKeys()
+
+  await b.append({
+    encryption: HypercoreEncryption.broadcastEncrypt(entropy, recipients)
+  })
+
+  await b.append('encryption key 2:0')
+  await a.append('encryption key 1:1')
+
+  await replicateAndSync([a, b])
+
+  await b.append('encryption key 2:2')
+  await a.append('encryption key 2:1')
+
+  await replicateAndSync([a, b])
+
+  t.alike(await a.view.get(0), 'encryption key 1:0')
+  t.alike(await a.view.get(1), 'encryption key 1:1')
+  t.alike(await a.view.get(2), 'encryption key 2:0')
+  t.alike(await a.view.get(3), 'encryption key 2:1')
+  t.alike(await a.view.get(4), 'encryption key 2:2')
+
+  t.is(a.view.length, 5)
+
+  await a.close()
+  await b.close()
+
+  async function applyRotate (batch, view, base) {
+    for (const { value } of batch) {
+      if (value.encryption) {
+        await base.updateEncryption(Buffer.from(value.encryption))
+        continue
+      }
+
+      if (value.add) {
+        await base.addWriter(Buffer.from(value.add.key, 'hex'), { indexer: value.add.indexer })
+        continue
+      }
+
+      await view.append(value.toString())
+    }
+  }
+})
+
+test('encryption - rotate key with writer removal', async t => {
+  const encryptionKey = b4a.alloc(32).fill('secret')
+
+  const { bases } = await create(3, t, {
+    apply: applyRotate,
+    open,
+    encryptionKey
+  })
+
+  const [a, b, c] = bases
+
+  await add(a, b, false)
+  await add(a, c, false)
+
+  await replicateAndSync([a, b, c])
+
+  await b.append(null)
+  await c.append(null)
+
+  await replicateAndSync([a, b, c])
+
+  await a.append('c can see me')
+
+  await remove(a, c, false)
+  await rotate(a, b4a.alloc(32, 1))
+
+  await a.append('c cannot see me')
+
+  await t.execution(replicateAndSync([a, b]))
+  await t.exception(replicateAndSync([a, c]))
+
+  t.alike(await a.view.get(0), 'c can see me')
+  t.alike(await b.view.get(0), 'c can see me')
+
+  t.alike(await a.view.get(1), 'c cannot see me')
+  t.alike(await b.view.get(1), 'c cannot see me')
+
+  await t.exception(c.view.get(1))
+
+  await a.close()
+  await b.close()
+
+  async function applyRotate (batch, view, base) {
+    for (const { value } of batch) {
+      if (value.encryption) {
+        await base.updateEncryption(Buffer.from(value.encryption))
+        continue
+      }
+
+      if (value.add) {
+        await base.addWriter(Buffer.from(value.add.key, 'hex'), { indexer: value.add.indexer })
+        continue
+      }
+
+      if (value.remove) {
+        await base.removeWriter(Buffer.from(value.remove.key, 'hex'))
+        continue
+      }
+
+      await view.append(value.toString())
+    }
+  }
+})
+
+test('encryption - fast forward', async t => {
+  const encryptionKey = b4a.alloc(32).fill('secret')
+
+  const { bases } = await create(2, t, {
+    apply: applyRotate,
+    open,
+    encryptionKey,
+    fastForward: true
+  })
+
+  const [a, b] = bases
+
+  await add(a, b, false)
+
+  await replicateAndSync([a, b])
+  await b.append(null)
+  await replicateAndSync([a, b])
+
+  await rotate(a, b4a.alloc(32, 1))
+  for (let i = 0; i < 200; i++) {
+    await a.append('interval 1 - ' + i)
+  }
+
+  await rotate(a, b4a.alloc(32, 2))
+  for (let i = 0; i < 200; i++) {
+    await a.append('interval 2 - ' + i)
+  }
+
+  await rotate(a, b4a.alloc(32, 3))
+  for (let i = 0; i < 200; i++) {
+    await a.append('interval 3 - ' + i)
+  }
+
+  await rotate(a, b4a.alloc(32, 4))
+  for (let i = 0; i < 200; i++) {
+    await a.append('interval 4 - ' + i)
+  }
+  await rotate(a, b4a.alloc(32, 5))
+  for (let i = 0; i < 200; i++) {
+    await a.append('interval 5 - ' + i)
+  }
+
+  const ff = t.execution(new Promise((resolve, reject) => {
+    b.on('fast-forward', pass)
+    const t = setTimeout(cleanup, 1000, false)
+
+    function pass () {
+      return cleanup(true)
+    }
+
+    function cleanup (ffed) {
+      b.removeListener('fast-foward', pass)
+      clearTimeout(t)
+
+      if (ffed) resolve()
+      else reject()
+    }
+  }))
+
+  await replicateAndSync([a, b])
+  await ff
+
+  t.is(a.view.length, 1000)
+  t.is(b.view.length, 1000)
+
+  t.alike(await a.view.get(999), 'interval 5 - 199')
+  t.alike(await b.view.get(999), 'interval 5 - 199')
+
+  await a.close()
+  await b.close()
+
+  async function applyRotate (batch, view, base) {
+    for (const { value } of batch) {
+      if (value.encryption) {
+        await base.updateEncryption(Buffer.from(value.encryption))
+        continue
+      }
+
+      if (value.add) {
+        await base.addWriter(Buffer.from(value.add.key, 'hex'), { indexer: value.add.indexer })
         continue
       }
 
@@ -187,4 +420,17 @@ async function apply (batch, view, base) {
   for (const { value } of batch) {
     await view.append(value.toString())
   }
+}
+
+function add (base, peer, indexer) {
+  return base.append({ add: { key: peer.local.key.toString('hex'), indexer } })
+}
+
+function remove (base, peer, index) {
+  return base.append({ remove: { key: peer.local.key.toString('hex') } })
+}
+
+async function rotate (base, entropy) {
+  const recipients = await base.listMemberPublicKeys()
+  return base.append({ encryption: HypercoreEncryption.broadcastEncrypt(entropy, recipients) })
 }
