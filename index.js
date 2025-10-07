@@ -1449,6 +1449,8 @@ module.exports = class Autobase extends ReadyResource {
 
     if (manifestData === null && ref.core.manifest.userData !== null) {
       manifestData = ref.core.manifest.userData
+    } else if (source && source.manifest.version !== manifestVersion && indexedLength) {
+      manifestData = c.encode(messages.ManifestData, { version: 0, legacyBlocks: indexedLength })
     }
 
     const next = this._viewStore.getViewCore(indexerManifests, name, prologue, manifestVersion, entropy, linked, manifestData)
