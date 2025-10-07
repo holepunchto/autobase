@@ -9,6 +9,7 @@ const {
   create,
   createBase,
   createStores,
+  applyNode,
   replicate,
   replicateAndSync,
   addWriter,
@@ -1160,6 +1161,77 @@ test('suspend - restart with crosslinked non-indexer nodes', async t => {
   await replicateAndSync([a, c1])
 
   t.is(await a.view.get(a.view.length - 1), 'c' + n)
+})
+
+test.solo('wakeup with interrupt', { timeout: 120_000 }, async t => {
+  t.plan(2)
+
+  const { bases, stores } = await create(6, t, {
+    apply,
+    storage: () => tmpDir(t)
+  })
+
+  const [a, b, c, d, e, reader] = bases
+  const adds = []
+  let msg = 0
+
+  adds.push(addWriter(a, b, false))
+  adds.push(addWriter(a, c, false))
+  adds.push(addWriter(a, d, false))
+  adds.push(addWriter(a, e, false))
+
+  await Promise.all(adds)
+
+  await confirm(bases)
+
+  const unreplicate = replicate([a, b, c, d, e])
+
+  for (let i = 0; i < 100; i++) {
+    const appends = []
+
+    appends.push(a.append(msg++))
+    appends.push(c.append(msg++))
+    appends.push(b.append(msg++))
+    appends.push(d.append(msg++))
+    appends.push(e.append(msg++))
+
+    await Promise.all(appends)
+  }
+
+  await a.append({ interrupt: true })
+
+  for (let i = 0; i < 10; i++) {
+    await b.append(msg++)
+    await c.append(msg++)
+    await d.append(msg++)
+    await e.append(msg++)
+  }
+
+  await unreplicate()
+  await replicateAndSync([a, b, c, d, e])
+
+  const interrupt = new Promise(resolve => reader.once('interrupt', resolve))
+
+  t.teardown(replicate(bases))
+
+  await interrupt
+  await reader.close()
+
+  const reader2 = createBase(stores[5], a.local.key, t)
+  await reader2.update()
+
+  t.is(reader2.view.signedLength, a.view.signedLength)
+  t.is(reader2.view.length, a.view.length)
+
+  async function apply (nodes, view, base) {
+    for (const node of nodes) {
+      if (node.value.interrupt && b4a.equals(base.base.local.key, reader.local.key)) {
+        base.interrupt()
+      }
+
+      await applyNode(node, view, base)
+    }
+  }
 })
 
 function openMultiple (store) {
