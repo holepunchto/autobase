@@ -15,7 +15,7 @@ const ScopeLock = require('scope-lock')
 const LocalState = require('./lib/local-state.js')
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
-const { EncryptionView } = require('./lib/encryption.js')
+const EncryptionView = require('./lib/encryption.js')
 const UpdateChanges = require('./lib/updates.js')
 const messages = require('./lib/messages.js')
 const Timer = require('./lib/timer.js')
@@ -102,7 +102,6 @@ module.exports = class Autobase extends ReadyResource {
     this.encrypt = !!handlers.encrypt
     this.encryptionKey = null
     this.encryption = new EncryptionView(this, null)
-    this.broadcastEncryption = handlers.broadcastEncryption || null
 
     this.activeBatch = null // maintained by the append-batch
 
@@ -229,7 +228,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   get isEncrypted () {
-    return !!(this.encryptionKey || this.broadcastEncryption)
+    return !!this.encryptionKey
   }
 
   // TODO: compat, will be removed
