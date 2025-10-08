@@ -331,7 +331,7 @@ test('encryption - fast forward', async t => {
       clearTimeout(t)
 
       if (ffed) resolve()
-      else reject()
+      else reject(new Error('timeout'))
     }
   }))
 
