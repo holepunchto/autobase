@@ -140,7 +140,7 @@ test('encryption - rotate key', async t => {
   const encryptionKey = b4a.alloc(32).fill('secret')
 
   const base = new Autobase(store, null, {
-    apply: applyRotate,
+    apply,
     open,
     ackInterval: 0,
     ackThreshold: 0,
@@ -170,17 +170,6 @@ test('encryption - rotate key', async t => {
   t.is(base.system.core.signedLength, 7)
 
   await base.close()
-
-  async function applyRotate (batch, view, base) {
-    for (const { value } of batch) {
-      if (value.encryption) {
-        await base.updateEncryption(Buffer.from(value.encryption))
-        continue
-      }
-
-      await view.append(value.toString())
-    }
-  }
 })
 
 test('encryption - rotate key with replication', async t => {
@@ -189,7 +178,7 @@ test('encryption - rotate key with replication', async t => {
   const encryptionKey = b4a.alloc(32).fill('secret')
 
   const a = new Autobase(stores[0], null, {
-    apply: applyRotate,
+    apply,
     open,
     ackInterval: 0,
     ackThreshold: 0,
@@ -200,7 +189,7 @@ test('encryption - rotate key with replication', async t => {
   await a.ready()
 
   const b = new Autobase(stores[1], a.key, {
-    apply: applyRotate,
+    apply,
     open,
     ackInterval: 0,
     ackThreshold: 0,
@@ -242,29 +231,13 @@ test('encryption - rotate key with replication', async t => {
 
   await a.close()
   await b.close()
-
-  async function applyRotate (batch, view, base) {
-    for (const { value } of batch) {
-      if (value.encryption) {
-        await base.updateEncryption(Buffer.from(value.encryption))
-        continue
-      }
-
-      if (value.add) {
-        await base.addWriter(Buffer.from(value.add.key, 'hex'), { indexer: value.add.indexer })
-        continue
-      }
-
-      await view.append(value.toString())
-    }
-  }
 })
 
 test('encryption - rotate key with writer removal', async t => {
   const encryptionKey = b4a.alloc(32).fill('secret')
 
   const { bases } = await create(3, t, {
-    apply: applyRotate,
+    apply,
     open,
     encryptionKey
   })
@@ -301,34 +274,13 @@ test('encryption - rotate key with writer removal', async t => {
 
   await a.close()
   await b.close()
-
-  async function applyRotate (batch, view, base) {
-    for (const { value } of batch) {
-      if (value.encryption) {
-        await base.updateEncryption(Buffer.from(value.encryption))
-        continue
-      }
-
-      if (value.add) {
-        await base.addWriter(Buffer.from(value.add.key, 'hex'), { indexer: value.add.indexer })
-        continue
-      }
-
-      if (value.remove) {
-        await base.removeWriter(Buffer.from(value.remove.key, 'hex'))
-        continue
-      }
-
-      await view.append(value.toString())
-    }
-  }
 })
 
 test('encryption - fast forward', async t => {
   const encryptionKey = b4a.alloc(32).fill('secret')
 
   const { bases } = await create(2, t, {
-    apply: applyRotate,
+    apply,
     open,
     encryptionKey,
     fastForward: true
@@ -394,29 +346,13 @@ test('encryption - fast forward', async t => {
 
   await a.close()
   await b.close()
-
-  async function applyRotate (batch, view, base) {
-    for (const { value } of batch) {
-      if (value.encryption) {
-        await base.updateEncryption(Buffer.from(value.encryption))
-        continue
-      }
-
-      if (value.add) {
-        await base.addWriter(Buffer.from(value.add.key, 'hex'), { indexer: value.add.indexer })
-        continue
-      }
-
-      await view.append(value.toString())
-    }
-  }
 })
 
 test('encryption - rotate writer encryption', async t => {
   const encryptionKey = b4a.alloc(32).fill('secret')
 
   const { bases } = await create(2, t, {
-    apply: applyRotate,
+    apply,
     open,
     encryptionKey
   })
@@ -470,27 +406,6 @@ test('encryption - rotate writer encryption', async t => {
 
   await a.close()
   await b.close()
-
-  async function applyRotate (batch, view, base) {
-    for (const { value } of batch) {
-      if (value.encryption) {
-        await base.updateEncryption(Buffer.from(value.encryption))
-        continue
-      }
-
-      if (value.add) {
-        await base.addWriter(Buffer.from(value.add.key, 'hex'), { indexer: value.add.indexer })
-        continue
-      }
-
-      if (value.remove) {
-        await base.removeWriter(Buffer.from(value.remove.key, 'hex'))
-        continue
-      }
-
-      await view.append(value.toString())
-    }
-  }
 })
 
 function open (store) {
@@ -499,6 +414,21 @@ function open (store) {
 
 async function apply (batch, view, base) {
   for (const { value } of batch) {
+    if (value.encryption) {
+      await base.updateEncryption(Buffer.from(value.encryption))
+      continue
+    }
+
+    if (value.add) {
+      await base.addWriter(Buffer.from(value.add.key, 'hex'), { indexer: value.add.indexer })
+      continue
+    }
+
+    if (value.remove) {
+      await base.removeWriter(Buffer.from(value.remove.key, 'hex'))
+      continue
+    }
+
     await view.append(value.toString())
   }
 }
