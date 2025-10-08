@@ -2021,10 +2021,13 @@ test('basic - append to views out of order', async t => {
 test('basic - rotate local writer', async t => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
-  const base = new Autobase(store, b4a.alloc(32), { open: openMultiple, apply: applyMultiple })
+  const base = new Autobase(store, null, { open: openMultiple, apply: applyMultiple })
 
   await base.ready()
+  await base.append(null)
+
   const local = base.local
+
   await base.setLocal(null, { keyPair: crypto.keyPair() })
   t.ok(local !== base.local)
   await base.close()

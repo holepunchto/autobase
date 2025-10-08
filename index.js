@@ -431,6 +431,10 @@ module.exports = class Autobase extends ReadyResource {
 
     const oldLocal = this.local
 
+    if (this._applyState.isLocalIndexer()) {
+      throw new Error('Cannot rotate indexer')
+    }
+
     if (this._applyState) await this._applyState.close()
 
     this.local = newLocal

@@ -412,6 +412,87 @@ test('encryption - fast forward', async t => {
   }
 })
 
+test('encryption - rotate writer encryption', async t => {
+  const encryptionKey = b4a.alloc(32).fill('secret')
+
+  const { bases } = await create(2, t, {
+    apply: applyRotate,
+    open,
+    encryptionKey
+  })
+
+  const [a, b] = bases
+
+  await add(a, b, false)
+  await replicateAndSync([a, b])
+
+  await b.append(null)
+  await replicateAndSync([a, b])
+
+  await a.append('c can see me')
+
+  const newLocal = b.store.get({
+    manifest: {
+      version: 2,
+      signers: [{
+        publicKey: b.local.keyPair.publicKey
+      }]
+    },
+    keyPair: b.local.keyPair
+  })
+
+  await newLocal.ready()
+
+  // rotate b writer
+  await remove(a, b, false)
+  await b.setLocal(newLocal.key)
+  await add(a, b, false)
+
+  await replicateAndSync([a, b])
+
+  await b.append('encrypted!')
+
+  await rotate(a, b4a.alloc(32, 1))
+
+  await a.append('c cannot see me')
+
+  await t.execution(replicateAndSync([a, b]))
+
+  await b.append('rotate and encrypted!')
+
+  await replicateAndSync([a, b])
+
+  t.alike(await a.view.get(0), 'c can see me')
+  t.alike(await b.view.get(0), 'c can see me')
+
+  t.alike(await a.view.get(1), 'c cannot see me')
+  t.alike(await b.view.get(1), 'c cannot see me')
+
+  await a.close()
+  await b.close()
+
+  async function applyRotate (batch, view, base) {
+    for (const { value } of batch) {
+      if (value.encryption) {
+        await base.updateEncryption(Buffer.from(value.encryption))
+        continue
+      }
+
+      if (value.add) {
+        await base.addWriter(Buffer.from(value.add.key, 'hex'), { indexer: value.add.indexer })
+        continue
+      }
+
+      if (value.remove) {
+        await base.removeWriter(Buffer.from(value.remove.key, 'hex'))
+        continue
+      }
+
+      await view.append(value.toString())
+    }
+  }
+})
+
 function open (store) {
   return store.get('view', { valueEncoding: 'json' })
 }
