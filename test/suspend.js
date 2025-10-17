@@ -17,7 +17,7 @@ const {
   eventFlush
 } = require('./helpers')
 
-test('suspend - pass exisiting store', async t => {
+test('suspend - pass exisiting store', async (t) => {
   const { stores, bases } = await create(2, t)
 
   const [base1, base2] = bases
@@ -53,7 +53,7 @@ test('suspend - pass exisiting store', async t => {
   await t.execution(replicateAndSync([base3, base1]))
 })
 
-test('suspend - update local writer', async t => {
+test('suspend - update local writer', async (t) => {
   const { stores, bases } = await create(2, t)
 
   const [base1] = bases
@@ -81,7 +81,7 @@ test('suspend - update local writer', async t => {
   t.is(base2.local.id, next.id)
 })
 
-test('suspend - pass exisiting fs store', async t => {
+test('suspend - pass exisiting fs store', async (t) => {
   const { bases } = await create(1, t, { open: null })
   const [base1] = bases
 
@@ -124,7 +124,7 @@ test('suspend - pass exisiting fs store', async t => {
   await t.execution(replicateAndSync([base3, base1]))
 })
 
-test('suspend - 2 exisiting fs stores', async t => {
+test('suspend - 2 exisiting fs stores', async (t) => {
   const { bases, stores } = await create(2, t, { storage: () => tmpDir(t) })
 
   const [base1, base2] = bases
@@ -160,7 +160,7 @@ test('suspend - 2 exisiting fs stores', async t => {
   await t.execution(replicateAndSync([base3, base1]))
 })
 
-test('suspend - reopen after index', async t => {
+test('suspend - reopen after index', async (t) => {
   const { bases, stores } = await create(2, t, { storage: () => tmpDir(t) })
 
   const [a, b] = bases
@@ -207,7 +207,7 @@ test('suspend - reopen after index', async t => {
   t.is(b2.view.length, order.length + 2)
 })
 
-test('suspend - reopen with sync in middle', async t => {
+test('suspend - reopen with sync in middle', async (t) => {
   const { bases, stores } = await create(2, t, { storage: () => tmpDir(t) })
 
   const [a, b] = bases
@@ -284,7 +284,7 @@ test('suspend - reopen with sync in middle', async t => {
   t.is(b2.view.length, length + 2)
 })
 
-test('suspend - reopen with indexing in middle', async t => {
+test('suspend - reopen with indexing in middle', async (t) => {
   const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
 
   const [a, b, c] = bases
@@ -339,7 +339,7 @@ test('suspend - reopen with indexing in middle', async t => {
   t.is(c2.view.length, 5)
 })
 
-test.skip('suspend - reopen with indexing + sync in middle', async t => {
+test.skip('suspend - reopen with indexing + sync in middle', async (t) => {
   const { bases, stores } = await create(2, t, { storage: () => tmpDir(t) })
 
   const [a, b, c] = bases
@@ -428,7 +428,7 @@ test.skip('suspend - reopen with indexing + sync in middle', async t => {
   t.is(c2.view.length, 5)
 })
 
-test('suspend - non-indexed writer', async t => {
+test('suspend - non-indexed writer', async (t) => {
   const { bases, stores } = await create(2, t, {
     apply: applyWriter,
     storage: () => tmpDir(t)
@@ -467,7 +467,7 @@ test('suspend - non-indexed writer', async t => {
   t.is(b2.view.signedLength, a.view.signedLength)
   t.is(b2.view.length, a.view.length)
 
-  async function applyWriter (batch, view, base) {
+  async function applyWriter(batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
         await base.addWriter(b4a.from(node.value.add, 'hex'), { isIndexer: !!node.value.indexer })
@@ -479,7 +479,7 @@ test('suspend - non-indexed writer', async t => {
   }
 })
 
-test('suspend - open new index after reopen', async t => {
+test('suspend - open new index after reopen', async (t) => {
   const { bases, stores } = await create(2, t, {
     apply: applyMultiple,
     open: openMultiple,
@@ -569,7 +569,7 @@ test('suspend - open new index after reopen', async t => {
   // t.alike(acp2, await a.view.second._source._checkpoint())
 })
 
-test('suspend - reopen multiple indexes', async t => {
+test('suspend - reopen multiple indexes', async (t) => {
   const { bases, stores } = await create(2, t, {
     apply: applyMultiple,
     open: openMultiple,
@@ -658,7 +658,7 @@ test('suspend - reopen multiple indexes', async t => {
   // t.alike(acp2, await a.view.second._source._checkpoint())
 })
 
-test('restart non writer', async t => {
+test('restart non writer', async (t) => {
   const [storeA, storeB] = await createStores(2, t)
 
   const base = createBase(storeA, null, t)
@@ -678,7 +678,7 @@ test('restart non writer', async t => {
   await other2.close()
 })
 
-test('suspend - non-indexed writer catches up', async t => {
+test('suspend - non-indexed writer catches up', async (t) => {
   const { bases, stores } = await create(2, t, {
     apply: applyWriter,
     storage: () => tmpDir(t)
@@ -719,7 +719,7 @@ test('suspend - non-indexed writer catches up', async t => {
 
   t.pass('did not fail on open')
 
-  async function applyWriter (batch, view, base) {
+  async function applyWriter(batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
         await base.addWriter(b4a.from(node.value.add, 'hex'), { isIndexer: !!node.value.indexer })
@@ -731,7 +731,7 @@ test('suspend - non-indexed writer catches up', async t => {
   }
 })
 
-test.skip('suspend - append but not indexed then reopen', async t => {
+test.skip('suspend - append but not indexed then reopen', async (t) => {
   const { bases, stores } = await create(3, t, {
     apply: applyMultiple,
     open: openMultiple,
@@ -813,7 +813,7 @@ test.skip('suspend - append but not indexed then reopen', async t => {
   // t.alike(acp2, await a.view.second._source._checkpoint())
 })
 
-test('suspend - migrations', async t => {
+test('suspend - migrations', async (t) => {
   const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
 
   const [a, b] = bases
@@ -870,7 +870,7 @@ test('suspend - migrations', async t => {
   t.is(b2.view.length, order.length + 1)
 })
 
-test('suspend - append waits for drain after boot', async t => {
+test('suspend - append waits for drain after boot', async (t) => {
   const { bases, stores } = await create(3, t, {
     apply: applyMultiple,
     open: openMultiple,
@@ -901,7 +901,7 @@ test('suspend - append waits for drain after boot', async t => {
   t.is(node.heads[0].length, 101) // links the last node
 })
 
-test('suspend - incomplete migrate', async t => {
+test('suspend - incomplete migrate', async (t) => {
   const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
 
   const [a, b] = bases
@@ -943,7 +943,7 @@ test('suspend - incomplete migrate', async t => {
 })
 
 // rocks should never fail like this
-test.skip('suspend - recover from bad sys core', async t => {
+test.skip('suspend - recover from bad sys core', async (t) => {
   const { bases, stores } = await create(2, t, { storage: () => tmpDir(t) })
 
   const [a, b] = bases
@@ -980,7 +980,7 @@ test.skip('suspend - recover from bad sys core', async t => {
   t.is(b1.system.core.length, len)
 })
 
-test('suspend - restart with unindexed nodes', async t => {
+test('suspend - restart with unindexed nodes', async (t) => {
   const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
 
   const [a, b, c] = bases
@@ -1014,7 +1014,7 @@ test('suspend - restart with unindexed nodes', async t => {
   t.is(await a.view.get(a.view.length - 1), 'c0')
 })
 
-test('suspend - restart with indexed and unindexed nodes', async t => {
+test('suspend - restart with indexed and unindexed nodes', async (t) => {
   const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
 
   const [a, b, c] = bases
@@ -1053,7 +1053,7 @@ test('suspend - restart with indexed and unindexed nodes', async t => {
   t.is(await a.view.get(a.view.length - 1), 'c0')
 })
 
-test('suspend - restart with unindexed local nodes', async t => {
+test('suspend - restart with unindexed local nodes', async (t) => {
   const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
 
   const [a, b, c] = bases
@@ -1084,7 +1084,7 @@ test('suspend - restart with unindexed local nodes', async t => {
   t.is(await a.view.get(a.view.length - 1), 'c101')
 })
 
-test('suspend - restart with indexed and unindexed local nodes', async t => {
+test('suspend - restart with indexed and unindexed local nodes', async (t) => {
   const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
 
   const [a, b, c] = bases
@@ -1121,7 +1121,7 @@ test('suspend - restart with indexed and unindexed local nodes', async t => {
   t.is(await a.view.get(a.view.length - 1), 'c101')
 })
 
-test('suspend - restart with crosslinked non-indexer nodes', async t => {
+test('suspend - restart with crosslinked non-indexer nodes', async (t) => {
   const { bases, stores } = await create(3, t, { storage: () => tmpDir(t) })
 
   const [a, b, c] = bases
@@ -1162,14 +1162,14 @@ test('suspend - restart with crosslinked non-indexer nodes', async t => {
   t.is(await a.view.get(a.view.length - 1), 'c' + n)
 })
 
-function openMultiple (store) {
+function openMultiple(store) {
   return {
     first: store.get('first', { valueEncoding: 'json' }),
     second: store.get('second', { valueEncoding: 'json' })
   }
 }
 
-async function applyMultiple (batch, view, base) {
+async function applyMultiple(batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
       await base.addWriter(Buffer.from(value.add, 'hex'))

@@ -8,7 +8,7 @@ import c from 'compact-encoding'
 import { replicate, sync } from 'autobase-test-helpers'
 
 class BlobBase extends ReadyResource {
-  constructor (store, opts = {}) {
+  constructor(store, opts = {}) {
     super()
     this.store = store
     this.bootstrap = opts.bootstrap || null
@@ -17,7 +17,7 @@ class BlobBase extends ReadyResource {
     this.ready().catch(safetyCatch)
   }
 
-  async _open () {
+  async _open() {
     this.base = new Autobase(this.store, this.bootstrap, {
       valueEncoding: c.any,
       open: this.open.bind(this),
@@ -31,7 +31,7 @@ class BlobBase extends ReadyResource {
     await this.localBlobs.ready()
   }
 
-  open (store) {
+  open(store) {
     const core = store.get('view')
     return new Hyperbee(core, {
       extension: false,
@@ -39,7 +39,7 @@ class BlobBase extends ReadyResource {
     })
   }
 
-  async apply (nodes, view, base) {
+  async apply(nodes, view, base) {
     for (const { value } of nodes) {
       const { op } = value
       switch (op) {
@@ -53,14 +53,14 @@ class BlobBase extends ReadyResource {
     }
   }
 
-  async addWriter (writerKey) {
+  async addWriter(writerKey) {
     this.base.append({
       op: 'add',
       writer: writerKey
     })
   }
 
-  async put (filename, buffer) {
+  async put(filename, buffer) {
     const id = await this.localBlobs.put(buffer)
 
     await this.base.append({
@@ -73,7 +73,7 @@ class BlobBase extends ReadyResource {
     })
   }
 
-  async get (filename) {
+  async get(filename) {
     const idNode = await this.base.view.get(filename)
     const remoteBlobsKey = idNode.value.blobKey
     const remoteBlobString = remoteBlobsKey.toString('hex')
@@ -94,7 +94,7 @@ class BlobBase extends ReadyResource {
 const a = new BlobBase(makeStore('A'))
 await a.ready()
 
-const largeBuffer = Buffer.alloc(100 * (1024 ** 2), 'largebuffer') // 100 MB
+const largeBuffer = Buffer.alloc(100 * 1024 ** 2, 'largebuffer') // 100 MB
 await a.put('foo.txt', largeBuffer)
 const contentA = await a.get('foo.txt')
 console.log('content from A', contentA.length)
@@ -114,6 +114,6 @@ console.log('content from B', contentB.length)
 // Safe to close replication
 await done()
 
-function makeStore (seed) {
+function makeStore(seed) {
   return new Corestore('./peer-' + seed, { primaryKey: Buffer.alloc(32).fill(seed) })
 }

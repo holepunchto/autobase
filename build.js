@@ -260,7 +260,8 @@ autobase.register({
       name: 'optimistic',
       type: 'bool',
       required: false
-    }, {
+    },
+    {
       name: 'trace',
       type: '@autobase/trace',
       required: false

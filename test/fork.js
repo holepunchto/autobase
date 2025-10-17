@@ -11,7 +11,7 @@ const {
   confirm
 } = require('./helpers')
 
-test('fork - one writer to another', async t => {
+test('fork - one writer to another', async (t) => {
   let forked = false
 
   const { bases } = await create(2, t, {
@@ -25,7 +25,7 @@ test('fork - one writer to another', async t => {
         }
 
         if (value.fork) {
-          const indexers = value.fork.indexers.map(key => b4a.from(key, 'hex'))
+          const indexers = value.fork.indexers.map((key) => b4a.from(key, 'hex'))
 
           const system = {
             key: b4a.from(value.fork.system.key, 'hex'),
@@ -83,7 +83,7 @@ test('fork - one writer to another', async t => {
   t.is(await b.view.get(3), 'post fork')
 })
 
-test('fork - with unindexed state', async t => {
+test('fork - with unindexed state', async (t) => {
   const { bases } = await create(3, t, {
     encryptionKey: b4a.alloc(32, 0),
     apply: applyFork
@@ -127,7 +127,7 @@ test('fork - with unindexed state', async t => {
   t.is(await b.view.get(103), 'post fork')
 })
 
-test('fork - migration after fork', async t => {
+test('fork - migration after fork', async (t) => {
   const { bases } = await create(3, t, {
     encryptionKey: b4a.alloc(32, 0),
     apply: applyFork
@@ -168,7 +168,7 @@ test('fork - migration after fork', async t => {
   t.is(await b.view.get(3), 'post fork')
 })
 
-test('fork - add old indexer back', async t => {
+test('fork - add old indexer back', async (t) => {
   const { bases } = await create(2, t, {
     encryptionKey: b4a.alloc(32, 0),
     apply: applyFork
@@ -211,7 +211,7 @@ test('fork - add old indexer back', async t => {
   t.is(await b.view.get(3), 'post fork')
 })
 
-test('fork - fork to multiple indexers', async t => {
+test('fork - fork to multiple indexers', async (t) => {
   const { bases } = await create(3, t, {
     encryptionKey: b4a.alloc(32, 0),
     apply: applyFork
@@ -256,7 +256,7 @@ test('fork - fork to multiple indexers', async t => {
   t.is(b.view.signedLength, 5)
 })
 
-test('fork - invalid fork should fail', async t => {
+test('fork - invalid fork should fail', async (t) => {
   const { bases } = await create(3, t, {
     encryptionKey: b4a.alloc(32, 0),
     apply: async (batch, view, host) => {
@@ -268,7 +268,7 @@ test('fork - invalid fork should fail', async t => {
         }
 
         if (value.fork) {
-          const indexers = value.fork.indexers.map(key => b4a.from(key, 'hex'))
+          const indexers = value.fork.indexers.map((key) => b4a.from(key, 'hex'))
 
           const system = {
             key: b4a.from(value.fork.system.key, 'hex'),
@@ -304,7 +304,7 @@ test('fork - invalid fork should fail', async t => {
   t.alike(b.system.indexers[0].key, a.local.key)
 })
 
-test('fork - competing forks', async t => {
+test('fork - competing forks', async (t) => {
   const { bases } = await create(3, t, {
     encryptionKey: b4a.alloc(32, 0),
     apply: applyFork
@@ -352,7 +352,7 @@ test('fork - competing forks', async t => {
   t.is(c.view.signedLength, 5)
 })
 
-test('fork - initial fast forward', async t => {
+test('fork - initial fast forward', async (t) => {
   const { bases } = await create(2, t, {
     encryptionKey: b4a.alloc(32, 0),
     apply: applyFork
@@ -391,7 +391,7 @@ test('fork - initial fast forward', async t => {
   t.alike(b.system.indexers, c.system.indexers)
 })
 
-test('fork - fast forward after fork', async t => {
+test('fork - fast forward after fork', async (t) => {
   const { bases } = await create(3, t, {
     encryptionKey: b4a.alloc(32, 0),
     apply: applyFork,
@@ -430,7 +430,7 @@ test('fork - fast forward after fork', async t => {
   t.is(b.view.signedLength, 1003)
   t.is(c.view.signedLength, 1003)
 
-  const ff = new Promise(resolve => a.once('fast-forward', resolve))
+  const ff = new Promise((resolve) => a.once('fast-forward', resolve))
 
   await replicateAndSync([a, b, c])
 
@@ -441,7 +441,7 @@ test('fork - fast forward after fork', async t => {
   t.alike(b.system.indexers, a.system.indexers)
 })
 
-test('fork - migration after fork', async t => {
+test('fork - migration after fork', async (t) => {
   const { bases } = await create(3, t, {
     encryptionKey: b4a.alloc(32, 0),
     apply: applyFork
@@ -499,7 +499,7 @@ test('fork - migration after fork', async t => {
   await replicateAndSync([b, c])
 })
 
-async function applyFork (batch, view, host) {
+async function applyFork(batch, view, host) {
   for (const { value } of batch) {
     if (value.add) {
       const key = Buffer.from(value.add, 'hex')
@@ -509,7 +509,7 @@ async function applyFork (batch, view, host) {
     }
 
     if (value.fork) {
-      const indexers = value.fork.indexers.map(key => b4a.from(key, 'hex'))
+      const indexers = value.fork.indexers.map((key) => b4a.from(key, 'hex'))
 
       const system = {
         key: b4a.from(value.fork.system.key, 'hex'),
@@ -524,10 +524,10 @@ async function applyFork (batch, view, host) {
   }
 }
 
-async function fork (base, indexers) {
+async function fork(base, indexers) {
   return base.append({
     fork: {
-      indexers: indexers.map(idx => b4a.toString(idx.local.key, 'hex')),
+      indexers: indexers.map((idx) => b4a.toString(idx.local.key, 'hex')),
       system: {
         key: b4a.toString(base.system.core.key, 'hex'),
         length: base.indexedLength

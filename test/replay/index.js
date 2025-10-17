@@ -6,21 +6,21 @@ const Writer = require('../../lib/writer')
 const { OplogMessage } = require('../../lib/messages')
 
 class MockAutobase {
-  constructor (writers, linearizer, opts = {}) {
+  constructor(writers, linearizer, opts = {}) {
     this.writers = writers
     this.linearizer = linearizer
     this.valueEncoding = opts.valueEncoding || c.from('binary')
 
     this._wakeup = {
-      add () {}
+      add() {}
     }
 
     this._viewStore = {
-      getByIndex () {}
+      getByIndex() {}
     }
   }
 
-  _getWriterByKey (key) {
+  _getWriterByKey(key) {
     return this.writers.get(b4a.toString(key, 'hex'))
   }
 }
@@ -28,12 +28,12 @@ class MockAutobase {
 // Replays an autobase up to a given set of heads. The returned
 // Linearizer will reflect the DAG at the given point.
 
-module.exports = async function replayLinearizer (store, indexers, heads, encryptionKey) {
+module.exports = async function replayLinearizer(store, indexers, heads, encryptionKey) {
   const writers = await replayWriterState(store, heads, encryptionKey)
   return loadLinearizer(writers, indexers)
 }
 
-async function replayWriterState (store, heads, encryptionKey) {
+async function replayWriterState(store, heads, encryptionKey) {
   const writerState = new Map()
 
   const stack = [...heads]
@@ -74,7 +74,7 @@ async function replayWriterState (store, heads, encryptionKey) {
   return writerState
 }
 
-async function loadLinearizer (writerState, indexerKeys) {
+async function loadLinearizer(writerState, indexerKeys) {
   const writers = new Map()
 
   const base = new MockAutobase(writers)
@@ -89,7 +89,7 @@ async function loadLinearizer (writerState, indexerKeys) {
     ws.push({ writer, missing: end - start })
   }
 
-  const indexers = indexerKeys.map(key => writers.get(key))
+  const indexers = indexerKeys.map((key) => writers.get(key))
   for (const idx of indexers) idx.isIndexer = true
 
   const linearizer = new Linearizer(indexers, { writers })
@@ -124,6 +124,6 @@ async function loadLinearizer (writerState, indexerKeys) {
   return linearizer
 }
 
-function toRef (node) {
+function toRef(node) {
   return node.key.toString('hex') + ':' + node.length
 }

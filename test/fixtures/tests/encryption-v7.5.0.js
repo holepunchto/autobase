@@ -8,7 +8,7 @@ const Autobase = require('../../..')
 
 const fixture = require('../data/encryption/v7.5.0.json')
 
-test('encryption - v7.5.0', async t => {
+test('encryption - v7.5.0', async (t) => {
   const keyPair = crypto.keyPair(b4a.alloc(32, 1))
   const storage = await tmpDir()
   const store = new Corestore(storage)
@@ -40,7 +40,7 @@ test('encryption - v7.5.0', async t => {
   await base.close()
   await store.close()
 
-  async function compareRawBlocks (core, fixture) {
+  async function compareRawBlocks(core, fixture) {
     t.is(core.length, fixture.length)
     for (let i = 0; i < core.length; i++) {
       const block = await core.get(i, { raw: true })
@@ -49,11 +49,11 @@ test('encryption - v7.5.0', async t => {
   }
 })
 
-function open (store) {
+function open(store) {
   return store.get('view', { valueEncoding: 'json' })
 }
 
-async function apply (batch, view, base) {
+async function apply(batch, view, base) {
   for (const { value } of batch) {
     await view.append(value.toString())
   }

@@ -1,16 +1,10 @@
 const test = require('brittle')
 
-const {
-  create,
-  replicateAndSync,
-  addWriterAndSync,
-  confirm,
-  compareViews
-} = require('./helpers')
+const { create, replicateAndSync, addWriterAndSync, confirm, compareViews } = require('./helpers')
 
 // a - b - a
 
-test('simple 2', async t => {
+test('simple 2', async (t) => {
   const { bases } = await create(2, t)
 
   const [a, b] = bases
@@ -52,7 +46,7 @@ c - b - a - c - b - a
 
 */
 
-test('simple 3', async t => {
+test('simple 3', async (t) => {
   const { bases } = await create(3, t)
 
   const [a, b, c] = bases
@@ -112,7 +106,7 @@ c   a
 */
 
 // known: test fails for current linearizer
-test.skip('convergence', async t => {
+test.skip('convergence', async (t) => {
   const { bases } = await create(3, t)
 
   const [a, b, c] = bases
@@ -192,7 +186,7 @@ test.skip('convergence', async t => {
 */
 
 // known: test fails for current linearizer
-test.skip('inner majority', async t => {
+test.skip('inner majority', async (t) => {
   const { bases } = await create(5, t)
 
   const [a, b, c, d, e] = bases
@@ -254,7 +248,7 @@ test.skip('inner majority', async t => {
 
 */
 
-test('majority alone - convergence', async t => {
+test('majority alone - convergence', async (t) => {
   const { bases } = await create(5, t)
 
   const [a, b, c, d, e] = bases
@@ -305,7 +299,7 @@ test('majority alone - convergence', async t => {
   t.is(b.linearizer.tails.size, 1)
 })
 
-test('add writer', async t => {
+test('add writer', async (t) => {
   const { bases } = await create(3, t)
   const [a, b, c] = bases
 
@@ -374,7 +368,7 @@ test('add writer', async t => {
 
 */
 
-test('majority alone - non-convergence', async t => {
+test('majority alone - non-convergence', async (t) => {
   const { bases } = await create(5, t)
 
   const [a, b, c, d, e] = bases
@@ -454,7 +448,7 @@ test('majority alone - non-convergence', async t => {
 [[a0, b0, c0, a1, ]]
 */
 
-test('double fork', async t => {
+test('double fork', async (t) => {
   const { bases } = await create(5, t)
 
   const [a, b, c, d, e] = bases
@@ -529,7 +523,7 @@ test('double fork', async t => {
   }
 })
 
-async function getIndexedViewLength (base, index = -1) {
+async function getIndexedViewLength(base, index = -1) {
   const info = await base.getIndexedInfo()
   if (index === -1) index = info.views.length - 1
   return info.views[index] ? info.views[index].length : 0

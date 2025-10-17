@@ -1,14 +1,11 @@
 const test = require('brittle')
 
-const {
-  create,
-  replicateAndSync
-} = require('./helpers')
+const { create, replicateAndSync } = require('./helpers')
 
-test('optimistic - two writer', async t => {
+test('optimistic - two writer', async (t) => {
   const { bases } = await create(2, t, {
     optimistic: true,
-    async apply (nodes, view, base) {
+    async apply(nodes, view, base) {
       for (const node of nodes) {
         if (node.value === 'optimistic') await base.ackWriter(node.from.key)
         await view.append(node.value)
@@ -34,10 +31,10 @@ test('optimistic - two writer', async t => {
   t.is(await b.view.get(1), 'optimistic')
 })
 
-test('optimistic - truncate to 0', async t => {
+test('optimistic - truncate to 0', async (t) => {
   const { bases } = await create(2, t, {
     optimistic: true,
-    async apply (nodes, view, base) {
+    async apply(nodes, view, base) {
       for (const node of nodes) {
         if (node.length === 1 && !node.from.key.equals(base.key)) {
           await base.addWriter(node.from.key, { isIndexer: false })

@@ -1,0 +1,3 @@
+**/test/fuzz/generated/**
+**/test/reference/**
+example.mjs

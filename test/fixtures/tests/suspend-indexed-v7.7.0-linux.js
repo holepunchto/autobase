@@ -10,7 +10,7 @@ const skip = os.platform() !== 'linux' // fixture was generated on linux
 
 const { createBase, replicateAndSync } = require('../../helpers')
 
-test('suspend - restart from v7.7.0 fixture', { skip }, async t => {
+test('suspend - restart from v7.7.0 fixture', { skip }, async (t) => {
   const fixturePath = path.join(__dirname, '../data/suspend/indexed/linux/corestore-v7.7.0')
 
   const bdir = await tmpDir(t)
@@ -52,14 +52,14 @@ test('suspend - restart from v7.7.0 fixture', { skip }, async t => {
   t.is(await c.view.second.get(c.view.second.length - 1), 'c99')
 })
 
-function openMultiple (store) {
+function openMultiple(store) {
   return {
     first: store.get('first', { valueEncoding: 'json' }),
     second: store.get('second', { valueEncoding: 'json' })
   }
 }
 
-async function applyMultiple (batch, view, base) {
+async function applyMultiple(batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
       await base.addWriter(Buffer.from(value.add, 'hex'), { indexer: !!value.indexer })

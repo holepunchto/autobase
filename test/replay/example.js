@@ -11,12 +11,12 @@ const indexers = JSON.parse(process.argv[5])
 
 replay(discoveryKey, encryptionKey, heads, indexers)
 
-async function replay (discoveryKey, encryptionKey, heads, indexers) {
+async function replay(discoveryKey, encryptionKey, heads, indexers) {
   const swarm = new Hyperswarm()
 
   const store = new Corestore('./replay-example')
 
-  swarm.on('connection', conn => {
+  swarm.on('connection', (conn) => {
     console.log('connection!')
     store.replicate(conn)
   })
@@ -30,7 +30,7 @@ async function replay (discoveryKey, encryptionKey, heads, indexers) {
   }
 }
 
-function parseHeads (str) {
+function parseHeads(str) {
   const heads = JSON.parse(str)
   for (const head of heads) {
     head.key = b4a.from(head.key.data)

@@ -1,22 +1,24 @@
 const test = require('brittle')
 const Timer = require('../lib/timer')
 
-test('timer - simple', t => {
+test('timer - simple', (t) => {
   t.plan(1)
 
   const timer = new Timer(handler, 100)
 
-  const fail = setTimeout(() => { t.fail() }, 500)
+  const fail = setTimeout(() => {
+    t.fail()
+  }, 500)
   timer.bump()
 
-  function handler () {
+  function handler() {
     clearTimeout(fail)
     t.pass()
     timer.stop()
   }
 })
 
-test('timer - bump', t => {
+test('timer - bump', (t) => {
   t.plan(1)
 
   const timer = new Timer(handler, 100)
@@ -30,7 +32,7 @@ test('timer - bump', t => {
     timer.stop()
   }, 200)
 
-  function handler () {
+  function handler() {
     clearInterval(int)
     clearTimeout(pass)
 
@@ -39,7 +41,7 @@ test('timer - bump', t => {
   }
 })
 
-test('timer - bump max timeout', t => {
+test('timer - bump max timeout', (t) => {
   t.plan(1)
 
   const timer = new Timer(handler, 100, { limit: 200 })
@@ -53,7 +55,7 @@ test('timer - bump max timeout', t => {
     timer.stop()
   }, 600) // [200-400ms] + 200ms test slack since timers
 
-  function handler () {
+  function handler() {
     clearInterval(int)
     clearTimeout(fail)
 
@@ -62,7 +64,7 @@ test('timer - bump max timeout', t => {
   }
 })
 
-test('timer - await execution', t => {
+test('timer - await execution', (t) => {
   t.plan(1)
 
   let running = false
@@ -78,11 +80,11 @@ test('timer - await execution', t => {
     clearInterval(int)
   })
 
-  function promise () {
+  function promise() {
     if (running) return t.fail()
     running = true
 
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       setTimeout(resolve, 500)
     }).then(() => {
       t.pass()

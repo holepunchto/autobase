@@ -16,7 +16,7 @@ const {
   createBase
 } = require('./helpers')
 
-test('fast-forward - signal preferred ff', { timeout: 999999999 }, async t => {
+test('fast-forward - signal preferred ff', { timeout: 999999999 }, async (t) => {
   t.plan(1)
 
   let slow = false
@@ -24,7 +24,7 @@ test('fast-forward - signal preferred ff', { timeout: 999999999 }, async t => {
   const { bases } = await create(2, t, {
     fastForward: true,
     storage: () => tmpDir(t),
-    async apply (nodes, view, host) {
+    async apply(nodes, view, host) {
       for (const node of nodes) {
         await view.append(node.value)
         if (slow) {
@@ -51,7 +51,7 @@ test('fast-forward - signal preferred ff', { timeout: 999999999 }, async t => {
   t.is(b.core.length, a.core.length, 'did not get stuck, length is ' + b.core.length)
 })
 
-test('fast-forward - simple', async t => {
+test('fast-forward - simple', async (t) => {
   t.plan(1)
 
   const { bases } = await create(2, t, {
@@ -71,10 +71,10 @@ test('fast-forward - simple', async t => {
 
   t.ok(sparse > 0)
   t.comment('sparse blocks: ' + sparse)
-  t.comment('percentage: ' + (sparse / b.view.length * 100).toFixed(2) + '%')
+  t.comment('percentage: ' + ((sparse / b.view.length) * 100).toFixed(2) + '%')
 })
 
-test('fast-forward - migrate', async t => {
+test('fast-forward - migrate', async (t) => {
   t.plan(3)
 
   const { bases } = await create(3, t, {
@@ -101,10 +101,10 @@ test('fast-forward - migrate', async t => {
 
   t.ok(sparse > 0)
   t.comment('sparse blocks: ' + sparse)
-  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+  t.comment('percentage: ' + ((sparse / core.length) * 100).toFixed(2) + '%')
 })
 
-test('fast-forward - fast forward after migrate', async t => {
+test('fast-forward - fast forward after migrate', async (t) => {
   t.plan(3)
 
   const { bases } = await create(3, t, {
@@ -150,10 +150,10 @@ test('fast-forward - fast forward after migrate', async t => {
   t.ok(sparse > 400)
 
   t.comment('sparse blocks: ' + sparse)
-  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+  t.comment('percentage: ' + ((sparse / core.length) * 100).toFixed(2) + '%')
 })
 
-test('fast-forward - multiple writers added', async t => {
+test('fast-forward - multiple writers added', async (t) => {
   t.plan(2)
 
   const MESSAGES_PER_ROUND = 40
@@ -204,10 +204,10 @@ test('fast-forward - multiple writers added', async t => {
 
   t.ok(sparse > 0)
   t.comment('sparse blocks: ' + sparse)
-  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+  t.comment('percentage: ' + ((sparse / core.length) * 100).toFixed(2) + '%')
 })
 
-test('fast-forward - multiple queues', async t => {
+test('fast-forward - multiple queues', async (t) => {
   const { bases } = await create(4, t, {
     fastForward: true,
     storage: () => tmpDir(t)
@@ -249,13 +249,13 @@ test('fast-forward - multiple queues', async t => {
 
   s1.pipe(s2).pipe(s1)
 
-  await new Promise(resolve => s2.on('open', resolve))
+  await new Promise((resolve) => s2.on('open', resolve))
 
   // trigger 2nd fast-forward
   setTimeout(() => t.teardown(replicate([a, b, d])), DELAY)
 
-  const to = await new Promise(resolve => d.on('fast-forward', resolve))
-  const next = new Promise(resolve => d.on('fast-forward', resolve))
+  const to = await new Promise((resolve) => d.on('fast-forward', resolve))
+  const next = new Promise((resolve) => d.on('fast-forward', resolve))
 
   if (to > midLength) {
     // vary value of DELAY, but make sure the first fast-forward
@@ -271,7 +271,7 @@ test('fast-forward - multiple queues', async t => {
 })
 
 // tests needs updating, old apis, internals etc
-test.skip('fast-forward - open with no remote io', async t => {
+test.skip('fast-forward - open with no remote io', async (t) => {
   const { bases, stores } = await create(2, t, {
     apply: applyOldState,
     fastForward: true,
@@ -316,12 +316,12 @@ test.skip('fast-forward - open with no remote io', async t => {
   await remote.download({ end: local.length }).downloaded()
 
   s1.destroy()
-  await new Promise(resolve => s2.on('close', resolve))
+  await new Promise((resolve) => s2.on('close', resolve))
 
   const b2 = createBase(stores[1].session(), a.local.key, t, { apply: applyOldState })
   await t.execution(b2.ready())
 
-  async function applyOldState (batch, view, base) {
+  async function applyOldState(batch, view, base) {
     for (const { value } of batch) {
       if (value.add) {
         const key = Buffer.from(value.add, 'hex')
@@ -340,7 +340,7 @@ test.skip('fast-forward - open with no remote io', async t => {
 })
 
 // todo: rocks will never use this pathway, rewrite for failure scenario
-test.skip('fast-forward - force reset then ff', async t => {
+test.skip('fast-forward - force reset then ff', async (t) => {
   t.plan(8)
 
   const { bases } = await create(3, t, {
@@ -376,7 +376,7 @@ test.skip('fast-forward - force reset then ff', async t => {
 
   t.ok(a.core.signedLength > 800)
 
-  const truncate = new Promise(resolve => b.core.on('truncate', resolve))
+  const truncate = new Promise((resolve) => b.core.on('truncate', resolve))
 
   t.not(b.core.signedLength, a.core.signedLength)
 
@@ -397,10 +397,10 @@ test.skip('fast-forward - force reset then ff', async t => {
 
   t.ok(sparse > 0)
   t.comment('sparse blocks: ' + sparse)
-  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+  t.comment('percentage: ' + ((sparse / core.length) * 100).toFixed(2) + '%')
 })
 
-test('fast-forward - initial fast forward', async t => {
+test('fast-forward - initial fast forward', async (t) => {
   t.plan(3)
 
   const { bases } = await create(2, t, {
@@ -442,10 +442,10 @@ test('fast-forward - initial fast forward', async t => {
   t.ok(sparse > 0)
 
   t.comment('sparse blocks: ' + sparse)
-  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+  t.comment('percentage: ' + ((sparse / core.length) * 100).toFixed(2) + '%')
 })
 
-test('fast-forward - initial ff after multiple migrate', async t => {
+test('fast-forward - initial ff after multiple migrate', async (t) => {
   t.plan(3)
 
   const { bases } = await create(5, t, {
@@ -507,10 +507,10 @@ test('fast-forward - initial ff after multiple migrate', async t => {
   t.ok(sparse > 0)
 
   t.comment('sparse blocks: ' + sparse)
-  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+  t.comment('percentage: ' + ((sparse / core.length) * 100).toFixed(2) + '%')
 })
 
-test('fast-forward - ignore bogus initial ff', async t => {
+test('fast-forward - ignore bogus initial ff', async (t) => {
   t.plan(3)
 
   const { bases } = await create(2, t, {
@@ -555,12 +555,12 @@ test('fast-forward - ignore bogus initial ff', async t => {
 
   t.absent(latecomer.fastForwardTo) // fastForward was cleared
   t.comment('sparse blocks: ' + sparse)
-  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+  t.comment('percentage: ' + ((sparse / core.length) * 100).toFixed(2) + '%')
 })
 
 // very timing dependent this test, so skipping. the idea is good enough tho
 // just needs to make less assumptions about when to ff
-test.skip('fast-forward - double ff', async t => {
+test.skip('fast-forward - double ff', async (t) => {
   const { bases } = await create(5, t, {
     fastForward: true,
     storage: () => tmpDir(t)
@@ -639,10 +639,10 @@ test.skip('fast-forward - double ff', async t => {
   t.ok(sparse > 0)
 
   t.comment('sparse blocks: ' + sparse)
-  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+  t.comment('percentage: ' + ((sparse / core.length) * 100).toFixed(2) + '%')
 })
 
-test('fast-forward - unindexed cores should migrate', async t => {
+test('fast-forward - unindexed cores should migrate', async (t) => {
   const { bases } = await create(4, t, {
     fastForward: true,
     storage: () => tmpDir(t)
@@ -663,7 +663,7 @@ test('fast-forward - unindexed cores should migrate', async t => {
   t.alike(a.core.key, c.core.key)
 })
 
-test('fast-forward - initial fast forward with in between writer', async t => {
+test('fast-forward - initial fast forward with in between writer', async (t) => {
   t.plan(3)
 
   const { bases } = await create(2, t, {
@@ -701,7 +701,7 @@ test('fast-forward - initial fast forward with in between writer', async t => {
   t.teardown(replicate([a, c]))
 
   // wait some time so c's initial wakeup is not up to date
-  await new Promise(resolve => setTimeout(resolve, 1000))
+  await new Promise((resolve) => setTimeout(resolve, 1000))
 
   t.teardown(replicate([a, b]))
   await b.append('c no see')
@@ -711,7 +711,7 @@ test('fast-forward - initial fast forward with in between writer', async t => {
   t.pass()
 })
 
-test('fast-forward - writer removed', async t => {
+test('fast-forward - writer removed', async (t) => {
   t.plan(3)
 
   const { bases } = await create(2, t, {
@@ -750,10 +750,10 @@ test('fast-forward - writer removed', async t => {
   t.ok(sparse > 0)
 
   t.comment('sparse blocks: ' + sparse)
-  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+  t.comment('percentage: ' + ((sparse / core.length) * 100).toFixed(2) + '%')
 })
 
-test('fast-forward - is indexer set correctly', async t => {
+test('fast-forward - is indexer set correctly', async (t) => {
   t.plan(11)
 
   const { bases } = await create(4, t, {
@@ -801,7 +801,7 @@ test('fast-forward - is indexer set correctly', async t => {
 
   t.is(c.linearizer.indexers.length, 2)
 
-  const event = new Promise(resolve => c.on('is-indexer', resolve))
+  const event = new Promise((resolve) => c.on('is-indexer', resolve))
 
   await replicateAndSync([c, d])
 
@@ -812,7 +812,7 @@ test('fast-forward - is indexer set correctly', async t => {
   await t.execution(event)
 })
 
-test('fast-forward - multiple views reordered', async t => {
+test('fast-forward - multiple views reordered', async (t) => {
   t.plan(3)
 
   const { bases } = await create(2, t, {
@@ -844,10 +844,10 @@ test('fast-forward - multiple views reordered', async t => {
 
   t.ok(sparse > 0)
   t.comment('sparse blocks: ' + sparse)
-  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+  t.comment('percentage: ' + ((sparse / core.length) * 100).toFixed(2) + '%')
 })
 
-test('fast-forward - static fast-forward', async t => {
+test('fast-forward - static fast-forward', async (t) => {
   const { bases } = await create(4, t, {
     fastForward: true,
     storage: () => tmpDir(t)
@@ -878,7 +878,7 @@ test('fast-forward - static fast-forward', async t => {
   let count = 0
   d.on('fast-forward', () => count++)
 
-  const ff = new Promise(resolve => d.once('fast-forward', resolve))
+  const ff = new Promise((resolve) => d.once('fast-forward', resolve))
 
   // trigger fast-forward
   t.teardown(replicate([a, b, d]))
@@ -889,7 +889,7 @@ test('fast-forward - static fast-forward', async t => {
   t.pass()
 })
 
-test('fast-forward - initial ff with zero length view', async t => {
+test('fast-forward - initial ff with zero length view', async (t) => {
   t.plan(4)
 
   const { bases } = await create(2, t, {
@@ -924,25 +924,25 @@ test('fast-forward - initial ff with zero length view', async t => {
 
   t.ok(sparse > 0)
   t.comment('sparse blocks: ' + sparse)
-  t.comment('percentage: ' + (sparse / core.length * 100).toFixed(2) + '%')
+  t.comment('percentage: ' + ((sparse / core.length) * 100).toFixed(2) + '%')
 })
 
-async function isSparse (core) {
+async function isSparse(core) {
   let n = 0
   for (let i = 0; i < core.length; i++) {
-    if (!await core.has(i)) n++
+    if (!(await core.has(i))) n++
   }
   return n
 }
 
-function openMultiple (store) {
+function openMultiple(store) {
   return {
     first: store.get('first', { valueEncoding: 'json' }),
     second: store.get('second', { valueEncoding: 'json' })
   }
 }
 
-async function applyWithRemove (batch, view, base) {
+async function applyWithRemove(batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
       await base.addWriter(b4a.from(value.add, 'hex'), { indexer: value.indexer !== false })
@@ -962,7 +962,7 @@ async function applyWithRemove (batch, view, base) {
   }
 }
 
-async function applyMultiple (batch, view, base) {
+async function applyMultiple(batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
       await base.addWriter(Buffer.from(value.add, 'hex'), { indexer: value.indexer !== false })

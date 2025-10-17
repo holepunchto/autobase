@@ -1,12 +1,7 @@
 const b4a = require('b4a')
 const test = require('brittle')
 
-const {
-  create,
-  confirm,
-  replicateAndSync,
-  addWriterAndSync
-} = require('./helpers')
+const { create, confirm, replicateAndSync, addWriterAndSync } = require('./helpers')
 
 /*
 
@@ -14,7 +9,7 @@ c - b - a - c - b - a
 
 */
 
-test('linearizer - simple', async t => {
+test('linearizer - simple', async (t) => {
   const { bases } = await create(3, t)
 
   const [a, b, c] = bases
@@ -119,7 +114,7 @@ c - b - a - c - a
 
 */
 
-test('linearizer - compete', async t => {
+test('linearizer - compete', async (t) => {
   const { bases } = await create(3, t)
 
   const [a, b, c] = bases
@@ -222,7 +217,7 @@ c - b - a - c - a
 
 */
 
-test('linearizer - count ordering', async t => {
+test('linearizer - count ordering', async (t) => {
   const { bases } = await create(3, t)
 
   const [a, b, c] = bases
@@ -350,7 +345,7 @@ test('linearizer - count ordering', async t => {
   t.is(a.linearizer.tails.size, 2)
 })
 
-test('linearizer - reordering', async t => {
+test('linearizer - reordering', async (t) => {
   const { bases } = await create(3, t)
 
   const [a, b, c] = bases
@@ -396,7 +391,7 @@ test('linearizer - reordering', async t => {
   t.is(await c.view.get(4), 'c0')
 })
 
-test('linearizer - reordering after restart', async t => {
+test('linearizer - reordering after restart', async (t) => {
   const { bases } = await create(3, t)
 
   const [a, b, c] = bases
@@ -428,7 +423,7 @@ test('linearizer - reordering after restart', async t => {
   t.is(await b.view.get(2), 'a0')
 })
 
-test('linearizer - shouldAck', async t => {
+test('linearizer - shouldAck', async (t) => {
   const { bases } = await create(3, t)
 
   const [a, b, c] = bases
@@ -455,13 +450,13 @@ test('linearizer - shouldAck', async t => {
   t.absent(b.linearizer.shouldAck(getWriter(b, c.localWriter)))
   t.absent(c.linearizer.shouldAck(c.localWriter))
 
-  function getWriter (base, writer) {
+  function getWriter(base, writer) {
     return base.activeWriters.get(writer.core.key)
   }
 })
 
 // review: test passes, but not sure what this test is for?
-test.skip('linearizer - no loop', async t => {
+test.skip('linearizer - no loop', async (t) => {
   const { bases } = await create(4, t)
 
   const [a, b, c, d] = bases
@@ -497,7 +492,7 @@ test.skip('linearizer - no loop', async t => {
   t.not(i, 20)
 })
 
-test('linearizer - all voted', async t => {
+test('linearizer - all voted', async (t) => {
   const { bases } = await create(3, t)
 
   const [a, b, c] = bases
@@ -525,7 +520,7 @@ test('linearizer - all voted', async t => {
   t.alike(await getIndexedViewLength(c), 1)
 })
 
-async function getIndexedViewLength (base, index = -1) {
+async function getIndexedViewLength(base, index = -1) {
   const info = await base.getIndexedInfo()
   if (index === -1) index = info.views.length - 1
   return info.views[index] ? info.views[index].length : 0

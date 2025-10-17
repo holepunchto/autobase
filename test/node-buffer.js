@@ -1,7 +1,7 @@
 const test = require('brittle')
 const NodeBuffer = require('../lib/node-buffer')
 
-test('node buffer - simple operation', t => {
+test('node buffer - simple operation', (t) => {
   const nodes = new NodeBuffer()
 
   t.is(nodes.push('0'), 0)
@@ -34,7 +34,7 @@ test('node buffer - simple operation', t => {
   t.is(nodes.shift(), null)
 })
 
-test('node buffer - grow', t => {
+test('node buffer - grow', (t) => {
   const nodes = new NodeBuffer(0, 1)
 
   t.is(nodes.buffer.length, 1)
@@ -71,7 +71,7 @@ test('node buffer - grow', t => {
   t.is(nodes.shift(), null)
 })
 
-test('node buffer - many entries', t => {
+test('node buffer - many entries', (t) => {
   const nodes = new NodeBuffer(0, 1)
 
   for (let i = 0; i < 0x1000001; i++) {
@@ -92,7 +92,7 @@ test('node buffer - many entries', t => {
   t.is(nodes.buffer.length, 1)
 })
 
-test('node buffer - grow only if necessary', t => {
+test('node buffer - grow only if necessary', (t) => {
   const nodes = new NodeBuffer(0, 4)
 
   nodes.push(0)
@@ -131,7 +131,7 @@ test('node buffer - grow only if necessary', t => {
   t.is(nodes.length, 8)
 })
 
-test('node buffer - push shift push', t => {
+test('node buffer - push shift push', (t) => {
   const nodes = new NodeBuffer(0, 1)
 
   nodes.push(0)
@@ -149,7 +149,7 @@ test('node buffer - push shift push', t => {
   t.is(nodes.buffer.length, 1)
 })
 
-test('node buffer - offset', t => {
+test('node buffer - offset', (t) => {
   const nodes = new NodeBuffer(5, 1)
 
   t.is(nodes.length, 5)
@@ -161,7 +161,7 @@ test('node buffer - offset', t => {
   t.is(nodes.buffer.length, 1)
 })
 
-test('node buffer - shrink', t => {
+test('node buffer - shrink', (t) => {
   const nodes = new NodeBuffer(0, 1)
 
   t.is(nodes.buffer.length, 1)

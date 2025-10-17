@@ -8,22 +8,16 @@ const b4a = require('b4a')
 
 const { version } = require('../../../package.json')
 
-const {
-  create,
-  createBase,
-  addWriterAndSync,
-  replicateAndSync,
-  confirm
-} = require('../../helpers')
+const { create, createBase, addWriterAndSync, replicateAndSync, confirm } = require('../../helpers')
 
 main().catch(console.error)
 
-async function main () {
+async function main() {
   await unindexed()
   await indexed()
 }
 
-async function unindexed () {
+async function unindexed() {
   const closing = []
   const t = { teardown }
 
@@ -38,8 +32,16 @@ async function unindexed () {
   const title = 'unindexed'
   const platform = os.platform()
 
-  const testPath = path.resolve(__dirname, '..', `tests/suspend-${title}-v${version}-${platform}.js`)
-  const fixturePath = path.join(__dirname, '..', `data/suspend/${title}/${platform}/corestore-v${version}`)
+  const testPath = path.resolve(
+    __dirname,
+    '..',
+    `tests/suspend-${title}-v${version}-${platform}.js`
+  )
+  const fixturePath = path.join(
+    __dirname,
+    '..',
+    `data/suspend/${title}/${platform}/corestore-v${version}`
+  )
 
   const bstore = new Corestore(path.join(fixturePath, 'b'))
   const cstore = new Corestore(path.join(fixturePath, 'c'))
@@ -101,16 +103,16 @@ async function unindexed () {
 
   console.log('Test was written to:', testPath)
 
-  function teardown (fn) {
+  function teardown(fn) {
     closing.push(fn)
   }
 
-  function shutdown () {
-    return Promise.all(closing.map(fn => fn()))
+  function shutdown() {
+    return Promise.all(closing.map((fn) => fn()))
   }
 }
 
-async function indexed () {
+async function indexed() {
   const closing = []
   const t = { teardown }
 
@@ -125,8 +127,16 @@ async function indexed () {
   const title = 'indexed'
   const platform = os.platform()
 
-  const testPath = path.resolve(__dirname, '..', `tests/suspend-${title}-v${version}-${platform}.js`)
-  const fixturePath = path.join(__dirname, '..', `data/suspend/${title}/${platform}/corestore-v${version}`)
+  const testPath = path.resolve(
+    __dirname,
+    '..',
+    `tests/suspend-${title}-v${version}-${platform}.js`
+  )
+  const fixturePath = path.join(
+    __dirname,
+    '..',
+    `data/suspend/${title}/${platform}/corestore-v${version}`
+  )
 
   const bstore = new Corestore(path.join(fixturePath, 'b'))
   const cstore = new Corestore(path.join(fixturePath, 'c'))
@@ -180,16 +190,16 @@ async function indexed () {
 
   console.log('Test was written to:', testPath)
 
-  function teardown (fn) {
+  function teardown(fn) {
     closing.push(fn)
   }
 
-  function shutdown () {
-    return Promise.all(closing.map(fn => fn()))
+  function shutdown() {
+    return Promise.all(closing.map((fn) => fn()))
   }
 }
 
-function generate (version, assertions, exp, dir, platform) {
+function generate(version, assertions, exp, dir, platform) {
   return `const fs = require('fs/promises')
 const os = require('os')
 const path = require('path')
@@ -240,7 +250,7 @@ test('suspend - restart from v${version} fixture', { skip }, async t => {
 
   await replicateAndSync([b, c])
 
-${assertions.map(a => '  ' + a).join('\n')}
+${assertions.map((a) => '  ' + a).join('\n')}
 })
 
 function openMultiple (store) {
@@ -267,14 +277,14 @@ async function applyMultiple (batch, view, base) {
 `
 }
 
-function openMultiple (store) {
+function openMultiple(store) {
   return {
     first: store.get('first', { valueEncoding: 'json' }),
     second: store.get('second', { valueEncoding: 'json' })
   }
 }
 
-async function applyMultiple (batch, view, base) {
+async function applyMultiple(batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
       await base.addWriter(Buffer.from(value.add, 'hex'), { indexer: value.indexer })
