@@ -775,9 +775,15 @@ module.exports = class Autobase extends ReadyResource {
 
     await closing
   }
+  
+  getLastError () {
+    return this._lastError
+  }
 
   _onError (err) {
     if (this.closing) return
+    
+    this._lastError = err
 
     if (err === INTERRUPT) {
       this.emit('interrupt', this.interrupted)

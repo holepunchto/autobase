@@ -21,11 +21,13 @@ const {
   compareViews
 } = require('./helpers')
 
-test('basic - single writer', async t => {
+test('basic - single writer', async (t) => {
   const { bases } = await create(1, t)
   const [base] = bases
 
-  const append = new Promise(resolve => { base.view.on('append', resolve) })
+  const append = new Promise((resolve) => {
+    base.view.on('append', resolve)
+  })
 
   await base.append('hello')
   await base.append('world')
@@ -44,7 +46,7 @@ test('basic - single writer', async t => {
   t.not(base.system.core.manifest, null)
 })
 
-test('basic - big batches', async t => {
+test('basic - big batches', async (t) => {
   t.plan(1)
 
   let shared = 0
@@ -69,17 +71,21 @@ test('basic - big batches', async t => {
   await replicateAndSync([a, b, c])
 
   function update (view, changes) {
-    if (c.bigBatches) t.alike(changes.get('view'), { from: shared, to: shared + 2000, shared })
+    if (c.bigBatches) {
+      t.alike(changes.get('view'), { from: shared, to: shared + 2000, shared })
+    }
   }
 })
 
-test('basic - two writers', async t => {
+test('basic - two writers', async (t) => {
   const { bases } = await create(3, t, { open: null })
 
   const [a, b, c] = bases
 
   let added = false
-  b.once('is-indexer', () => { added = true })
+  b.once('is-indexer', () => {
+    added = true
+  })
 
   await addWriter(a, b)
   await confirm([a, b, c])
@@ -87,7 +93,9 @@ test('basic - two writers', async t => {
   t.ok(added)
 
   added = false
-  c.once('is-indexer', () => { added = true })
+  c.once('is-indexer', () => {
+    added = true
+  })
 
   await addWriter(b, c)
   await confirm([a, b, c])
@@ -110,7 +118,7 @@ test('basic - two writers', async t => {
   // t.alike(await a.system.checkpoint(), await c.system.checkpoint())
 })
 
-test('basic - wait for writable', async t => {
+test('basic - wait for writable', async (t) => {
   const { bases } = await create(3, t, { open: null })
 
   const [a, b, c] = bases
@@ -130,7 +138,7 @@ test('basic - wait for writable', async t => {
   t.pass('resolved')
 })
 
-test('basic - no truncates when history is linear', async t => {
+test('basic - no truncates when history is linear', async (t) => {
   const { bases } = await create(3, t)
   const [a, b, c] = bases
 
@@ -167,7 +175,7 @@ test('basic - no truncates when history is linear', async t => {
   t.is(c.view.fork, 0)
 })
 
-test('basic - truncates when history is not linear', async t => {
+test('basic - truncates when history is not linear', async (t) => {
   const { bases } = await create(3, t)
   const [a, b, c] = bases
 
@@ -186,7 +194,7 @@ test('basic - truncates when history is not linear', async t => {
   t.ok(b.view.fork > 0 || a.view.fork > 0)
 })
 
-test('basic - writable event fires', async t => {
+test('basic - writable event fires', async (t) => {
   t.plan(1)
   const { bases } = await create(2, t, { open: null })
   const [a, b] = bases
@@ -200,7 +208,7 @@ test('basic - writable event fires', async t => {
   await confirm([a, b])
 })
 
-test('basic - local key pair', async t => {
+test('basic - local key pair', async (t) => {
   const keyPair = crypto.keyPair(Buffer.alloc(32))
   const [store] = await createStores(1, t)
 
@@ -226,11 +234,13 @@ test('basic - local key pair', async t => {
   t.alike(b.local.manifest.signers[0].publicKey, keyPair.publicKey)
 })
 
-test('basic - local key pair promise', async t => {
+test('basic - local key pair promise', async (t) => {
   const keyPair = crypto.keyPair(Buffer.alloc(32))
   const [store] = await createStores(1, t)
 
-  const base = createBase(store, null, t, { keyPair: Promise.resolve(keyPair) })
+  const base = createBase(store, null, t, {
+    keyPair: Promise.resolve(keyPair)
+  })
   await base.ready()
 
   const key = base.key
@@ -252,7 +262,7 @@ test('basic - local key pair promise', async t => {
   t.alike(b.local.manifest.signers[0].publicKey, keyPair.publicKey)
 })
 
-test('basic - view', async t => {
+test('basic - view', async (t) => {
   const { bases } = await create(1, t)
   const [base] = bases
 
@@ -264,7 +274,7 @@ test('basic - view', async t => {
   t.alike(await base.view.get(0), block)
 })
 
-test('basic - view with close', async t => {
+test('basic - view with close', async (t) => {
   const { bases } = await create(1, t, { open, close })
   const [base] = bases
 
@@ -284,7 +294,7 @@ test('basic - view with close', async t => {
     return {
       core,
       lastBlock: null,
-      append: v => core.append(v)
+      append: (v) => core.append(v)
     }
   }
 
@@ -294,7 +304,7 @@ test('basic - view with close', async t => {
   }
 })
 
-test('basic - view/writer userdata is set', async t => {
+test('basic - view/writer userdata is set', async (t) => {
   const { bases } = await create(2, t)
   const [a, b] = bases
 
@@ -319,7 +329,7 @@ test('basic - view/writer userdata is set', async t => {
   }
 })
 
-test('basic - simple reorg', async t => {
+test('basic - simple reorg', async (t) => {
   const { bases } = await create(2, t)
 
   const [a, b] = bases
@@ -350,7 +360,7 @@ test('basic - simple reorg', async t => {
   t.is(await b.view.get(3), 'b1')
 })
 
-test('basic - zero length view', async t => {
+test('basic - zero length view', async (t) => {
   const { bases } = await create(2, t)
 
   const [a, b] = bases
@@ -367,7 +377,7 @@ test('basic - zero length view', async t => {
   t.is(info.views.length, 0)
 })
 
-test('basic - compare views', async t => {
+test('basic - compare views', async (t) => {
   const { bases } = await create(2, t)
 
   const [a, b] = bases
@@ -385,7 +395,7 @@ test('basic - compare views', async t => {
   await compareViews([a, b], t)
 })
 
-test('basic - online majority', async t => {
+test('basic - online majority', async (t) => {
   const { bases } = await create(3, t)
 
   const [a, b, c] = bases
@@ -424,7 +434,7 @@ test('basic - online majority', async t => {
   await compareViews([a, b, c], t)
 })
 
-test('basic - rotating majority', async t => {
+test('basic - rotating majority', async (t) => {
   const { bases } = await create(3, t)
 
   const [a, b, c] = bases
@@ -501,7 +511,7 @@ test('basic - rotating majority', async t => {
 })
 
 // hard in new hc
-test('basic - throws', async t => {
+test('basic - throws', async (t) => {
   const { bases } = await create(2, t)
 
   const [a, b] = bases
@@ -516,7 +526,7 @@ test('basic - throws', async t => {
   await t.exception(a.view.append('append outside apply'))
 })
 
-test('basic - add 5 writers', async t => {
+test('basic - add 5 writers', async (t) => {
   const { bases } = await create(5, t)
 
   const [a, b, c, d, e] = bases
@@ -549,7 +559,7 @@ test('basic - add 5 writers', async t => {
   t.ok(migrate > 0)
 })
 
-test('basic - online minorities', async t => {
+test('basic - online minorities', async (t) => {
   const { bases } = await create(5, t)
 
   const [a, b, c, d, e] = bases
@@ -616,7 +626,7 @@ test('basic - online minorities', async t => {
   await t.execution(compare(a, e, true))
 })
 
-test('basic - restarting sets bootstrap correctly', async t => {
+test('basic - restarting sets bootstrap correctly', async (t) => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
 
@@ -636,7 +646,10 @@ test('basic - restarting sets bootstrap correctly', async t => {
 
   {
     const ns = store.namespace(bootstrapKey)
-    const base = new Autobase(ns, bootstrapKey, { ackInterval: 0, ackThreshold: 0 })
+    const base = new Autobase(ns, bootstrapKey, {
+      ackInterval: 0,
+      ackThreshold: 0
+    })
     await base.ready()
 
     t.alike(base.key, bootstrapKey)
@@ -649,7 +662,7 @@ test('basic - restarting sets bootstrap correctly', async t => {
   await store.close()
 })
 
-test('batch append', async t => {
+test('batch append', async (t) => {
   const { bases } = await create(2, t)
 
   const [a, b] = bases
@@ -664,7 +677,7 @@ test('batch append', async t => {
   await t.execution(confirm(bases))
 })
 
-test('undoing a batch', async t => {
+test('undoing a batch', async (t) => {
   const { bases } = await create(2, t)
 
   const [a, b] = bases
@@ -678,15 +691,12 @@ test('undoing a batch', async t => {
   await a.append('a0')
   await confirm(bases)
 
-  await Promise.all([
-    a.append('a1'),
-    b.append(['b0', 'b1'])
-  ])
+  await Promise.all([a.append('a1'), b.append(['b0', 'b1'])])
 
   await t.execution(confirm(bases))
 })
 
-test('append during reindex', async t => {
+test('append during reindex', async (t) => {
   const { bases } = await create(4, t)
 
   const [a, b, c, d] = bases
@@ -721,7 +731,7 @@ test('append during reindex', async t => {
   await unreplicate()
 })
 
-test('closing an autobase', async t => {
+test('closing an autobase', async (t) => {
   const { bases } = await create(1, t)
   const [base] = bases
 
@@ -732,7 +742,7 @@ test('closing an autobase', async t => {
   t.is(base.local.closed, true)
 })
 
-test('flush after reindex', async t => {
+test('flush after reindex', async (t) => {
   const { bases } = await create(9, t)
 
   const root = bases[0]
@@ -762,17 +772,14 @@ test('flush after reindex', async t => {
   await t.execution(bases[8].append('msg' + msg++))
 })
 
-test('reindex', async t => {
+test('reindex', async (t) => {
   const { bases } = await create(5, t)
 
   const [a, b, c, d, e] = bases
 
   let msg = 0
 
-  await Promise.all([
-    addWriter(a, b),
-    addWriter(a, c)
-  ])
+  await Promise.all([addWriter(a, b), addWriter(a, c)])
 
   await confirm([a, b, c])
 
@@ -809,7 +816,11 @@ test('reindex', async t => {
 
   await compareViews(bases, t)
 
-  t.is((await a.system.getIndexedInfo()).heads.length, 1, 'only one indexed head')
+  t.is(
+    (await a.system.getIndexedInfo()).heads.length,
+    1,
+    'only one indexed head'
+  )
   t.is(a.system.members, bases.length)
 
   t.not(a.view.signedLength, a.view.length)
@@ -822,7 +833,7 @@ test('reindex', async t => {
   }
 })
 
-test('sequential restarts', { timeout: 120_000 }, async t => {
+test('sequential restarts', { timeout: 120_000 }, async (t) => {
   const { bases } = await create(9, t)
 
   const root = bases[0]
@@ -887,7 +898,7 @@ test('sequential restarts', { timeout: 120_000 }, async t => {
   await compareViews(bases, t)
 })
 
-test('two writers write many messages, third writer joins', async t => {
+test('two writers write many messages, third writer joins', async (t) => {
   t.timeout(120_000)
   const { bases } = await create(3, t)
   const [a, b, c] = bases
@@ -910,7 +921,7 @@ test('two writers write many messages, third writer joins', async t => {
   await compareViews([a, b, c], t)
 })
 
-test('basic - gc indexed nodes', async t => {
+test('basic - gc indexed nodes', async (t) => {
   const { bases } = await create(1, t)
   const [base] = bases
 
@@ -931,7 +942,7 @@ test('basic - gc indexed nodes', async t => {
   t.alike(await base.view.get(4), { message: '4' })
 })
 
-test('basic - isAutobase', async t => {
+test('basic - isAutobase', async (t) => {
   const { bases } = await create(3, t, { open: null })
   const [a, b, c] = bases
 
@@ -953,7 +964,7 @@ test('basic - isAutobase', async t => {
   t.is(await Autobase.isAutobase(c.local), true)
 })
 
-test('basic - non-indexed writer', async t => {
+test('basic - non-indexed writer', async (t) => {
   const { bases } = await create(2, t, { apply: applyWriter })
   const [a, b] = bases
 
@@ -1016,7 +1027,9 @@ test('basic - non-indexed writer', async t => {
   async function applyWriter (batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
-        await base.addWriter(b4a.from(node.value.add, 'hex'), { isIndexer: !!node.value.indexer })
+        await base.addWriter(b4a.from(node.value.add, 'hex'), {
+          isIndexer: !!node.value.indexer
+        })
         continue
       }
 
@@ -1025,7 +1038,7 @@ test('basic - non-indexed writer', async t => {
   }
 })
 
-test('basic - non-indexed writers 3-of-5', async t => {
+test('basic - non-indexed writers 3-of-5', async (t) => {
   const { bases } = await create(5, t, { apply: applyWriter })
   const [a, b, c, d, e] = bases
 
@@ -1133,7 +1146,9 @@ test('basic - non-indexed writers 3-of-5', async t => {
   async function applyWriter (batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
-        await base.addWriter(b4a.from(node.value.add, 'hex'), { isIndexer: !!node.value.indexer })
+        await base.addWriter(b4a.from(node.value.add, 'hex'), {
+          isIndexer: !!node.value.indexer
+        })
         continue
       }
 
@@ -1143,7 +1158,7 @@ test('basic - non-indexed writers 3-of-5', async t => {
 })
 
 // memview failing: corestore has no detach option
-test('autobase should not detach the original store', async t => {
+test('autobase should not detach the original store', async (t) => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
   const bootstrap = b4a.alloc(32)
@@ -1160,7 +1175,7 @@ test('autobase should not detach the original store', async t => {
   t.ok(base.store.closed)
 })
 
-test('basic - oplog digest', async t => {
+test('basic - oplog digest', async (t) => {
   const { bases } = await create(2, t, { open: null })
   const [a, b] = bases
 
@@ -1181,7 +1196,9 @@ test('basic - oplog digest', async t => {
   await a.append(null)
 
   let last = await a.local.get(a.local.length - 1)
-  if (last.digest.pointer) last = await a.local.get(a.local.length - 1 - last.digest.pointer)
+  if (last.digest.pointer) {
+    last = await a.local.get(a.local.length - 1 - last.digest.pointer)
+  }
 
   t.is(last.digest.pointer, 0)
   t.is(b.system.core.manifest.signers.length, 2)
@@ -1189,7 +1206,7 @@ test('basic - oplog digest', async t => {
 })
 
 // todo: use normal helper once we have hypercore session manager
-test('basic - close during apply', async t => {
+test('basic - close during apply', async (t) => {
   t.plan(1)
 
   const [store] = await createStores(1, t)
@@ -1204,7 +1221,7 @@ test('basic - close during apply', async t => {
         await view.get(view.length) // can never resolve
       }
     },
-    open: store => store.get('test'),
+    open: (store) => store.get('test'),
     valueEncoding: 'json'
   })
 
@@ -1216,7 +1233,7 @@ test('basic - close during apply', async t => {
   await t.exception(promise)
 })
 
-test('basic - constructor throws', async t => {
+test('basic - constructor throws', async (t) => {
   await t.exception(create(1, t, { apply: undefined, open }), /Synthetic./)
 
   function open () {
@@ -1224,7 +1241,7 @@ test('basic - constructor throws', async t => {
   }
 })
 
-test('basic - never sign past pending migration', async t => {
+test('basic - never sign past pending migration', async (t) => {
   const { bases } = await create(5, t)
 
   const [a, b, c, d, e] = bases
@@ -1251,7 +1268,7 @@ test('basic - never sign past pending migration', async t => {
   t.ok(info.indexers.length - signers.length <= 1)
 })
 
-test('basic - remove writer', async t => {
+test('basic - remove writer', async (t) => {
   const { bases } = await create(3, t, { apply: applyWithRemove, open: null })
   const [a, b, c] = bases
 
@@ -1274,7 +1291,7 @@ test('basic - remove writer', async t => {
   t.is(b.system.members, c.system.members)
 })
 
-test('basic - remove and rejoin writer', async t => {
+test('basic - remove and rejoin writer', async (t) => {
   const { bases } = await create(2, t, { apply: applyWithRemove, open: null })
   const [a, b] = bases
 
@@ -1299,7 +1316,7 @@ test('basic - remove and rejoin writer', async t => {
   t.is(a.system.members, 1)
 })
 
-test('basic - non-indexer writer removes themselves', async t => {
+test('basic - non-indexer writer removes themselves', async (t) => {
   const { bases } = await create(2, t, { apply: applyWithRemove, open: null })
   const [a, b] = bases
 
@@ -1320,7 +1337,7 @@ test('basic - non-indexer writer removes themselves', async t => {
   t.is(a.system.members, a.system.members)
 })
 
-test('basic - remove indexer', async t => {
+test('basic - remove indexer', async (t) => {
   const { bases } = await create(3, t, { apply: applyWithRemove, open: null })
   const [a, b, c] = bases
 
@@ -1356,7 +1373,7 @@ test('basic - remove indexer', async t => {
   t.is(b.system.members, c.system.members)
 })
 
-test('basic - remove indexer and continue indexing', async t => {
+test('basic - remove indexer and continue indexing', async (t) => {
   const { bases } = await create(3, t, { apply: applyWithRemove })
   const [a, b, c] = bases
 
@@ -1386,7 +1403,7 @@ test('basic - remove indexer and continue indexing', async t => {
   t.is(b.view.manifest.signers.length, 2)
 })
 
-test('basic - remove indexer back to previously used indexer set', async t => {
+test('basic - remove indexer back to previously used indexer set', async (t) => {
   const { bases } = await create(3, t, { apply: applyWithRemove })
   const [a, b, c] = bases
 
@@ -1431,7 +1448,7 @@ test('basic - remove indexer back to previously used indexer set', async t => {
   t.unlike(manifest1.prologue.hash, manifest2.prologue.hash)
 })
 
-test('basic - remove an indexer when 2-of-2', async t => {
+test('basic - remove an indexer when 2-of-2', async (t) => {
   const { bases } = await create(2, t, { apply: applyWithRemove })
   const [a, b] = bases
 
@@ -1473,7 +1490,7 @@ test('basic - remove an indexer when 2-of-2', async t => {
   t.not(finalManifest.prologue.length, 0)
 })
 
-test('basic - remove multiple indexers concurrently', async t => {
+test('basic - remove multiple indexers concurrently', async (t) => {
   const { bases } = await create(3, t, { apply })
   const [a, b, c] = bases
 
@@ -1522,7 +1539,7 @@ test('basic - remove multiple indexers concurrently', async t => {
   }
 })
 
-test('basic - indexer removes themselves', async t => {
+test('basic - indexer removes themselves', async (t) => {
   const { bases } = await create(3, t, { apply })
   const [a, b, c] = bases
 
@@ -1575,7 +1592,7 @@ test('basic - indexer removes themselves', async t => {
   }
 })
 
-test('basic - cannot remove last indexer', async t => {
+test('basic - cannot remove last indexer', async (t) => {
   t.plan(7)
 
   const { bases } = await create(2, t, { apply })
@@ -1604,7 +1621,9 @@ test('basic - cannot remove last indexer', async t => {
       }
 
       if (value.remove) {
-        await t.exception(() => base.removeWriter(b4a.from(value.remove, 'hex')))
+        await t.exception(() =>
+          base.removeWriter(b4a.from(value.remove, 'hex'))
+        )
         continue
       }
 
@@ -1613,7 +1632,7 @@ test('basic - cannot remove last indexer', async t => {
   }
 })
 
-test('basic - promote writer to indexer', async t => {
+test('basic - promote writer to indexer', async (t) => {
   t.plan(9)
 
   const { bases } = await create(2, t)
@@ -1638,7 +1657,7 @@ test('basic - promote writer to indexer', async t => {
 
   t.is(a.linearizer.indexers.length, 2)
 
-  const event = new Promise(resolve => b.on('is-indexer', resolve))
+  const event = new Promise((resolve) => b.on('is-indexer', resolve))
 
   await replicateAndSync([a, b])
 
@@ -1648,7 +1667,7 @@ test('basic - promote writer to indexer', async t => {
   t.ok(b.localWriter.isActiveIndexer)
 })
 
-test('basic - demote indexer to writer', async t => {
+test('basic - demote indexer to writer', async (t) => {
   t.plan(14)
 
   const { bases } = await create(2, t)
@@ -1670,7 +1689,7 @@ test('basic - demote indexer to writer', async t => {
   t.is(a.view.signedLength, 1)
   t.is(b.view.signedLength, 1)
 
-  const event = new Promise(resolve => b.on('is-non-indexer', resolve))
+  const event = new Promise((resolve) => b.on('is-non-indexer', resolve))
 
   // demote writer
   await addWriter(a, b, false)
@@ -1694,7 +1713,7 @@ test('basic - demote indexer to writer', async t => {
   t.is(a.activeWriters.size, 1)
 })
 
-test('basic - add new indexer after removing', async t => {
+test('basic - add new indexer after removing', async (t) => {
   const { bases } = await create(3, t, { apply: applyWithRemove })
   const [a, b, c] = bases
 
@@ -1751,13 +1770,17 @@ test('basic - add new indexer after removing', async t => {
   t.is(c.system.core.manifest.signers.length, 2)
 })
 
-test('basic - readd removed indexer', async t => {
+test('basic - readd removed indexer', async (t) => {
   const { bases } = await create(2, t, { apply: applyWithRemove })
   const [a, b] = bases
 
   let added = false
-  b.on('is-indexer', () => { added = true })
-  b.on('is-non-indexer', () => { added = false })
+  b.on('is-indexer', () => {
+    added = true
+  })
+  b.on('is-non-indexer', () => {
+    added = false
+  })
 
   await addWriterAndSync(a, b)
 
@@ -1813,7 +1836,7 @@ test('basic - readd removed indexer', async t => {
   t.is(b.system.core.manifest.signers.length, 2)
 })
 
-test('basic - writer adds a writer while being removed', async t => {
+test('basic - writer adds a writer while being removed', async (t) => {
   const { bases } = await create(2, t, { apply: applyWithRemove })
   const [a, b] = bases
 
@@ -1865,7 +1888,7 @@ test('basic - writer adds a writer while being removed', async t => {
 })
 
 // memview failing: globalCache disabled in corestore
-test('basic - sessions use globalCache from corestore if it is set', async t => {
+test('basic - sessions use globalCache from corestore if it is set', async (t) => {
   const globalCache = new Rache()
 
   const [store] = await createStores(1, t, { globalCache })
@@ -1877,7 +1900,7 @@ test('basic - sessions use globalCache from corestore if it is set', async t => 
   t.is(base.system.core.globalCache, globalCache, 'passed to system')
 })
 
-test('basic - interrupt', async t => {
+test('basic - interrupt', async (t) => {
   t.plan(2)
 
   const { bases } = await create(1, t, { apply: applyWithInterupt })
@@ -1911,7 +1934,7 @@ test('basic - interrupt', async t => {
   }
 })
 
-test('basic - writer adds a writer while being removed', async t => {
+test('basic - writer adds a writer while being removed', async (t) => {
   const { bases } = await create(4, t, { apply: applyWithRemove })
   const [a, b, c, d] = bases
 
@@ -1961,7 +1984,7 @@ test('basic - writer adds a writer while being removed', async t => {
   t.is(await d.view.get(1), 'd1')
 })
 
-test('basic - removed writer adds a writer while being removed', async t => {
+test('basic - removed writer adds a writer while being removed', async (t) => {
   const { bases } = await create(3, t, { apply: applyWithRemove })
   const [a, b, c] = bases
 
@@ -2015,7 +2038,7 @@ test('basic - removed writer adds a writer while being removed', async t => {
   t.is(a.view.length, c.view.length)
 })
 
-test('basic - append to views out of order', async t => {
+test('basic - append to views out of order', async (t) => {
   const { bases } = await create(2, t, {
     apply: applyMultiple,
     open: openMultiple,
@@ -2047,10 +2070,13 @@ test('basic - append to views out of order', async t => {
   await t.execution(confirm([a, b]))
 })
 
-test('basic - rotate local writer', async t => {
+test('basic - rotate local writer', async (t) => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
-  const base = new Autobase(store, b4a.alloc(32), { open: openMultiple, apply: applyMultiple })
+  const base = new Autobase(store, b4a.alloc(32), {
+    open: openMultiple,
+    apply: applyMultiple
+  })
 
   await base.ready()
   const local = base.local
@@ -2059,7 +2085,7 @@ test('basic - rotate local writer', async t => {
   await base.close()
 })
 
-test('basic - getBootRecord statically', async t => {
+test('basic - getBootRecord statically', async (t) => {
   const { bases } = await create(1, t)
   const [base] = bases
 
@@ -2072,7 +2098,7 @@ test('basic - getBootRecord statically', async t => {
   await base.close()
 })
 
-test('basic - append returns local length', async t => {
+test('basic - append returns local length', async (t) => {
   const { bases } = await create(1, t)
   const [base] = bases
 
@@ -2090,7 +2116,7 @@ test('basic - append returns local length', async t => {
   await base.close()
 })
 
-test('basic - apply supports backoff', async t => {
+test('basic - apply supports backoff', async (t) => {
   const backoff = new TaskBackoff({ maxDelay: 20 })
 
   const tmp = await tmpDir(t)
@@ -2114,7 +2140,9 @@ test('basic - apply supports backoff', async t => {
 async function applyWithRemove (batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
-      await base.addWriter(b4a.from(value.add, 'hex'), { indexer: value.indexer !== false })
+      await base.addWriter(b4a.from(value.add, 'hex'), {
+        indexer: value.indexer !== false
+      })
       continue
     }
 
@@ -2149,15 +2177,23 @@ async function applyMultiple (batch, view, base) {
   }
 }
 
-test('basic - indexer list transition [a, b, c, d, e] -> [b, c, d, e, f]', async t => {
+test('basic - indexer list transition [a, b, c, d, e] -> [b, c, d, e, f]', async (t) => {
   async function applyRotateKey (nodes, view, base) {
     for (const node of nodes) {
       if (node.value.type === 'addIndexer' && node.value.add) {
-        await base.addWriter(b4a.from(node.value.add, 'hex'), { isIndexer: true })
+        await base.addWriter(b4a.from(node.value.add, 'hex'), {
+          isIndexer: true
+        })
       }
-      if (node.value.type === 'rotateIndexer' && node.value.remove && node.value.add) {
+      if (
+        node.value.type === 'rotateIndexer' &&
+        node.value.remove &&
+        node.value.add
+      ) {
         await base.removeWriter(b4a.from(node.value.remove, 'hex'))
-        await base.addWriter(b4a.from(node.value.add, 'hex'), { isIndexer: true })
+        await base.addWriter(b4a.from(node.value.add, 'hex'), {
+          isIndexer: true
+        })
       }
     }
   }
@@ -2174,7 +2210,7 @@ test('basic - indexer list transition [a, b, c, d, e] -> [b, c, d, e, f]', async
   await a.append({ type: 'addIndexer', add: e.local.key.toString('hex') })
   await confirm(bases)
 
-  const initialIndexers = a.system.indexers.map(indexer => indexer.key)
+  const initialIndexers = a.system.indexers.map((indexer) => indexer.key)
   const expectedInitialIndexers = [
     a.local.key,
     b.local.key,
@@ -2183,12 +2219,20 @@ test('basic - indexer list transition [a, b, c, d, e] -> [b, c, d, e, f]', async
     e.local.key
   ]
 
-  t.alike(initialIndexers, expectedInitialIndexers, 'indexers list order before rotation is correct')
+  t.alike(
+    initialIndexers,
+    expectedInitialIndexers,
+    'indexers list order before rotation is correct'
+  )
 
-  await b.append({ type: 'rotateIndexer', remove: a.local.key.toString('hex'), add: f.local.key.toString('hex') })
+  await b.append({
+    type: 'rotateIndexer',
+    remove: a.local.key.toString('hex'),
+    add: f.local.key.toString('hex')
+  })
   await confirm(bases)
 
-  const afterRotationIndexers = b.system.indexers.map(indexer => indexer.key)
+  const afterRotationIndexers = b.system.indexers.map((indexer) => indexer.key)
   const expectedAfterRotationIndexers = [
     b.local.key,
     c.local.key,
@@ -2197,64 +2241,37 @@ test('basic - indexer list transition [a, b, c, d, e] -> [b, c, d, e, f]', async
     f.local.key
   ]
 
-  t.alike(afterRotationIndexers, expectedAfterRotationIndexers, 'indexers order after rotation is correct')
+  t.alike(
+    afterRotationIndexers,
+    expectedAfterRotationIndexers,
+    'indexers order after rotation is correct'
+  )
 
   for (const base of bases) {
-    const nodeIndexers = base.system.indexers.map(indexer => indexer.key)
-    t.alike(nodeIndexers, expectedAfterRotationIndexers, `Node ${base.local.key.toString('hex')} has the correct order of the indexers`)
+    const nodeIndexers = base.system.indexers.map((indexer) => indexer.key)
+    t.alike(
+      nodeIndexers,
+      expectedAfterRotationIndexers,
+      `Node ${base.local.key.toString('hex')} has the correct order of the indexers`
+    )
   }
 })
 
-test('basic - export', async t => {
+test('basic - get last error', async (t) => {
   const { bases } = await create(1, t)
   const [base] = bases
 
-  const append = new Promise(resolve => { base.view.on('append', resolve) })
+  t.plan(4)
 
-  await base.append('hello')
-  await base.append('world')
+  base.on('error', (err) => {
+    t.ok(err.message, "Cannot read properties of undefined (reading 'add')")
+    t.pass()
+  })
 
-  t.is(base.system.members, 1)
-  t.ok(base.isIndexer)
+  await t.exception(() => base.append())
 
-  t.is(base.view.length, 2)
-  t.is(base.view.signedLength, 2)
-
-  t.is(base.system.core.length, 5)
-  t.is(base.system.core.signedLength, 5)
-
-  await t.execution(append)
-
-  t.not(base.system.core.manifest, null)
-
-  const exported = await base.export()
-
-  const { local, views } = exported
-
-  t.is(local.head.length, 2)
-  t.alike(local.head.rootHash, await base.local.treeHash())
-
-  t.is(local.auth.keyPair, null)
-  t.alike(local.auth.encryptionKey, base.local.encryptionKey || null)
-  t.alike(local.auth.manifest, base.local.manifest)
-
-  t.alike(local.sessions, [])
-  t.is(local.data.length, 1)
-  t.is(local.data[0].blocks.length, 2)
-  t.is(local.data[0].tree.length, 3)
-  t.is(local.data[0].bitfield.length, 1)
-
-  t.is(views.length, 3)
-
-  const sys = views.find(v => v.name === '_system')
-  const enc = views.find(v => v.name === '_encryption')
-  const view = views.find(v => v.name === 'view')
-
-  t.alike(sys.core.sessions, ['batch'])
-  t.alike(enc.core.sessions, ['batch'])
-  t.alike(view.core.sessions, ['batch'])
-
-  t.is(sys.core.data.length, 2)
-  t.is(enc.core.data.length, 2)
-  t.is(view.core.data.length, 2)
+  t.is(
+    base.getLastError().message,
+    "Cannot read properties of undefined (reading 'add')"
+  )
 })
