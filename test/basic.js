@@ -2258,3 +2258,22 @@ test('basic - export', async t => {
   t.is(enc.core.data.length, 2)
   t.is(view.core.data.length, 2)
 })
+
+test('basic - get last error', async (t) => {
+  const { bases } = await create(1, t)
+  const [base] = bases
+
+  t.plan(4)
+
+  base.on('error', (err) => {
+    t.ok(err.message, "Cannot read properties of undefined (reading 'add')")
+    t.pass()
+  })
+
+  await t.exception(() => base.append())
+
+  t.is(
+    base.getLastError().message,
+    "Cannot read properties of undefined (reading 'add')"
+  )
+})
