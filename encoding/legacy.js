@@ -2,15 +2,15 @@ const c = require('compact-encoding')
 const IndexEncoder = require('index-encoder')
 
 const Checkout = {
-  preencode (state, m) {
+  preencode(state, m) {
     c.fixed32.preencode(state, m.key)
     c.uint.preencode(state, m.length)
   },
-  encode (state, m) {
+  encode(state, m) {
     c.fixed32.encode(state, m.key)
     c.uint.encode(state, m.length)
   },
-  decode (state) {
+  decode(state) {
     return {
       key: c.fixed32.decode(state),
       length: c.uint.decode(state)
@@ -21,15 +21,15 @@ const Checkout = {
 const Clock = c.array(Checkout)
 
 const IndexCheckpoint = {
-  preencode (state, m) {
+  preencode(state, m) {
     c.fixed64.preencode(state, m.signature)
     c.uint.preencode(state, m.length)
   },
-  encode (state, m) {
+  encode(state, m) {
     c.fixed64.encode(state, m.signature)
     c.uint.encode(state, m.length)
   },
-  decode (state) {
+  decode(state) {
     return {
       signature: c.fixed64.decode(state),
       length: c.uint.decode(state)
@@ -38,13 +38,13 @@ const IndexCheckpoint = {
 }
 
 const KeyV0 = {
-  preencode (state, m) {
+  preencode(state, m) {
     c.fixed32.preencode(state, m.key)
   },
-  encode (state, m) {
+  encode(state, m) {
     c.fixed32.encode(state, m.key)
   },
-  decode (state) {
+  decode(state) {
     return {
       key: c.fixed32.decode(state),
       length: -1
@@ -55,7 +55,7 @@ const KeyV0 = {
 const KeysV0 = c.array(KeyV0)
 
 const WakeupV0 = {
-  preencode (state, m) {
+  preencode(state, m) {
     c.uint.preencode(state, 0) // version
     c.uint.preencode(state, m.type)
 
@@ -63,7 +63,7 @@ const WakeupV0 = {
       KeysV0.preencode(state, m.writers)
     }
   },
-  encode (state, m) {
+  encode(state, m) {
     c.uint.encode(state, 0) // version
     c.uint.encode(state, m.type)
 
@@ -71,7 +71,7 @@ const WakeupV0 = {
       KeysV0.encode(state, m.writers)
     }
   },
-  decode (state) {
+  decode(state) {
     const v = c.uint.decode(state)
     if (v !== 0) throw new Error('Unsupported version: ' + v)
 
@@ -87,7 +87,7 @@ const WakeupV0 = {
 }
 
 const Wakeup = {
-  preencode (state, m) {
+  preencode(state, m) {
     if (m.version === 0) return WakeupV0.preencode(state, m)
 
     c.uint.preencode(state, 1) // version
@@ -97,7 +97,7 @@ const Wakeup = {
       Clock.preencode(state, m.writers)
     }
   },
-  encode (state, m) {
+  encode(state, m) {
     if (m.version === 0) return WakeupV0.encode(state, m)
 
     c.uint.encode(state, 1) // version
@@ -107,7 +107,7 @@ const Wakeup = {
       Clock.encode(state, m.writers)
     }
   },
-  decode (state) {
+  decode(state) {
     const start = state.start
     const v = c.uint.decode(state)
 
@@ -130,31 +130,40 @@ const Wakeup = {
 }
 
 const BootRecordV0 = {
-  preencode () {
+  preencode() {
     throw new Error('version 0 records cannot be encoded')
   },
-  encode () {
+  encode() {
     throw new Error('version 0 records cannot be encoded')
   },
-  decode (state) {
+  decode(state) {
     const indexed = Checkout.decode(state)
     const heads = Clock.decode(state)
 
     // one cause initial recover is not ff recovery
-    return { version: 0, key: indexed.key, systemLength: indexed.length, indexersUpdated: false, fastForwarding: false, recoveries: 1, migrating: false, heads }
+    return {
+      version: 0,
+      key: indexed.key,
+      systemLength: indexed.length,
+      indexersUpdated: false,
+      fastForwarding: false,
+      recoveries: 1,
+      migrating: false,
+      heads
+    }
   }
 }
 
 const Checkpointer = {
-  preencode (state, idx) {
+  preencode(state, idx) {
     c.uint.preencode(state, idx.checkpointer)
     if (idx.checkpoint !== null) IndexCheckpoint.preencode(state, idx.checkpoint)
   },
-  encode (state, idx) {
+  encode(state, idx) {
     c.uint.encode(state, idx.checkpointer)
     if (idx.checkpoint !== null) IndexCheckpoint.encode(state, idx.checkpoint)
   },
-  decode (state) {
+  decode(state) {
     const checkpointer = c.uint.decode(state)
     const checkpoint = checkpointer ? null : IndexCheckpoint.decode(state)
 
@@ -168,17 +177,17 @@ const Checkpointer = {
 const CheckpointerArray = c.array(Checkpointer)
 
 const Indexer = {
-  preencode (state, m) {
+  preencode(state, m) {
     c.uint.preencode(state, m.signature)
     c.fixed32.preencode(state, m.namespace)
     c.fixed32.preencode(state, m.publicKey)
   },
-  encode (state, m) {
+  encode(state, m) {
     c.uint.encode(state, m.signature)
     c.fixed32.encode(state, m.namespace)
     c.fixed32.encode(state, m.publicKey)
   },
-  decode (state) {
+  decode(state) {
     return {
       signature: c.uint.decode(state),
       namespace: c.fixed32.decode(state),
@@ -190,19 +199,19 @@ const Indexer = {
 const Indexers = c.array(Indexer)
 
 const DigestV0 = {
-  preencode (state, m) {
+  preencode(state, m) {
     c.uint.preencode(state, m.pointer)
     if (m.pointer === 0) {
       Indexers.preencode(state, m.indexers)
     }
   },
-  encode (state, m) {
+  encode(state, m) {
     c.uint.encode(state, m.pointer)
     if (m.pointer === 0) {
       Indexers.encode(state, m.indexers)
     }
   },
-  decode (state) {
+  decode(state) {
     const pointer = c.uint.decode(state)
     return {
       pointer,
@@ -212,19 +221,19 @@ const DigestV0 = {
 }
 
 const Digest = {
-  preencode (state, m) {
+  preencode(state, m) {
     c.uint.preencode(state, m.pointer)
     if (m.pointer === 0) {
       c.fixed32.preencode(state, m.key)
     }
   },
-  encode (state, m) {
+  encode(state, m) {
     c.uint.encode(state, m.pointer)
     if (m.pointer === 0) {
       c.fixed32.encode(state, m.key)
     }
   },
-  decode (state) {
+  decode(state) {
     const pointer = c.uint.decode(state)
     return {
       pointer,
@@ -234,17 +243,17 @@ const Digest = {
 }
 
 const Node = {
-  preencode (state, m) {
+  preencode(state, m) {
     Clock.preencode(state, m.heads)
     c.uint.preencode(state, m.batch)
     c.buffer.preencode(state, m.value)
   },
-  encode (state, m) {
+  encode(state, m) {
     Clock.encode(state, m.heads)
     c.uint.encode(state, m.batch)
     c.buffer.encode(state, m.value)
   },
-  decode (state, m) {
+  decode(state, m) {
     return {
       heads: Clock.decode(state),
       batch: c.uint.decode(state),
@@ -254,19 +263,19 @@ const Node = {
 }
 
 const Additional = {
-  preencode (state, m) {
+  preencode(state, m) {
     c.uint.preencode(state, m.pointer)
     if (m.pointer === 0) {
       AdditionalData.preencode(state, m.data)
     }
   },
-  encode (state, m) {
+  encode(state, m) {
     c.uint.encode(state, m.pointer)
     if (m.pointer === 0) {
       AdditionalData.encode(state, m.data)
     }
   },
-  decode (state) {
+  decode(state) {
     const pointer = c.uint.decode(state)
     return {
       pointer,
@@ -276,13 +285,13 @@ const Additional = {
 }
 
 const AdditionalData = {
-  preencode (state, m) {
+  preencode(state, m) {
     c.uint.preencode(state, 0)
   },
-  encode (state, m) {
+  encode(state, m) {
     c.uint.encode(state, 0) // empty for now, for the future
   },
-  decode (state) {
+  decode(state) {
     const flags = c.uint.decode(state)
     return {
       encryptionId: flags & 1 ? c.fixed32.decode(state) : null, // to help validate the encryption key used
@@ -292,13 +301,13 @@ const AdditionalData = {
 }
 
 const OplogMessageV1 = {
-  preencode (state, m) {
+  preencode(state, m) {
     throw new Error('Encoding not supported')
   },
-  encode (state, m) {
+  encode(state, m) {
     throw new Error('Encoding not supported')
   },
-  decode (state) {
+  decode(state) {
     const maxSupportedVersion = c.uint.decode(state)
 
     const flags = c.uint.decode(state)
@@ -322,13 +331,13 @@ const OplogMessageV1 = {
 }
 
 const OplogMessageV0 = {
-  preencode (state, m) {
+  preencode(state, m) {
     throw new Error('Encoding not supported')
   },
-  encode (state, m) {
+  encode(state, m) {
     throw new Error('Encoding not supported')
   },
-  decode (state) {
+  decode(state) {
     const flags = c.uint.decode(state)
 
     const isCheckpointer = (flags & 1) !== 0
@@ -354,21 +363,21 @@ const OplogMessageV0 = {
 const LINEARIZER_PREFIX = 1
 
 const LinearizerKey = {
-  preencode (state, seq) {
+  preencode(state, seq) {
     IndexEncoder.UINT.preencode(state, LINEARIZER_PREFIX)
     IndexEncoder.UINT.preencode(state, seq)
   },
-  encode (state, seq) {
+  encode(state, seq) {
     IndexEncoder.UINT.encode(state, LINEARIZER_PREFIX)
     IndexEncoder.UINT.encode(state, seq)
   },
-  decode (state) {
+  decode(state) {
     IndexEncoder.UINT.decode(state)
     return IndexEncoder.UINT.decode(state)
   }
 }
 
-function infoLegacyMap (info) {
+function infoLegacyMap(info) {
   return {
     version: info.version,
     members: info.members,

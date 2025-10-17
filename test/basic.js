@@ -70,7 +70,7 @@ test('basic - big batches', async (t) => {
 
   await replicateAndSync([a, b, c])
 
-  function update (view, changes) {
+  function update(view, changes) {
     if (c.bigBatches) {
       t.alike(changes.get('view'), { from: shared, to: shared + 2000, shared })
     }
@@ -289,7 +289,7 @@ test('basic - view with close', async (t) => {
   await base.close()
   t.is(base.view.lastBlock.message, 'hello, world!')
 
-  function open (store) {
+  function open(store) {
     const core = store.get('test', { valueEncoding: 'json' })
     return {
       core,
@@ -298,7 +298,7 @@ test('basic - view with close', async (t) => {
     }
   }
 
-  async function close (view) {
+  async function close(view) {
     view.lastBlock = await view.core.get(view.core.length - 1)
     await view.core.close()
   }
@@ -315,7 +315,7 @@ test('basic - view/writer userdata is set', async (t) => {
   await verifyUserData(a)
   await verifyUserData(b)
 
-  async function verifyUserData (base) {
+  async function verifyUserData(base) {
     const systemData = await Autobase.getUserData(base.system.core)
 
     t.alike(systemData.referrer, base.key)
@@ -816,11 +816,7 @@ test('reindex', async (t) => {
 
   await compareViews(bases, t)
 
-  t.is(
-    (await a.system.getIndexedInfo()).heads.length,
-    1,
-    'only one indexed head'
-  )
+  t.is((await a.system.getIndexedInfo()).heads.length, 1, 'only one indexed head')
   t.is(a.system.members, bases.length)
 
   t.not(a.view.signedLength, a.view.length)
@@ -876,10 +872,7 @@ test('sequential restarts', { timeout: 120_000 }, async (t) => {
 
     if (i % 2 === 1) {
       if (i < bases.length) {
-        t.is(
-          bases[0].linearizer.indexers.length,
-          bases[i - 1].linearizer.indexers.length
-        )
+        t.is(bases[0].linearizer.indexers.length, bases[i - 1].linearizer.indexers.length)
       }
     }
   }
@@ -1024,7 +1017,7 @@ test('basic - non-indexed writer', async (t) => {
     t.ok(block.checkpoint === null)
   }
 
-  async function applyWriter (batch, view, base) {
+  async function applyWriter(batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
         await base.addWriter(b4a.from(node.value.add, 'hex'), {
@@ -1143,7 +1136,7 @@ test('basic - non-indexed writers 3-of-5', async (t) => {
     t.ok(block.checkpoint === null)
   }
 
-  async function applyWriter (batch, view, base) {
+  async function applyWriter(batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
         await base.addWriter(b4a.from(node.value.add, 'hex'), {
@@ -1211,7 +1204,7 @@ test('basic - close during apply', async (t) => {
 
   const [store] = await createStores(1, t)
   const a = new Autobase(store, null, {
-    async apply (nodes, view, base) {
+    async apply(nodes, view, base) {
       for (const node of nodes) {
         if (node.value.add) {
           await base.addWriter(b4a.from(node.value.add, 'hex'))
@@ -1236,7 +1229,7 @@ test('basic - close during apply', async (t) => {
 test('basic - constructor throws', async (t) => {
   await t.exception(create(1, t, { apply: undefined, open }), /Synthetic./)
 
-  function open () {
+  function open() {
     throw new Error('Synthetic.')
   }
 })
@@ -1522,7 +1515,7 @@ test('basic - remove multiple indexers concurrently', async (t) => {
   t.is(b.linearizer.indexers.length, 1)
   t.is(b.view.manifest.signers.length, 1)
 
-  async function apply (batch, view, base) {
+  async function apply(batch, view, base) {
     for (const { value } of batch) {
       if (value.add) {
         await base.addWriter(b4a.from(value.add, 'hex'))
@@ -1575,7 +1568,7 @@ test('basic - indexer removes themselves', async (t) => {
 
   t.not(a.view.signedLength, signedLength) // b,c can still index
 
-  async function apply (batch, view, base) {
+  async function apply(batch, view, base) {
     for (const { value } of batch) {
       if (value.add) {
         await base.addWriter(b4a.from(value.add, 'hex'))
@@ -1613,7 +1606,7 @@ test('basic - cannot remove last indexer', async (t) => {
 
   await a.append({ remove: b4a.toString(a.local.key, 'hex') })
 
-  async function apply (batch, view, base) {
+  async function apply(batch, view, base) {
     for (const { value } of batch) {
       if (value.add) {
         await base.addWriter(b4a.from(value.add, 'hex'))
@@ -1621,9 +1614,7 @@ test('basic - cannot remove last indexer', async (t) => {
       }
 
       if (value.remove) {
-        await t.exception(() =>
-          base.removeWriter(b4a.from(value.remove, 'hex'))
-        )
+        await t.exception(() => base.removeWriter(b4a.from(value.remove, 'hex')))
         continue
       }
 
@@ -1927,7 +1918,7 @@ test('basic - interrupt', async (t) => {
 
   a.off('close', onclose) // teardown actually closes it
 
-  function applyWithInterupt (nodes, view, base) {
+  function applyWithInterupt(nodes, view, base) {
     for (const node of nodes) {
       if (node.value.interrupt) base.interrupt()
     }
@@ -2137,7 +2128,7 @@ test('basic - apply supports backoff', async (t) => {
   await store.close()
 })
 
-async function applyWithRemove (batch, view, base) {
+async function applyWithRemove(batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
       await base.addWriter(b4a.from(value.add, 'hex'), {
@@ -2155,14 +2146,14 @@ async function applyWithRemove (batch, view, base) {
   }
 }
 
-function openMultiple (store) {
+function openMultiple(store) {
   return {
     first: store.get('first', { valueEncoding: 'json' }),
     second: store.get('second', { valueEncoding: 'json' })
   }
 }
 
-async function applyMultiple (batch, view, base) {
+async function applyMultiple(batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
       await base.addWriter(Buffer.from(value.add, 'hex'))
@@ -2178,18 +2169,14 @@ async function applyMultiple (batch, view, base) {
 }
 
 test('basic - indexer list transition [a, b, c, d, e] -> [b, c, d, e, f]', async (t) => {
-  async function applyRotateKey (nodes, view, base) {
+  async function applyRotateKey(nodes, view, base) {
     for (const node of nodes) {
       if (node.value.type === 'addIndexer' && node.value.add) {
         await base.addWriter(b4a.from(node.value.add, 'hex'), {
           isIndexer: true
         })
       }
-      if (
-        node.value.type === 'rotateIndexer' &&
-        node.value.remove &&
-        node.value.add
-      ) {
+      if (node.value.type === 'rotateIndexer' && node.value.remove && node.value.add) {
         await base.removeWriter(b4a.from(node.value.remove, 'hex'))
         await base.addWriter(b4a.from(node.value.add, 'hex'), {
           isIndexer: true
@@ -2211,13 +2198,7 @@ test('basic - indexer list transition [a, b, c, d, e] -> [b, c, d, e, f]', async
   await confirm(bases)
 
   const initialIndexers = a.system.indexers.map((indexer) => indexer.key)
-  const expectedInitialIndexers = [
-    a.local.key,
-    b.local.key,
-    c.local.key,
-    d.local.key,
-    e.local.key
-  ]
+  const expectedInitialIndexers = [a.local.key, b.local.key, c.local.key, d.local.key, e.local.key]
 
   t.alike(
     initialIndexers,
@@ -2270,8 +2251,5 @@ test('basic - get last error', async (t) => {
 
   await t.exception(() => base.append())
 
-  t.is(
-    base.getLastError().message,
-    "Cannot read properties of undefined (reading 'add')"
-  )
+  t.is(base.getLastError().message, "Cannot read properties of undefined (reading 'add')")
 })

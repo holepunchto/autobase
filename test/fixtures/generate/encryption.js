@@ -12,14 +12,9 @@ const { version } = require('../../../package.json')
 
 main()
 
-const DATA = [
-  'encrypted data',
-  'that should be',
-  'determinstically',
-  'encrypted'
-]
+const DATA = ['encrypted data', 'that should be', 'determinstically', 'encrypted']
 
-async function main () {
+async function main() {
   const closing = []
   const t = { teardown }
 
@@ -59,16 +54,16 @@ async function main () {
 
   console.log('Test was written to:', testPath)
 
-  function teardown (fn) {
+  function teardown(fn) {
     closing.push(fn)
   }
 
-  function shutdown () {
-    return Promise.all(closing.map(fn => fn()))
+  function shutdown() {
+    return Promise.all(closing.map((fn) => fn()))
   }
 }
 
-async function getBlocks (core) {
+async function getBlocks(core) {
   const blocks = []
   for (let i = 0; i < core.length; i++) {
     blocks.push(b4a.toString(await core.get(i, { raw: true }), 'hex'))
@@ -76,7 +71,7 @@ async function getBlocks (core) {
   return blocks
 }
 
-function generate (version, n, exp) {
+function generate(version, n, exp) {
   return `const Corestore = require('corestore')
 const test = require('brittle')
 const tmpDir = require('test-tmp')
@@ -101,7 +96,7 @@ test('encryption - v${version}', async t => {
     encryptionKey: b4a.alloc(32).fill('secret')
   })
 
-${DATA.map(d => `  await base.append('${d}')`).join('\n')}
+${DATA.map((d) => `  await base.append('${d}')`).join('\n')}
 
   // oplog comparison disabled
   // t.comment('local')
@@ -137,11 +132,11 @@ async function apply (batch, view, base) {
 `
 }
 
-function open (store) {
+function open(store) {
   return store.get('view', { valueEncoding: 'json' })
 }
 
-async function apply (batch, view, base) {
+async function apply(batch, view, base) {
   for (const { value } of batch) {
     await view.append(value.toString())
   }

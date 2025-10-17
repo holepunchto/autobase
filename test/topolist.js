@@ -1142,9 +1142,9 @@ test('topolist - fuzz', function (t) {
   const runs = 1e1 // adjust if mining
   const tests = 1e3
 
-  if (runAll()) t.pass('worked for ' + (runs * tests) + ' runs')
+  if (runAll()) t.pass('worked for ' + runs * tests + ' runs')
 
-  function runAll () {
+  function runAll() {
     for (let i = 0; i < runs; i++) {
       t.comment('fuzz #' + i)
       const nodes = []
@@ -1167,7 +1167,7 @@ test('topolist - fuzz', function (t) {
     return true
   }
 
-  function run (ref, nodes) {
+  function run(ref, nodes) {
     const tip = new Topolist()
     const all = [...nodes]
     const replay = []
@@ -1191,7 +1191,19 @@ test('topolist - fuzz', function (t) {
 
     if (order !== ref) {
       for (const n of nodes) {
-        console.log('const ' + n.value + ' = makeNode(\'' + n.value + '\', 0, [' + n.dependencies.map(x => x.value).join(', ') + '], { value: \'' + n.value + '\', optimistic: ' + n.optimistic + ' })')
+        console.log(
+          'const ' +
+            n.value +
+            " = makeNode('" +
+            n.value +
+            "', 0, [" +
+            n.dependencies.map((x) => x.value).join(', ') +
+            "], { value: '" +
+            n.value +
+            "', optimistic: " +
+            n.optimistic +
+            ' })'
+        )
       }
 
       console.log('const ref = new Topolist()')
@@ -1204,7 +1216,7 @@ test('topolist - fuzz', function (t) {
         console.log('bug.add(' + r + ')')
       }
       console.log()
-      console.log('console.log(bug.print().join(\' \') === ref.print().join(\' \'))')
+      console.log("console.log(bug.print().join(' ') === ref.print().join(' '))")
 
       t.comment('ref: ' + ref)
       t.comment('run: ' + order)
@@ -1215,7 +1227,7 @@ test('topolist - fuzz', function (t) {
     return true
   }
 
-  function makeRandomNode (nodes) {
+  function makeRandomNode(nodes) {
     const heads = Math.round(Math.random() * Math.min(nodes.length, 3))
 
     const h = []
@@ -1225,7 +1237,7 @@ test('topolist - fuzz', function (t) {
       h.push(r)
     }
 
-    const hasOptimistic = nodes.filter(n => n.optimistic).length
+    const hasOptimistic = nodes.filter((n) => n.optimistic).length
 
     const optimistic = hasOptimistic === 100 ? false : Math.random() < 0.15
     const v = 'n' + nodes.length + (optimistic ? 'o' : '')
@@ -1233,7 +1245,12 @@ test('topolist - fuzz', function (t) {
   }
 })
 
-function makeNode (key, length, dependencies, { version = 0, value = key + length, optimistic = false } = {}) {
+function makeNode(
+  key,
+  length,
+  dependencies,
+  { version = 0, value = key + length, optimistic = false } = {}
+) {
   const node = {
     writer: { core: { key: b4a.from(key) } },
     length,

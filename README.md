@@ -39,12 +39,12 @@ for (let i = 0; i < local.view.length; i++) {
 }
 
 // create the view
-function open (store) {
+function open(store) {
   return store.get('test')
 }
 
 // use apply to handle to updates
-async function apply (nodes, view, host) {
+async function apply(nodes, view, host) {
   for (const { value } of nodes) {
     if (value.addWriter) {
       await host.addWriter(value.addWriter, { indexer: true })
@@ -78,18 +78,18 @@ A view is one or more hypercores whose contents are created by deterministically
 Autobase accepts an `open` function for creating views and an `apply` function that can be used to update the views based on the writer nodes.
 
 ```js
-function open (store) {
+function open(store) {
   return store.get('my-view')
 }
 ```
 
 ```js
-async function apply (nodes, view, host) {
+async function apply(nodes, view, host) {
   for (const n of nodes) await view.append(n)
 }
 ```
 
-*IMPORTANT*: Autobase messages may be reordered as new data becomes available. Updates will be undone and reapplied internally. So it is important that the `open` handler returns a data structure only derived from its `store` object argument and that while updating the view in the `apply` function, the `view` argument is the only data structure being update and that its fully deterministic. If any external data structures are used, these updates will not be correctly undone.
+_IMPORTANT_: Autobase messages may be reordered as new data becomes available. Updates will be undone and reapplied internally. So it is important that the `open` handler returns a data structure only derived from its `store` object argument and that while updating the view in the `apply` function, the `view` argument is the only data structure being update and that its fully deterministic. If any external data structures are used, these updates will not be correctly undone.
 
 ## API
 
@@ -129,7 +129,7 @@ _Note:_ Optimistic blocks should self verify in the `apply` handler to prevent u
 ```js
 const base = new Autobase(store, bootstrap, {
   optimistic: true,
-  async apply (nodes, view, host) {
+  async apply(nodes, view, host) {
     for (const node of nodes) {
       const { value } = node
       // Verify block

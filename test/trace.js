@@ -10,7 +10,7 @@ const {
   sync
 } = require('./helpers')
 
-test('trace - local block includes trace', async t => {
+test('trace - local block includes trace', async (t) => {
   const { bases } = await create(1, t, { apply })
   const [a] = bases
 
@@ -24,10 +24,14 @@ test('trace - local block includes trace', async t => {
 
   {
     const node = await a.local.get(1)
-    t.alike(node.trace.user, [{ view: 0, blocks: [0] }], '2nd includes trace of view block from 1st append')
+    t.alike(
+      node.trace.user,
+      [{ view: 0, blocks: [0] }],
+      '2nd includes trace of view block from 1st append'
+    )
   }
 
-  async function apply (batch, view, host) {
+  async function apply(batch, view, host) {
     for (const { value } of batch) {
       let str = ''
       if (view.length) str += await view.get(view.length - 1)
@@ -38,7 +42,7 @@ test('trace - local block includes trace', async t => {
   }
 })
 
-test('trace - local optimistic block includes trace', async t => {
+test('trace - local optimistic block includes trace', async (t) => {
   const { bases } = await create(2, t, { apply, optimistic: true })
   const [a, b] = bases
 
@@ -57,10 +61,14 @@ test('trace - local optimistic block includes trace', async t => {
 
   {
     const node = await b.local.get(0)
-    t.alike(node.trace.user, [{ view: 0, blocks: [0] }], '2nd includes trace of view block from 1st append')
+    t.alike(
+      node.trace.user,
+      [{ view: 0, blocks: [0] }],
+      '2nd includes trace of view block from 1st append'
+    )
   }
 
-  async function apply (batch, view, host) {
+  async function apply(batch, view, host) {
     for (const node of batch) {
       const { value } = node
       let str = ''
@@ -74,7 +82,7 @@ test('trace - local optimistic block includes trace', async t => {
   }
 })
 
-test('trace - gets blocks needed from view before apply', async t => {
+test('trace - gets blocks needed from view before apply', async (t) => {
   t.plan(5)
   const { bases } = await create(3, t, { apply, fastForward: true })
   const [a, b, c] = bases
@@ -109,7 +117,7 @@ test('trace - gets blocks needed from view before apply', async t => {
 
   t.ok(await c.view.has(targetIndex), 'loaded block!')
 
-  async function apply (batch, view, host) {
+  async function apply(batch, view, host) {
     for (const node of batch) {
       const { value } = node
       if (value.add) {
@@ -137,7 +145,7 @@ test('trace - gets blocks needed from view before apply', async t => {
   }
 })
 
-test('trace - skips unindex view blocks', async t => {
+test('trace - skips unindex view blocks', async (t) => {
   const { bases } = await create(1, t, { apply })
   const [a] = bases
 
@@ -170,7 +178,7 @@ test('trace - skips unindex view blocks', async t => {
     t.alike(node.trace.user, [{ view: 0, blocks: [99] }], 'block after indexing has trace')
   }
 
-  async function apply (batch, view, host) {
+  async function apply(batch, view, host) {
     for (const { value } of batch) {
       if (view.length) await view.get(view.length - 1)
 
@@ -179,7 +187,7 @@ test('trace - skips unindex view blocks', async t => {
   }
 })
 
-test('trace - MAX_TRACE_PER_VIEW', async t => {
+test('trace - MAX_TRACE_PER_VIEW', async (t) => {
   const { bases } = await create(1, t, { apply })
   const [a] = bases
 
@@ -206,7 +214,7 @@ test('trace - MAX_TRACE_PER_VIEW', async t => {
     t.alike(viewTrace.blocks.length, 256, 'later append has max traced blocks')
   }
 
-  async function apply (batch, view, host) {
+  async function apply(batch, view, host) {
     for (const { value } of batch) {
       if (view.length && view.length > 256) {
         // Request more than 256 (MAX_TRACE_PER_VIEW) blocks
@@ -220,7 +228,7 @@ test('trace - MAX_TRACE_PER_VIEW', async t => {
   }
 })
 
-test('trace - writer references non-existent block in trace still apply', async t => {
+test('trace - writer references non-existent block in trace still apply', async (t) => {
   const { bases } = await create(2, t)
   const [a, b] = bases
 
@@ -232,19 +240,22 @@ test('trace - writer references non-existent block in trace still apply', async 
   const futureIndex = 1e6
 
   const done = replicate([a, b])
-  await t.execution(b._applyState._flush([
-    {
-      value: 'beep',
-      heads: [],
-      batch: 1,
-      optimistic: false,
-      trace: {
-        system: [],
-        encryption: [],
-        user: [{ view: 0, blocks: [futureIndex] }]
+  await t.execution(
+    b._applyState._flush([
+      {
+        value: 'beep',
+        heads: [],
+        batch: 1,
+        optimistic: false,
+        trace: {
+          system: [],
+          encryption: [],
+          user: [{ view: 0, blocks: [futureIndex] }]
+        }
       }
-    }
-  ]), 'peer writes block with non-existent block in trace')
+    ]),
+    'peer writes block with non-existent block in trace'
+  )
   await b.append('something else')
 
   await sync(bases)
@@ -259,12 +270,12 @@ test('trace - writer references non-existent block in trace still apply', async 
   t.absent(await a.view.has(futureIndex), '"future" index is absent')
 })
 
-test('trace - non-indexed views arent traced', async t => {
+test('trace - non-indexed views arent traced', async (t) => {
   const { bases, stores } = await create(2, t, {
-    open (store) {
+    open(store) {
       return { v1: store.get('view1', { valueEncoding: 'json' }) }
     },
-    async apply (batch, view, base) {
+    async apply(batch, view, base) {
       for (const { value } of batch) {
         if (value.add) {
           const key = Buffer.from(value.add, 'hex')
@@ -291,13 +302,13 @@ test('trace - non-indexed views arent traced', async t => {
 
   // Open with new view core
   const b2 = createBase(stores[1], a.local.key, t, {
-    open (store) {
+    open(store) {
       return {
         v1: store.get('view1', { valueEncoding: 'json' }),
         v2: store.get('view2', { valueEncoding: 'json' })
       }
     },
-    async apply (batch, view, base) {
+    async apply(batch, view, base) {
       for (const { value } of batch) {
         if (value.add) {
           const key = Buffer.from(value.add, 'hex')
