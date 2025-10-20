@@ -156,6 +156,7 @@ module.exports = class Autobase extends ReadyResource {
     this._updates = []
     this._handlers = handlers || {}
     this._warn = emitWarning.bind(this)
+    this._lastError = null
 
     this._draining = false
     this._writable = null
