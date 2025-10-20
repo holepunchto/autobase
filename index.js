@@ -153,6 +153,7 @@ module.exports = class Autobase extends ReadyResource {
     this._updates = []
     this._handlers = handlers || {}
     this._warn = emitWarning.bind(this)
+    this._lastError = null
 
     this._draining = false
     this._writable = null
@@ -1698,7 +1699,7 @@ module.exports = class Autobase extends ReadyResource {
     for (let i = 0; i < length; i++) {
       const heads = this.linearizer.getHeads()
       const deps = new Set(this.linearizer.heads)
-      const batch = this._appending.length - i
+      const batch = length - i
       const value = this._appending[i]
 
       const node = this.localWriter.append(value, heads, batch, deps, this._optimistic === 0)
