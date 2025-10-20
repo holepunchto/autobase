@@ -30,10 +30,7 @@ const ApplyState = require('./lib/apply-state.js')
 const AppendBatch = require('./lib/append-batch.js')
 const { PublicApplyCalls } = require('./lib/apply-calls.js')
 const boot = require('./lib/boot.js')
-const {
-  MAX_AUTOBASE_VERSION,
-  BOOT_RECORD_VERSION
-} = require('./lib/caps.js')
+const { MAX_AUTOBASE_VERSION, BOOT_RECORD_VERSION } = require('./lib/caps.js')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 const INTERRUPT = new Error('Apply interrupted')
@@ -50,23 +47,23 @@ const REMOTE_ADD_BATCH_SANITY = 4096
 const MIN_FF_WAIT = 300_000 // wait at least 5min before attempting to ff again after failure
 
 class WakeupHandler {
-  constructor (base, discoveryKey) {
+  constructor(base, discoveryKey) {
     this.active = true
     this.discoveryKey = discoveryKey
     this.base = base
   }
 
-  onpeeractive (peer, session) {
+  onpeeractive(peer, session) {
     this.base._bumpWakeupPeer(peer)
   }
 
-  onlookup (req, peer, session) {
+  onlookup(req, peer, session) {
     const wakeup = this.base._getWakeup()
     if (wakeup.length === 0) return
     session.announce(peer, wakeup)
   }
 
-  onannounce (wakeup, peer, session) {
+  onannounce(wakeup, peer, session) {
     if (this.base.isFastForwarding()) {
       this.base._needsWakeupRequest = true
       return
@@ -76,7 +73,7 @@ class WakeupHandler {
 }
 
 module.exports = class Autobase extends ReadyResource {
-  constructor (store, bootstrap, handlers = {}) {
+  constructor(store, bootstrap, handlers = {}) {
     if (Array.isArray(bootstrap)) bootstrap = bootstrap[0] // TODO: just a quick compat, lets remove soon
 
     if (bootstrap && typeof bootstrap !== 'string' && !b4a.isBuffer(bootstrap)) {
@@ -191,10 +188,7 @@ module.exports = class Autobase extends ReadyResource {
     this.interrupted = null
     this.recoveries = RECOVERIES
 
-    const {
-      ackInterval = DEFAULT_ACK_INTERVAL,
-      ackThreshold = DEFAULT_ACK_THRESHOLD
-    } = handlers
+    const { ackInterval = DEFAULT_ACK_INTERVAL, ackThreshold = DEFAULT_ACK_THRESHOLD } = handlers
 
     this._ackInterval = ackInterval
     this._ackThreshold = ackThreshold
@@ -206,17 +200,21 @@ module.exports = class Autobase extends ReadyResource {
 
     this._waiting = new SignalPromise()
 
-    this.view = this._hasOpen ? this._handlers.open(this._viewStore, new PublicApplyCalls(this)) : null
+    this.view = this._hasOpen
+      ? this._handlers.open(this._viewStore, new PublicApplyCalls(this))
+      : null
     this.core = this._viewStore.get({ name: '_system' })
 
     if (this.fastForwardEnabled && isObject(handlers.fastForward)) {
-      this._runFastForward(new FastForward(this, handlers.fastForward.key, { verified: false })).catch(noop)
+      this._runFastForward(
+        new FastForward(this, handlers.fastForward.key, { verified: false })
+      ).catch(noop)
     }
 
     this.ready().catch(safetyCatch)
   }
 
-  [inspect] (depth, opts) {
+  [inspect](depth, opts) {
     let indent = ''
     if (typeof opts.indentationLvl === 'number') {
       while (indent.length < opts.indentationLvl) indent += ' '
@@ -226,84 +224,84 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // just compat, use .key
-  get bootstrap () {
+  get bootstrap() {
     return this.key
   }
 
   // TODO: compat, will be removed
-  get bootstraps () {
+  get bootstraps() {
     return [this.bootstrap]
   }
 
-  get appending () {
+  get appending() {
     return this._appending !== null && this._appending.length > 0
   }
 
-  get writable () {
+  get writable() {
     return this.localWriter !== null && !this.localWriter.isRemoved
   }
 
-  get ackable () {
+  get ackable() {
     return this.localWriter !== null && this.localWriter.isActiveIndexer
   }
 
-  get signedLength () {
+  get signedLength() {
     return this.core.signedLength
   }
 
-  get indexedLength () {
+  get indexedLength() {
     return this._applyState ? this._applyState.indexedLength : 0
   }
 
-  get length () {
+  get length() {
     return this.core.length
   }
 
-  get flushing () {
+  get flushing() {
     return this._flushing > 0
   }
 
-  hash () {
+  hash() {
     return this.core.treeHash()
   }
 
   // deprecated, use .core.key
-  getSystemKey () {
+  getSystemKey() {
     return this.core.key
   }
 
-  get system () {
+  get system() {
     return this._applyState && this._applyState.system
   }
 
   // deprecated
-  async getIndexedInfo () {
+  async getIndexedInfo() {
     if (this.opened === false) await this.ready()
-    return this._applyState && this._applyState.system.getIndexedInfo(this._applyState.indexedLength)
+    return (
+      this._applyState && this._applyState.system.getIndexedInfo(this._applyState.indexedLength)
+    )
   }
 
-  _isActiveIndexer () {
+  _isActiveIndexer() {
     return this.localWriter ? this.localWriter.isActiveIndexer : false
   }
 
-  replicate (isInitiator, opts) {
+  replicate(isInitiator, opts) {
     const stream = this.store.replicate(isInitiator, opts)
     this.wakeupProtocol.addStream(stream)
     return stream
   }
 
-  heads () {
+  heads() {
     if (!this._applyState || !this._applyState.opened) return []
     const nodes = new Array(this._applyState.system.heads.length)
-    for (let i = 0; i < this._applyState.system.heads.length; i++) nodes[i] = this._applyState.system.heads[i]
+    for (let i = 0; i < this._applyState.system.heads.length; i++)
+      nodes[i] = this._applyState.system.heads[i]
     return nodes.sort(compareNodes)
   }
 
-  async export () {
-    const exporting = [
-      this.store.storage.export(this.local.discoveryKey),
-      this._viewStore.export()
-    ]
+  async export() {
+    const exporting = [this.store.storage.export(this.local.discoveryKey), this._viewStore.export()]
 
     const [local, views] = await Promise.all(exporting)
 
@@ -313,7 +311,7 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  hintWakeup (hints) {
+  hintWakeup(hints) {
     if (!Array.isArray(hints)) hints = [hints]
     for (const { key, length } of hints) {
       const hex = b4a.toString(key, 'hex')
@@ -323,15 +321,15 @@ module.exports = class Autobase extends ReadyResource {
     this._queueBump()
   }
 
-  setBigBatches (bool = true) {
+  setBigBatches(bool = true) {
     this.bigBatches = bool
   }
 
-  _queueBump () {
+  _queueBump() {
     this._bump().catch(safetyCatch)
   }
 
-  async _runPreOpen () {
+  async _runPreOpen() {
     if (this._handlers.wait) await this._handlers.wait()
 
     await this.store.ready()
@@ -372,11 +370,14 @@ module.exports = class Autobase extends ReadyResource {
 
     this.local.on('append', this._onlocalwriterchangeBound)
 
-    this.wakeupCapability = (await this._handlers.wakeupCapability) || { key: this.key, discoveryKey: this.discoveryKey }
+    this.wakeupCapability = (await this._handlers.wakeupCapability) || {
+      key: this.key,
+      discoveryKey: this.discoveryKey
+    }
     this.setWakeup(this.wakeupCapability.key, this.wakeupCapability.discoveryKey)
   }
 
-  async _nukeTipBatch (key, length) {
+  async _nukeTipBatch(key, length) {
     const core = this.store.get({ key, active: false })
     await core.ready()
 
@@ -389,7 +390,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // TODO: not atomic atm, so more of a (very useful) debug helper
-  async _nukeTip () {
+  async _nukeTip() {
     const pointer = await this.local.getUserData('autobase/boot')
     if (!pointer) return
 
@@ -408,7 +409,8 @@ module.exports = class Autobase extends ReadyResource {
     const info = await SystemView.getIndexedInfo(batch, boot.systemLength)
     await batch.close()
 
-    for (const view of info.views) { // ensure any views ref'ed by system are consistent as well
+    for (const view of info.views) {
+      // ensure any views ref'ed by system are consistent as well
       await this._nukeTipBatch(view.key, view.length)
     }
 
@@ -419,11 +421,11 @@ module.exports = class Autobase extends ReadyResource {
     if (encCore) await encCore.close()
   }
 
-  _bumpWakeupPeer (peer) {
+  _bumpWakeupPeer(peer) {
     if (this._coupler) this._coupler.update(peer.stream)
   }
 
-  async _rotateLocalWriter (newLocal) {
+  async _rotateLocalWriter(newLocal) {
     assert(!this.appending, 'Cannot rotate a newLocal writer if an append is in progress')
 
     const oldLocal = this.local
@@ -469,17 +471,26 @@ module.exports = class Autobase extends ReadyResource {
     this._rebooted()
   }
 
-  async setLocal (key, { keyPair } = {}) {
+  async setLocal(key, { keyPair } = {}) {
     if (!this.opened) await this.ready()
 
-    const manifest = keyPair ? { version: this.store.manifestVersion, signers: [{ publicKey: keyPair.publicKey }] } : null
+    const manifest = keyPair
+      ? { version: this.store.manifestVersion, signers: [{ publicKey: keyPair.publicKey }] }
+      : null
     if (!key) key = Hypercore.key(manifest)
     // If the keys are the same, no need to rotate
     if (b4a.equals(key, this.local.key)) return
 
     const encryption = this.encryptionKey ? this.getWriterEncryption() : null
 
-    const local = this.store.get({ key, manifest, active: false, exclusive: true, encryption, valueEncoding: messages.OplogMessage })
+    const local = this.store.get({
+      key,
+      manifest,
+      active: false,
+      exclusive: true,
+      encryption,
+      valueEncoding: messages.OplogMessage
+    })
     await local.ready()
 
     this._updateLocalCore = local
@@ -489,10 +500,13 @@ module.exports = class Autobase extends ReadyResource {
     await this._bump()
   }
 
-  setWakeup (cap, discoveryKey) {
+  setWakeup(cap, discoveryKey) {
     if (this.wakeupSession) this.wakeupSession.destroy()
     if (!discoveryKey && b4a.equals(cap, this.key)) discoveryKey = this.discoveryKey
-    this.wakeupSession = this.wakeupProtocol.session(cap, new WakeupHandler(this, discoveryKey || null))
+    this.wakeupSession = this.wakeupProtocol.session(
+      cap,
+      new WakeupHandler(this, discoveryKey || null)
+    )
 
     // incase this session has active peers already, bump the coupler
     for (const peer of this.wakeupSession.peers) {
@@ -500,11 +514,11 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _getMigrationPointer (key, length) {
+  async _getMigrationPointer(key, length) {
     const core = this.store.get({ key, active: false, encryption: null })
     const encCore = await EncryptionView.setSystemEncryption(this, core)
 
-    const min = (core.manifest && core.manifest.prologue) ? core.manifest.prologue.length : 0
+    const min = core.manifest && core.manifest.prologue ? core.manifest.prologue.length : 0
 
     for (let i = length - 1; i >= min; i--) {
       if (!(await core.has(i))) continue
@@ -534,7 +548,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // migrating from 6 -> latest
-  async _migrate6 (key, length) {
+  async _migrate6(key, length) {
     const core = this.store.get({ key, active: false })
     await core.ready()
     const batch = core.session({ name: 'batch', overwrite: true, checkout: length })
@@ -544,14 +558,15 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // called by view-store for bootstrapping
-  async _getSystemInfo () {
+  async _getSystemInfo() {
     const boot = await this._getBootRecord()
     if (!boot.key) return null
 
     const migrated = !!boot.heads
     const indexedLength = boot.systemLength
 
-    if (migrated) { // ensure system batch is consistent on initial migration
+    if (migrated) {
+      // ensure system batch is consistent on initial migration
       await this._migrate6(boot.key, indexedLength)
     }
 
@@ -575,7 +590,8 @@ module.exports = class Autobase extends ReadyResource {
     if (migrated) {
       this.migrated = true
 
-      for (const view of info.views) { // ensure any views ref'ed by system are consistent as well
+      for (const view of info.views) {
+        // ensure any views ref'ed by system are consistent as well
         await this._migrate6(view.key, view.length)
       }
 
@@ -592,55 +608,68 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // called by the apply state for bootstrapping
-  async _getBootRecord () {
+  async _getBootRecord() {
     await this._preopen
 
     const pointer = await this.local.getUserData('autobase/boot')
 
     const boot = pointer
       ? c.decode(messages.BootRecord, pointer)
-      : { version: BOOT_RECORD_VERSION, key: null, systemLength: 0, indexersUpdated: false, fastForwarding: false, recoveries: RECOVERIES, heads: null }
+      : {
+          version: BOOT_RECORD_VERSION,
+          key: null,
+          systemLength: 0,
+          indexersUpdated: false,
+          fastForwarding: false,
+          recoveries: RECOVERIES,
+          heads: null
+        }
 
     if (boot.heads) {
       const len = await this._getMigrationPointer(boot.key, boot.systemLength)
-      if (len !== boot.systemLength) this._warn(new Error('Invalid pointer in migration, correcting (' + len + ' vs ' + boot.systemLength + ')'))
+      if (len !== boot.systemLength)
+        this._warn(
+          new Error(
+            'Invalid pointer in migration, correcting (' + len + ' vs ' + boot.systemLength + ')'
+          )
+        )
       boot.systemLength = len
     }
 
     return boot
   }
 
-  static async getBootRecord (store, key) {
+  static async getBootRecord(store, key) {
     const result = await boot(store, key, { exclusive: false })
     await result.bootstrap.close()
     await result.local.close()
     return result.boot
   }
 
-  _interrupt (reason) {
+  _interrupt(reason) {
     assert(!!this._applyState.applying, 'Interrupt is only allowed in apply')
     this._interrupting = true
     if (reason) this.interrupted = reason
     throw INTERRUPT
   }
 
-  async flush () {
+  async flush() {
     if (this._flushing === 0) return
     return this._flushSignal.wait()
   }
 
-  async advance () {
+  async advance() {
     if (this.opened === false) await this.ready()
     await this._advancing
   }
 
-  recouple () {
+  recouple() {
     if (this._coupler) this._coupler.destroy()
     const core = this._viewStore.getSystemCore()
     this._coupler = new CoreCoupler(core, this._wakeupPeerBound)
   }
 
-  _updateBootstrapWriters () {
+  _updateBootstrapWriters() {
     const writers = this.linearizer.getBootstrapWriters()
 
     // first clear all, but without applying it for churn reasons
@@ -664,7 +693,7 @@ module.exports = class Autobase extends ReadyResource {
     this._bootstrapWritersChanged = false
   }
 
-  async _openLinearizer () {
+  async _openLinearizer() {
     if (this._applyState.system.bootstrapping) {
       await this._makeLinearizer(null)
       this._bootstrapLinearizer()
@@ -674,7 +703,7 @@ module.exports = class Autobase extends ReadyResource {
     await this._makeLinearizerFromViewState()
   }
 
-  async _catchupApplyState () {
+  async _catchupApplyState() {
     if (await this._applyState.shouldMigrate()) {
       await this._migrate()
     } else {
@@ -684,7 +713,7 @@ module.exports = class Autobase extends ReadyResource {
     this._caughtup = true
   }
 
-  async _open () {
+  async _open() {
     this._preopen = this._runPreOpen()
     await this._preopen
 
@@ -736,7 +765,7 @@ module.exports = class Autobase extends ReadyResource {
     this._queueBump()
   }
 
-  async _close () {
+  async _close() {
     await this.flush() // flush all pending non network io
     this._interrupting = true
     await Promise.resolve() // defer one tick
@@ -777,11 +806,11 @@ module.exports = class Autobase extends ReadyResource {
     await closing
   }
 
-  getLastError () {
+  getLastError() {
     return this._lastError
   }
 
-  _onError (err) {
+  _onError(err) {
     if (this.closing) return
 
     this._lastError = err
@@ -804,12 +833,12 @@ module.exports = class Autobase extends ReadyResource {
     this.emit('error', err)
   }
 
-  async _closeWriter (w) {
+  async _closeWriter(w) {
     this.activeWriters.delete(w)
     await w.close()
   }
 
-  async _gcWriters () {
+  async _gcWriters() {
     // just return early, why not
     if (this._checkWriters.length === 0) return
 
@@ -832,18 +861,18 @@ module.exports = class Autobase extends ReadyResource {
     await this._wakeup.flush()
   }
 
-  _startAckTimer () {
+  _startAckTimer() {
     if (this._ackTimer) return
     this._ackTimer = new Timer(this._backgroundAck.bind(this), this._ackInterval)
     this._bumpAckTimer()
   }
 
-  _bumpAckTimer () {
+  _bumpAckTimer() {
     if (!this._ackTimer) return
     this._ackTimer.bump()
   }
 
-  async update () {
+  async update() {
     if (this.opened === false) await this.ready()
 
     try {
@@ -857,7 +886,7 @@ module.exports = class Autobase extends ReadyResource {
 
   // runs in bg, not allowed to throw
   // TODO: refactor so this only moves the writer affected to a updated set
-  async _onremotewriterchange () {
+  async _onremotewriterchange() {
     this._bumpAckTimer()
 
     try {
@@ -865,27 +894,28 @@ module.exports = class Autobase extends ReadyResource {
     } catch {}
   }
 
-  _onlocalwriterchange () {
+  _onlocalwriterchange() {
     if (!this.localWriter || this.localWriter.isRemoved) this._queueBump()
   }
 
-  _onwakeup () {
+  _onwakeup() {
     this._needsWakeup = true
     this._queueBump()
   }
 
-  isFastForwarding () {
+  isFastForwarding() {
     if (this.fastForwardTo !== null) return true
     return this.fastForwardEnabled && this.fastForwarding !== null
   }
 
-  _backgroundAck () {
+  _backgroundAck() {
     return this.ack(true)
   }
 
-  async ack (bg = false) {
+  async ack(bg = false) {
     if (this.opened === false) await this.ready()
-    if (this.localWriter === null || this._acking || this._interrupting || this._appending !== null) return
+    if (this.localWriter === null || this._acking || this._interrupting || this._appending !== null)
+      return
 
     if (this._applyState === null) {
       try {
@@ -925,7 +955,7 @@ module.exports = class Autobase extends ReadyResource {
       return
     }
 
-    const alwaysWrite = isPendingIndexer || await applyState.shouldWrite()
+    const alwaysWrite = isPendingIndexer || (await applyState.shouldWrite())
     if (this._interrupting || applyState.closing) {
       this._acking = false
       return
@@ -949,30 +979,34 @@ module.exports = class Autobase extends ReadyResource {
     this._acking = false
   }
 
-  views () {
+  views() {
     if (this._applyState) return this._applyState.store.listViews()
     return this._viewStore.listViews()
   }
 
-  batch () {
+  batch() {
     return new AppendBatch(this)
   }
 
-  async append (value, opts) {
+  async append(value, opts) {
     if (this.opened === false) await this.ready()
     if (this._advancing !== null) await this._advancing
     while (this.activeBatch) await this.activeBatch.flushed()
     return this._appendBatch(value, opts)
   }
 
-  async _appendBatch (value, opts) {
+  async _appendBatch(value, opts) {
     if (this._interrupting) throw new Error('Autobase is closing')
-    if (value && this.valueEncoding !== BINARY_ENCODING) value = normalize(this.valueEncoding, value)
+    if (value && this.valueEncoding !== BINARY_ENCODING)
+      value = normalize(this.valueEncoding, value)
 
     const optimistic = !!opts && !!opts.optimistic && !!value
 
     // we wanna allow acks so interdexers can flush
-    if (!optimistic && (this.localWriter === null || (this.localWriter.isRemoved && value !== null))) {
+    if (
+      !optimistic &&
+      (this.localWriter === null || (this.localWriter.isRemoved && value !== null))
+    ) {
       throw new Error('Not writable')
     }
 
@@ -1008,7 +1042,7 @@ module.exports = class Autobase extends ReadyResource {
     return localLength + len
   }
 
-  _append (value) {
+  _append(value) {
     // if prev value is an ack that hasnt been flushed, skip it
     if (this._appending.length > 0) {
       if (value === null) return this._appending.length
@@ -1019,29 +1053,38 @@ module.exports = class Autobase extends ReadyResource {
     return this._appending.push(value)
   }
 
-  static decodeValue (value, opts) {
+  static decodeValue(value, opts) {
     return decodeValue(value, opts)
   }
 
-  static encodeValue (value, opts) {
+  static encodeValue(value, opts) {
     return encodeValue(value, opts)
   }
 
-  static async getLocalKey (store, opts = {}) {
-    const core = opts.keyPair ? store.get({ ...opts, active: false }) : store.get({ ...opts, name: 'local', active: false })
+  static async getLocalKey(store, opts = {}) {
+    const core = opts.keyPair
+      ? store.get({ ...opts, active: false })
+      : store.get({ ...opts, name: 'local', active: false })
     await core.ready()
     const key = core.key
     await core.close()
     return key
   }
 
-  static getLocalCore (store, handlers, encryptionKey) {
+  static getLocalCore(store, handlers, encryptionKey) {
     const encryption = !encryptionKey ? null : { key: encryptionKey }
-    const opts = { ...handlers, compat: false, active: false, exclusive: true, valueEncoding: messages.OplogMessage, encryption }
+    const opts = {
+      ...handlers,
+      compat: false,
+      active: false,
+      exclusive: true,
+      valueEncoding: messages.OplogMessage,
+      encryption
+    }
     return opts.keyPair ? store.get(opts) : store.get({ ...opts, name: 'local' })
   }
 
-  static async getUserData (core) {
+  static async getUserData(core) {
     const view = await core.getUserData('autobase/view')
 
     return {
@@ -1050,7 +1093,7 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  static async isAutobase (core, opts = {}) {
+  static async isAutobase(core, opts = {}) {
     const block = await core.get(0, opts)
     if (!block) throw new Error('Core is empty.')
     if (!b4a.isBuffer(block)) return isAutobaseMessage(block)
@@ -1064,26 +1107,26 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // no guarantees where the user data is stored, just that its associated with the base
-  async setUserData (key, val) {
+  async setUserData(key, val) {
     await this._preopen
     const core = this._primaryBootstrap === null ? this.local : this._primaryBootstrap
 
     await core.setUserData(key, val)
   }
 
-  async getUserData (key) {
+  async getUserData(key) {
     await this._preopen
     const core = this._primaryBootstrap === null ? this.local : this._primaryBootstrap
 
     return await core.getUserData(key)
   }
 
-  _needsLocalWriter () {
+  _needsLocalWriter() {
     return this.localWriter === null || this.localWriter.closed
   }
 
   // no guarantees about writer.isActiveIndexer property here
-  async _getWriterByKey (key, len, seen, allowGC, isAdded, system) {
+  async _getWriterByKey(key, len, seen, allowGC, isAdded, system) {
     assert(this._draining === true || (this.opening && !this.opened) || this._optimistic > -1)
 
     await this._lock.lock()
@@ -1158,18 +1201,18 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  _updateAll () {
+  _updateAll() {
     const p = []
     for (const w of this.activeWriters) p.push(w.update(null).catch(this._warn))
     return Promise.all(p)
   }
 
-  getWriterEncryption () {
+  getWriterEncryption() {
     if (!this.encryptionKey) return null
     return this.encryption.getWriterEncryption()
   }
 
-  _makeWriterCore (key) {
+  _makeWriterCore(key) {
     if (this.closing) throw new Error('Autobase is closing')
     if (this._interrupting) throw INTERRUPT()
 
@@ -1178,12 +1221,19 @@ module.exports = class Autobase extends ReadyResource {
 
     const core = local
       ? this.local.session({ valueEncoding: messages.OplogMessage, encryption, active: false })
-      : this.store.get({ key, compat: false, writable: false, valueEncoding: messages.OplogMessage, encryption, active: false })
+      : this.store.get({
+          key,
+          compat: false,
+          writable: false,
+          valueEncoding: messages.OplogMessage,
+          encryption,
+          active: false
+        })
 
     return core
   }
 
-  _makeWriter (key, length, isActive, isRemoved) {
+  _makeWriter(key, length, isActive, isRemoved) {
     const core = this._makeWriterCore(key)
     const w = new Writer(this, core, length, isRemoved)
 
@@ -1199,7 +1249,7 @@ module.exports = class Autobase extends ReadyResource {
     return w
   }
 
-  _updateLinearizer (indexers, heads) {
+  _updateLinearizer(indexers, heads) {
     // only current active indexers are reset to true below
     for (const w of this.activeWriters) w.isActiveIndexer = false
     if (this.localWriter) this.localWriter.isActiveIndexer = false
@@ -1217,12 +1267,12 @@ module.exports = class Autobase extends ReadyResource {
     this._updateAckThreshold()
   }
 
-  async _updateLocalWriter (sys) {
+  async _updateLocalWriter(sys) {
     if (this.localWriter !== null && !this.localWriter.closed) return
     await this._getWriterByKey(this.local.key, -1, 0, true, false, sys)
   }
 
-  async _bootstrapLinearizer () {
+  async _bootstrapLinearizer() {
     const bootstrap = this._makeWriter(this.key, 0, true, false)
 
     this.activeWriters.add(bootstrap)
@@ -1233,12 +1283,12 @@ module.exports = class Autobase extends ReadyResource {
     this._updateLinearizer([bootstrap], [])
   }
 
-  async _makeLinearizer (sys) {
+  async _makeLinearizer(sys) {
     if (sys === null) {
       return this._bootstrapLinearizer()
     }
 
-    if (this.opened || await sys.hasLocal(this.local.key)) {
+    if (this.opened || (await sys.hasLocal(this.local.key))) {
       await this._updateLocalWriter(sys)
     }
 
@@ -1265,37 +1315,40 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _clearWriters () {
+  async _clearWriters() {
     await this.activeWriters.clear()
     if (this.localWriter !== null) await this.localWriter.close()
     this._checkWriters = []
   }
 
-  async _makeLinearizerFromViewState () {
+  async _makeLinearizerFromViewState() {
     const sys = await this._applyState.getIndexedSystem()
     await this._makeLinearizer(sys)
     await sys.close()
   }
 
-  async _runForceFastForward () {
+  async _runForceFastForward() {
     await this.core.ready()
     if (this.closing) return
     await this._runFastForward(new FastForward(this, this.core.key, { force: true }))
   }
 
   // general repair method for trying to recover
-  async repair () {
+  async repair() {
     await this.forceFastForward()
   }
 
-  async forceFastForward () {
+  async forceFastForward() {
     if (this.isFastForwarding()) return
     await this._runForceFastForward()
     await this.update()
   }
 
-  async _applyFastForward () {
-    if (!this.fastForwardTo.force && this.fastForwardTo.length < this.core.length + this.fastForwardTo.minimum) {
+  async _applyFastForward() {
+    if (
+      !this.fastForwardTo.force &&
+      this.fastForwardTo.length < this.core.length + this.fastForwardTo.minimum
+    ) {
       this.fastForwardTo = null
       this._updateActivity()
       // still not worth it
@@ -1308,14 +1361,7 @@ module.exports = class Autobase extends ReadyResource {
     // close existing state
     if (this._applyState) await this._applyState.close()
 
-    const {
-      key,
-      length,
-      views,
-      indexers,
-      manifestVersion,
-      entropy
-    } = this.fastForwardTo
+    const { key, length, views, indexers, manifestVersion, entropy } = this.fastForwardTo
 
     const from = this.core.signedLength
     const ffed = new Set()
@@ -1420,7 +1466,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // TODO: not atomic in regards to the ff, fix that
-  async _applyFastForwardMigration (ref, v) {
+  async _applyFastForwardMigration(ref, v) {
     const next = this.store.get(v.key)
     await next.ready()
 
@@ -1446,18 +1492,36 @@ module.exports = class Autobase extends ReadyResource {
     ref.migrated(this, next)
   }
 
-  async _migrateView (indexerManifests, source, name, indexedLength, manifestVersion, entropy, linked, manifestData) {
+  async _migrateView(
+    indexerManifests,
+    source,
+    name,
+    indexedLength,
+    manifestVersion,
+    entropy,
+    linked,
+    manifestData
+  ) {
     const ref = this._viewStore.byName.get(name)
 
-    const prologue = indexedLength === 0
-      ? null
-      : { length: indexedLength, hash: await source.treeHash(indexedLength) }
+    const prologue =
+      indexedLength === 0
+        ? null
+        : { length: indexedLength, hash: await source.treeHash(indexedLength) }
 
     if (manifestData === null && ref.core.manifest.userData !== null) {
       manifestData = ref.core.manifest.userData
     }
 
-    const next = this._viewStore.getViewCore(indexerManifests, name, prologue, manifestVersion, entropy, linked, manifestData)
+    const next = this._viewStore.getViewCore(
+      indexerManifests,
+      name,
+      prologue,
+      manifestVersion,
+      entropy,
+      linked,
+      manifestData
+    )
     await next.ready()
 
     if (indexedLength > 0) {
@@ -1483,7 +1547,7 @@ module.exports = class Autobase extends ReadyResource {
     return ref
   }
 
-  async _premigrate () {
+  async _premigrate() {
     this._flushing++
     try {
       const length = this._applyState.indexedLength
@@ -1504,18 +1568,46 @@ module.exports = class Autobase extends ReadyResource {
         const source = ref.getCore()
         await source.ready()
 
-        await this._migrateView(indexerManifests, source, view.name, indexedLength, manifestVersion, info.entropy, null, null)
+        await this._migrateView(
+          indexerManifests,
+          source,
+          view.name,
+          indexedLength,
+          manifestVersion,
+          info.entropy,
+          null,
+          null
+        )
       }
 
       const source = encryptionView.ref.getCore()
       await source.ready()
 
-      const enc = await this._migrateView(indexerManifests, source, '_encryption', info.encryptionLength, manifestVersion, info.entropy, null, null)
+      const enc = await this._migrateView(
+        indexerManifests,
+        source,
+        '_encryption',
+        info.encryptionLength,
+        manifestVersion,
+        info.entropy,
+        null,
+        null
+      )
 
       const linked = [enc.core.key]
 
       const sysCore = systemView.ref.getCore()
-      const ref = await this._migrateView(indexerManifests, sysCore, '_system', length, manifestVersion, info.entropy, linked, null, null)
+      const ref = await this._migrateView(
+        indexerManifests,
+        sysCore,
+        '_system',
+        length,
+        manifestVersion,
+        info.entropy,
+        linked,
+        null,
+        null
+      )
 
       return ref.core.key
     } finally {
@@ -1523,11 +1615,11 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _migrate () {
+  async _migrate() {
     return this._reboot(await this._premigrate())
   }
 
-  async _reboot (key) {
+  async _reboot(key) {
     await this._clearWriters()
     await this._makeLinearizerFromViewState()
 
@@ -1545,7 +1637,7 @@ module.exports = class Autobase extends ReadyResource {
     this._rebooted()
   }
 
-  _rebooted () {
+  _rebooted() {
     this.recouple()
     this._updateActivity()
 
@@ -1559,12 +1651,12 @@ module.exports = class Autobase extends ReadyResource {
     this._queueBump()
   }
 
-  _setLocalWriter (w) {
+  _setLocalWriter(w) {
     this.localWriter = w
     if (this._ackInterval) this._startAckTimer()
   }
 
-  _unsetLocalWriter () {
+  _unsetLocalWriter() {
     if (!this.localWriter) return
 
     this._closeWriter(this.localWriter)
@@ -1573,14 +1665,14 @@ module.exports = class Autobase extends ReadyResource {
     this.localWriter = null
   }
 
-  _setLocalIndexer () {
+  _setLocalIndexer() {
     assert(this.localWriter !== null)
 
     this.isIndexer = true
     this.emit('is-indexer')
   }
 
-  _clearLocalIndexer () {
+  _clearLocalIndexer() {
     assert(this.localWriter !== null)
 
     if (this._ackTimer) this._ackTimer.stop()
@@ -1591,19 +1683,17 @@ module.exports = class Autobase extends ReadyResource {
     this.emit('is-non-indexer')
   }
 
-  _isLocalCore (core) {
+  _isLocalCore(core) {
     return core.writable && core.id === this.local.id
   }
 
-  _addLocalHeads () {
+  _addLocalHeads() {
     // not writable atm, will prop be writable in a subsequent bump tho
     if (!this.localWriter || this.localWriter.closed) return null
     // safety, localwriter is still processing, should prop be an assertion
     if (!this.localWriter.idle()) return null
 
-    const length = this._optimistic === -1
-      ? this._appending.length
-      : this._optimistic || 1
+    const length = this._optimistic === -1 ? this._appending.length : this._optimistic || 1
 
     const nodes = new Array(length)
     for (let i = 0; i < length; i++) {
@@ -1621,17 +1711,20 @@ module.exports = class Autobase extends ReadyResource {
     return nodes
   }
 
-  _flushLocalHeads (length) {
+  _flushLocalHeads(length) {
     this._appending = length === this._appending.length ? null : this._appending.slice(length)
     this._appended += length
 
     if (this._optimistic > -1 && this._optimistic < length) this._optimistic = -1
   }
 
-  async _addRemoteHeads () {
+  async _addRemoteHeads() {
     let added = 0
 
-    while (added < REMOTE_ADD_BATCH || (this.bigBatches && !this._indexersIdle() && added < REMOTE_ADD_BATCH_SANITY)) {
+    while (
+      added < REMOTE_ADD_BATCH ||
+      (this.bigBatches && !this._indexersIdle() && added < REMOTE_ADD_BATCH_SANITY)
+    ) {
       await this._updateAll()
 
       let advanced = 0
@@ -1650,7 +1743,7 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       if (advanced === 0) {
-        if (this.bigBatches && !this._indexersIdle() && await this._waitForIndexers()) continue
+        if (this.bigBatches && !this._indexersIdle() && (await this._waitForIndexers())) continue
         break
       }
 
@@ -1660,7 +1753,7 @@ module.exports = class Autobase extends ReadyResource {
     return added
   }
 
-  async _waitForIndexers () {
+  async _waitForIndexers() {
     const promises = []
 
     for (const w of this.linearizer.indexers) {
@@ -1676,14 +1769,14 @@ module.exports = class Autobase extends ReadyResource {
     return false
   }
 
-  _indexersIdle () {
+  _indexersIdle() {
     for (const w of this.linearizer.indexers) {
       if (!w.idle()) return false
     }
     return true
   }
 
-  async _drain () {
+  async _drain() {
     const writable = this.writable
 
     while (!this._interrupting && !this.paused) {
@@ -1708,7 +1801,9 @@ module.exports = class Autobase extends ReadyResource {
       }
 
       const u = this.linearizer.update()
-      const update = u ? await this._applyState.update(u, localNodes) : { reboot: false, migrated: false }
+      const update = u
+        ? await this._applyState.update(u, localNodes)
+        : { reboot: false, migrated: false }
 
       if (localNodes) this._flushLocalHeads(localNodes.length)
 
@@ -1737,14 +1832,14 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  _wakeupPeer (stream) {
+  _wakeupPeer(stream) {
     if (!this.wakeupSession) return
     const wakeup = this._getWakeup()
     if (wakeup.length === 0) return
     this.wakeupSession.announceByStream(stream, wakeup)
   }
 
-  _getWakeup () {
+  _getWakeup() {
     const writers = []
 
     for (const w of this.activeWriters) {
@@ -1755,19 +1850,19 @@ module.exports = class Autobase extends ReadyResource {
     return writers
   }
 
-  async _wakeupWriter (key, length) {
+  async _wakeupWriter(key, length) {
     this._ensureWakeup(await this._getWriterByKey(key, -1, length, true, false, null))
   }
 
   // ensure wakeup on an existing writer (the writer calls this in addition to above)
-  _ensureWakeup (w) {
+  _ensureWakeup(w) {
     if (w === null || w.isBootstrap === true) return
     w.setBootstrap(true) // even if turn false at end of drain, hypercore makes them linger a bit so no churn
     this._bootstrapWriters.push(w)
     this._bootstrapWritersChanged = true
   }
 
-  async _drainWakeup () {
+  async _drainWakeup() {
     const promises = []
 
     // warmup all the below gets
@@ -1833,22 +1928,22 @@ module.exports = class Autobase extends ReadyResource {
     this._wakeupHints.clear()
   }
 
-  pause () {
+  pause() {
     this.paused = true
   }
 
-  resume () {
+  resume() {
     this.paused = false
     this._queueBump()
   }
 
-  waitForWritable () {
+  waitForWritable() {
     if (this.writable) return Promise.resolve(true)
     if (!this._writable) this._writable = rrp()
     return this._writable.promise
   }
 
-  async _drainWithInterupt () {
+  async _drainWithInterupt() {
     while (true) {
       try {
         await this._drain()
@@ -1860,7 +1955,7 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  async _advance () {
+  async _advance() {
     if (this.opened === false) await this.ready()
     if (this.paused || this._interrupting) return
 
@@ -1876,7 +1971,8 @@ module.exports = class Autobase extends ReadyResource {
       await this._drainWithInterupt()
 
       // must run post drain so the linearizer is caught up
-      if (this._caughtup && (this._needsWakeup === true || this._wakeupHints.size > 0)) await this._drainWakeup()
+      if (this._caughtup && (this._needsWakeup === true || this._wakeupHints.size > 0))
+        await this._drainWakeup()
 
       // check if we should update local writer
       if (!this.localWriter || this.localWriter.closed) {
@@ -1914,7 +2010,7 @@ module.exports = class Autobase extends ReadyResource {
     if (!this._interrupting) await this._gcWriters()
   }
 
-  _triggerAckAsap () {
+  _triggerAckAsap() {
     if (!this._ackTimer) return false
 
     // flush if threshold is reached and we are not already acking
@@ -1931,7 +2027,7 @@ module.exports = class Autobase extends ReadyResource {
     return false
   }
 
-  _queueFastForward () {
+  _queueFastForward() {
     if (!this.core.opened) return
     // should have a better way to get this
     const latestSignedLength = this.core.core.state.length
@@ -1940,20 +2036,22 @@ module.exports = class Autobase extends ReadyResource {
 
     if (latestSignedLength - this.core.length < this.fastForwardMinimum) return
     if (this.fastForwardTo !== null) return
-    if ((Date.now() - this.fastForwardFailedAt) < MIN_FF_WAIT) return
+    if (Date.now() - this.fastForwardFailedAt < MIN_FF_WAIT) return
 
-    this._runFastForward(new FastForward(this, this.core.key, { minimum: this.fastForwardMinimum })).catch(noop)
+    this._runFastForward(
+      new FastForward(this, this.core.key, { minimum: this.fastForwardMinimum })
+    ).catch(noop)
   }
 
-  _queueStaticFastForward (key) {
+  _queueStaticFastForward(key) {
     if (!this.fastForwardEnabled || this.fastForwarding !== null || this._interrupting) return
     if (this.fastForwardTo !== null) return
-    if ((Date.now() - this.fastForwardFailedAt) < MIN_FF_WAIT) return
+    if (Date.now() - this.fastForwardFailedAt < MIN_FF_WAIT) return
 
     this._runFastForward(new FastForward(this, key, { verified: false })).catch(noop)
   }
 
-  _updateActivity () {
+  _updateActivity() {
     this.activeWriters.updateActivity()
     if (this._applyState) {
       if (this.isFastForwarding()) this._applyState.pause()
@@ -1968,16 +2066,16 @@ module.exports = class Autobase extends ReadyResource {
     }
   }
 
-  _preferFastForward () {
+  _preferFastForward() {
     this.fastForwardMinimum = 1
     this._queueFastForward()
   }
 
-  _postApply () {
+  _postApply() {
     this.fastForwardMinimum = FastForward.MINIMUM
   }
 
-  async _runFastForward (ff) {
+  async _runFastForward(ff) {
     this.fastForwarding = ff
 
     this._updateActivity()
@@ -2006,10 +2104,13 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // triggered from apply
-  async _addWriter (key, sys) { // just compat for old version
+  async _addWriter(key, sys) {
+    // just compat for old version
     assert(!!this._applyState.applying, 'System changes are only allowed in apply')
 
-    const writer = (await this._getWriterByKey(key, -1, 0, false, true, sys)) || this._makeWriter(key, 0, true, false)
+    const writer =
+      (await this._getWriterByKey(key, -1, 0, false, true, sys)) ||
+      this._makeWriter(key, 0, true, false)
     await writer.ready()
 
     if (!this.activeWriters.has(key)) {
@@ -2023,68 +2124,71 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   // triggered from apply
-  _removeWriter (key) { // just compat for old version
+  _removeWriter(key) {
+    // just compat for old version
     const w = this.activeWriters.get(key)
     if (w) w.isRemoved = true
 
     this._queueBump()
   }
 
-  removeable (key) {
+  removeable(key) {
     return this._applyState ? this._applyState.removeable(key) : false
   }
 
-  _updateAckThreshold () {
+  _updateAckThreshold() {
     if (this._ackThreshold === 0) return
     if (this._ackTimer) this._ackTimer.bau()
     this._ackTick = 0
     this._ackTickThreshold = random2over1(this.linearizer.indexers.length * this._ackThreshold)
   }
 
-  _resetAckTick () {
+  _resetAckTick() {
     this._ackTick = 0
     if (this._ackTimer) this._ackTimer.bau()
   }
 
-  _shiftWriter (w) {
+  _shiftWriter(w) {
     w.shift()
     if (w.flushed()) this._checkWriters.push(w)
   }
 }
 
-function toKey (k) {
+function toKey(k) {
   return b4a.isBuffer(k) ? k : hypercoreId.decode(k)
 }
 
-function isAutobaseMessage (msg) {
+function isAutobaseMessage(msg) {
   return msg.checkpoint ? msg.checkpoint.length > 0 : msg.checkpoint === null
 }
 
-function compareNodes (a, b) {
+function compareNodes(a, b) {
   return b4a.compare(a.key, b.key)
 }
 
-function random2over1 (n) {
+function random2over1(n) {
   return Math.floor(n + Math.random() * n)
 }
 
-function noop () {}
+function noop() {}
 
-function crashSoon (err) {
-  queueMicrotask(() => { throw err })
+function crashSoon(err) {
+  queueMicrotask(() => {
+    throw err
+  })
   throw err
 }
 
-function isObject (obj) {
+function isObject(obj) {
   return typeof obj === 'object' && obj !== null
 }
 
-function emitWarning (err) {
+function emitWarning(err) {
   safetyCatch(err)
   this.emit('warning', err)
 }
 
-function normalize (valueEncoding, value) {
+function normalize(valueEncoding, value) {
   const state = { buffer: null, start: 0, end: 0 }
   valueEncoding.preencode(state, value)
   state.buffer = b4a.allocUnsafe(state.end)

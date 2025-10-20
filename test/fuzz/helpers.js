@@ -13,40 +13,40 @@ module.exports = {
 // classes for making dag outline
 
 class SkeletonNode {
-  constructor (key, seq, links = []) {
+  constructor(key, seq, links = []) {
     this.key = key
     this.seq = seq
     this.links = links
     this.clock = new Map()
   }
 
-  get ref () {
+  get ref() {
     return `${this.key}:${this.seq}`
   }
 
-  toDetails () {
+  toDetails() {
     return {
       ref: this.ref,
       args: [this.key, this.seq],
-      deps: this.links.map(l => l.ref)
+      deps: this.links.map((l) => l.ref)
       // clock: this.clock
     }
   }
 
-  addLink (link) {
+  addLink(link) {
     if (clockContains(this.clock, link)) return
 
     updateClock(this.clock, link)
     this.links.push(link)
   }
 
-  toJavaScript () {
+  toJavaScript() {
     return `const ${this.key + this.seq} = l.addHead(${this.key}.add())\n`
   }
 }
 
 class SkeletonWriter {
-  constructor (key, majority, indexer) {
+  constructor(key, majority, indexer) {
     this.key = key
     this.seq = 0
     this.head = null
@@ -54,7 +54,7 @@ class SkeletonWriter {
     this.isActiveIndexer = !!indexer
   }
 
-  add (links = []) {
+  add(links = []) {
     const check = updateClock(new Map(), ...links)
     if (this.head && !clockContains(check, this.head)) {
       links.push(this.head)
@@ -79,7 +79,7 @@ class SkeletonWriter {
 // placeholder class
 
 class Writer {
-  constructor (key, indexer) {
+  constructor(key, indexer) {
     this.core = { key }
     this.isActiveIndexer = true
     this.length = 0
@@ -90,22 +90,22 @@ class Writer {
     this.isActiveIndexer = !!indexer
   }
 
-  get indexed () {
+  get indexed() {
     return this.nodes.offset
   }
 
-  get available () {
+  get available() {
     return this.nodes.nodes.length
   }
 
-  get (index) {
+  get(index) {
     return this.nodes.nodes[index]
   }
 }
 
 // fuzzer
 
-function fuzz (w, idx, n, b, logLevel, dir) {
+function fuzz(w, idx, n, b, logLevel, dir) {
   const start = Date.now()
   for (let i = 0; true; i++) {
     // timing
@@ -115,7 +115,7 @@ function fuzz (w, idx, n, b, logLevel, dir) {
     }
 
     const { nodes, writers } = dagGen(w, idx, n, b)
-    const steps = nodes.map(n => n.toDetails())
+    const steps = nodes.map((n) => n.toDetails())
 
     const result = rollBack(w, idx, steps, 3)
     if (!result.pass) return fail(result, w, steps)
@@ -124,13 +124,23 @@ function fuzz (w, idx, n, b, logLevel, dir) {
     const majority = writers.slice(0, (writers.length >>> 1) + 1)
     continueWriting(nodes, majority, n, b)
 
-    let more = rollBack(w, idx, nodes.map(n => n.toDetails()), 3)
-    if (!more.pass) return fail(more, w, nodes.map(n => n.toDetails()))
+    let more = rollBack(
+      w,
+      idx,
+      nodes.map((n) => n.toDetails()),
+      3
+    )
+    if (!more.pass)
+      return fail(
+        more,
+        w,
+        nodes.map((n) => n.toDetails())
+      )
 
     let retry = 0
     while (more.nodes.length === midway) {
       continueWriting(nodes, majority, n, b)
-      const dag = nodes.map(n => n.toDetails())
+      const dag = nodes.map((n) => n.toDetails())
 
       more = rollBack(w, idx, dag, 3)
       if (!more.pass) return fail(more, w, dag)
@@ -146,13 +156,11 @@ function fuzz (w, idx, n, b, logLevel, dir) {
     }
   }
 
-  function fail (result, w, steps) {
+  function fail(result, w, steps) {
     const label = getLabel()
 
     console.log('----', label, '----')
-    const js = result.deadlock
-      ? formatDeadlock(result, label)
-      : formatResult(result, label)
+    const js = result.deadlock ? formatDeadlock(result, label) : formatResult(result, label)
 
     fs.writeFileSync(path.join(dir, label + '.js'), js)
 
@@ -163,7 +171,7 @@ function fuzz (w, idx, n, b, logLevel, dir) {
 
 // test function
 
-function rollBack (n, idx, steps, batch = 3, result = []) {
+function rollBack(n, idx, steps, batch = 3, result = []) {
   const writers = {}
   const writersLength = n
 
@@ -189,14 +197,7 @@ function rollBack (n, idx, steps, batch = 3, result = []) {
     }
 
     const w = writers[args[0]]
-    const node = Linearizer.createNode(
-      w,
-      w.length + 1,
-      ref,
-      [],
-      1,
-      dependencies
-    )
+    const node = Linearizer.createNode(w, w.length + 1, ref, [], 1, dependencies)
     w.nodes.nodes.push(node)
 
     node._ref = ref
@@ -254,7 +255,7 @@ function rollBack (n, idx, steps, batch = 3, result = []) {
     if (!head.deps.length) continue
     next.splice(heads[del], 1)
 
-    if (!next.filter(n => n.deps.length).length) {
+    if (!next.filter((n) => n.deps.length).length) {
       return { nodes: result, pass: true }
     }
   }
@@ -264,15 +265,16 @@ function rollBack (n, idx, steps, batch = 3, result = []) {
 
 // generating dags
 
-function dagGen (w = 3, idx = w, size = 10, branchFactor = 0.3) {
+function dagGen(w = 3, idx = w, size = 10, branchFactor = 0.3) {
   const writers = []
   const majority = Math.floor(w / 2) + 1
-  for (let i = 0; i < w; i++) writers.push(new SkeletonWriter(String.fromCharCode(0x61 + i), majority, i < idx))
+  for (let i = 0; i < w; i++)
+    writers.push(new SkeletonWriter(String.fromCharCode(0x61 + i), majority, i < idx))
 
   return createDag(writers, size, branchFactor)
 }
 
-function printGraph (graph) {
+function printGraph(graph) {
   let str = '```mermaid\n'
   str += 'graph TD;'
 
@@ -294,7 +296,7 @@ function printGraph (graph) {
   return str
 }
 
-function createDag (writers, size, branch) {
+function createDag(writers, size, branch) {
   const nodes = []
 
   const tails = new Set()
@@ -323,9 +325,9 @@ function createDag (writers, size, branch) {
   return { nodes, writers }
 }
 
-function continueWriting (nodes, writers, size, branch) {
+function continueWriting(nodes, writers, size, branch) {
   const tails = nodes.reduce((tails, node) => {
-    if (nodes.findIndex(n => n.links.includes(node)) < 0) {
+    if (nodes.findIndex((n) => n.links.includes(node)) < 0) {
       tails.add(node)
     }
     return tails
@@ -358,11 +360,11 @@ function continueWriting (nodes, writers, size, branch) {
 
 // clock helpers
 
-function clockContains (clock, node) {
+function clockContains(clock, node) {
   return clock.has(node.key) && node.seq < clock.get(node.key)
 }
 
-function updateClock (clock, ...deps) {
+function updateClock(clock, ...deps) {
   const stack = []
 
   stack.push(...deps)
@@ -387,20 +389,20 @@ function updateClock (clock, ...deps) {
 
 // dag helpers
 
-function getHeads (nodes) {
+function getHeads(nodes) {
   return nodes.reduce((heads, node, i) => {
-    if (nodes.findIndex(n => n.deps.includes(node.ref)) < 0) {
+    if (nodes.findIndex((n) => n.deps.includes(node.ref)) < 0) {
       heads.push(i)
     }
     return heads
   }, [])
 }
 
-function compareNode (a, b) {
+function compareNode(a, b) {
   return a.writer.key === b.writer.key && a.seq === b.seq
 }
 
-function nodeByClock (a, b) {
+function nodeByClock(a, b) {
   if (b.clock.get(a.key) > a.seq) return 1
 
   if (a.clock.get(b.key) <= b.seq) return 1
@@ -414,17 +416,17 @@ function nodeByClock (a, b) {
 
 // logging
 
-function timerLabel (w, n, i) {
+function timerLabel(w, n, i) {
   return w + ' writers ' + n + ' nodes - ' + i + ' cases'
 }
 
-function getLabel (result) {
+function getLabel(result) {
   return crypto.randomBytes(3).toString('hex')
 }
 
 // format tests
 
-function printTestBranch (w, steps) {
+function printTestBranch(w, steps) {
   let str = ''
 
   let writers = '['
@@ -437,7 +439,7 @@ function printTestBranch (w, steps) {
   str += `    const l = new Linearizer(${writers})\n\n`
 
   for (const step of steps) {
-    str += `    const ${step.ref.replace(/:/, '')} = l.addHead(${step.args[0]}.add(${step.deps.map(d => d.replace(/:/, '')).join(', ')}))\n`
+    str += `    const ${step.ref.replace(/:/, '')} = l.addHead(${step.args[0]}.add(${step.deps.map((d) => d.replace(/:/, '')).join(', ')}))\n`
   }
 
   str += '    return l\n'
@@ -445,11 +447,11 @@ function printTestBranch (w, steps) {
   return str
 }
 
-function formatResult ({ writers, left, right }, label = '(no label)') {
+function formatResult({ writers, left, right }, label = '(no label)') {
   // const yielded = left.yielded
 
-  let js = 'const test = require(\'brittle\')\n'
-  js += 'const { Linearizer, Writer } = require(\'../../\')\n\n'
+  let js = "const test = require('brittle')\n"
+  js += "const { Linearizer, Writer } = require('../../')\n\n"
   js += `test('fuzz ${label}', function (t) {
   const l1 = makeGraph(true)
   const l2 = makeGraph(false)
@@ -507,9 +509,9 @@ function formatResult ({ writers, left, right }, label = '(no label)') {
   // return str
 }
 
-function formatDeadlock ({ nodes, writers, batch }, label = '(no label)') {
-  let js = 'const test = require(\'brittle\')\n'
-  js += 'const { Linearizer, Writer } = require(\'../../\')\n\n'
+function formatDeadlock({ nodes, writers, batch }, label = '(no label)') {
+  let js = "const test = require('brittle')\n"
+  js += "const { Linearizer, Writer } = require('../../')\n\n"
   js += `test('fuzz ${label}', function (t) {\n`
   let w = '['
   for (let i = 0; i < writers; i++) {
@@ -524,7 +526,7 @@ function formatDeadlock ({ nodes, writers, batch }, label = '(no label)') {
   const nodes = []\n\n`
 
   for (const step of nodes) {
-    js += `    const ${step.ref.replace(/:/, '')} = ${step.args[0]}.add(${step.deps.map(d => d.replace(/:/, '')).join(', ')})\n`
+    js += `    const ${step.ref.replace(/:/, '')} = ${step.args[0]}.add(${step.deps.map((d) => d.replace(/:/, '')).join(', ')})\n`
     js += `    nodes.push(${step.ref.replace(/:/, '')})\n`
   }
 
