@@ -2260,20 +2260,22 @@ test('basic - export', async t => {
 })
 
 test('basic - get last error', async (t) => {
-  const { bases } = await create(1, t)
+  const { bases } = await create(1, t, {
+    apply: function () {
+      throw new Error('This is the last error!')
+    }
+  })
   const [base] = bases
 
   t.plan(4)
 
+  // Needed to stop shutdown
   base.on('error', (err) => {
-    t.ok(err.message, "Cannot read properties of undefined (reading 'add')")
+    t.ok(err.message, 'This is the last error!')
     t.pass()
   })
 
   await t.exception(() => base.append())
 
-  t.is(
-    base.getLastError().message,
-    "Cannot read properties of undefined (reading 'add')"
-  )
+  t.is(base.getLastError().message, 'This is the last error!')
 })
