@@ -5,10 +5,12 @@ const {
   createBase,
   addWriter,
   confirm,
+  compare,
   replicate,
   replicateAndSync,
   sync
 } = require('./helpers')
+const { replicateAndSyncDebugStream } = require('./helpers/networking.js')
 
 test('trace - local block includes trace', async (t) => {
   const { bases } = await create(1, t, { apply })
@@ -340,5 +342,87 @@ test('trace - non-indexed views arent traced', async (t) => {
   {
     const node = await b2.local.get(1)
     t.alike(node.trace.user, [{ view: 0, blocks: [0] }], 'no trace w/ new view core')
+  }
+})
+
+test('trace - reduces sync time - 1 writer', async (t) => {
+  const { bases } = await create(4, t, { apply, fastForward: true })
+  const [a, b, c, d] = bases
+  const indexers = [a, b, c]
+
+  await addWriter(a, b, true)
+  await addWriter(a, c, true)
+  await confirm(indexers)
+
+  t.alike(
+    a.system.indexers.map((i) => i.key),
+    indexers.map((i) => i.local.key)
+  )
+
+  await addWriter(a, d, false)
+
+  t.comment('confirming non indexer')
+  await confirm(bases)
+
+  const tipLength = 5000
+  const traceableLength = tipLength
+
+  for (let i = 0; i < traceableLength; i++) {
+    await a.append(a.name + i)
+  }
+  await confirm(indexers)
+  t.comment('tracable indexed')
+
+  t.is(a.view.signedLength, traceableLength, 'traceable section is signed')
+
+  for (let i = 0; i < tipLength; i++) {
+    await a.append(a.name + (i + traceableLength))
+  }
+  t.comment('tip appended')
+
+  // Assert that `d` cannot already have blocks as safeguard
+  for (let i = 0; i < a.view.length; i++) {
+    if (await d.view.has(i)) throw Error('`d` already has blocks!')
+  }
+
+  t.comment('joining')
+  const latency = 50
+
+  const joiningStart = Date.now()
+  await replicateAndSyncDebugStream([a, d], t, { latency })
+  const joiningEnd = Date.now()
+  const joiningTime = joiningEnd - joiningStart
+
+  // Estimate processing time
+  const roundTripLatency = 2 * latency
+  const idealBatches = tipLength / 64
+  const netRequests = idealBatches * 2 // 1 request & 1 data
+  const timeEstimate =
+    (netRequests * roundTripLatency) / 2 + // Assume half-max batches
+    tipLength // Assume each block takes 1ms to process
+
+  t.comment('joiningTime', `${joiningTime / 1000}s`, 'timeEstimate', `${timeEstimate / 1000}s`)
+  t.ok(joiningTime < timeEstimate * 2.0, 'joining time within double of estimate')
+
+  await compare(a, d, true)
+  t.pass('a & d match')
+
+  async function apply(batch, view, host) {
+    for (const { value } of batch) {
+      if (value.add) {
+        const key = Buffer.from(value.add, 'hex')
+        await host.addWriter(key, { indexer: value.indexer })
+        continue
+      }
+
+      let str = ''
+      if (view.length >= traceableLength) {
+        const viewIndex = (view.length - traceableLength) % traceableLength
+        str += await view.get(viewIndex)
+      }
+      str += value
+
+      await view.append(str)
+    }
   }
 })
