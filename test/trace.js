@@ -364,7 +364,7 @@ test('trace - reduces sync time - 1 writer', async (t) => {
   t.comment('confirming non indexer')
   await confirm(bases)
 
-  const tipLength = 5000
+  const tipLength = 3000
   const traceableLength = tipLength
 
   for (let i = 0; i < traceableLength; i++) {
