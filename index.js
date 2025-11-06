@@ -100,10 +100,9 @@ module.exports = class Autobase extends ReadyResource {
     this.globalCache = store.globalCache || null
     this.migrated = false
 
-    this.encrypted = handlers.encrypted || !!handlers.encryptionKey
-    this.encrypt = !!handlers.encrypt
     this.encryptionKey = null
-    this.encryption = new EncryptionView(this, null)
+    this.encryptionOpts = getEncryptionOpts(handlers)
+    this.encryption = new EncryptionView(this, null, this.encryptionOpts)
 
     this.activeBatch = null // maintained by the append-batch
 
@@ -234,7 +233,7 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   get isEncrypted() {
-    return !!this.encryptionKey
+    return !!this.encryptionOpts.encrypted
   }
 
   // TODO: compat, will be removed
@@ -306,9 +305,8 @@ module.exports = class Autobase extends ReadyResource {
     return this._applyState.encryption.getBootstrap()
   }
 
-  bootstrapEncryption(info) {
-    this.encryption.bootstrap(info)
-    this._applyState.encryption.bootstrap(info)
+  bootstrapEncryption(boostrap) {
+    this._applyState.bootstrapEncryption(boostrap)
   }
 
   _isActiveIndexer() {
@@ -365,13 +363,13 @@ module.exports = class Autobase extends ReadyResource {
 
     this.keyPair = (await this._handlers.keyPair) || null
 
-    if (this._handlers.encryptionKey !== null) {
-      this.encryptionKey = await this._handlers.encryptionKey
+    if (this.encryptionOpts.key !== null) {
+      this.encryptionKey = await this.encryptionOpts.key
     }
 
     const result = await boot(this.store, this.key, {
       encryptionKey: this.encryptionKey,
-      encrypt: this.encrypt,
+      encrypt: this.isEncrypted,
       keyPair: this.keyPair
     })
 
@@ -382,9 +380,9 @@ module.exports = class Autobase extends ReadyResource {
     this.discoveryKey = result.bootstrap.discoveryKey
     this.id = result.bootstrap.id
 
-    this.encryptionKey = result.encryptionKey
+    this.encryptionKey = result.encryption ? result.encryption.encryptionKey : null
 
-    if (this.encrypted) {
+    if (this.isEncrypted) {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
     }
 
@@ -1678,12 +1676,12 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._applyState.finalize(key)
 
+    // end soft shutdown
+
     this._applyState = new ApplyState(this)
 
     await this._applyState.ready()
     await this._applyState.catchup(this.linearizer)
-
-    // end soft shutdown
 
     this._queueFastForward()
 
@@ -2248,4 +2246,27 @@ function normalize(valueEncoding, value) {
   valueEncoding.encode(state, value)
   state.start = 0
   return valueEncoding.decode(state)
+}
+
+function getEncryptionOpts(opts) {
+  if (opts.encryptionKey) {
+    return {
+      encrypted: true,
+      key: opts.encryptionKey,
+      bootstrap: null
+    }
+  }
+
+  if (opts.encryption) {
+    return {
+      encrypted: true,
+      ...opts.encryption
+    }
+  }
+
+  return {
+    encrypted: opts.encrypt === true || opts.encrypted === true, // todo: seems like we had dup options
+    key: null,
+    bootstrap: null
+  }
 }

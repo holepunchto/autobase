@@ -381,8 +381,13 @@ test('fork - initial fast forward', async (t) => {
 
   const [store] = await createStores(1, t, { offset: 2 })
 
+  const bootstrap = await b.getEncryptionBootstrap()
+
   const c = createBase(store.session(), a.key, t, {
-    encryptionKey: b4a.alloc(32, 0),
+    encryption: {
+      key: b4a.alloc(32, 0),
+      bootstrap
+    },
     apply: applyFork,
     fastForward: { key: b.core.key }
   })
@@ -471,6 +476,9 @@ test('fork - migration after fork', async (t) => {
   t.alike(b.system.indexers[0].key, b.local.key)
 
   await t.execution(b.append('post fork'))
+
+  const bootstrap = await b.getEncryptionBootstrap()
+  c.bootstrapEncryption(bootstrap)
 
   await addWriter(b, c, true)
   await confirm([a, b, c], { checkHash: false })
