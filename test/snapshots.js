@@ -1,16 +1,11 @@
 const test = require('brittle')
 const Hyperbee = require('hyperbee')
 
-const {
-  create,
-  confirm,
-  addWriter,
-  replicateAndSync
-} = require('./helpers')
+const { create, confirm, addWriter, replicateAndSync } = require('./helpers')
 
 const beeOpts = { extension: false, keyEncoding: 'binary', valueEncoding: 'binary' }
 
-test('check snapshot of snapshot after rebase', async t => {
+test('check snapshot of snapshot after rebase', async (t) => {
   const { bases } = await create(2, t)
   const [base1, base2] = bases
 
@@ -53,7 +48,7 @@ test('check snapshot of snapshot after rebase', async t => {
   await resnap2.close()
 })
 
-test('no inconsistent snapshot entries when truncated', async t => {
+test('no inconsistent snapshot entries when truncated', async (t) => {
   const { bases } = await create(3, t)
   const [base1, base2, base3] = bases
 
@@ -85,7 +80,7 @@ test('no inconsistent snapshot entries when truncated', async t => {
   await orig2.close()
 })
 
-test('no inconsistent snapshot-of-snapshot entries when truncated', async t => {
+test('no inconsistent snapshot-of-snapshot entries when truncated', async (t) => {
   const { bases } = await create(3, t)
   const [base1, base2, base3] = bases
 
@@ -110,8 +105,12 @@ test('no inconsistent snapshot-of-snapshot entries when truncated', async t => {
   t.alike(origValues1, ['1-1', '1-2']) // Sanity check
 
   let hasTruncated = false
-  base2.view.on('truncate', function () { hasTruncated = true })
-  base1.view.on('truncate', function () { hasTruncated = true })
+  base2.view.on('truncate', function () {
+    hasTruncated = true
+  })
+  base1.view.on('truncate', function () {
+    hasTruncated = true
+  })
   await confirm(bases)
   t.is(hasTruncated, true) // Sanity check
 
@@ -128,10 +127,12 @@ test('no inconsistent snapshot-of-snapshot entries when truncated', async t => {
   await snap2.close()
 })
 
-test('no inconsistent entries when using snapshot core in bee (bee snapshot)', async t => {
+test('no inconsistent entries when using snapshot core in bee (bee snapshot)', async (t) => {
   // Setup
   const { bases } = await create(3, t, {
-    apply (...args) { return applyForBee(t, ...args) },
+    apply(...args) {
+      return applyForBee(t, ...args)
+    },
     open: openForBee
   })
 
@@ -163,8 +164,12 @@ test('no inconsistent entries when using snapshot core in bee (bee snapshot)', a
   t.is(bee2.version, 4) // Sanity check
 
   let hasTruncated = false
-  base2.view.core.on('truncate', function () { hasTruncated = true })
-  base1.view.core.on('truncate', function () { hasTruncated = true })
+  base2.view.core.on('truncate', function () {
+    hasTruncated = true
+  })
+  base1.view.core.on('truncate', function () {
+    hasTruncated = true
+  })
 
   const keysPreMerge = await getBeeKeys(bee1)
   const keys2PreMerge = await getBeeKeys(bee2)
@@ -188,7 +193,7 @@ test('no inconsistent entries when using snapshot core in bee (bee snapshot)', a
   await bee2.close()
 })
 
-test('check cloning detached snapshot', async t => {
+test('check cloning detached snapshot', async (t) => {
   const { bases } = await create(4, t)
   const [base1, base2, base3, base4] = bases
 
@@ -222,7 +227,7 @@ test('check cloning detached snapshot', async t => {
   await orig.close()
 })
 
-async function applyForBee (t, batch, view, base) {
+async function applyForBee(t, batch, view, base) {
   for (const { value } of batch) {
     if (value === null) continue
     if (value.add) {
@@ -238,13 +243,13 @@ async function applyForBee (t, batch, view, base) {
   }
 }
 
-function openForBee (linStore) {
+function openForBee(linStore) {
   const core = linStore.get('simple-bee', { valueEncoding: 'binary' })
   const view = new Hyperbee(core, beeOpts)
   return view
 }
 
-async function getBeeKeys (bee) {
+async function getBeeKeys(bee) {
   const res = []
   for await (const entry of bee.createReadStream()) res.push(entry.key.toString())
   return res

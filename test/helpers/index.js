@@ -6,7 +6,9 @@ const b4a = require('b4a')
 
 const Autobase = require('../..')
 const argv = typeof global.Bare !== 'undefined' ? global.Bare.argv : process.argv
-const encryptionKey = argv.includes('--encrypt-all') ? b4a.alloc(32).fill('autobase-encryption-test') : undefined
+const encryptionKey = argv.includes('--encrypt-all')
+  ? b4a.alloc(32).fill('autobase-encryption-test')
+  : undefined
 
 module.exports = {
   createStores,
@@ -24,7 +26,7 @@ module.exports = {
   ...helpers
 }
 
-async function createStores (n, t, opts = {}) {
+async function createStores(n, t, opts = {}) {
   const storage = opts.storage || (() => tmpDir(t))
   const offset = opts.offset || 0
 
@@ -33,15 +35,15 @@ async function createStores (n, t, opts = {}) {
     const primaryKey = Buffer.alloc(32, i)
     const globalCache = opts.globalCache || null
     const dir = await storage()
-    stores.push(new Corestore(dir, { primaryKey, encryptionKey, globalCache }))
+    stores.push(new Corestore(dir, { primaryKey, encryptionKey, globalCache, unsafe: true }))
   }
 
-  t.teardown(() => Promise.all(stores.map(s => s.close())), { order: 2 })
+  t.teardown(() => Promise.all(stores.map((s) => s.close())), { order: 2 })
 
   return stores
 }
 
-async function create (n, t, opts = {}) {
+async function create(n, t, opts = {}) {
   const stores = await createStores(n, t, opts)
   const bases = [createBase(stores[0], null, t, opts)]
   await bases[0].ready()
@@ -62,7 +64,7 @@ async function create (n, t, opts = {}) {
   }
 }
 
-function createBase (store, key, t, opts = {}) {
+function createBase(store, key, t, opts = {}) {
   const moreOpts = {
     apply,
     open,
@@ -81,30 +83,33 @@ function createBase (store, key, t, opts = {}) {
     base.maxSupportedVersion = opts.maxSupportedVersion
   }
 
-  t.teardown(async () => {
-    return base.close()
-    // const view = new Promise(resolve => {
-    //   setImmediate(() => base._viewStore.close().then(resolve, resolve))
-    // })
+  t.teardown(
+    async () => {
+      return base.close()
+      // const view = new Promise(resolve => {
+      //   setImmediate(() => base._viewStore.close().then(resolve, resolve))
+      // })
 
-    // await Promise.all([
-    //   view,
-    //   base.close()
-    // ])
-  }, { order: 1 })
+      // await Promise.all([
+      //   view,
+      //   base.close()
+      // ])
+    },
+    { order: 1 }
+  )
 
   return base
 }
 
-function open (store) {
+function open(store) {
   return store.get('view', { valueEncoding: 'json' })
 }
 
-async function addWriter (base, add, indexer = true) {
+async function addWriter(base, add, indexer = true) {
   return base.append({ add: add.local.key.toString('hex'), indexer })
 }
 
-function printIndexerTip (tip, indexers) {
+function printIndexerTip(tip, indexers) {
   let string = '```mermaid\n'
   string += 'graph TD;\n'
 
@@ -150,7 +155,7 @@ function printIndexerTip (tip, indexers) {
   return string
 }
 
-function printTip (tip, indexers) {
+function printTip(tip, indexers) {
   let string = '```mermaid\n'
   string += 'graph TD;\n'
 
@@ -183,24 +188,24 @@ function printTip (tip, indexers) {
   string += '```'
   return string
 
-  function labelNonNull (label, node) {
+  function labelNonNull(label, node) {
     return label + (node.value !== null ? '*' : '')
   }
 }
 
-async function addWriterAndSync (base, add, indexer = true, bases = [base, add]) {
+async function addWriterAndSync(base, add, indexer = true, bases = [base, add]) {
   await addWriter(base, add, indexer)
   await helpers.replicateAndSync(bases)
   await base.ack()
   await helpers.replicateAndSync(bases)
 }
 
-async function confirm (bases, options = {}) {
+async function confirm(bases, options = {}) {
   await helpers.replicateAndSync(bases, options)
 
   for (let i = 0; i < 2; i++) {
-    const writers = bases.filter(b => !!b.localWriter)
-    const maj = options.majority || (Math.floor(writers.length / 2) + 1)
+    const writers = bases.filter((b) => !!b.localWriter)
+    const maj = options.majority || Math.floor(writers.length / 2) + 1
     for (let j = 0; j < maj; j++) {
       if (!writers[j].ackable) continue
 
@@ -212,7 +217,7 @@ async function confirm (bases, options = {}) {
   await helpers.replicateAndSync(bases, options)
 }
 
-async function compare (a, b, full = false) {
+async function compare(a, b, full = false) {
   const alen = full ? a.view.length : a.view.signedLength
   const blen = full ? b.view.length : b.view.signedLength
 
@@ -226,7 +231,7 @@ async function compare (a, b, full = false) {
   }
 }
 
-async function apply (batch, view, base) {
+async function apply(batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
       const key = Buffer.from(value.add, 'hex')
@@ -238,7 +243,7 @@ async function apply (batch, view, base) {
   }
 }
 
-async function compareViews (bases, t) {
+async function compareViews(bases, t) {
   const missing = bases.slice()
 
   const a = missing.shift()

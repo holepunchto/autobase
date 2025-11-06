@@ -9,7 +9,7 @@ const {
   replicateAndSync
 } = require('./helpers')
 
-test('updates - simple', async t => {
+test('updates - simple', async (t) => {
   const { bases } = await create(1, t, { update })
   const [a] = bases
 
@@ -24,7 +24,7 @@ test('updates - simple', async t => {
   t.is(a.view.length, 2)
   t.is(a.view.signedLength, 2)
 
-  async function update (view, changes) {
+  async function update(view, changes) {
     const update = changes.get('view')
 
     // always appending one
@@ -33,7 +33,7 @@ test('updates - simple', async t => {
   }
 })
 
-test('updates - truncate', async t => {
+test('updates - truncate', async (t) => {
   const { bases } = await create(2, t, { update })
   const [a, b] = bases
 
@@ -53,7 +53,7 @@ test('updates - truncate', async t => {
 
   t.is(truncations, 1)
 
-  async function update (view, changes) {
+  async function update(view, changes) {
     const update = changes.get('view')
     if (update.from === update.shared) return
 
@@ -65,7 +65,7 @@ test('updates - truncate', async t => {
   }
 })
 
-test('updates - fast-forward', async t => {
+test('updates - fast-forward', async (t) => {
   let updates = 0
 
   const stores = await createStores(2, t)
@@ -89,7 +89,7 @@ test('updates - fast-forward', async t => {
   t.ok(sparse > 0)
   t.is(updates, 1)
 
-  async function update (view, changes) {
+  async function update(view, changes) {
     const update = changes.get('view')
     if (update.to !== 1000) return
 
@@ -100,7 +100,7 @@ test('updates - fast-forward', async t => {
   }
 })
 
-test('updates - fast-forward with truncation', async t => {
+test('updates - fast-forward with truncation', async (t) => {
   let truncations = 0
 
   const stores = await createStores(4, t)
@@ -150,7 +150,7 @@ test('updates - fast-forward with truncation', async t => {
   t.ok(sparse > 0)
   t.is(truncations, 1)
 
-  async function update (view, changes) {
+  async function update(view, changes) {
     const update = changes.get('view')
     if (update.to !== 1000) return
 
@@ -162,7 +162,7 @@ test('updates - fast-forward with truncation', async t => {
   }
 })
 
-test('updates - initial fast forward', async t => {
+test('updates - initial fast forward', async (t) => {
   const stores = await createStores(3, t)
   const a = createBase(stores[0], null, t, { fastForward: true })
   await a.ready()
@@ -203,7 +203,7 @@ test('updates - initial fast forward', async t => {
   t.is(c.linearizer.indexers.length, 2)
   t.ok(sparse > 0)
 
-  async function update (view, changes) {
+  async function update(view, changes) {
     if (updated) return
     updated = true
 
@@ -216,10 +216,10 @@ test('updates - initial fast forward', async t => {
   }
 })
 
-async function isSparse (core) {
+async function isSparse(core) {
   let n = 0
   for (let i = 0; i < core.length; i++) {
-    if (!await core.has(i)) n++
+    if (!(await core.has(i))) n++
   }
   return n
 }

@@ -149,7 +149,7 @@ const encoding6 = {
         return decoded
       }
       default:
-          throw new Error('Unsupported version')
+        throw new Error('Unsupported version')
     }
   }
 }
@@ -270,35 +270,70 @@ const encoding10 = {
   }
 }
 
-const encoding11 = external0.OplogMessageV0
+// @autobase/trace.system
+const encoding11_0 = c.array(c.uint)
+// @autobase/trace.encryption
+const encoding11_1 = encoding11_0
 
-const encoding12 = external0.OplogMessageV1
+// @autobase/trace
+const encoding11 = {
+  preencode(state, m) {
+    encoding11_0.preencode(state, m.system)
+    encoding11_1.preencode(state, m.encryption)
+    encoding11_2.preencode(state, m.user)
+  },
+  encode(state, m) {
+    encoding11_0.encode(state, m.system)
+    encoding11_1.encode(state, m.encryption)
+    encoding11_2.encode(state, m.user)
+  },
+  decode(state) {
+    const r0 = encoding11_0.decode(state)
+    const r1 = encoding11_1.decode(state)
+    const r2 = encoding11_2.decode(state)
+
+    return {
+      system: r0,
+      encryption: r1,
+      user: r2
+    }
+  }
+}
+
+const encoding12 = external0.OplogMessageV0
+
+const encoding13 = external0.OplogMessageV1
 
 // @autobase/oplog-message-v2.checkpoint
-const encoding13_1 = c.frame(encoding8)
+const encoding14_1 = c.frame(encoding8)
 // @autobase/oplog-message-v2.digest
-const encoding13_2 = c.frame(encoding9)
+const encoding14_2 = c.frame(encoding9)
+// @autobase/oplog-message-v2.trace
+const encoding14_4 = c.frame(encoding11)
 
 // @autobase/oplog-message-v2
-const encoding13 = {
+const encoding14 = {
   preencode(state, m) {
     encoding10.preencode(state, m.node)
-    state.end++ // max flag is 4 so always one byte
+    state.end++ // max flag is 8 so always one byte
 
-    if (m.checkpoint) encoding13_1.preencode(state, m.checkpoint)
-    if (m.digest) encoding13_2.preencode(state, m.digest)
+    if (m.checkpoint) encoding14_1.preencode(state, m.checkpoint)
+    if (m.digest) encoding14_2.preencode(state, m.digest)
+    if (m.trace) encoding14_4.preencode(state, m.trace)
   },
   encode(state, m) {
     const flags =
       (m.checkpoint ? 1 : 0) |
       (m.digest ? 2 : 0) |
-      (m.optimistic ? 4 : 0)
+      (m.optimistic ? 4 : 0) |
+      (m.trace ? 8 : 0)
 
     encoding10.encode(state, m.node)
     c.uint.encode(state, flags)
 
-    if (m.checkpoint) encoding13_1.encode(state, m.checkpoint)
-    if (m.digest) encoding13_2.encode(state, m.digest)
+    if (m.checkpoint) encoding14_1.encode(state, m.checkpoint)
+    if (m.digest) encoding14_2.encode(state, m.digest)
+    if (m.trace) encoding14_4.encode(state, m.trace)
   },
   decode(state, version) {
     if (version === undefined) version = c.uint.decode(state)
@@ -308,26 +343,27 @@ const encoding13 = {
     return {
       version,
       node: r0,
-      checkpoint: (flags & 1) !== 0 ? encoding13_1.decode(state) : null,
-      digest: (flags & 2) !== 0 ? encoding13_2.decode(state) : null,
-      optimistic: (flags & 4) !== 0
+      checkpoint: (flags & 1) !== 0 ? encoding14_1.decode(state) : null,
+      digest: (flags & 2) !== 0 ? encoding14_2.decode(state) : null,
+      optimistic: (flags & 4) !== 0,
+      trace: (flags & 8) !== 0 ? encoding14_4.decode(state) : null
     }
   }
 }
 
 // @autobase/oplog-message
-const encoding14 = {
+const encoding15 = {
   preencode(state, m) {
     c.uint.preencode(state, m.version)
     switch (m.version) {
       case 0:
-        encoding11.preencode(state, m)
-        break
-      case 1:
         encoding12.preencode(state, m)
         break
-      case 2:
+      case 1:
         encoding13.preencode(state, m)
+        break
+      case 2:
+        encoding14.preencode(state, m)
         break
       default:
         throw new Error('Unsupported version')
@@ -337,13 +373,13 @@ const encoding14 = {
     c.uint.encode(state, m.version)
     switch (m.version) {
       case 0:
-        encoding11.encode(state, m)
-        break
-      case 1:
         encoding12.encode(state, m)
         break
-      case 2:
+      case 1:
         encoding13.encode(state, m)
+        break
+      case 2:
+        encoding14.encode(state, m)
         break
       default:
         throw new Error('Unsupported version')
@@ -353,38 +389,38 @@ const encoding14 = {
     const version = c.uint.decode(state)
     switch (version) {
       case 0: {
-        const decoded = encoding11.decode(state, version)
-        return decoded
-      }
-      case 1: {
         const decoded = encoding12.decode(state, version)
         return decoded
       }
-      case 2: {
+      case 1: {
         const decoded = encoding13.decode(state, version)
         return decoded
       }
+      case 2: {
+        const decoded = encoding14.decode(state, version)
+        return decoded
+      }
       default:
-          throw new Error('Unsupported version')
+        throw new Error('Unsupported version')
     }
   }
 }
 
 // @autobase/info-v1.pendingIndexers
-const encoding15_1 = c.array(c.fixed32)
+const encoding16_1 = c.array(c.fixed32)
 
 // @autobase/info-v1
-const encoding15 = {
+const encoding16 = {
   preencode(state, m) {
     c.uint.preencode(state, m.members)
-    encoding15_1.preencode(state, m.pendingIndexers)
+    encoding16_1.preencode(state, m.pendingIndexers)
     encoding1.preencode(state, m.indexers)
     encoding1.preencode(state, m.heads)
     encoding1.preencode(state, m.views)
   },
   encode(state, m) {
     c.uint.encode(state, m.members)
-    encoding15_1.encode(state, m.pendingIndexers)
+    encoding16_1.encode(state, m.pendingIndexers)
     encoding1.encode(state, m.indexers)
     encoding1.encode(state, m.heads)
     encoding1.encode(state, m.views)
@@ -392,7 +428,7 @@ const encoding15 = {
   decode(state, version) {
     if (version === undefined) version = c.uint.decode(state)
     const r0 = c.uint.decode(state)
-    const r1 = encoding15_1.decode(state)
+    const r1 = encoding16_1.decode(state)
     const r2 = encoding1.decode(state)
     const r3 = encoding1.decode(state)
     const r4 = encoding1.decode(state)
@@ -409,13 +445,13 @@ const encoding15 = {
 }
 
 // @autobase/info-v2.pendingIndexers
-const encoding16_1 = encoding15_1
+const encoding17_1 = encoding16_1
 
 // @autobase/info-v2
-const encoding16 = {
+const encoding17 = {
   preencode(state, m) {
     c.uint.preencode(state, m.members)
-    encoding16_1.preencode(state, m.pendingIndexers)
+    encoding17_1.preencode(state, m.pendingIndexers)
     encoding1.preencode(state, m.indexers)
     encoding1.preencode(state, m.heads)
     encoding1.preencode(state, m.views)
@@ -428,7 +464,7 @@ const encoding16 = {
     const flags = m.entropy ? 1 : 0
 
     c.uint.encode(state, m.members)
-    encoding16_1.encode(state, m.pendingIndexers)
+    encoding17_1.encode(state, m.pendingIndexers)
     encoding1.encode(state, m.indexers)
     encoding1.encode(state, m.heads)
     encoding1.encode(state, m.views)
@@ -440,7 +476,7 @@ const encoding16 = {
   decode(state, version) {
     if (version === undefined) version = c.uint.decode(state)
     const r0 = c.uint.decode(state)
-    const r1 = encoding16_1.decode(state)
+    const r1 = encoding17_1.decode(state)
     const r2 = encoding1.decode(state)
     const r3 = encoding1.decode(state)
     const r4 = encoding1.decode(state)
@@ -461,16 +497,16 @@ const encoding16 = {
 }
 
 // @autobase/info
-const encoding17 = {
+const encoding18 = {
   preencode(state, m) {
     c.uint.preencode(state, m.version)
     switch (m.version) {
       case 0:
       case 1:
-        encoding15.preencode(state, m)
+        encoding16.preencode(state, m)
         break
       case 2:
-        encoding16.preencode(state, m)
+        encoding17.preencode(state, m)
         break
       default:
         throw new Error('Unsupported version')
@@ -481,10 +517,10 @@ const encoding17 = {
     switch (m.version) {
       case 0:
       case 1:
-        encoding15.encode(state, m)
+        encoding16.encode(state, m)
         break
       case 2:
-        encoding16.encode(state, m)
+        encoding17.encode(state, m)
         break
       default:
         throw new Error('Unsupported version')
@@ -495,22 +531,22 @@ const encoding17 = {
     switch (version) {
       case 0:
       case 1: {
-        const decoded = encoding15.decode(state, version)
+        const decoded = encoding16.decode(state, version)
         const map = external0.infoLegacyMap
         return map(decoded)
       }
       case 2: {
-        const decoded = encoding16.decode(state, version)
+        const decoded = encoding17.decode(state, version)
         return decoded
       }
       default:
-          throw new Error('Unsupported version')
+        throw new Error('Unsupported version')
     }
   }
 }
 
 // @autobase/member
-const encoding18 = {
+const encoding19 = {
   preencode(state, m) {
     state.end++ // max flag is 2 so always one byte
     c.uint.preencode(state, m.length)
@@ -534,10 +570,10 @@ const encoding18 = {
   }
 }
 
-const encoding19 = external0.LinearizerKey
+const encoding20 = external0.LinearizerKey
 
 // @autobase/linearizer-update
-const encoding20 = {
+const encoding21 = {
   preencode(state, m) {
     c.fixed32.preencode(state, m.key)
     c.uint.preencode(state, m.length)
@@ -572,7 +608,7 @@ const encoding20 = {
 }
 
 // @autobase/encryption-descriptor
-const encoding21 = {
+const encoding22 = {
   preencode(state, m) {
     c.uint.preencode(state, m.type)
     c.buffer.preencode(state, m.payload)
@@ -593,7 +629,7 @@ const encoding21 = {
 }
 
 // @autobase/manifest-data
-const encoding22 = {
+const encoding23 = {
   preencode(state, m) {
     c.uint.preencode(state, m.version)
     state.end++ // max flag is 2 so always one byte
@@ -623,6 +659,33 @@ const encoding22 = {
     }
   }
 }
+
+// @autobase/user-view-trace.blocks
+const encoding24_1 = encoding11_0
+
+// @autobase/user-view-trace
+const encoding24 = {
+  preencode(state, m) {
+    c.uint.preencode(state, m.view)
+    encoding24_1.preencode(state, m.blocks)
+  },
+  encode(state, m) {
+    c.uint.encode(state, m.view)
+    encoding24_1.encode(state, m.blocks)
+  },
+  decode(state) {
+    const r0 = c.uint.decode(state)
+    const r1 = encoding24_1.decode(state)
+
+    return {
+      view: r0,
+      blocks: r1
+    }
+  }
+}
+
+// @autobase/trace.user, deferred due to recusive use
+const encoding11_2 = c.array(encoding24)
 
 function setVersion(v) {
   version = v
@@ -669,30 +732,34 @@ function getEncoding(name) {
       return encoding9
     case '@autobase/node':
       return encoding10
-    case '@autobase/oplog-message-v0':
+    case '@autobase/trace':
       return encoding11
-    case '@autobase/oplog-message-v1':
+    case '@autobase/oplog-message-v0':
       return encoding12
-    case '@autobase/oplog-message-v2':
+    case '@autobase/oplog-message-v1':
       return encoding13
-    case '@autobase/oplog-message':
+    case '@autobase/oplog-message-v2':
       return encoding14
-    case '@autobase/info-v1':
+    case '@autobase/oplog-message':
       return encoding15
-    case '@autobase/info-v2':
+    case '@autobase/info-v1':
       return encoding16
-    case '@autobase/info':
+    case '@autobase/info-v2':
       return encoding17
-    case '@autobase/member':
+    case '@autobase/info':
       return encoding18
-    case '@autobase/linearizer-key':
+    case '@autobase/member':
       return encoding19
-    case '@autobase/linearizer-update':
+    case '@autobase/linearizer-key':
       return encoding20
-    case '@autobase/encryption-descriptor':
+    case '@autobase/linearizer-update':
       return encoding21
-    case '@autobase/manifest-data':
+    case '@autobase/encryption-descriptor':
       return encoding22
+    case '@autobase/manifest-data':
+      return encoding23
+    case '@autobase/user-view-trace':
+      return encoding24
     default:
       throw new Error('Encoder not found ' + name)
   }

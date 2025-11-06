@@ -211,6 +211,35 @@
       ]
     },
     {
+      "name": "trace",
+      "namespace": "autobase",
+      "compact": false,
+      "flagsPosition": -1,
+      "fields": [
+        {
+          "name": "system",
+          "required": true,
+          "array": true,
+          "type": "uint",
+          "version": 1
+        },
+        {
+          "name": "encryption",
+          "required": true,
+          "array": true,
+          "type": "uint",
+          "version": 1
+        },
+        {
+          "name": "user",
+          "required": true,
+          "array": true,
+          "type": "@autobase/user-view-trace",
+          "version": 1
+        }
+      ]
+    },
+    {
       "name": "oplog-message-v0",
       "namespace": "autobase",
       "external": "OplogMessageV0"
@@ -248,6 +277,12 @@
           "name": "optimistic",
           "required": false,
           "type": "bool",
+          "version": 1
+        },
+        {
+          "name": "trace",
+          "required": false,
+          "type": "@autobase/trace",
           "version": 1
         }
       ]
@@ -490,6 +525,27 @@
           "name": "namespace",
           "required": false,
           "type": "fixed32",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "name": "user-view-trace",
+      "namespace": "autobase",
+      "compact": true,
+      "flagsPosition": -1,
+      "fields": [
+        {
+          "name": "view",
+          "required": true,
+          "type": "uint",
+          "version": 1
+        },
+        {
+          "name": "blocks",
+          "required": true,
+          "array": true,
+          "type": "uint",
           "version": 1
         }
       ]

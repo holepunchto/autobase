@@ -14,7 +14,7 @@ const {
   confirm
 } = require('./helpers')
 
-test('apply - simple', async t => {
+test('apply - simple', async (t) => {
   const { bases } = await create(1, t, { apply })
   const [a] = bases
 
@@ -29,14 +29,14 @@ test('apply - simple', async t => {
   t.is(a.view.length, 2)
   t.is(a.view.signedLength, 2)
 
-  async function apply (nodes, view, base) {
+  async function apply(nodes, view, base) {
     for (const node of nodes) {
       await view.append(node.value)
     }
   }
 })
 
-test('apply - add writer', async t => {
+test('apply - add writer', async (t) => {
   const { bases } = await create(2, t, { apply })
   const [a, b] = bases
 
@@ -66,7 +66,7 @@ test('apply - add writer', async t => {
   t.is(a.view.signedLength, 2)
   t.is(b.view.signedLength, 2)
 
-  async function apply (nodes, view, base) {
+  async function apply(nodes, view, base) {
     for (const node of nodes) {
       if (node.value.add) {
         const { add, indexer } = node.value
@@ -79,7 +79,7 @@ test('apply - add writer', async t => {
   }
 })
 
-test('apply - multiple appends', async t => {
+test('apply - multiple appends', async (t) => {
   const { bases } = await create(2, t, { apply })
   const [a, b] = bases
 
@@ -109,7 +109,7 @@ test('apply - multiple appends', async t => {
   t.is(a.view.signedLength, 6)
   t.is(b.view.signedLength, 6)
 
-  async function apply (nodes, view, base) {
+  async function apply(nodes, view, base) {
     for (const node of nodes) {
       if (node.value.add) {
         const { add, indexer } = node.value
@@ -124,7 +124,7 @@ test('apply - multiple appends', async t => {
   }
 })
 
-test('apply - simultaneous appends', async t => {
+test('apply - simultaneous appends', async (t) => {
   const { bases } = await create(2, t, { apply })
   const [a, b] = bases
 
@@ -154,7 +154,7 @@ test('apply - simultaneous appends', async t => {
   t.is(a.view.signedLength, 20)
   t.is(b.view.signedLength, 20)
 
-  async function apply (nodes, view, base) {
+  async function apply(nodes, view, base) {
     for (const node of nodes) {
       if (node.value.add) {
         const { add, indexer } = node.value
@@ -171,7 +171,7 @@ test('apply - simultaneous appends', async t => {
   }
 })
 
-test('apply - add writer and append', async t => {
+test('apply - add writer and append', async (t) => {
   const { bases } = await create(2, t, { apply })
   const [a, b] = bases
 
@@ -205,7 +205,7 @@ test('apply - add writer and append', async t => {
   t.is(a.view.signedLength, 3)
   t.is(b.view.signedLength, 3)
 
-  async function apply (nodes, view, base) {
+  async function apply(nodes, view, base) {
     for (const node of nodes) {
       if (node.value.add) {
         const { add, indexer } = node.value
@@ -217,7 +217,7 @@ test('apply - add writer and append', async t => {
   }
 })
 
-test('apply - simultaneous add writer and append', async t => {
+test('apply - simultaneous add writer and append', async (t) => {
   const { bases } = await create(2, t, { apply })
   const [a, b] = bases
 
@@ -251,7 +251,7 @@ test('apply - simultaneous add writer and append', async t => {
   t.is(a.view.signedLength, 3)
   t.is(b.view.signedLength, 3)
 
-  async function apply (nodes, view, base) {
+  async function apply(nodes, view, base) {
     for (const node of nodes) {
       const appends = []
 
@@ -266,7 +266,7 @@ test('apply - simultaneous add writer and append', async t => {
   }
 })
 
-test('apply - simultaneous append over entire batch', async t => {
+test('apply - simultaneous append over entire batch', async (t) => {
   const { bases } = await create(3, t, { apply })
   const [a, b, c] = bases
 
@@ -299,12 +299,9 @@ test('apply - simultaneous append over entire batch', async t => {
   await replicateAndSync([a, b, c])
 
   t.is(c.view.signedLength, 20)
-  t.alike(
-    await c.view.treeHash(),
-    await a.view.treeHash()
-  )
+  t.alike(await c.view.treeHash(), await a.view.treeHash())
 
-  async function apply (nodes, view, base) {
+  async function apply(nodes, view, base) {
     const appends = []
     for (const node of nodes) {
       if (node.value.add) {
@@ -321,7 +318,7 @@ test('apply - simultaneous append over entire batch', async t => {
   }
 })
 
-test('apply - simultaneous append and add over entire batch', async t => {
+test('apply - simultaneous append and add over entire batch', async (t) => {
   const { bases } = await create(3, t, { apply })
   const [a, b, c] = bases
 
@@ -354,12 +351,9 @@ test('apply - simultaneous append and add over entire batch', async t => {
   await replicateAndSync([a, b, c])
 
   t.is(c.view.signedLength, 20)
-  t.alike(
-    await c.view.treeHash(),
-    await a.view.treeHash()
-  )
+  t.alike(await c.view.treeHash(), await a.view.treeHash())
 
-  async function apply (nodes, view, base) {
+  async function apply(nodes, view, base) {
     const appends = []
     for (const node of nodes) {
       if (node.value.add) {
@@ -377,7 +371,7 @@ test('apply - simultaneous append and add over entire batch', async t => {
 })
 
 // todo: this test can trigger an edge case when adding many writers concurrently
-test.skip('apply - simultaneous appends with large batch', async t => {
+test.skip('apply - simultaneous appends with large batch', async (t) => {
   const { bases } = await create(10, t, { apply })
   const [a, b] = bases
   const last = bases[bases.length - 1]
@@ -428,12 +422,9 @@ test.skip('apply - simultaneous appends with large batch', async t => {
   await replicateAndSync(bases)
 
   t.is(last.view.signedLength, 900)
-  t.alike(
-    await last.view.treeHash(),
-    await a.view.treeHash()
-  )
+  t.alike(await last.view.treeHash(), await a.view.treeHash())
 
-  async function apply (nodes, view, base) {
+  async function apply(nodes, view, base) {
     const appends = []
     for (const node of nodes) {
       if (node.value.add) {
@@ -450,7 +441,7 @@ test.skip('apply - simultaneous appends with large batch', async t => {
   }
 })
 
-test('apply - catch exception', async t => {
+test('apply - catch exception', async (t) => {
   t.plan(1)
 
   const { bases } = await create(1, t)
@@ -460,7 +451,7 @@ test('apply - catch exception', async t => {
 
   const b = createBase(store, a.local.key, t, { apply: applyThrow })
 
-  b.on('error', err => {
+  b.on('error', (err) => {
     t.pass(!!err)
   })
 
@@ -481,7 +472,7 @@ test('apply - catch exception', async t => {
 
   await a.append('trigger')
 
-  async function applyThrow (batch, view, base) {
+  async function applyThrow(batch, view, base) {
     for (const node of batch) {
       if (node.value.add) {
         await base.addWriter(b4a.from(node.value.add, 'hex'))
@@ -494,7 +485,7 @@ test('apply - catch exception', async t => {
   }
 })
 
-test('apply - uncaught exception', async t => {
+test('apply - uncaught exception', async (t) => {
   t.plan(3)
 
   const [store] = await createStores(1, t)
@@ -505,7 +496,7 @@ test('apply - uncaught exception', async t => {
   })
 
   const a = new Autobase(store.session(), null, {
-    async apply (nodes, view, base) {
+    async apply(nodes, view, base) {
       throw new Error('Synthetic')
     },
     encryptionKey,

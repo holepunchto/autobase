@@ -2,7 +2,7 @@
 
 runTests()
 
-async function runTests () {
+async function runTests() {
   const test = (await import('brittle')).default
 
   test.pause()
@@ -24,6 +24,7 @@ async function runTests () {
   await import('./suspend.js')
   await import('./timer.js')
   await import('./topolist.js')
+  await import('./trace.js')
   await import('./updates.js')
 
   test.resume()

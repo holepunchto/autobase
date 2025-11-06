@@ -1,12 +1,9 @@
 const test = require('brittle')
 const b4a = require('b4a')
 
-const {
-  create,
-  replicateAndSync
-} = require('./helpers')
+const { create, replicateAndSync } = require('./helpers')
 
-test('anchor - simple', async t => {
+test('anchor - simple', async (t) => {
   const { bases } = await create(1, t, { apply })
   const [a] = bases
 
@@ -25,7 +22,7 @@ test('anchor - simple', async t => {
   t.is(heads.length, 1)
   t.alike(anchor, heads[0])
 
-  async function apply (nodes, view, base) {
+  async function apply(nodes, view, base) {
     for (const node of nodes) {
       await view.append(node.value.data)
       if (node.value.anchor) {
@@ -35,7 +32,7 @@ test('anchor - simple', async t => {
   }
 })
 
-test('anchor - same anchor', async t => {
+test('anchor - same anchor', async (t) => {
   const { bases } = await create(2, t, { apply })
   const [a, b] = bases
 
@@ -58,7 +55,7 @@ test('anchor - same anchor', async t => {
   t.is(heads.length, 2)
   t.alike(existing, heads[1])
 
-  async function apply (nodes, view, base) {
+  async function apply(nodes, view, base) {
     for (const node of nodes) {
       if (node.value.add) {
         await base.addWriter(b4a.from(node.value.add, 'hex'), { indexer: node.value.indexer })

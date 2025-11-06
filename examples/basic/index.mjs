@@ -2,11 +2,11 @@ import Autobase from '../../index.js'
 import Corestore from 'corestore'
 import { replicateAndSync } from 'autobase-test-helpers'
 
-function open (store) {
+function open(store) {
   return store.get('view', { valueEncoding: 'json' })
 }
 
-async function apply (nodes, view, base) {
+async function apply(nodes, view, base) {
   for (const node of nodes) {
     if (node.value.add) {
       await base.addWriter(Buffer.from(node.value.add, 'hex'))
@@ -72,7 +72,7 @@ await list('B', b)
 // 0 add writer 3c059a578e217790630a5454d33f254bda36b96beb33e2d664cee8302ff7d329
 // 1 sup
 
-async function list (name, base) {
+async function list(name, base) {
   console.log('- list ' + name + ' -')
   for (let i = 0; i < base.view.length; i++) {
     const node = await base.view.get(i)
@@ -86,6 +86,8 @@ async function list (name, base) {
   console.log('')
 }
 
-function makeStore (seed) {
-  return new Corestore('./example-corestore-peer-' + seed, { primaryKey: Buffer.alloc(32).fill(seed) })
+function makeStore(seed) {
+  return new Corestore('./example-corestore-peer-' + seed, {
+    primaryKey: Buffer.alloc(32).fill(seed)
+  })
 }

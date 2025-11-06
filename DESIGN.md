@@ -47,10 +47,10 @@ This may be applied recursively to resolve more complex dags:
 ```
 a < b < c
 
-a0   c0 
+a0   c0
  | X |
 b0   a1
- | \ | 
+ | \ |
 c1   b1
  | /
 b2
@@ -62,7 +62,7 @@ May be linearised as:
 [a0, c0, a1, b0, b1, c1, b2]
 ```
 
-## Consistency 
+## Consistency
 
 While a deterministic linearisation may always be made, there is no guarantee of consistency between peers. For example, in the above DAG, writer `c` would have the linearised view of:
 
@@ -72,19 +72,20 @@ While a deterministic linearisation may always be made, there is no guarantee of
 
 It turns out, through counting the number of writers that reference each node, we are able to determine when consistency is guaranteed.
 
-We use the term __vote__ to denote a reference from a writer to a node. Like this, each node in the graph accumulates __votes__ from other writers (max 1 per writer), and these votes can be used as a metric to determine consistent ordering.  
+We use the term **vote** to denote a reference from a writer to a node. Like this, each node in the graph accumulates **votes** from other writers (max 1 per writer), and these votes can be used as a metric to determine consistent ordering.
 
 ### Quorums
 
-In order to express a condition, we define the concept of __quorums__ over nodes:
+In order to express a condition, we define the concept of **quorums** over nodes:
 
-- A node achieves a __quorum__ once it has been referenced by a majority of writers, or equivalently once it has a majority of votes. 
+- A node achieves a **quorum** once it has been referenced by a majority of writers, or equivalently once it has a majority of votes.
 
 We recursively define the degree of a quorum. A quroum increases in degree once the quorum has itself been referenced by a majority of writers (ie. a majority of writers are aware of a majority over a given node)
 
-For example, A 2nd degree quorum or __double quorum__ is achieved once it is deduced that a majority of writers are themselves aware of a majority over a given node.
+For example, A 2nd degree quorum or **double quorum** is achieved once it is deduced that a majority of writers are themselves aware of a majority over a given node.
 
 Consider the DAG:
+
 ```
        2' quorum
            |
@@ -124,9 +125,9 @@ The nodes `a0` and `c0` have both achieved quorums independently. Despite being 
 
 The conflict comes about because `c` is part of both quorums, and therefore cast contributed conflicting votes to either.
 
-In general, this condition will __always__ hold true:
+In general, this condition will **always** hold true:
 
-- Any two quorums __must__ have at least one writer in common
+- Any two quorums **must** have at least one writer in common
 
 We need a stronger condition for consistency. Let's consider higher quorums.
 
@@ -185,7 +186,7 @@ a1  c1
 
 In this case, if writers `b` & `c` continue cooperating they will be able to confirm `c1` and order the graph below.
 
-With `a1` writer `a` sees a double quroum over `a0`, with no competing quorums and therefore is able to lock in `a0`. 
+With `a1` writer `a` sees a double quroum over `a0`, with no competing quorums and therefore is able to lock in `a0`.
 
 `b` & `c` must anticipate this and always order `a0` before `b0`.
 

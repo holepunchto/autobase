@@ -8,11 +8,17 @@ const BroadcastEncryption = require('@holepunchto/broadcast-encryption')
 const Autobase = require('..')
 const { replicateAndSync, createStores, create } = require('./helpers')
 
-test('encryption - basic', async t => {
+test('encryption - basic', async (t) => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
 
-  const base = new Autobase(store, { apply, open, ackInterval: 0, ackThreshold: 0, encryptionKey: b4a.alloc(32).fill('secret') })
+  const base = new Autobase(store, {
+    apply,
+    open,
+    ackInterval: 0,
+    ackThreshold: 0,
+    encryptionKey: b4a.alloc(32).fill('secret')
+  })
   await base.ready()
 
   t.ok(base.encryptionKey)
@@ -42,11 +48,17 @@ test('encryption - basic', async t => {
   await base.close()
 })
 
-test('encryption - restart', async t => {
+test('encryption - restart', async (t) => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
 
-  const base = new Autobase(store, { apply, open, ackInterval: 0, ackThreshold: 0, encryptionKey: b4a.alloc(32).fill('secret') })
+  const base = new Autobase(store, {
+    apply,
+    open,
+    ackInterval: 0,
+    ackThreshold: 0,
+    encryptionKey: b4a.alloc(32).fill('secret')
+  })
   await base.ready()
 
   t.ok(base.encryptionKey)
@@ -79,10 +91,16 @@ test('encryption - restart', async t => {
   await base2.close()
 })
 
-test('encryption - expect encryption key', async t => {
+test('encryption - expect encryption key', async (t) => {
   const storage = await tmpDir(t)
   const store = new Corestore(storage)
-  const base = new Autobase(store, { apply, open, ackInterval: 0, ackThreshold: 0, encrypted: true })
+  const base = new Autobase(store, {
+    apply,
+    open,
+    ackInterval: 0,
+    ackThreshold: 0,
+    encrypted: true
+  })
 
   try {
     await base.ready()
@@ -97,12 +115,12 @@ test('encryption - expect encryption key', async t => {
   await closing
 })
 
-test('encryption - pass as promise', async t => {
+test('encryption - pass as promise', async (t) => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
 
   const key = b4a.alloc(32).fill('secret')
-  const encryptionKey = new Promise(resolve => setTimeout(resolve, 1000, key))
+  const encryptionKey = new Promise((resolve) => setTimeout(resolve, 1000, key))
 
   const base = new Autobase(store, { apply, open, ackInterval: 0, ackThreshold: 0, encryptionKey })
   await base.ready()
@@ -134,6 +152,7 @@ test('encryption - pass as promise', async t => {
   await base.close()
 })
 
+<<<<<<< HEAD
 test('encryption - rotate key', async t => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
@@ -409,11 +428,11 @@ test('encryption - rotate writer encryption', async t => {
   await b.close()
 })
 
-function open (store) {
+function open(store) {
   return store.get('view', { valueEncoding: 'json' })
 }
 
-async function apply (batch, view, base) {
+async function apply(batch, view, base) {
   for (const { value } of batch) {
     if (value.encryption) {
       const buffer = Buffer.from(value.encryption, 'hex')

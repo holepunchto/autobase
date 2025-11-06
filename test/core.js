@@ -2,14 +2,9 @@ const test = require('brittle')
 const tmpDir = require('test-tmp')
 const Hypercore = require('hypercore')
 
-const {
-  create,
-  addWriter,
-  confirm,
-  replicateAndSync
-} = require('./helpers')
+const { create, addWriter, confirm, replicateAndSync } = require('./helpers')
 
-test('core -  no new session if closed (hypercore compat)', async t => {
+test('core -  no new session if closed (hypercore compat)', async (t) => {
   const dir = await tmpDir(t)
   const { bases } = await create(1, t)
 
@@ -19,11 +14,7 @@ test('core -  no new session if closed (hypercore compat)', async t => {
   const linearizedSessionCore = base.view
   const snapshotSession = linearizedSessionCore.snapshot()
 
-  await Promise.all([
-    linearizedSessionCore.close(),
-    normalCore.close(),
-    snapshotSession.close()
-  ])
+  await Promise.all([linearizedSessionCore.close(), normalCore.close(), snapshotSession.close()])
 
   // LinearisedCore.session handles snapshots differently than hypercore.session,
   // so just testing that explicitly too
@@ -38,7 +29,7 @@ test('core -  no new session if closed (hypercore compat)', async t => {
   t.exception(() => snapshotSession.snapshot(), /SESSION_CLOSED/)
 })
 
-test('core - seek', async t => {
+test('core - seek', async (t) => {
   const { bases } = await create(1, t)
   const [base] = bases
 
@@ -65,10 +56,10 @@ test('core - seek', async t => {
   // t.alike(await base.view.seek(b1 - 10), null)
 })
 
-test('core - seek multi writer', async t => {
+test('core - seek multi writer', async (t) => {
   const { bases } = await create(2, t, {
     apply: scopedApply,
-    open: store => store.get('test', { valueEncoding: 'utf-8' })
+    open: (store) => store.get('test', { valueEncoding: 'utf-8' })
   })
 
   const [a, b] = bases
@@ -105,7 +96,7 @@ test('core - seek multi writer', async t => {
   }
 
   // byteLength tests are apply dependent
-  async function scopedApply (batch, view, base) {
+  async function scopedApply(batch, view, base) {
     for (const { value } of batch) {
       if (value === null) continue
       if (value.add) {
@@ -118,7 +109,7 @@ test('core - seek multi writer', async t => {
   }
 })
 
-test('core - userData', async t => {
+test('core - userData', async (t) => {
   const { bases } = await create(1, t)
   const [base] = bases
 
@@ -138,7 +129,7 @@ test('core - userData', async t => {
   t.alike(await session.getUserData('first'), Buffer.from('change'))
 })
 
-test('core - properties', async t => {
+test('core - properties', async (t) => {
   const { bases } = await create(1, t)
   const [base] = bases
 

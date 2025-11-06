@@ -12,7 +12,7 @@ const {
   eventFlush
 } = require('./helpers')
 
-test('autoack - simple', async t => {
+test('autoack - simple', async (t) => {
   t.plan(6)
 
   const { bases } = await create(2, t, {
@@ -33,7 +33,7 @@ test('autoack - simple', async t => {
   t.is(a.view.signedLength, 0)
   t.is(b.view.signedLength, 0)
 
-  await new Promise(resolve => setTimeout(resolve, 500))
+  await new Promise((resolve) => setTimeout(resolve, 500))
 
   t.not(a.local.length, 1)
   t.not(b.local.length, 1)
@@ -43,7 +43,7 @@ test('autoack - simple', async t => {
 })
 
 // TODO: unflake this test (skipping to avoid false positives on canary)
-test.skip('autoack - 5 writers', async t => {
+test.skip('autoack - 5 writers', async (t) => {
   t.plan(21)
 
   const ackInterval = 50
@@ -77,7 +77,7 @@ test.skip('autoack - 5 writers', async t => {
   await poll(() => bases.reduce((acc, b) => acc && b.view.signedLength === 1, true), ackInterval)
 
   // allow acks to settle
-  await new Promise(resolve => setTimeout(resolve, 10 * ackInterval))
+  await new Promise((resolve) => setTimeout(resolve, 10 * ackInterval))
 
   const alen = a.local.length
   const blen = b.local.length
@@ -85,7 +85,7 @@ test.skip('autoack - 5 writers', async t => {
   const dlen = d.local.length
   const elen = e.local.length
 
-  await new Promise(resolve => setTimeout(resolve, 10 * ackInterval))
+  await new Promise((resolve) => setTimeout(resolve, 10 * ackInterval))
 
   // check that acks stop
   t.is(a.local.length, alen)
@@ -108,7 +108,7 @@ test.skip('autoack - 5 writers', async t => {
 })
 
 // skipping cause flaking
-test.skip('autoack - concurrent', async t => {
+test.skip('autoack - concurrent', async (t) => {
   t.plan(10)
 
   const ackInterval = 100
@@ -129,9 +129,9 @@ test.skip('autoack - concurrent', async t => {
 
   await sync(bases)
 
-  await Promise.all(bases.map(n => message(n, 10)))
+  await Promise.all(bases.map((n) => message(n, 10)))
 
-  await new Promise(resolve => setTimeout(resolve, 40 * ackInterval))
+  await new Promise((resolve) => setTimeout(resolve, 40 * ackInterval))
 
   // TODO: autoack should ensure views are fully signed
 
@@ -147,7 +147,7 @@ test.skip('autoack - concurrent', async t => {
   const dlen = d.local.length
   const elen = e.local.length
 
-  await new Promise(resolve => setTimeout(resolve, 40 * ackInterval))
+  await new Promise((resolve) => setTimeout(resolve, 40 * ackInterval))
 
   t.is(a.local.length, alen)
   t.is(b.local.length, blen)
@@ -155,14 +155,14 @@ test.skip('autoack - concurrent', async t => {
   t.is(d.local.length, dlen)
   t.is(e.local.length, elen)
 
-  async function message (w, n) {
+  async function message(w, n) {
     for (let i = 0; i < n; i++) {
       await w.append(w.local.key.toString('hex').slice(0, 2) + n)
     }
   }
 })
 
-test.skip('autoack - threshold', async t => {
+test.skip('autoack - threshold', async (t) => {
   t.plan(2)
 
   const { bases } = await create(2, t, {
@@ -189,7 +189,7 @@ test.skip('autoack - threshold', async t => {
   t.ok(b.view.signedLength >= 4)
 })
 
-test.skip('autoack - threshold with interval', async t => {
+test.skip('autoack - threshold with interval', async (t) => {
   t.plan(3)
 
   const ackInterval = 800
@@ -210,7 +210,7 @@ test.skip('autoack - threshold with interval', async t => {
   b.append('b1')
   b.append('b2')
   await b.append('b3')
-  await new Promise(resolve => setTimeout(resolve, 1000)) // fast ack
+  await new Promise((resolve) => setTimeout(resolve, 1000)) // fast ack
   await sync([a, b])
   await eventFlush() // allow the bg threshold to react...
 
@@ -219,14 +219,14 @@ test.skip('autoack - threshold with interval', async t => {
   await b.append('b6')
   await b.append('b7')
   await sync([a, b])
-  await new Promise(resolve => setTimeout(resolve, 2000)) // fast ack
+  await new Promise((resolve) => setTimeout(resolve, 2000)) // fast ack
 
   t.is(a._ackTimer.interval, ackInterval)
   t.ok(a.view.signedLength >= 4)
   t.ok(b.view.signedLength >= 4)
 })
 
-test('autoack - no null acks', async t => {
+test('autoack - no null acks', async (t) => {
   t.plan(2)
 
   const { bases } = await create(2, t, {
@@ -252,7 +252,7 @@ test('autoack - no null acks', async t => {
   }, 1000)
 })
 
-test('autoack - value beneath null values', async t => {
+test('autoack - value beneath null values', async (t) => {
   t.plan(3)
 
   const { bases } = await create(2, t, {
@@ -274,7 +274,7 @@ test('autoack - value beneath null values', async t => {
 
   await sync([a, b])
 
-  await new Promise(resolve => setTimeout(resolve, 1000))
+  await new Promise((resolve) => setTimeout(resolve, 1000))
 
   t.not(a.local.length, alen) // a should ack
 
@@ -282,7 +282,7 @@ test('autoack - value beneath null values', async t => {
   t.is(b.view.length, a.view.length)
 })
 
-test('autoack - merge', async t => {
+test('autoack - merge', async (t) => {
   t.plan(2)
 
   const { bases } = await create(2, t, {
@@ -307,7 +307,7 @@ test('autoack - merge', async t => {
   t.ok(b.linearizer.shouldAck(b.localWriter))
 })
 
-test('autoack - merge when not head', async t => {
+test('autoack - merge when not head', async (t) => {
   t.plan(12)
 
   const { bases } = await create(3, t, {
@@ -350,7 +350,7 @@ test('autoack - merge when not head', async t => {
   t.ok(c.linearizer.shouldAck(c.localWriter))
 })
 
-test('autoack - more merges', async t => {
+test('autoack - more merges', async (t) => {
   t.plan(8)
 
   const { bases } = await create(3, t, {
@@ -390,7 +390,7 @@ test('autoack - more merges', async t => {
   t.ok(a.linearizer.shouldAck(getWriter(a, b.localWriter)))
 })
 
-test('autoack - pending writers', async t => {
+test('autoack - pending writers', async (t) => {
   t.plan(5)
 
   const { bases } = await create(3, t, {
@@ -407,7 +407,7 @@ test('autoack - pending writers', async t => {
 
   await eventFlush()
 
-  await new Promise(resolve => setTimeout(resolve, 500))
+  await new Promise((resolve) => setTimeout(resolve, 500))
 
   t.ok(b.local.length > 0)
   t.ok(c.local.length > 0)
@@ -417,7 +417,7 @@ test('autoack - pending writers', async t => {
   t.is(c.system.indexers.length, 3)
 })
 
-test.skip('autoack - pending migrates', async t => {
+test.skip('autoack - pending migrates', async (t) => {
   t.plan(3)
 
   const { bases } = await create(2, t, {
@@ -432,7 +432,7 @@ test.skip('autoack - pending migrates', async t => {
   await addWriter(a, b)
   await eventFlush()
 
-  await new Promise(resolve => setTimeout(resolve, 100))
+  await new Promise((resolve) => setTimeout(resolve, 100))
 
   await sync([a, b])
 
@@ -447,7 +447,7 @@ test.skip('autoack - pending migrates', async t => {
   t.ok(b._viewStore.shouldMigrate())
 })
 
-test('autoack - minority indexers who are both tails', async t => {
+test('autoack - minority indexers who are both tails', async (t) => {
   const { bases } = await create(4, t, {
     ackInterval: 10,
     ackThreshold: 0
@@ -485,7 +485,7 @@ test('autoack - minority indexers who are both tails', async t => {
   // now we keep c and d offline
   t.teardown(await replicate([a, b]))
 
-  await new Promise(resolve => setTimeout(resolve, 1000))
+  await new Promise((resolve) => setTimeout(resolve, 1000))
 
   const alen = a.local.length
   const blen = b.local.length
@@ -493,7 +493,7 @@ test('autoack - minority indexers who are both tails', async t => {
   const asize = a.linearizer.size
   const bsize = b.linearizer.size
 
-  await new Promise(resolve => setTimeout(resolve, 1000))
+  await new Promise((resolve) => setTimeout(resolve, 1000))
 
   t.absent(b.linearizer.shouldAck(b.localWriter))
 
@@ -504,7 +504,7 @@ test('autoack - minority indexers who are both tails', async t => {
   t.is(b.linearizer.size, bsize)
 })
 
-test('autoack - minority indexers with non-indexer tails', async t => {
+test('autoack - minority indexers with non-indexer tails', async (t) => {
   const { bases } = await create(5, t, {
     ackInterval: 10,
     ackThreshold: 0
@@ -544,7 +544,7 @@ test('autoack - minority indexers with non-indexer tails', async t => {
   // now we keep c and d offline
   t.teardown(await replicate([a, b, e]))
 
-  await new Promise(resolve => setTimeout(resolve, 1000))
+  await new Promise((resolve) => setTimeout(resolve, 1000))
 
   const alen = a.local.length
   const blen = b.local.length
@@ -552,7 +552,7 @@ test('autoack - minority indexers with non-indexer tails', async t => {
   const asize = a.linearizer.size
   const bsize = b.linearizer.size
 
-  await new Promise(resolve => setTimeout(resolve, 1000))
+  await new Promise((resolve) => setTimeout(resolve, 1000))
 
   t.absent(b.linearizer.shouldAck(b.localWriter))
 
@@ -563,26 +563,26 @@ test('autoack - minority indexers with non-indexer tails', async t => {
   t.is(b.linearizer.size, bsize)
 })
 
-function getWriter (base, writer) {
+function getWriter(base, writer) {
   return base.activeWriters.get(writer.core.key)
 }
 
-function poll (fn, interval) {
-  return new Promise(resolve => {
+function poll(fn, interval) {
+  return new Promise((resolve) => {
     const int = setInterval(check, interval)
 
-    function check () {
+    function check() {
       if (fn()) done()
     }
 
-    function done () {
+    function done() {
       clearInterval(int)
       resolve()
     }
   })
 }
 
-test('autoack - flush all pending indexers', async t => {
+test('autoack - flush all pending indexers', async (t) => {
   const { bases } = await create(7, t, { apply, ackInterval: 10, ackThreshold: 0 })
   const [a, b, c, d, e, f, g] = bases
 
@@ -607,7 +607,7 @@ test('autoack - flush all pending indexers', async t => {
   t.is(b.linearizer.indexers.length, 7)
   t.is(c.linearizer.indexers.length, 7)
 
-  async function apply (nodes, view, base) {
+  async function apply(nodes, view, base) {
     for (const node of nodes) {
       if (node.value.add) {
         for (const { key, indexer } of node.value.add) {
@@ -621,7 +621,7 @@ test('autoack - flush all pending indexers', async t => {
   }
 })
 
-async function getIndexedViewLength (base, index = -1) {
+async function getIndexedViewLength(base, index = -1) {
   const info = await base.getIndexedInfo()
   if (index === -1) index = info.views.length - 1
   return info.views[index] ? info.views[index].length : 0
