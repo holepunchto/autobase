@@ -696,7 +696,7 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this.closing) return
 
-    if (this.encryptionKey) await this.encryption.reload(this.encryptionCore)
+    if (this.encryptionKey) await this.encryption.load(this.encryptionCore)
 
     this._applyState = new ApplyState(this)
 

@@ -35,6 +35,7 @@
   },
   "homepage": "https://github.com/holepunchto/autobase#readme",
   "dependencies": {
+    "@holepunchto/broadcast-encryption": "^1.0.0",
     "b4a": "^1.6.1",
     "bare-events": "^2.2.0",
     "compact-encoding": "^2.16.0",
