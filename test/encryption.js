@@ -2,7 +2,8 @@ const test = require('brittle')
 const tmpDir = require('test-tmp')
 const Corestore = require('corestore')
 const b4a = require('b4a')
-const HypercoreEncryption = require('hypercore-encryption')
+const cenc = require('compact-encoding')
+const BroadcastEncryption = require('@holepunchto/broadcast-encryption')
 
 const Autobase = require('..')
 const { replicateAndSync, createStores, create } = require('./helpers')
@@ -158,7 +159,7 @@ test('encryption - rotate key', async t => {
   const recipients = await base.listMemberPublicKeys()
 
   await base.append({
-    encryption: HypercoreEncryption.broadcastEncrypt(entropy, recipients)
+    encryption: broadcastPayload(entropy, recipients).toString('hex')
   })
 
   await base.append('encryption key 2')
@@ -208,7 +209,7 @@ test('encryption - rotate key with replication', async t => {
   const recipients = await b.listMemberPublicKeys()
 
   await b.append({
-    encryption: HypercoreEncryption.broadcastEncrypt(entropy, recipients)
+    encryption: broadcastPayload(entropy, recipients).toString('hex')
   })
 
   await b.append('encryption key 2:0')
@@ -415,7 +416,9 @@ function open (store) {
 async function apply (batch, view, base) {
   for (const { value } of batch) {
     if (value.encryption) {
-      await base.updateEncryption(Buffer.from(value.encryption))
+      const buffer = Buffer.from(value.encryption, 'hex')
+      const payload = cenc.decode(BroadcastEncryption.PayloadEncoding, buffer)
+      await base.updateEncryption(payload)
       continue
     }
 
@@ -443,5 +446,13 @@ function remove (base, peer, index) {
 
 async function rotate (base, entropy) {
   const recipients = await base.listMemberPublicKeys()
-  return base.append({ encryption: HypercoreEncryption.broadcastEncrypt(entropy, recipients) })
+  const payload = broadcastPayload(entropy, recipients)
+
+  await base.append({ encryption: payload.toString('hex') })
+  return payload
+}
+
+function broadcastPayload (entropy, recipients) {
+  const payload = BroadcastEncryption.encrypt(entropy, recipients)
+  return cenc.encode(BroadcastEncryption.PayloadEncoding, payload)
 }
