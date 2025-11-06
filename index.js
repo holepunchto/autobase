@@ -1447,7 +1447,8 @@ module.exports = class Autobase extends ReadyResource {
         systemLength: length,
         indexersUpdated: false,
         fastForwarding: true,
-        recoveries: RECOVERIES
+        recoveries: RECOVERIES,
+        manifestVersion
       })
 
       const local = store.getLocal()
