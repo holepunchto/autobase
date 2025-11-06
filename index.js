@@ -297,7 +297,14 @@ module.exports = class Autobase extends ReadyResource {
     return this._viewStore.getManifestPublicKeys(members)
   }
 
+  getEncryptionBootstrap() {
+    if (!this._applyState) return this.encryption.getBootstrap()
+    return this._applyState.encryption.getBootstrap()
+  }
 
+  bootstrapEncryption(info) {
+    this.encryption.bootstrap(info)
+    this._applyState.encryption.bootstrap(info)
   }
 
   _isActiveIndexer() {

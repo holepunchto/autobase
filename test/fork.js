@@ -155,6 +155,10 @@ test('fork - migration after fork', async (t) => {
   await t.execution(b.append('post fork'))
 
   await addWriter(b, c, true)
+
+  const bootstrap = await b.getEncryptionBootstrap()
+  c.bootstrapEncryption(bootstrap)
+
   await confirm([a, b, c], { checkHash: false })
 
   t.is(b.system.indexers.length, 2)
