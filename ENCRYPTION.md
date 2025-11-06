@@ -59,6 +59,7 @@ If Keet could pass down a `decryptKey` hook to Autobase, then we would only need
 There is a potential issue with encryption key rotation and reordering of writer removals.
 
 Consider
+
 ```
 a1 - b1 - c1 ---- remove e --- rotate keys([a, b, c, d])
                \
@@ -76,6 +77,6 @@ Now there are two encrypted payloads, one for `[a, b, c, d]` and one for `[a, b,
 
 This issue arises because we need generate the payload up front, rather than in the apply function.
 
-Unfortunately, there is no way around this, so it is __important__ that the rotation mechanic is distinct from the writer removal process.
+Unfortunately, there is no way around this, so it is **important** that the rotation mechanic is distinct from the writer removal process.
 
 eg. 3 writers get removed, then in a separate step we rotate the key to exclude all 3 removed writers.

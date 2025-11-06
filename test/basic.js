@@ -2064,7 +2064,7 @@ test('basic - append to views out of order', async (t) => {
 test('basic - rotate local writer', async (t) => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
-  const base = new Autobase(store, null, {
+  const base = new Autobase(store, b4a.alloc(32), {
     open: openMultiple,
     apply: applyMultiple
   })

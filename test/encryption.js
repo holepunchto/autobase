@@ -152,8 +152,7 @@ test('encryption - pass as promise', async (t) => {
   await base.close()
 })
 
-<<<<<<< HEAD
-test('encryption - rotate key', async t => {
+test('encryption - rotate key', async (t) => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
 
@@ -192,7 +191,7 @@ test('encryption - rotate key', async t => {
   await base.close()
 })
 
-test('encryption - rotate key with replication', async t => {
+test('encryption - rotate key with replication', async (t) => {
   const stores = await createStores(2, t)
 
   const encryptionKey = b4a.alloc(32).fill('secret')
@@ -253,7 +252,7 @@ test('encryption - rotate key with replication', async t => {
   await b.close()
 })
 
-test('encryption - rotate key with writer removal', async t => {
+test('encryption - rotate key with writer removal', async (t) => {
   const encryptionKey = b4a.alloc(32).fill('secret')
 
   const { bases } = await create(3, t, {
@@ -296,7 +295,7 @@ test('encryption - rotate key with writer removal', async t => {
   await b.close()
 })
 
-test('encryption - fast forward', async t => {
+test('encryption - fast forward', async (t) => {
   const encryptionKey = b4a.alloc(32).fill('secret')
 
   const { bases } = await create(2, t, {
@@ -338,22 +337,24 @@ test('encryption - fast forward', async t => {
     await a.append('interval 5 - ' + i)
   }
 
-  const ff = t.execution(new Promise((resolve, reject) => {
-    b.on('fast-forward', pass)
-    const t = setTimeout(cleanup, 1000, false)
+  const ff = t.execution(
+    new Promise((resolve, reject) => {
+      b.on('fast-forward', pass)
+      const t = setTimeout(cleanup, 1000, false)
 
-    function pass () {
-      return cleanup(true)
-    }
+      function pass() {
+        return cleanup(true)
+      }
 
-    function cleanup (ffed) {
-      b.removeListener('fast-foward', pass)
-      clearTimeout(t)
+      function cleanup(ffed) {
+        b.removeListener('fast-foward', pass)
+        clearTimeout(t)
 
-      if (ffed) resolve()
-      else reject(new Error('timeout'))
-    }
-  }))
+        if (ffed) resolve()
+        else reject(new Error('timeout'))
+      }
+    })
+  )
 
   await replicateAndSync([a, b])
   await ff
@@ -368,7 +369,7 @@ test('encryption - fast forward', async t => {
   await b.close()
 })
 
-test('encryption - rotate writer encryption', async t => {
+test('encryption - rotate writer encryption', async (t) => {
   const encryptionKey = b4a.alloc(32).fill('secret')
 
   const { bases } = await create(2, t, {
@@ -390,9 +391,11 @@ test('encryption - rotate writer encryption', async t => {
   const newLocal = b.store.get({
     manifest: {
       version: 2,
-      signers: [{
-        publicKey: b.local.keyPair.publicKey
-      }]
+      signers: [
+        {
+          publicKey: b.local.keyPair.publicKey
+        }
+      ]
     },
     keyPair: b.local.keyPair
   })
@@ -455,15 +458,15 @@ async function apply(batch, view, base) {
   }
 }
 
-function add (base, peer, indexer) {
+function add(base, peer, indexer) {
   return base.append({ add: { key: peer.local.key.toString('hex'), indexer } })
 }
 
-function remove (base, peer, index) {
+function remove(base, peer, index) {
   return base.append({ remove: { key: peer.local.key.toString('hex') } })
 }
 
-async function rotate (base, entropy) {
+async function rotate(base, entropy) {
   const recipients = await base.listMemberPublicKeys()
   const payload = broadcastPayload(entropy, recipients)
 
@@ -471,7 +474,7 @@ async function rotate (base, entropy) {
   return payload
 }
 
-function broadcastPayload (entropy, recipients) {
+function broadcastPayload(entropy, recipients) {
   const payload = BroadcastEncryption.encrypt(entropy, recipients)
   return cenc.encode(BroadcastEncryption.PayloadEncoding, payload)
 }

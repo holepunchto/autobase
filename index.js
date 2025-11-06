@@ -229,7 +229,7 @@ module.exports = class Autobase extends ReadyResource {
     return this.key
   }
 
-  get isEncrypted () {
+  get isEncrypted() {
     return !!this.encryptionKey
   }
 

@@ -76,7 +76,7 @@ const encoding5 = {
       (m.indexersUpdated ? 1 : 0) |
       (m.fastForwarding ? 2 : 0) |
       (m.recoveries ? 4 : 0) |
-      ((version >= 2 && m.manifestVersion) ? 8 : 0)
+      (version >= 2 && m.manifestVersion ? 8 : 0)
 
     c.fixed32.encode(state, m.key)
     c.uint.encode(state, m.systemLength)
@@ -98,7 +98,7 @@ const encoding5 = {
       indexersUpdated: (flags & 1) !== 0,
       fastForwarding: (flags & 2) !== 0,
       recoveries: (flags & 4) !== 0 ? c.uint.decode(state) : 0,
-      manifestVersion: (version >= 2 && (flags & 8) !== 0) ? c.uint.decode(state) : 0
+      manifestVersion: version >= 2 && (flags & 8) !== 0 ? c.uint.decode(state) : 0
     }
   }
 }
@@ -163,9 +163,7 @@ const encoding7 = {
     if (m.checkpoint) encoding2.preencode(state, m.checkpoint)
   },
   encode(state, m) {
-    const flags =
-      (m.checkpointer ? 1 : 0) |
-      (m.checkpoint ? 2 : 0)
+    const flags = (m.checkpointer ? 1 : 0) | (m.checkpoint ? 2 : 0)
 
     c.uint.encode(state, flags)
 
@@ -195,10 +193,7 @@ const encoding8 = {
     if (m.user) encoding8_2.preencode(state, m.user)
   },
   encode(state, m) {
-    const flags =
-      (m.system ? 1 : 0) |
-      (m.encryption ? 2 : 0) |
-      (m.user ? 4 : 0)
+    const flags = (m.system ? 1 : 0) | (m.encryption ? 2 : 0) | (m.user ? 4 : 0)
 
     c.uint.encode(state, flags)
 
@@ -226,9 +221,7 @@ const encoding9 = {
     if (m.key) c.fixed32.preencode(state, m.key)
   },
   encode(state, m) {
-    const flags =
-      (m.pointer ? 1 : 0) |
-      (m.key ? 2 : 0)
+    const flags = (m.pointer ? 1 : 0) | (m.key ? 2 : 0)
 
     c.uint.encode(state, flags)
 
@@ -323,10 +316,7 @@ const encoding14 = {
   },
   encode(state, m) {
     const flags =
-      (m.checkpoint ? 1 : 0) |
-      (m.digest ? 2 : 0) |
-      (m.optimistic ? 4 : 0) |
-      (m.trace ? 8 : 0)
+      (m.checkpoint ? 1 : 0) | (m.digest ? 2 : 0) | (m.optimistic ? 4 : 0) | (m.trace ? 8 : 0)
 
     encoding10.encode(state, m.node)
     c.uint.encode(state, flags)
@@ -552,9 +542,7 @@ const encoding19 = {
     c.uint.preencode(state, m.length)
   },
   encode(state, m) {
-    const flags =
-      (m.isIndexer ? 1 : 0) |
-      (m.isRemoved ? 2 : 0)
+    const flags = (m.isIndexer ? 1 : 0) | (m.isRemoved ? 2 : 0)
 
     c.uint.encode(state, flags)
     c.uint.encode(state, m.length)
@@ -638,9 +626,7 @@ const encoding23 = {
     if (m.namespace) c.fixed32.preencode(state, m.namespace)
   },
   encode(state, m) {
-    const flags =
-      (m.legacyBlocks ? 1 : 0) |
-      (m.namespace ? 2 : 0)
+    const flags = (m.legacyBlocks ? 1 : 0) | (m.namespace ? 2 : 0)
 
     c.uint.encode(state, m.version)
     c.uint.encode(state, flags)
