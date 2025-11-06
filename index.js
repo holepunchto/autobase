@@ -1493,6 +1493,12 @@ module.exports = class Autobase extends ReadyResource {
 
       const { views, systemView, encryptionView, manifestVersion } = this._applyState
 
+      // migrate encryption core first so we
+      const source = encryptionView.ref.getCore()
+      await source.ready()
+
+      const enc = await this._migrateView(indexerManifests, source, '_encryption', info.encryptionLength, manifestVersion, info.entropy, null, null)
+
       for (const view of views) {
         const v = this._applyState.getViewFromSystem(view, info)
         const indexedLength = v ? v.length : 0
@@ -1503,11 +1509,6 @@ module.exports = class Autobase extends ReadyResource {
 
         await this._migrateView(indexerManifests, source, view.name, indexedLength, manifestVersion, info.entropy, null, null)
       }
-
-      const source = encryptionView.ref.getCore()
-      await source.ready()
-
-      const enc = await this._migrateView(indexerManifests, source, '_encryption', info.encryptionLength, manifestVersion, info.entropy, null, null)
 
       const linked = [enc.core.key]
 
