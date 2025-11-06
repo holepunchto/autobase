@@ -30,7 +30,11 @@ const ApplyState = require('./lib/apply-state.js')
 const AppendBatch = require('./lib/append-batch.js')
 const { PublicApplyCalls } = require('./lib/apply-calls.js')
 const boot = require('./lib/boot.js')
-const { MAX_AUTOBASE_VERSION, BOOT_RECORD_VERSION } = require('./lib/caps.js')
+const {
+  MAX_AUTOBASE_VERSION,
+  BOOT_RECORD_VERSION,
+  ENCRYPTION_RECORD_VERSION
+} = require('./lib/caps.js')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 const INTERRUPT = new Error('Apply interrupted')
@@ -665,6 +669,23 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return boot
+  }
+
+  // called by the apply state for bootstrapping
+  async _getEncryptionRecord() {
+    await this._preopen
+
+    const pointer = await this.local.getUserData('autobase/encryption-record')
+
+    const encryption = pointer
+      ? c.decode(messages.EncryptionRecord, pointer)
+      : {
+          version: ENCRYPTION_RECORD_VERSION,
+          encryptionKey: this.encryptionKey,
+          bootstrap: null
+        }
+
+    return encryption
   }
 
   static async getBootRecord(store, key) {

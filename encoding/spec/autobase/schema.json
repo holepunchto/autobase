@@ -549,6 +549,46 @@
           "version": 1
         }
       ]
+    },
+    {
+      "name": "broadcast-encryption-key",
+      "namespace": "autobase",
+      "compact": false,
+      "flagsPosition": -1,
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "uint",
+          "version": 2
+        },
+        {
+          "name": "encryptionKey",
+          "required": true,
+          "type": "fixed32",
+          "version": 2
+        }
+      ]
+    },
+    {
+      "name": "encryption-record",
+      "namespace": "autobase",
+      "compact": false,
+      "flagsPosition": 0,
+      "fields": [
+        {
+          "name": "bootstrap",
+          "required": false,
+          "type": "@autobase/broadcast-encryption-key",
+          "version": 2
+        },
+        {
+          "name": "encryptionKey",
+          "required": false,
+          "type": "fixed32",
+          "version": 2
+        }
+      ]
     }
   ]
 }

@@ -670,6 +670,56 @@ const encoding24 = {
   }
 }
 
+// @autobase/broadcast-encryption-key
+const encoding25 = {
+  preencode(state, m) {
+    c.uint.preencode(state, m.id)
+    c.fixed32.preencode(state, m.encryptionKey)
+  },
+  encode(state, m) {
+    c.uint.encode(state, m.id)
+    c.fixed32.encode(state, m.encryptionKey)
+  },
+  decode(state) {
+    const r0 = c.uint.decode(state)
+    const r1 = c.fixed32.decode(state)
+
+    return {
+      id: r0,
+      encryptionKey: r1
+    }
+  }
+}
+
+// @autobase/encryption-record.bootstrap
+const encoding26_0 = c.frame(encoding25)
+
+// @autobase/encryption-record
+const encoding26 = {
+  preencode(state, m) {
+    state.end++ // max flag is 2 so always one byte
+
+    if (version >= 2 && m.bootstrap) encoding26_0.preencode(state, m.bootstrap)
+    if (version >= 2 && m.encryptionKey) c.fixed32.preencode(state, m.encryptionKey)
+  },
+  encode(state, m) {
+    const flags = (version >= 2 && m.bootstrap ? 1 : 0) | (version >= 2 && m.encryptionKey ? 2 : 0)
+
+    c.uint.encode(state, flags)
+
+    if (version >= 2 && m.bootstrap) encoding26_0.encode(state, m.bootstrap)
+    if (version >= 2 && m.encryptionKey) c.fixed32.encode(state, m.encryptionKey)
+  },
+  decode(state) {
+    const flags = c.uint.decode(state)
+
+    return {
+      bootstrap: version >= 2 && (flags & 1) !== 0 ? encoding26_0.decode(state) : null,
+      encryptionKey: version >= 2 && (flags & 2) !== 0 ? c.fixed32.decode(state) : null
+    }
+  }
+}
+
 // @autobase/trace.user, deferred due to recusive use
 const encoding11_2 = c.array(encoding24)
 
@@ -746,6 +796,10 @@ function getEncoding(name) {
       return encoding23
     case '@autobase/user-view-trace':
       return encoding24
+    case '@autobase/broadcast-encryption-key':
+      return encoding25
+    case '@autobase/encryption-record':
+      return encoding26
     default:
       throw new Error('Encoder not found ' + name)
   }

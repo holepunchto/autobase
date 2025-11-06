@@ -438,6 +438,7 @@ autobase.register({
   ]
 })
 
+// unused
 autobase.register({
   name: 'encryption-descriptor',
   fields: [
@@ -470,6 +471,43 @@ autobase.register({
     },
     {
       name: 'namespace',
+      type: 'fixed32',
+      required: false
+    }
+  ]
+})
+
+autobase.register({
+  name: 'broadcast-encryption-key',
+  fields: [
+    {
+      name: 'id',
+      type: 'uint',
+      required: true
+    },
+    {
+      name: 'encryptionKey',
+      type: 'fixed32',
+      required: true
+    }
+  ]
+})
+
+autobase.register({
+  name: 'encryption-record',
+  fields: [
+    {
+      name: 'version',
+      type: 'uint',
+      required: true
+    },
+    {
+      name: 'bootstrap',
+      type: '@autobase/broadcast-encryption-key',
+      required: false
+    },
+    {
+      name: 'encryptionKey',
       type: 'fixed32',
       required: false
     }
