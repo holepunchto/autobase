@@ -103,6 +103,7 @@ module.exports = class Autobase extends ReadyResource {
     this.encryptionKey = null
     this.encryptionOpts = getEncryptionOpts(handlers)
     this.encryption = new EncryptionView(this, null, this.encryptionOpts)
+    this.isEncrypted = !!this.encryptionOpts.encrypted
 
     this.activeBatch = null // maintained by the append-batch
 
@@ -230,10 +231,6 @@ module.exports = class Autobase extends ReadyResource {
   // just compat, use .key
   get bootstrap() {
     return this.key
-  }
-
-  get isEncrypted() {
-    return !!this.encryptionOpts.encrypted
   }
 
   // TODO: compat, will be removed
@@ -369,7 +366,7 @@ module.exports = class Autobase extends ReadyResource {
 
     const result = await boot(this.store, this.key, {
       encryptionKey: this.encryptionKey,
-      encrypt: this.isEncrypted,
+      encrypt: this.encryptionOpts.encrypt,
       keyPair: this.keyPair
     })
 
@@ -385,6 +382,9 @@ module.exports = class Autobase extends ReadyResource {
     if (this.isEncrypted) {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
     }
+
+    // fresh instance where encryption key is created
+    this.isEncrypted = !!this.encryptionKey
 
     if (this.encryptionKey) {
       this.local.setEncryption(this.getWriterEncryption())
@@ -2249,23 +2249,26 @@ function normalize(valueEncoding, value) {
 }
 
 function getEncryptionOpts(opts) {
+  if (opts.encryption) {
+    return {
+      encrypt: false,
+      encrypted: true,
+      ...opts.encryption
+    }
+  }
+
   if (opts.encryptionKey) {
     return {
+      encrypt: false,
       encrypted: true,
       key: opts.encryptionKey,
       bootstrap: null
     }
   }
 
-  if (opts.encryption) {
-    return {
-      encrypted: true,
-      ...opts.encryption
-    }
-  }
-
   return {
-    encrypted: opts.encrypt === true || opts.encrypted === true, // todo: seems like we had dup options
+    encrypt: opts.encrypt === true,
+    encrypted: opts.encrypted === true,
     key: null,
     bootstrap: null
   }
