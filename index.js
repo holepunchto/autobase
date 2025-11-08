@@ -706,11 +706,12 @@ module.exports = class Autobase extends ReadyResource {
   async _catchupApplyState() {
     if (await this._applyState.shouldMigrate()) {
       await this._migrate()
-    } else {
-      await this._applyState.catchup(this.linearizer)
+    } else if (!(await this._applyState.catchup(this.linearizer))) {
+      return false
     }
 
     this._caughtup = true
+    return true
   }
 
   async _open() {
@@ -1787,7 +1788,10 @@ module.exports = class Autobase extends ReadyResource {
 
       // we defer this to post ready so its not blocking reading the views
       if (this._caughtup === false) {
-        await this._catchupApplyState()
+        // if the catchup fails, just force ff it to recover, less user pain
+        if (!(await this._catchupApplyState())) {
+          await this._runForceFastForward()
+        }
         continue
       }
 
