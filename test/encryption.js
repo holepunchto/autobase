@@ -6,7 +6,14 @@ const cenc = require('compact-encoding')
 const BroadcastEncryption = require('@holepunchto/broadcast-encryption')
 
 const Autobase = require('..')
-const { replicateAndSync, createStores, create } = require('./helpers')
+const {
+  replicateAndSync,
+  createStores,
+  create,
+  apply,
+  addWriter,
+  removeWriter
+} = require('./helpers')
 
 test('encryption - basic', async (t) => {
   const tmp = await tmpDir(t)
@@ -196,7 +203,7 @@ test('encryption - rotate key with replication', async (t) => {
 
   const encryptionKey = b4a.alloc(32).fill('secret')
 
-  const a = new Autobase(stores[0], null, {
+  const { bases } = await create(2, t, {
     apply,
     open,
     ackInterval: 0,
@@ -205,20 +212,9 @@ test('encryption - rotate key with replication', async (t) => {
     valueEncoding: 'json'
   })
 
-  await a.ready()
+  const [a, b] = bases
 
-  const b = new Autobase(stores[1], a.key, {
-    apply,
-    open,
-    ackInterval: 0,
-    ackThreshold: 0,
-    encryptionKey,
-    valueEncoding: 'json'
-  })
-
-  await b.ready()
-
-  await a.append({ add: { key: b.local.key.toString('hex'), indexer: false } })
+  await addWriter(a, b, false)
   await a.append('encryption key 1:0')
 
   await replicateAndSync([a, b])
@@ -247,9 +243,6 @@ test('encryption - rotate key with replication', async (t) => {
   t.alike(await a.view.get(4), 'encryption key 2:2')
 
   t.is(a.view.length, 5)
-
-  await a.close()
-  await b.close()
 })
 
 test('encryption - rotate key with writer removal', async (t) => {
@@ -263,8 +256,8 @@ test('encryption - rotate key with writer removal', async (t) => {
 
   const [a, b, c] = bases
 
-  await add(a, b, false)
-  await add(a, c, false)
+  await addWriter(a, b, false)
+  await addWriter(a, c, false)
 
   await replicateAndSync([a, b, c])
 
@@ -275,7 +268,7 @@ test('encryption - rotate key with writer removal', async (t) => {
 
   await a.append('c can see me')
 
-  await remove(a, c, false)
+  await removeWriter(a, c, false)
   await rotate(a, b4a.alloc(32, 1))
 
   await a.append('c cannot see me')
@@ -307,7 +300,7 @@ test('encryption - fast forward', async (t) => {
 
   const [a, b] = bases
 
-  await add(a, b, false)
+  await addWriter(a, b, false)
 
   await replicateAndSync([a, b])
   await b.append(null)
@@ -380,7 +373,7 @@ test('encryption - rotate writer encryption', async (t) => {
 
   const [a, b] = bases
 
-  await add(a, b, false)
+  await addWriter(a, b, false)
   await replicateAndSync([a, b])
 
   await b.append(null)
@@ -403,9 +396,9 @@ test('encryption - rotate writer encryption', async (t) => {
   await newLocal.ready()
 
   // rotate b writer
-  await remove(a, b, false)
+  await removeWriter(a, b, false)
   await b.setLocal(newLocal.key)
-  await add(a, b, false)
+  await addWriter(a, b, false)
 
   await replicateAndSync([a, b])
 
@@ -427,43 +420,18 @@ test('encryption - rotate writer encryption', async (t) => {
   t.alike(await a.view.get(1), 'c cannot see me')
   t.alike(await b.view.get(1), 'c cannot see me')
 
+  t.alike(await a.view.get(2), 'encrypted!')
+  t.alike(await b.view.get(2), 'encrypted!')
+
+  t.alike(await a.view.get(3), 'rotate and encrypted!')
+  t.alike(await b.view.get(3), 'rotate and encrypted!')
+
   await a.close()
   await b.close()
 })
 
 function open(store) {
   return store.get('view', { valueEncoding: 'json' })
-}
-
-async function apply(batch, view, base) {
-  for (const { value } of batch) {
-    if (value.encryption) {
-      const buffer = Buffer.from(value.encryption, 'hex')
-      const payload = cenc.decode(BroadcastEncryption.PayloadEncoding, buffer)
-      await base.updateEncryption(payload)
-      continue
-    }
-
-    if (value.add) {
-      await base.addWriter(Buffer.from(value.add.key, 'hex'), { indexer: value.add.indexer })
-      continue
-    }
-
-    if (value.remove) {
-      await base.removeWriter(Buffer.from(value.remove.key, 'hex'))
-      continue
-    }
-
-    await view.append(value.toString())
-  }
-}
-
-function add(base, peer, indexer) {
-  return base.append({ add: { key: peer.local.key.toString('hex'), indexer } })
-}
-
-function remove(base, peer, index) {
-  return base.append({ remove: { key: peer.local.key.toString('hex') } })
 }
 
 async function rotate(base, entropy) {

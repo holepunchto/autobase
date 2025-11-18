@@ -288,12 +288,8 @@ module.exports = class Autobase extends ReadyResource {
   }
 
   async listMemberPublicKeys() {
-    const members = []
-    for (const member of await SystemView.members(this.core.session({ active: false }))) {
-      if (member.value.isRemoved) continue
-      members.push(member.key)
-    }
-
+    const core = this.core.session({ active: false })
+    const members = await SystemView.members(core, { onlyActive: true })
     return this._viewStore.getManifestPublicKeys(members)
   }
 
