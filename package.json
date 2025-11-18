@@ -36,6 +36,7 @@
   },
   "homepage": "https://github.com/holepunchto/autobase#readme",
   "dependencies": {
+    "@holepunchto/broadcast-encryption": "^1.0.0",
     "b4a": "^1.6.1",
     "bare-events": "^2.2.0",
     "compact-encoding": "^2.16.0",
@@ -44,6 +45,7 @@
     "hyperbee": "^2.22.0",
     "hypercore": "^11.4.0",
     "hypercore-crypto": "^3.4.0",
+    "hypercore-encryption": "^3.0.0",
     "hypercore-id-encoding": "^1.2.0",
     "hyperschema": "^1.12.1",
     "index-encoder": "^3.3.2",

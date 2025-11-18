@@ -3,6 +3,8 @@ const Corestore = require('corestore')
 const helpers = require('autobase-test-helpers')
 const same = require('same-data')
 const b4a = require('b4a')
+const cenc = require('compact-encoding')
+const BroadcastEncryption = require('@holepunchto/broadcast-encryption')
 
 const Autobase = require('../..')
 const argv = typeof global.Bare !== 'undefined' ? global.Bare.argv : process.argv
@@ -15,6 +17,7 @@ module.exports = {
   createBase,
   create,
   addWriter,
+  removeWriter,
   addWriterAndSync,
   apply,
   confirm,
@@ -105,8 +108,12 @@ function open(store) {
   return store.get('view', { valueEncoding: 'json' })
 }
 
-async function addWriter(base, add, indexer = true) {
-  return base.append({ add: add.local.key.toString('hex'), indexer })
+async function addWriter(base, key, indexer = true) {
+  return base.append({ add: key.local.key.toString('hex'), indexer })
+}
+
+async function removeWriter(base, key) {
+  return base.append({ remove: key.local.key.toString('hex') })
 }
 
 function printIndexerTip(tip, indexers) {
@@ -236,6 +243,19 @@ async function apply(batch, view, base) {
     if (value.add) {
       const key = Buffer.from(value.add, 'hex')
       await base.addWriter(key, { indexer: value.indexer })
+      continue
+    }
+
+    if (value.remove) {
+      const key = Buffer.from(value.remove, 'hex')
+      await base.removeWriter(key)
+      continue
+    }
+
+    if (value.encryption) {
+      const buffer = Buffer.from(value.encryption, 'hex')
+      const payload = cenc.decode(BroadcastEncryption.PayloadEncoding, buffer)
+      await base.updateEncryption(payload)
       continue
     }
 

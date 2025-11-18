@@ -15,7 +15,7 @@ const ScopeLock = require('scope-lock')
 const LocalState = require('./lib/local-state.js')
 const Linearizer = require('./lib/linearizer.js')
 const SystemView = require('./lib/system.js')
-const { EncryptionView } = require('./lib/encryption.js')
+const EncryptionView = require('./lib/encryption.js')
 const UpdateChanges = require('./lib/updates.js')
 const messages = require('./lib/messages.js')
 const Timer = require('./lib/timer.js')
@@ -30,7 +30,11 @@ const ApplyState = require('./lib/apply-state.js')
 const AppendBatch = require('./lib/append-batch.js')
 const { PublicApplyCalls } = require('./lib/apply-calls.js')
 const boot = require('./lib/boot.js')
-const { MAX_AUTOBASE_VERSION, BOOT_RECORD_VERSION } = require('./lib/caps.js')
+const {
+  MAX_AUTOBASE_VERSION,
+  BOOT_RECORD_VERSION,
+  ENCRYPTION_RECORD_VERSION
+} = require('./lib/caps.js')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 const INTERRUPT = new Error('Apply interrupted')
@@ -96,10 +100,10 @@ module.exports = class Autobase extends ReadyResource {
     this.globalCache = store.globalCache || null
     this.migrated = false
 
-    this.encrypted = handlers.encrypted || !!handlers.encryptionKey
-    this.encrypt = !!handlers.encrypt
     this.encryptionKey = null
-    this.encryption = null
+    this.encryptionOpts = getEncryptionOpts(handlers)
+    this.encryption = new EncryptionView(this, null, this.encryptionOpts)
+    this.isEncrypted = !!this.encryptionOpts.encrypted
 
     this.activeBatch = null // maintained by the append-batch
 
@@ -179,7 +183,7 @@ module.exports = class Autobase extends ReadyResource {
     this._hasUpdate = !!this._handlers.update
     this._hasClose = !!this._handlers.close
 
-    this._viewStore = new AutoStore(this)
+    this._viewStore = new AutoStore(this, null, this.encryption)
     this._applyState = null
 
     this.view = null
@@ -204,6 +208,7 @@ module.exports = class Autobase extends ReadyResource {
       ? this._handlers.open(this._viewStore, new PublicApplyCalls(this))
       : null
     this.core = this._viewStore.get({ name: '_system' })
+    this.encryptionCore = this._viewStore.get({ name: '_encryption' })
 
     if (this.fastForwardEnabled && isObject(handlers.fastForward)) {
       this._runFastForward(
@@ -282,6 +287,21 @@ module.exports = class Autobase extends ReadyResource {
     )
   }
 
+  async listMemberPublicKeys() {
+    const core = this.core.session({ active: false })
+    const members = await SystemView.members(core, { onlyActive: true })
+    return this._viewStore.getManifestPublicKeys(members)
+  }
+
+  getEncryptionBootstrap() {
+    if (!this._applyState) return this.encryption.getBootstrap()
+    return this._applyState.encryption.getBootstrap()
+  }
+
+  bootstrapEncryption(boostrap) {
+    this._applyState.bootstrapEncryption(boostrap)
+  }
+
   _isActiveIndexer() {
     return this.localWriter ? this.localWriter.isActiveIndexer : false
   }
@@ -336,13 +356,13 @@ module.exports = class Autobase extends ReadyResource {
 
     this.keyPair = (await this._handlers.keyPair) || null
 
-    if (this._handlers.encryptionKey !== null) {
-      this.encryptionKey = await this._handlers.encryptionKey
+    if (this.encryptionOpts.key !== null) {
+      this.encryptionKey = await this.encryptionOpts.key
     }
 
     const result = await boot(this.store, this.key, {
       encryptionKey: this.encryptionKey,
-      encrypt: this.encrypt,
+      encrypt: this.encryptionOpts.encrypt,
       keyPair: this.keyPair
     })
 
@@ -353,15 +373,16 @@ module.exports = class Autobase extends ReadyResource {
     this.discoveryKey = result.bootstrap.discoveryKey
     this.id = result.bootstrap.id
 
-    this.encryptionKey = result.encryptionKey
+    this.encryptionKey = result.encryption ? result.encryption.encryptionKey : null
 
-    if (this.encrypted) {
+    if (this.isEncrypted) {
       assert(this.encryptionKey !== null, 'Encryption key is expected')
     }
 
-    if (this.encryptionKey) {
-      this.encryption = new EncryptionView(this, null)
+    // fresh instance where encryption key is created
+    this.isEncrypted = !!this.encryptionKey
 
+    if (this.encryptionKey) {
       this.local.setEncryption(this.getWriterEncryption())
       this._primaryBootstrap.setEncryption(this.getWriterEncryption())
     }
@@ -430,6 +451,10 @@ module.exports = class Autobase extends ReadyResource {
 
     const oldLocal = this.local
 
+    if (this._applyState.isLocalIndexer()) {
+      throw new Error('Cannot rotate indexer')
+    }
+
     if (this._applyState) await this._applyState.close()
 
     this.local = newLocal
@@ -438,7 +463,7 @@ module.exports = class Autobase extends ReadyResource {
     this.localWriter = null
     this._updateLocalCore = null
 
-    const store = this._viewStore.atomize()
+    const store = this._viewStore.atomize(this.encryption)
 
     const local = store.getLocal()
     await local.ready()
@@ -622,7 +647,8 @@ module.exports = class Autobase extends ReadyResource {
           indexersUpdated: false,
           fastForwarding: false,
           recoveries: RECOVERIES,
-          heads: null
+          heads: null,
+          manifestVersion: 1
         }
 
     if (boot.heads) {
@@ -637,6 +663,23 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     return boot
+  }
+
+  // called by the apply state for bootstrapping
+  async _getEncryptionRecord() {
+    await this._preopen
+
+    const pointer = await this.local.getUserData('autobase/encryption-record')
+
+    const encryption = pointer
+      ? c.decode(messages.EncryptionRecord, pointer)
+      : {
+          version: ENCRYPTION_RECORD_VERSION,
+          encryptionKey: this.encryptionKey,
+          bootstrap: null
+        }
+
+    return encryption
   }
 
   static async getBootRecord(store, key) {
@@ -719,6 +762,8 @@ module.exports = class Autobase extends ReadyResource {
     await this._preopen
 
     if (this.closing) return
+
+    if (this.encryptionKey) await this.encryption.load(this.encryptionCore)
 
     this._applyState = new ApplyState(this)
 
@@ -1369,7 +1414,7 @@ module.exports = class Autobase extends ReadyResource {
 
     this._flushing++
     try {
-      const store = this._viewStore.atomize()
+      const store = this._viewStore.atomize(null)
 
       const migrated = !b4a.equals(key, this.core.key)
 
@@ -1417,7 +1462,8 @@ module.exports = class Autobase extends ReadyResource {
         systemLength: length,
         indexersUpdated: false,
         fastForwarding: true,
-        recoveries: RECOVERIES
+        recoveries: RECOVERIES,
+        manifestVersion
       })
 
       const local = store.getLocal()
@@ -1512,6 +1558,8 @@ module.exports = class Autobase extends ReadyResource {
 
     if (manifestData === null && ref.core.manifest.userData !== null) {
       manifestData = ref.core.manifest.userData
+    } else if (source && source.manifest.version !== manifestVersion && indexedLength) {
+      manifestData = c.encode(messages.ManifestData, { version: 0, legacyBlocks: indexedLength })
     }
 
     const next = this._viewStore.getViewCore(
@@ -1557,9 +1605,22 @@ module.exports = class Autobase extends ReadyResource {
       const info = await system.getIndexedInfo(length)
       const indexerManifests = await this._viewStore.getIndexerManifests(info.indexers)
 
-      const { views, systemView, encryptionView } = this._applyState
+      const { views, systemView, encryptionView, manifestVersion } = this._applyState
 
-      const manifestVersion = this._applyState.system.core.manifest.version
+      // migrate encryption core first so we
+      const source = encryptionView.ref.getCore()
+      await source.ready()
+
+      const enc = await this._migrateView(
+        indexerManifests,
+        source,
+        '_encryption',
+        info.encryptionLength,
+        manifestVersion,
+        info.entropy,
+        null,
+        null
+      )
 
       for (const view of views) {
         const v = this._applyState.getViewFromSystem(view, info)
@@ -1580,20 +1641,6 @@ module.exports = class Autobase extends ReadyResource {
           null
         )
       }
-
-      const source = encryptionView.ref.getCore()
-      await source.ready()
-
-      const enc = await this._migrateView(
-        indexerManifests,
-        source,
-        '_encryption',
-        info.encryptionLength,
-        manifestVersion,
-        info.entropy,
-        null,
-        null
-      )
 
       const linked = [enc.core.key]
 
@@ -1626,12 +1673,12 @@ module.exports = class Autobase extends ReadyResource {
 
     await this._applyState.finalize(key)
 
+    // end soft shutdown
+
     this._applyState = new ApplyState(this)
 
     await this._applyState.ready()
     await this._applyState.catchup(this.linearizer)
-
-    // end soft shutdown
 
     this._queueFastForward()
 
@@ -2199,4 +2246,30 @@ function normalize(valueEncoding, value) {
   valueEncoding.encode(state, value)
   state.start = 0
   return valueEncoding.decode(state)
+}
+
+function getEncryptionOpts(opts) {
+  if (opts.encryption) {
+    return {
+      encrypt: false,
+      encrypted: true,
+      ...opts.encryption
+    }
+  }
+
+  if (opts.encryptionKey) {
+    return {
+      encrypt: false,
+      encrypted: true,
+      key: opts.encryptionKey,
+      bootstrap: null
+    }
+  }
+
+  return {
+    encrypt: opts.encrypt === true,
+    encrypted: opts.encrypted === true,
+    key: null,
+    bootstrap: null
+  }
 }

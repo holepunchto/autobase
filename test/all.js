@@ -7,6 +7,7 @@ async function runTests() {
 
   test.pause()
 
+  await import('./anchors.js')
   await import('./apply.js')
   await import('./autoack.js')
   await import('./basic.js')

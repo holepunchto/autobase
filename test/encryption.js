@@ -2,8 +2,18 @@ const test = require('brittle')
 const tmpDir = require('test-tmp')
 const Corestore = require('corestore')
 const b4a = require('b4a')
+const cenc = require('compact-encoding')
+const BroadcastEncryption = require('@holepunchto/broadcast-encryption')
 
 const Autobase = require('..')
+const {
+  replicateAndSync,
+  createStores,
+  create,
+  apply,
+  addWriter,
+  removeWriter
+} = require('./helpers')
 
 test('encryption - basic', async (t) => {
   const tmp = await tmpDir(t)
@@ -149,12 +159,290 @@ test('encryption - pass as promise', async (t) => {
   await base.close()
 })
 
+test('encryption - rotate key', async (t) => {
+  const tmp = await tmpDir(t)
+  const store = new Corestore(tmp)
+
+  const encryptionKey = b4a.alloc(32).fill('secret')
+
+  const base = new Autobase(store, null, {
+    apply,
+    open,
+    ackInterval: 0,
+    ackThreshold: 0,
+    encryptionKey,
+    valueEncoding: 'json'
+  })
+
+  await base.ready()
+
+  t.alike(base.encryptionKey, encryptionKey)
+
+  await base.append('encryption key 1')
+
+  const entropy = b4a.alloc(32, 2)
+  const recipients = await base.listMemberPublicKeys()
+
+  await base.append({
+    encryption: broadcastPayload(entropy, recipients).toString('hex')
+  })
+
+  await base.append('encryption key 2')
+
+  t.alike(await base.view.get(0), 'encryption key 1')
+  t.alike(await base.view.get(1), 'encryption key 2')
+
+  t.is(base.view.signedLength, 2)
+  t.is(base.system.core.signedLength, 7)
+
+  await base.close()
+})
+
+test('encryption - rotate key with replication', async (t) => {
+  const stores = await createStores(2, t)
+
+  const encryptionKey = b4a.alloc(32).fill('secret')
+
+  const { bases } = await create(2, t, {
+    apply,
+    open,
+    ackInterval: 0,
+    ackThreshold: 0,
+    encryptionKey,
+    valueEncoding: 'json'
+  })
+
+  const [a, b] = bases
+
+  await addWriter(a, b, false)
+  await a.append('encryption key 1:0')
+
+  await replicateAndSync([a, b])
+
+  const entropy = b4a.alloc(32, 2)
+  const recipients = await b.listMemberPublicKeys()
+
+  await b.append({
+    encryption: broadcastPayload(entropy, recipients).toString('hex')
+  })
+
+  await b.append('encryption key 2:0')
+  await a.append('encryption key 1:1')
+
+  await replicateAndSync([a, b])
+
+  await b.append('encryption key 2:2')
+  await a.append('encryption key 2:1')
+
+  await replicateAndSync([a, b])
+
+  t.alike(await a.view.get(0), 'encryption key 1:0')
+  t.alike(await a.view.get(1), 'encryption key 1:1')
+  t.alike(await a.view.get(2), 'encryption key 2:0')
+  t.alike(await a.view.get(3), 'encryption key 2:1')
+  t.alike(await a.view.get(4), 'encryption key 2:2')
+
+  t.is(a.view.length, 5)
+})
+
+test('encryption - rotate key with writer removal', async (t) => {
+  const encryptionKey = b4a.alloc(32).fill('secret')
+
+  const { bases } = await create(3, t, {
+    apply,
+    open,
+    encryptionKey
+  })
+
+  const [a, b, c] = bases
+
+  await addWriter(a, b, false)
+  await addWriter(a, c, false)
+
+  await replicateAndSync([a, b, c])
+
+  await b.append(null)
+  await c.append(null)
+
+  await replicateAndSync([a, b, c])
+
+  await a.append('c can see me')
+
+  await removeWriter(a, c, false)
+  await rotate(a, b4a.alloc(32, 1))
+
+  await a.append('c cannot see me')
+
+  await t.execution(replicateAndSync([a, b]))
+  await t.exception(replicateAndSync([a, c]))
+
+  t.alike(await a.view.get(0), 'c can see me')
+  t.alike(await b.view.get(0), 'c can see me')
+
+  t.alike(await a.view.get(1), 'c cannot see me')
+  t.alike(await b.view.get(1), 'c cannot see me')
+
+  await t.exception(c.view.get(1))
+
+  await a.close()
+  await b.close()
+})
+
+test('encryption - fast forward', async (t) => {
+  const encryptionKey = b4a.alloc(32).fill('secret')
+
+  const { bases } = await create(2, t, {
+    apply,
+    open,
+    encryptionKey,
+    fastForward: true
+  })
+
+  const [a, b] = bases
+
+  await addWriter(a, b, false)
+
+  await replicateAndSync([a, b])
+  await b.append(null)
+  await replicateAndSync([a, b])
+
+  await rotate(a, b4a.alloc(32, 1))
+  for (let i = 0; i < 200; i++) {
+    await a.append('interval 1 - ' + i)
+  }
+
+  await rotate(a, b4a.alloc(32, 2))
+  for (let i = 0; i < 200; i++) {
+    await a.append('interval 2 - ' + i)
+  }
+
+  await rotate(a, b4a.alloc(32, 3))
+  for (let i = 0; i < 200; i++) {
+    await a.append('interval 3 - ' + i)
+  }
+
+  await rotate(a, b4a.alloc(32, 4))
+  for (let i = 0; i < 200; i++) {
+    await a.append('interval 4 - ' + i)
+  }
+  await rotate(a, b4a.alloc(32, 5))
+  for (let i = 0; i < 200; i++) {
+    await a.append('interval 5 - ' + i)
+  }
+
+  const ff = t.execution(
+    new Promise((resolve, reject) => {
+      b.on('fast-forward', pass)
+      const t = setTimeout(cleanup, 1000, false)
+
+      function pass() {
+        return cleanup(true)
+      }
+
+      function cleanup(ffed) {
+        b.removeListener('fast-foward', pass)
+        clearTimeout(t)
+
+        if (ffed) resolve()
+        else reject(new Error('timeout'))
+      }
+    })
+  )
+
+  await replicateAndSync([a, b])
+  await ff
+
+  t.is(a.view.length, 1000)
+  t.is(b.view.length, 1000)
+
+  t.alike(await a.view.get(999), 'interval 5 - 199')
+  t.alike(await b.view.get(999), 'interval 5 - 199')
+
+  await a.close()
+  await b.close()
+})
+
+test('encryption - rotate writer encryption', async (t) => {
+  const encryptionKey = b4a.alloc(32).fill('secret')
+
+  const { bases } = await create(2, t, {
+    apply,
+    open,
+    encryptionKey
+  })
+
+  const [a, b] = bases
+
+  await addWriter(a, b, false)
+  await replicateAndSync([a, b])
+
+  await b.append(null)
+  await replicateAndSync([a, b])
+
+  await a.append('c can see me')
+
+  const newLocal = b.store.get({
+    manifest: {
+      version: 2,
+      signers: [
+        {
+          publicKey: b.local.keyPair.publicKey
+        }
+      ]
+    },
+    keyPair: b.local.keyPair
+  })
+
+  await newLocal.ready()
+
+  // rotate b writer
+  await removeWriter(a, b, false)
+  await b.setLocal(newLocal.key)
+  await addWriter(a, b, false)
+
+  await replicateAndSync([a, b])
+
+  await b.append('encrypted!')
+
+  await rotate(a, b4a.alloc(32, 1))
+
+  await a.append('c cannot see me')
+
+  await t.execution(replicateAndSync([a, b]))
+
+  await b.append('rotate and encrypted!')
+
+  await replicateAndSync([a, b])
+
+  t.alike(await a.view.get(0), 'c can see me')
+  t.alike(await b.view.get(0), 'c can see me')
+
+  t.alike(await a.view.get(1), 'c cannot see me')
+  t.alike(await b.view.get(1), 'c cannot see me')
+
+  t.alike(await a.view.get(2), 'encrypted!')
+  t.alike(await b.view.get(2), 'encrypted!')
+
+  t.alike(await a.view.get(3), 'rotate and encrypted!')
+  t.alike(await b.view.get(3), 'rotate and encrypted!')
+
+  await a.close()
+  await b.close()
+})
+
 function open(store) {
   return store.get('view', { valueEncoding: 'json' })
 }
 
-async function apply(batch, view, base) {
-  for (const { value } of batch) {
-    await view.append(value.toString())
-  }
+async function rotate(base, entropy) {
+  const recipients = await base.listMemberPublicKeys()
+  const payload = broadcastPayload(entropy, recipients)
+
+  await base.append({ encryption: payload.toString('hex') })
+  return payload
+}
+
+function broadcastPayload(entropy, recipients) {
+  const payload = BroadcastEncryption.encrypt(entropy, recipients)
+  return cenc.encode(BroadcastEncryption.PayloadEncoding, payload)
 }

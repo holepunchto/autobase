@@ -2070,7 +2070,10 @@ test('basic - rotate local writer', async (t) => {
   })
 
   await base.ready()
+  await base.append(null)
+
   const local = base.local
+
   await base.setLocal(null, { keyPair: crypto.keyPair() })
   t.ok(local !== base.local)
   await base.close()
@@ -2128,48 +2131,8 @@ test('basic - apply supports backoff', async (t) => {
   await store.close()
 })
 
-async function applyWithRemove(batch, view, base) {
-  for (const { value } of batch) {
-    if (value.add) {
-      await base.addWriter(b4a.from(value.add, 'hex'), {
-        indexer: value.indexer !== false
-      })
-      continue
-    }
-
-    if (value.remove) {
-      await base.removeWriter(b4a.from(value.remove, 'hex'))
-      continue
-    }
-
-    await view.append(value)
-  }
-}
-
-function openMultiple(store) {
-  return {
-    first: store.get('first', { valueEncoding: 'json' }),
-    second: store.get('second', { valueEncoding: 'json' })
-  }
-}
-
-async function applyMultiple(batch, view, base) {
-  for (const { value } of batch) {
-    if (value.add) {
-      await base.addWriter(Buffer.from(value.add, 'hex'))
-      continue
-    }
-
-    if (value.index === 1) {
-      await view.first.append(value.data)
-    } else if (value.index === 2) {
-      await view.second.append(value.data)
-    }
-  }
-}
-
 test('basic - indexer list transition [a, b, c, d, e] -> [b, c, d, e, f]', async (t) => {
-  async function applyRotateKey(nodes, view, base) {
+  async function applyRotateIndexer(nodes, view, base) {
     for (const node of nodes) {
       if (node.value.type === 'addIndexer' && node.value.add) {
         await base.addWriter(b4a.from(node.value.add, 'hex'), {
@@ -2185,7 +2148,7 @@ test('basic - indexer list transition [a, b, c, d, e] -> [b, c, d, e, f]', async
     }
   }
 
-  const { bases } = await create(6, t, { apply: applyRotateKey })
+  const { bases } = await create(6, t, { apply: applyRotateIndexer })
   const [a, b, c, d, e, f] = bases
 
   await a.append({ type: 'addIndexer', add: b.local.key.toString('hex') })
@@ -2274,3 +2237,43 @@ test('basic - get last error', async (t) => {
 
   t.is(base.getLastError().message, 'This is the last error!')
 })
+
+async function applyWithRemove(batch, view, base) {
+  for (const { value } of batch) {
+    if (value.add) {
+      await base.addWriter(b4a.from(value.add, 'hex'), {
+        indexer: value.indexer !== false
+      })
+      continue
+    }
+
+    if (value.remove) {
+      await base.removeWriter(b4a.from(value.remove, 'hex'))
+      continue
+    }
+
+    await view.append(value)
+  }
+}
+
+function openMultiple(store) {
+  return {
+    first: store.get('first', { valueEncoding: 'json' }),
+    second: store.get('second', { valueEncoding: 'json' })
+  }
+}
+
+async function applyMultiple(batch, view, base) {
+  for (const { value } of batch) {
+    if (value.add) {
+      await base.addWriter(Buffer.from(value.add, 'hex'))
+      continue
+    }
+
+    if (value.index === 1) {
+      await view.first.append(value.data)
+    } else if (value.index === 2) {
+      await view.second.append(value.data)
+    }
+  }
+}
