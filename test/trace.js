@@ -172,7 +172,19 @@ test('trace - skips unindex view blocks', async (t) => {
 
   {
     const node = await a.local.get(postIndexingIndex - 1)
-    t.absent(node.trace, 'last block before index still not traced')
+    t.alike(
+      node.trace.user,
+      [
+        {
+          view: 0,
+          // [0, 1, 2, .., 98] because it skips the first block since there is no view length
+          blocks: Array(99)
+            .fill(1)
+            .map((_, i) => i)
+        }
+      ],
+      'last block before index is traced & contains trace for all view blocks in batch'
+    )
   }
 
   {
@@ -272,7 +284,7 @@ test('trace - writer references non-existent block in trace still apply', async 
   t.absent(await a.view.has(futureIndex), '"future" index is absent')
 })
 
-test('trace - non-indexed views arent traced', async (t) => {
+test('trace - non-indexed views are traced', async (t) => {
   const { bases, stores } = await create(2, t, {
     open(store) {
       return { v1: store.get('view1', { valueEncoding: 'json' }) }
@@ -341,7 +353,20 @@ test('trace - non-indexed views arent traced', async (t) => {
 
   {
     const node = await b2.local.get(1)
-    t.alike(node.trace.user, [{ view: 0, blocks: [0] }], 'no trace w/ new view core')
+    t.alike(
+      node.trace.user,
+      [
+        {
+          view: 0,
+          blocks: [0]
+        },
+        {
+          view: 1,
+          blocks: [0]
+        }
+      ],
+      'trace includes new view core'
+    )
   }
 })
 
