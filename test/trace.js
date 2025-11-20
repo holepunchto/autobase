@@ -172,7 +172,19 @@ test('trace - skips unindex view blocks', async (t) => {
 
   {
     const node = await a.local.get(postIndexingIndex - 1)
-    t.absent(node.trace, 'last block before index still not traced')
+    t.alike(
+      node.trace.user,
+      [
+        {
+          view: 0,
+          // [0, 1, 2, .., 98] because it skips the first block since there is no view length
+          blocks: Array(99)
+            .fill(1)
+            .map((_, i) => i)
+        }
+      ],
+      'last block before index is traced & contains trace for all view blocks in batch'
+    )
   }
 
   {
@@ -272,7 +284,7 @@ test('trace - writer references non-existent block in trace still apply', async 
   t.absent(await a.view.has(futureIndex), '"future" index is absent')
 })
 
-test('trace - non-indexed views arent traced', async (t) => {
+test('trace - non-indexed views are traced', async (t) => {
   const { bases, stores } = await create(2, t, {
     open(store) {
       return { v1: store.get('view1', { valueEncoding: 'json' }) }
@@ -341,7 +353,20 @@ test('trace - non-indexed views arent traced', async (t) => {
 
   {
     const node = await b2.local.get(1)
-    t.alike(node.trace.user, [{ view: 0, blocks: [0] }], 'no trace w/ new view core')
+    t.alike(
+      node.trace.user,
+      [
+        {
+          view: 0,
+          blocks: [0]
+        },
+        {
+          view: 1,
+          blocks: [0]
+        }
+      ],
+      'trace includes new view core'
+    )
   }
 })
 
@@ -426,3 +451,103 @@ test('trace - reduces sync time - 1 writer', async (t) => {
     }
   }
 })
+
+test(
+  'trace - reduces sync time for well behaved non-indexed blocks',
+  { timeout: 2 * 60 * 1000 },
+  async (t) => {
+    const { bases, stores } = await create(5, t, { apply, fastForward: true })
+    const [a, b, c, d, e] = bases
+    const indexers = [a, b, c]
+
+    await addWriter(a, b, true)
+    await addWriter(a, c, true)
+    await confirm(indexers)
+
+    t.alike(
+      a.system.indexers.map((i) => i.key),
+      indexers.map((i) => i.local.key)
+    )
+
+    await addWriter(a, d, false)
+    await addWriter(a, e, false)
+
+    t.comment('confirming non indexer')
+    await confirm(bases)
+
+    const initialLength = 100
+    const tipLength = 100
+
+    for (let i = 0; i < initialLength; i++) {
+      await a.append(a.name + i)
+    }
+    t.comment('reference blocks appended')
+
+    await confirm([a, d]) // Sync tip writer before quorum
+    await confirm(indexers) // Reach quorum
+
+    t.is(a.view.signedLength, a.view.length, 'A view is all signed')
+    t.is(d.view.signedLength, 0, 'D doesnt know about signed view blocks')
+
+    for (let i = 0; i < tipLength; i++) {
+      await d.append(d.name + i)
+    }
+
+    t.comment('tip w/ unindex trace appended')
+
+    await confirm([d, a]) // d updates a so initial view blocks are now indexed
+
+    t.is(d.view.length, a.view.length, 'A & D views match')
+    t.not(a.view.signedLength, a.view.length, 'A has unsigned view blocks')
+
+    e.once('fast-forward', () => {
+      t.pass('e ffed from a and didnt run apply for initial blocks')
+    })
+
+    // Assert that `e` cannot already have blocks as safeguard
+    for (let i = 0; i < a.view.length; i++) {
+      if (await e.view.has(i)) throw Error('`e` already has blocks!')
+    }
+
+    t.comment('joining')
+    const latency = 100
+
+    const joiningStart = Date.now()
+    await replicateAndSyncDebugStream([a, e], t, { latency })
+    const joiningEnd = Date.now()
+    const joiningTime = joiningEnd - joiningStart
+
+    // Estimate processing time
+    const roundTripLatency = 2 * latency
+    const idealBatches = tipLength / 64
+    const netRequests = idealBatches * 2 // 1 request & 1 data
+    const timeEstimate =
+      netRequests * roundTripLatency * 2 + // Assume half-max batches
+      tipLength // Assume each block takes 1ms to process
+
+    t.comment('joiningTime', `${joiningTime / 1000}s`, 'timeEstimate', `${timeEstimate / 1000}s`)
+    t.ok(joiningTime < timeEstimate * 2.0, 'joining time within double of estimate')
+
+    await compare(a, d, true)
+    t.pass('a & d match')
+
+    async function apply(batch, view, host) {
+      for (const { value } of batch) {
+        if (value.add) {
+          const key = Buffer.from(value.add, 'hex')
+          await host.addWriter(key, { indexer: value.indexer })
+          continue
+        }
+
+        let str = ''
+        if (view.length > 0) {
+          const index = (view.length - 1) % initialLength
+          str += await view.get(index)
+        }
+        str += value
+
+        await view.append(str)
+      }
+    }
+  }
+)
