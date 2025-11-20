@@ -145,6 +145,38 @@ test('trace - gets blocks needed from view before apply', async (t) => {
   }
 })
 
+test('trace - deduplicate block indexes', async (t) => {
+  const { bases } = await create(1, t, { apply })
+  const [a] = bases
+
+  await a.append('a1')
+  await a.append('a2')
+  await a.append('a3')
+
+  {
+    const node = await a.local.get(0)
+    t.absent(node.trace, 'first append has no trace')
+  }
+
+  {
+    const node = await a.local.get(2)
+    t.alike(node.trace.user, [{ view: 0, blocks: [0, 1] }], 'trace only includes 1 index')
+  }
+
+  async function apply(batch, view, host) {
+    for (const { value } of batch) {
+      if (view.length >= 2) {
+        await view.get(0)
+        await view.get(0)
+        await view.get(1)
+        await view.get(1)
+      }
+
+      await view.append(value)
+    }
+  }
+})
+
 test('trace - skips unindex view blocks', async (t) => {
   const { bases } = await create(1, t, { apply })
   const [a] = bases
