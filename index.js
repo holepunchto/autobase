@@ -1331,7 +1331,7 @@ module.exports = class Autobase extends ReadyResource {
   async _runForceFastForward() {
     await this.core.ready()
     if (this.closing) return
-    const rec = this._applyState ? this._applyState.recoverAt() : null
+    const rec = this._applyState ? await this._applyState.recoverAt() : null
     await this._runFastForward(
       new FastForward(this, this.core.key, { force: true, length: rec ? rec.length : 0 })
     )
@@ -1957,6 +1957,8 @@ module.exports = class Autobase extends ReadyResource {
         return
       } catch (err) {
         if (this.closing || !this.fastForwardTo) throw err
+        if (Date.now() - this.fastForwardFailedAt < MIN_FF_WAIT) throw err
+        this.fastForwardFailedAt = Date.now()
         // if an FF is enabled retry
       }
     }
