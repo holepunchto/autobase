@@ -1331,7 +1331,10 @@ module.exports = class Autobase extends ReadyResource {
   async _runForceFastForward() {
     await this.core.ready()
     if (this.closing) return
-    await this._runFastForward(new FastForward(this, this.core.key, { force: true }))
+    const rec = this._applyState ? this._applyState.recoverAt() : null
+    await this._runFastForward(
+      new FastForward(this, this.core.key, { force: true, length: rec ? rec.length : 0 })
+    )
   }
 
   // general repair method for trying to recover
