@@ -469,6 +469,8 @@ module.exports = class Autobase extends ReadyResource {
     this._caughtup = false
 
     this._rebooted()
+
+    this.emit('rotate-local-writer')
   }
 
   async setLocal(key, { keyPair } = {}) {
