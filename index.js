@@ -1206,7 +1206,7 @@ module.exports = class Autobase extends ReadyResource {
 
   _updateAll() {
     const p = []
-    for (const w of this.activeWriters) p.push(w.update(null).catch(this._warn))
+    for (const w of this.activeWriters) p.push(w.update(null).catch(safetyCatch))
     return Promise.all(p)
   }
 
