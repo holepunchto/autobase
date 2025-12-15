@@ -26,6 +26,7 @@ async function runTests() {
   await import('./topolist.js')
   await import('./trace.js')
   await import('./updates.js')
+  await import('./values.js')
 
   test.resume()
 }

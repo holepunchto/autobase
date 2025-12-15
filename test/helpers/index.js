@@ -32,13 +32,16 @@ module.exports = {
 async function createStores(n, t, opts = {}) {
   const storage = opts.storage || (() => tmpDir(t))
   const offset = opts.offset || 0
+  const manifestVersion = opts.manifestVersion
 
   const stores = []
   for (let i = offset; i < n + offset; i++) {
     const primaryKey = Buffer.alloc(32, i)
     const globalCache = opts.globalCache || null
     const dir = await storage()
-    stores.push(new Corestore(dir, { primaryKey, encryptionKey, globalCache, unsafe: true }))
+    stores.push(
+      new Corestore(dir, { primaryKey, encryptionKey, globalCache, unsafe: true, manifestVersion })
+    )
   }
 
   t.teardown(() => Promise.all(stores.map((s) => s.close())), { order: 2 })
