@@ -56,7 +56,6 @@
     "safety-catch": "^1.0.2",
     "scope-lock": "^1.2.4",
     "signal-promise": "^1.0.3",
-    "sodium-universal": "^5.0.1",
     "sub-encoder": "^2.1.1",
     "tiny-buffer-map": "^1.1.1"
   },
