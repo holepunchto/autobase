@@ -155,8 +155,37 @@ test('encryption - encrypt/decrypt', async (t) => {
   const store = new Corestore(tmp)
 
   const encryptionKey = b4a.alloc(32, 'secret')
+  const password = b4a.alloc(32, 'mypassword')
 
-  const password = 'mySuperPassword'
+  const blindEncryption = {
+    encrypt: async (key) => {
+      const buffer = b4a.allocUnsafe(
+        key.byteLength + sodium.crypto_secretbox_MACBYTES + sodium.crypto_secretbox_NONCEBYTES
+      )
+      const nonce = buffer.subarray(0, sodium.crypto_secretbox_NONCEBYTES)
+      const box = buffer.subarray(nonce.byteLength)
+
+      sodium.randombytes_buf(nonce)
+      sodium.crypto_secretbox_easy(box, key, nonce, password)
+
+      return { value: buffer, type: 1 }
+    },
+    decrypt: async ({ value, type }) => {
+      if (type !== 1) {
+        throw new Error('Wrong data!')
+      }
+
+      const nonce = value.subarray(0, sodium.crypto_secretbox_NONCEBYTES)
+      const box = value.subarray(nonce.byteLength)
+      const output = b4a.allocUnsafe(box.byteLength - sodium.crypto_secretbox_MACBYTES)
+
+      sodium.crypto_secretbox_open_easy(output, box, nonce, password)
+      return output
+    }
+  }
+
+  const b = t.test('blindEncryption')
+  b.plan(2)
 
   const base = new Autobase(store, {
     apply,
@@ -165,35 +194,28 @@ test('encryption - encrypt/decrypt', async (t) => {
     ackThreshold: 0,
     encryptionKey,
     blindEncryption: {
-      encrypt: async (encryptionKey) => {
-        const buffer = b4a.allocUnsafe(
-          encryptionKey.byteLength +
-            sodium.crypto_secretbox_MACBYTES +
-            sodium.crypto_secretbox_NONCEBYTES
-        )
-        const nonce = buffer.subarray(0, sodium.crypto_secretbox_NONCEBYTES)
-        const box = buffer.subarray(nonce.byteLength)
-
-        sodium.randombytes_buf(nonce)
-        sodium.crypto_secretbox_easy(box, encryptionKey, nonce, password)
-
-        return { value: buffer, type: 1 }
+      encrypt: (...args) => {
+        b.pass('called encrypt')
+        return blindEncryption.encrypt(...args)
       },
-      decrypt: async ({ value, type }) => {
-        if (type !== 1) {
-          throw new Error('Wrong data!')
-        }
-
-        const nonce = value.subarray(0, sodium.crypto_secretbox_NONCEBYTES)
-        const box = value.subarray(nonce.byteLength)
-        const output = b4a.allocUnsafe(box.byteLength - sodium.crypto_secretbox_MACBYTES)
-
-        sodium.crypto_secretbox_open_easy(output, box, nonce, password)
-        return output
+      decrypt: (...args) => {
+        b.fail('called decrypt')
+        return blindEncryption.decrypt(...args)
       }
     }
   })
+
   await base.ready()
+
+  {
+    const [encryptionKeyBuffer, encryptionKeyEncryptedBuffer] = await Promise.all([
+      base.local.getUserData('autobase/encryption'),
+      base.local.getUserData('autobase/blind-encryption')
+    ])
+
+    t.absent(encryptionKeyBuffer)
+    t.ok(encryptionKeyEncryptedBuffer)
+  }
 
   t.alike(base.encryptionKey, encryptionKey)
 
@@ -219,7 +241,40 @@ test('encryption - encrypt/decrypt', async (t) => {
 
   t.absent(found)
 
+  await base.append('you should still not see me')
   await base.close()
+
+  const store2 = new Corestore(tmp)
+  const base2 = new Autobase(store2, {
+    apply,
+    open,
+    ackInterval: 0,
+    ackThreshold: 0,
+    encryptionKey,
+    blindEncryption: {
+      encrypt: (...args) => {
+        b.fail('called encrypt on reboot')
+        return blindEncryption.encrypt(...args)
+      },
+      decrypt: (...args) => {
+        b.pass('called decrypt on reboot')
+        return blindEncryption.decrypt(...args)
+      }
+    }
+  })
+
+  t.alike(await base2.view.get(0), 'you should not see me')
+  t.ok(base2.encryptionKey)
+
+  {
+    const [encryptionKeyBuffer, encryptionKeyEncryptedBuffer] = await Promise.all([
+      base2.local.getUserData('autobase/encryption'),
+      base2.local.getUserData('autobase/blind-encryption')
+    ])
+
+    t.absent(encryptionKeyBuffer)
+    t.ok(encryptionKeyEncryptedBuffer)
+  }
 })
 
 function open(store) {
