@@ -41,6 +41,7 @@
     "compact-encoding": "^2.16.0",
     "core-coupler": "^2.0.0",
     "debounceify": "^1.0.0",
+    "encryption-encoding": "^1.0.3",
     "hyperbee": "^2.22.0",
     "hypercore": "^11.4.0",
     "hypercore-crypto": "^3.4.0",

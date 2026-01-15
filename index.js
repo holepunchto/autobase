@@ -11,6 +11,7 @@ const ProtomuxWakeup = require('protomux-wakeup')
 const rrp = require('resolve-reject-promise')
 const Hypercore = require('hypercore')
 const ScopeLock = require('scope-lock')
+const encryptionEncoding = require('encryption-encoding')
 
 const LocalState = require('./lib/local-state.js')
 const Linearizer = require('./lib/linearizer.js')
@@ -100,6 +101,12 @@ module.exports = class Autobase extends ReadyResource {
     this.encrypt = !!handlers.encrypt
     this.encryptionKey = null
     this.encryption = null
+    this.encryptionHook = handlers.encryptionHook
+      ? {
+          encrypt: handlers.encryptionHook.encrypt,
+          decrypt: handlers.encryptionHook.decrypt
+        }
+      : null
 
     this.activeBatch = null // maintained by the append-batch
 
@@ -343,7 +350,8 @@ module.exports = class Autobase extends ReadyResource {
     const result = await boot(this.store, this.key, {
       encryptionKey: this.encryptionKey,
       encrypt: this.encrypt,
-      keyPair: this.keyPair
+      keyPair: this.keyPair,
+      encryptionHook: this.encryptionHook
     })
 
     this._primaryBootstrap = result.bootstrap
@@ -446,7 +454,17 @@ module.exports = class Autobase extends ReadyResource {
     await LocalState.moveTo(oldLocal, local)
 
     await local.setUserData('referrer', this.key)
-    if (this.encryptionKey) await local.setUserData('autobase/encryption', this.encryptionKey)
+    if (this.encryptionKey) {
+      if (this.encryptionHook) {
+        const encrypted = await encryptionEncoding.encrypt(
+          this.encryptionKey,
+          this.encryptionHook.encrypt
+        )
+        await local.setUserData('autobase/blind-encryption', encrypted)
+      } else {
+        await local.setUserData('autobase/encryption', this.encryptionKey)
+      }
+    }
 
     await store.flush()
     await store.close()
