@@ -150,11 +150,11 @@ test('encryption - pass as promise', async (t) => {
   await base.close()
 })
 
-test.solo('encryption - encrypt/decrypt', async (t) => {
+test('encryption - encrypt/decrypt', async (t) => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
 
-  const encryptionKey = b4a.alloc(32).fill('secret')
+  const encryptionKey = b4a.alloc(32, 'secret')
 
   const password = 'mySuperPassword'
 
@@ -164,7 +164,7 @@ test.solo('encryption - encrypt/decrypt', async (t) => {
     ackInterval: 0,
     ackThreshold: 0,
     encryptionKey,
-    encryptionHook: {
+    blindEncryption: {
       encrypt: async (encryptionKey) => {
         const buffer = b4a.allocUnsafe(
           encryptionKey.byteLength +

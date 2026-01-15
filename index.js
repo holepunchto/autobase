@@ -101,12 +101,7 @@ module.exports = class Autobase extends ReadyResource {
     this.encrypt = !!handlers.encrypt
     this.encryptionKey = null
     this.encryption = null
-    this.encryptionHook = handlers.encryptionHook
-      ? {
-          encrypt: handlers.encryptionHook.encrypt,
-          decrypt: handlers.encryptionHook.decrypt
-        }
-      : null
+    this.blindEncryption = handlers.blindEncryption
 
     this.activeBatch = null // maintained by the append-batch
 
@@ -351,7 +346,7 @@ module.exports = class Autobase extends ReadyResource {
       encryptionKey: this.encryptionKey,
       encrypt: this.encrypt,
       keyPair: this.keyPair,
-      encryptionHook: this.encryptionHook
+      blindEncryption: this.blindEncryption
     })
 
     this._primaryBootstrap = result.bootstrap
@@ -455,10 +450,10 @@ module.exports = class Autobase extends ReadyResource {
 
     await local.setUserData('referrer', this.key)
     if (this.encryptionKey) {
-      if (this.encryptionHook) {
+      if (this.blindEncryption) {
         const encrypted = await encryptionEncoding.encrypt(
           this.encryptionKey,
-          this.encryptionHook.encrypt
+          this.blindEncryption.encrypt
         )
         await local.setUserData('autobase/blind-encryption', encrypted)
       } else {
