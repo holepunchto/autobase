@@ -157,33 +157,7 @@ test('encryption - encrypt/decrypt', async (t) => {
   const encryptionKey = b4a.alloc(32, 'secret')
   const password = b4a.alloc(32, 'mypassword')
 
-  const blindEncryption = {
-    encrypt: async (key) => {
-      const buffer = b4a.allocUnsafe(
-        key.byteLength + sodium.crypto_secretbox_MACBYTES + sodium.crypto_secretbox_NONCEBYTES
-      )
-      const nonce = buffer.subarray(0, sodium.crypto_secretbox_NONCEBYTES)
-      const box = buffer.subarray(nonce.byteLength)
-
-      sodium.randombytes_buf(nonce)
-      sodium.crypto_secretbox_easy(box, key, nonce, password)
-
-      return { value: buffer, type: 1 }
-    },
-    decrypt: async ({ value, type }) => {
-      if (type !== 1) {
-        throw new Error('Wrong data!')
-      }
-
-      const nonce = value.subarray(0, sodium.crypto_secretbox_NONCEBYTES)
-      const box = value.subarray(nonce.byteLength)
-      const output = b4a.allocUnsafe(box.byteLength - sodium.crypto_secretbox_MACBYTES)
-
-      sodium.crypto_secretbox_open_easy(output, box, nonce, password)
-      return output
-    }
-  }
-
+  const blindEncryption = setupBlindEncryption(password)
   const b = t.test('blindEncryption')
   b.plan(2)
 
@@ -217,32 +191,12 @@ test('encryption - encrypt/decrypt', async (t) => {
     t.ok(encryptionKeyEncryptedBuffer)
   }
 
-  t.alike(base.encryptionKey, encryptionKey)
-
-  await base.append('you should not see me')
-
-  t.alike(await base.view.get(0), 'you should not see me')
-  t.is(base.view.signedLength, 1)
-  t.is(base.system.core.signedLength, 3)
-
-  let found = false
-
-  for (const core of store.cores) {
-    const session = store.get(core.key)
-    await session.setEncryptionKey(null) // ensure no auto decryption
-
-    for (let i = 0; i < core.length; i++) {
-      const buf = await session.get(i, { valueEncoding: 'ascii' })
-      if (buf.indexOf('you should not see me') > -1) found = true
-    }
-
-    await session.close()
-  }
-
-  t.absent(found)
+  t.ok(base.encryptionKey)
 
   await base.append('you should still not see me')
   await base.close()
+
+  t.is(store.cores.size, 0)
 
   const store2 = new Corestore(tmp)
   const base2 = new Autobase(store2, {
@@ -263,7 +217,7 @@ test('encryption - encrypt/decrypt', async (t) => {
     }
   })
 
-  t.alike(await base2.view.get(0), 'you should not see me')
+  t.alike(await base2.view.get(0), 'you should still not see me')
   t.ok(base2.encryptionKey)
 
   {
@@ -275,7 +229,177 @@ test('encryption - encrypt/decrypt', async (t) => {
     t.absent(encryptionKeyBuffer)
     t.ok(encryptionKeyEncryptedBuffer)
   }
+
+  t.alike(await base2.view.get(0), 'you should still not see me')
+  t.ok(base2.encryptionKey)
+
+  let found = false
+
+  for (const core of store2.cores) {
+    const session = store2.get(core.key)
+    await session.setEncryptionKey(null) // ensure no auto decryption
+    for (let i = 0; i < session.length; i++) {
+      const buf = await session.get(i, { valueEncoding: 'ascii' })
+      if (buf.indexOf('you should still not see me') > -1) found = true
+    }
+    await session.close()
+  }
+
+  t.absent(found)
+  await base2.close()
 })
+
+test('encryption - encrypt/decrypt - compat', async (t) => {
+  const tmp = await tmpDir(t)
+  const store = new Corestore(tmp)
+
+  const encryptionKey = b4a.alloc(32, 'secret')
+  const password = b4a.alloc(32, 'mypassword')
+
+  const blindEncryption = setupBlindEncryption(password)
+  const b = t.test('blindEncryption')
+  b.plan(2)
+
+  const base = new Autobase(store, {
+    apply,
+    open,
+    ackInterval: 0,
+    ackThreshold: 0,
+    encryptionKey
+  })
+
+  await base.ready()
+
+  {
+    const [encryptionKeyBuffer, encryptionKeyEncryptedBuffer] = await Promise.all([
+      base.local.getUserData('autobase/encryption'),
+      base.local.getUserData('autobase/blind-encryption')
+    ])
+
+    t.ok(encryptionKeyBuffer)
+    t.absent(encryptionKeyEncryptedBuffer)
+  }
+
+  t.ok(base.encryptionKey)
+
+  await base.append('you should still not see me')
+  await base.close()
+
+  t.is(store.cores.size, 0)
+
+  const store2 = new Corestore(tmp)
+  const base2 = new Autobase(store2, {
+    apply,
+    open,
+    ackInterval: 0,
+    ackThreshold: 0,
+    encryptionKey,
+    blindEncryption: {
+      encrypt: (...args) => {
+        // will encrypt the old plain text one
+        b.pass('called encrypt on reboot')
+        return blindEncryption.encrypt(...args)
+      },
+      decrypt: (...args) => {
+        b.fail('called decrypt on reboot')
+        return blindEncryption.decrypt(...args)
+      }
+    }
+  })
+
+  t.alike(await base2.view.get(0), 'you should still not see me')
+  t.ok(base2.encryptionKey)
+
+  // replaced encryption with blind-encryption!
+  {
+    const [encryptionKeyBuffer, encryptionKeyEncryptedBuffer] = await Promise.all([
+      base2.local.getUserData('autobase/encryption'),
+      base2.local.getUserData('autobase/blind-encryption')
+    ])
+
+    t.absent(encryptionKeyBuffer)
+    t.ok(encryptionKeyEncryptedBuffer)
+  }
+
+  t.alike(await base2.view.get(0), 'you should still not see me')
+  t.ok(base2.encryptionKey)
+
+  let found = false
+
+  for (const core of store2.cores) {
+    const session = store2.get(core.key)
+    await session.setEncryptionKey(null) // ensure no auto decryption
+    for (let i = 0; i < session.length; i++) {
+      const buf = await session.get(i, { valueEncoding: 'ascii' })
+      if (buf.indexOf('you should still not see me') > -1) found = true
+    }
+    await session.close()
+  }
+
+  t.absent(found)
+  await base2.close()
+
+  const store3 = new Corestore(tmp)
+  const base3 = new Autobase(store3, {
+    apply,
+    open,
+    ackInterval: 0,
+    ackThreshold: 0,
+    encryptionKey,
+    blindEncryption: {
+      encrypt: (...args) => {
+        b.fail('called encrypt on reboot#2')
+        return blindEncryption.encrypt(...args)
+      },
+      decrypt: (...args) => {
+        b.pass('called decrypt on reboot#2')
+        return blindEncryption.decrypt(...args)
+      }
+    }
+  })
+  await base3.ready()
+
+  {
+    const [encryptionKeyBuffer, encryptionKeyEncryptedBuffer] = await Promise.all([
+      base3.local.getUserData('autobase/encryption'),
+      base3.local.getUserData('autobase/blind-encryption')
+    ])
+
+    t.absent(encryptionKeyBuffer)
+    t.ok(encryptionKeyEncryptedBuffer)
+  }
+
+  await base3.close()
+})
+
+function setupBlindEncryption(password) {
+  return {
+    encrypt: async (key) => {
+      const buffer = b4a.allocUnsafe(
+        key.byteLength + sodium.crypto_secretbox_MACBYTES + sodium.crypto_secretbox_NONCEBYTES
+      )
+      const nonce = buffer.subarray(0, sodium.crypto_secretbox_NONCEBYTES)
+      const box = buffer.subarray(nonce.byteLength)
+
+      sodium.randombytes_buf(nonce)
+      sodium.crypto_secretbox_easy(box, key, nonce, password)
+
+      return { value: buffer, type: 1 }
+    },
+    decrypt: async ({ value, type }) => {
+      if (type !== 1) {
+        throw new Error('Wrong data!')
+      }
+
+      const nonce = value.subarray(0, sodium.crypto_secretbox_NONCEBYTES)
+      const box = value.subarray(nonce.byteLength)
+      const output = b4a.allocUnsafe(box.byteLength - sodium.crypto_secretbox_MACBYTES)
+
+      sodium.crypto_secretbox_open_easy(output, box, nonce, password)
+      return output
+    }
+  }
+}
 
 function open(store) {
   return store.get('view', { valueEncoding: 'json' })
