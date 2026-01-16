@@ -101,7 +101,7 @@ module.exports = class Autobase extends ReadyResource {
     this.encrypt = !!handlers.encrypt
     this.encryptionKey = null
     this.encryption = null
-    this.blindEncryption = handlers.blindEncryption
+    this.blindEncryption = handlers.blindEncryption || null
 
     this.activeBatch = null // maintained by the append-batch
 
