@@ -61,7 +61,7 @@
   },
   "devDependencies": {
     "autobase-test-helpers": "^3.0.0",
-    "blind-encryption-sodium": "^1.0.2",
+    "blind-encryption-sodium": "^2.0.0",
     "brittle": "^3.1.1",
     "corestore": "^7.0.15",
     "prettier": "^3.6.2",
