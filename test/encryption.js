@@ -150,7 +150,7 @@ test('encryption - pass as promise', async (t) => {
   await base.close()
 })
 
-test('encryption - encrypt/decrypt', async (t) => {
+test('encryption - encrypt/decrypt - rotate', async (t) => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
 
@@ -158,10 +158,13 @@ test('encryption - encrypt/decrypt', async (t) => {
   const password = b4a.alloc(32, 'mypassword')
   const newPassword = b4a.alloc(32, 'myNewPassword')
 
-  const blindEncryption = new BlindEncryptionSodium(password)
-  const blindEncryptionNew = new BlindEncryptionSodium(newPassword)
+  const blindEncryption = new BlindEncryptionSodium([{ key: password, type: 0 }])
+  const blindEncryptionNew = new BlindEncryptionSodium([
+    { key: password, type: 0 },
+    { key: newPassword, type: 1 }
+  ])
   const b = t.test('blindEncryption')
-  b.plan(2)
+  b.plan(3)
 
   const base = new Autobase(store, {
     apply,
@@ -209,30 +212,15 @@ test('encryption - encrypt/decrypt', async (t) => {
     encryptionKey,
     blindEncryption: {
       encrypt: (...args) => {
-        b.fail('called encrypt on reboot')
-        return blindEncryption.encrypt(...args)
+        b.pass('rotate')
+        return blindEncryptionNew.encrypt(...args)
       },
       decrypt: (...args) => {
-        b.pass('called decrypt on reboot')
-        return blindEncryption.decrypt(...args)
+        b.pass('called decrypt before rotate')
+        return blindEncryptionNew.decrypt(...args)
       }
     }
   })
-
-  t.alike(await base2.view.get(0), 'you should still not see me')
-  t.ok(base2.encryptionKey)
-
-  await Autobase.RotateBlindEncryption(base2, blindEncryption, blindEncryptionNew)
-
-  {
-    const [encryptionKeyBuffer, encryptionKeyEncryptedBuffer] = await Promise.all([
-      base2.local.getUserData('autobase/encryption'),
-      base2.local.getUserData('autobase/blind-encryption')
-    ])
-
-    t.absent(encryptionKeyBuffer)
-    t.ok(encryptionKeyEncryptedBuffer)
-  }
 
   t.alike(await base2.view.get(0), 'you should still not see me')
   t.ok(base2.encryptionKey)
@@ -264,11 +252,11 @@ test('encryption - encrypt/decrypt', async (t) => {
     encryptionKey,
     blindEncryption: {
       encrypt: (...args) => {
-        b2.fail('called encrypt on reboot')
+        b2.fail('called encrypt after already rotated')
         return blindEncryptionNew.encrypt(...args)
       },
       decrypt: (...args) => {
-        b2.pass('called decrypt on reboot')
+        b2.pass('called decrypt with rotated')
         return blindEncryptionNew.decrypt(...args)
       }
     }
@@ -287,7 +275,7 @@ test('encryption - encrypt/decrypt', async (t) => {
   const encryptionKey = b4a.alloc(32, 'secret')
   const password = b4a.alloc(32, 'mypassword')
 
-  const blindEncryption = new BlindEncryptionSodium(password)
+  const blindEncryption = new BlindEncryptionSodium([{ key: password, type: 0 }])
   const b = t.test('blindEncryption')
   b.plan(2)
 
@@ -386,7 +374,7 @@ test('encryption - encrypt/decrypt - compat', async (t) => {
   const encryptionKey = b4a.alloc(32, 'secret')
   const password = b4a.alloc(32, 'mypassword')
 
-  const blindEncryption = new BlindEncryptionSodium(password)
+  const blindEncryption = new BlindEncryptionSodium([{ key: password, type: 0 }])
   const b = t.test('blindEncryption')
   b.plan(2)
 

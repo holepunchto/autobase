@@ -32,7 +32,6 @@ const AppendBatch = require('./lib/append-batch.js')
 const { PublicApplyCalls } = require('./lib/apply-calls.js')
 const boot = require('./lib/boot.js')
 const { MAX_AUTOBASE_VERSION, BOOT_RECORD_VERSION } = require('./lib/caps.js')
-const rotate = require('./lib/rotate.js')
 
 const inspect = Symbol.for('nodejs.util.inspect.custom')
 const INTERRUPT = new Error('Apply interrupted')
@@ -225,8 +224,6 @@ module.exports = class Autobase extends ReadyResource {
 
     return indent + 'Autobase { ... }'
   }
-
-  static RotateBlindEncryption = rotate
 
   // just compat, use .key
   get bootstrap() {
