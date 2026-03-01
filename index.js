@@ -1799,6 +1799,15 @@ module.exports = class Autobase extends ReadyResource {
     const writable = this.writable
 
     while (!this._interrupting && !this.paused) {
+      if (this.local.recovering) {
+        try {
+          await this.local.recover()
+        } catch {
+          await this._runForceFastForward()
+        }
+        continue
+      }
+
       if (this.fastForwardTo !== null) {
         await this._applyFastForward()
         continue // revaluate conditions...
