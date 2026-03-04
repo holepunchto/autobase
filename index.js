@@ -1389,9 +1389,9 @@ module.exports = class Autobase extends ReadyResource {
     try {
       const store = this._viewStore.atomize()
 
-      const migrated = !b4a.equals(key, this.core.key)
-
       const systemRef = await this._viewStore.findViewByKey(key, indexers, manifestVersion, entropy)
+      const migrated = !b4a.equals(key, systemRef.core.key)
+
       ffed.add(systemRef)
 
       if (migrated) {
@@ -1403,6 +1403,9 @@ module.exports = class Autobase extends ReadyResource {
       for (const v of views) {
         const ref = await this._viewStore.findViewByKey(v.key, indexers, manifestVersion, entropy)
         if (!ref) continue // unknown, view ignored
+
+        const migrated = !b4a.equals(ref.core.key, v.key)
+
         ffed.add(ref)
 
         if (migrated) {
