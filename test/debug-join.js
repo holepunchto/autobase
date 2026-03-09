@@ -16,67 +16,53 @@ const {
   createBase
 } = require('./helpers')
 
-test.solo('fast-forward - multiple writers with view migration', async (t) => {
+test('fast-forward - signal preferred ff', { timeout: 999999999 }, async (t) => {
   t.plan(1)
 
-  const MESSAGES_PER_ROUND = 40
+  let slow = false
 
-  const { bases } = await create(4, t, {
+  const { bases } = await create(3, t, {
     fastForward: true,
-    storage: () => tmpDir(t)
+    storage: () => tmpDir(t),
+    async apply(nodes, view, host) {
+      for (const node of nodes) {
+        if (node.value.add) {
+          await host.addWriter(b4a.from(node.value.add, 'hex'), { indexer: true })
+          continue
+        }
+
+        await view.append(node.value)
+        if (slow) {
+          host.preferFastForward()
+          await view.get(1000) // just a hack to pretend a network stall
+          t.fail('should not get here')
+        }
+      }
+    }
   })
 
-  const [a, b, c, d] = bases
+  const [a, b, c] = bases
 
-  await a.append('a')
-  await replicateAndSync(bases)
+  await a.append('a0')
 
-  await addMultipleAndSync(
-    a,
-    [
-      { add: b.local.key.toString('hex'), indexer: true },
-      { add: c.local.key.toString('hex'), indexer: true }
-    ],
-    [a, b, c]
-  )
+  await replicateAndSync([a, b])
 
-  await b.append('b')
+  await a.append('a1')
+
+  slow = true // pretend replication stalls
+
+  await replicateAndSync([a, b])
+
+  slow = false // pretend replication stalls
+
+  await addWriter(a, c)
+  await replicateAndSync([a, c])
+  console.log(c.writable)
   await c.append('c')
+  await replicateAndSync([a, c])
 
-  await confirm([a, b, c])
+  console.log(a.linearizer.indexers.length)
+  await replicateAndSync([a, b])
 
-  const online = [a, b, c]
-
-  for (let i = 0; i < 10; i++) {
-    const unreplicate = replicate(online)
-    await eventFlush()
-
-    const as = Math.random() * MESSAGES_PER_ROUND
-    const bs = Math.random() * MESSAGES_PER_ROUND
-    const cs = Math.random() * MESSAGES_PER_ROUND
-
-    for (let j = 0; j < Math.max(as, bs, cs); j++) {
-      if (j < as) a.append('a' + j)
-      if (j < bs) b.append('b' + j)
-      if (j < cs) c.append('c' + j)
-
-      if (j % 2 === 0) await eventFlush()
-    }
-
-    await unreplicate()
-    await confirm(online)
-
-    if (i === 8) online.push(d)
-  }
-
-  const core = d.view
-
-  t.is(d.linearizer.indexers.length, 3)
-
-  async function addMultipleAndSync(base, add, bases) {
-    await base.append({ add })
-    await replicateAndSync(bases)
-    await base.ack()
-    await replicateAndSync(bases)
-  }
+  t.is(b.core.length, a.core.length, 'did not get stuck, length is ' + b.core.length)
 })

@@ -235,7 +235,7 @@ async function apply(batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
       if (typeof value.add === 'string') {
-        value.add = [value]
+        value.add = [{ add: value.add, indexer: value.indexer }]
       }
 
       for (const { add, indexer } of value.add) {
