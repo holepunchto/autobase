@@ -234,8 +234,14 @@ async function compare(a, b, full = false) {
 async function apply(batch, view, base) {
   for (const { value } of batch) {
     if (value.add) {
-      const key = Buffer.from(value.add, 'hex')
-      await base.addWriter(key, { indexer: value.indexer })
+      if (typeof value.add === 'string') {
+        value.add = [value]
+      }
+
+      for (const { add, indexer } of value.add) {
+        const key = Buffer.from(add, 'hex')
+        await base.addWriter(key, { indexer: value.indexer })
+      }
       continue
     }
 
