@@ -65,7 +65,7 @@ test('repair borked batches', async (t) => {
   // Repair broken batch on view core
   const repairViewCore = store2.get(viewKey)
   await repairViewCore.ready()
-  await repairViewCore.core.storage.purgeBatches()
+  await repairViewCore.core.storage.deleteBatches()
   await repairViewCore.close()
 
   // Reload
