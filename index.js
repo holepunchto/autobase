@@ -1337,6 +1337,18 @@ module.exports = class Autobase extends ReadyResource {
     this._checkWriters = []
   }
 
+  async _moveTo() {
+    assert(this._applyState.closed)
+    for (const ref of this._viewStore.byName.values()) {
+      if (!ref.moveTo) continue
+      const [batch, next] = ref.moveTo
+      ref.moveTo = null
+      await ref.batch.state.moveTo(batch, batch.length)
+      await batch.close()
+      ref.migrated(this, next)
+    }
+  }
+
   async _makeLinearizerFromViewState() {
     const sys = await this._applyState.getIndexedSystem()
     await this._makeLinearizer(sys)
@@ -1447,23 +1459,23 @@ module.exports = class Autobase extends ReadyResource {
 
       await LocalState.clear(local)
 
-      if (changes) changes.finalise()
-
       await store.flush()
       await store.close()
     } finally {
       if (--this._flushing === 0) this._flushSignal.notify()
     }
 
-    const to = this.core.signedLength
-
-    for (const ref of ffed) await ref.release()
+    for (const ref of this._viewStore.byName.values()) await ref.release()
 
     this.recoveries = RECOVERIES
     this.fastForwardTo = null
     this._queueFastForward()
 
     await this._clearWriters()
+    await this._moveTo()
+    const to = this.core.signedLength
+
+    if (changes) changes.finalise()
 
     this._applyState = new ApplyState(this)
     await this._applyState.ready()
@@ -1510,10 +1522,7 @@ module.exports = class Autobase extends ReadyResource {
     // remake the batch, reset from our prologue in case it replicated inbetween
     // TODO: we should really have an HC function for this
 
-    await ref.batch.state.moveTo(batch, batch.length)
-    await batch.close()
-
-    ref.migrated(this, next)
+    ref.moveTo = [batch, next]
   }
 
   async _migrateView(
@@ -1564,10 +1573,7 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
-    await ref.batch.state.moveTo(batch, batch.length)
-    await batch.close()
-
-    ref.migrated(this, next)
+    ref.moveTo = [batch, next]
 
     return ref
   }
@@ -1649,6 +1655,7 @@ module.exports = class Autobase extends ReadyResource {
     await this._makeLinearizerFromViewState()
 
     await this._applyState.finalize(key)
+    await this._moveTo()
 
     this._applyState = new ApplyState(this)
 

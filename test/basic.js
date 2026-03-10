@@ -562,7 +562,7 @@ test('basic - add 5 writers', async (t) => {
   const [a, b, c, d, e] = bases
 
   let migrate = 0
-  e.system.core.on('migrate', () => migrate++)
+  e.core.on('migrate', () => migrate++)
 
   await addWriter(a, b)
   await addWriter(a, c)
