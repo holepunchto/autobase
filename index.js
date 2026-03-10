@@ -1510,9 +1510,7 @@ module.exports = class Autobase extends ReadyResource {
     // remake the batch, reset from our prologue in case it replicated inbetween
     // TODO: we should really have an HC function for this
 
-    await ref.batch.state.moveTo(batch, batch.length)
-    await batch.close()
-
+    ref.moveTo = batch
     ref.migrated(this, next)
   }
 
@@ -1564,9 +1562,7 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
-    await ref.batch.state.moveTo(batch, batch.length)
-    await batch.close()
-
+    ref.moveTo = batch
     ref.migrated(this, next)
 
     return ref
@@ -1649,6 +1645,14 @@ module.exports = class Autobase extends ReadyResource {
     await this._makeLinearizerFromViewState()
 
     await this._applyState.finalize(key)
+
+    for (const ref of this._viewStore.byName.values()) {
+      if (!ref.moveTo) continue
+      const batch = ref.moveTo
+      ref.moveTo = null
+      await ref.batch.state.moveTo(batch, batch.length)
+      await batch.close()
+    }
 
     this._applyState = new ApplyState(this)
 
