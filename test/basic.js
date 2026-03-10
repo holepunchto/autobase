@@ -62,19 +62,16 @@ test('repair borked batches', async (t) => {
   const store2 = new Corestore(tmp)
   await store2.ready()
 
-  // Repair broken batch on view core
-  const repairViewCore = store2.get(viewKey)
-  await repairViewCore.ready()
-  await repairViewCore.core.storage.deleteBatches()
-  await repairViewCore.close()
+  const base2 = createBase(store2, null, t)
+  await t.exception(base2.ready())
 
-  // Reload
-  const baseReloaded = createBase(store2, base.key, t)
-  await baseReloaded.ready()
-  await baseReloaded.append('boop')
-  t.is(baseReloaded.view.length, 2, 'appended after recovery')
-  await baseReloaded.close()
   await store2.close()
+
+  const store3 = new Corestore(tmp)
+  await store3.ready()
+
+  const base3 = createBase(store3, null, t)
+  await t.execution(base3.ready())
 })
 
 test('basic - single writer', async (t) => {
