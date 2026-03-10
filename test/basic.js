@@ -556,13 +556,13 @@ test('basic - throws', async (t) => {
   await t.exception(a.view.append('append outside apply'))
 })
 
-test('basic - add 5 writers', async (t) => {
+test.solo('basic - add 5 writers', async (t) => {
   const { bases } = await create(5, t)
 
   const [a, b, c, d, e] = bases
 
   let migrate = 0
-  e.system.core.on('migrate', () => migrate++)
+  e.core.on('migrate', () => migrate++)
 
   await addWriter(a, b)
   await addWriter(a, c)

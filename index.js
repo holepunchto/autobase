@@ -1337,6 +1337,18 @@ module.exports = class Autobase extends ReadyResource {
     this._checkWriters = []
   }
 
+  async _moveTo() {
+    assert(this._applyState.closed)
+    for (const ref of this._viewStore.byName.values()) {
+      if (!ref.moveTo) continue
+      const batch = ref.moveTo
+      ref.moveTo = null
+      await ref.batch.state.moveTo(batch, batch.length)
+      await batch.close()
+      // await ref.release()
+    }
+  }
+
   async _makeLinearizerFromViewState() {
     const sys = await this._applyState.getIndexedSystem()
     await this._makeLinearizer(sys)
@@ -1447,15 +1459,11 @@ module.exports = class Autobase extends ReadyResource {
 
       await LocalState.clear(local)
 
-      if (changes) changes.finalise()
-
       await store.flush()
       await store.close()
     } finally {
       if (--this._flushing === 0) this._flushSignal.notify()
     }
-
-    const to = this.core.signedLength
 
     for (const ref of ffed) await ref.release()
 
@@ -1464,6 +1472,10 @@ module.exports = class Autobase extends ReadyResource {
     this._queueFastForward()
 
     await this._clearWriters()
+    await this._moveTo()
+    const to = this.core.signedLength
+
+    if (changes) changes.finalise()
 
     this._applyState = new ApplyState(this)
     await this._applyState.ready()
@@ -1645,14 +1657,7 @@ module.exports = class Autobase extends ReadyResource {
     await this._makeLinearizerFromViewState()
 
     await this._applyState.finalize(key)
-
-    for (const ref of this._viewStore.byName.values()) {
-      if (!ref.moveTo) continue
-      const batch = ref.moveTo
-      ref.moveTo = null
-      await ref.batch.state.moveTo(batch, batch.length)
-      await batch.close()
-    }
+    await this._moveTo()
 
     this._applyState = new ApplyState(this)
 

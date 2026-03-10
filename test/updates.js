@@ -73,14 +73,14 @@ test('updates - fast-forward', async (t) => {
   const a = createBase(stores[0], null, t, { fastForward: true })
   await a.ready()
 
-  const b = createBase(stores[1], a.local.key, t, {
-    fastForward: true,
-    update
-  })
-
   for (let i = 0; i < 1000; i++) {
     await a.append('a' + i)
   }
+
+  const b = createBase(stores[1], a.local.key, t, {
+    fastForward: { key: a.core.key },
+    update
+  })
 
   await replicateAndSync([a, b])
 
