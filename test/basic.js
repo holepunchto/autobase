@@ -556,7 +556,7 @@ test('basic - throws', async (t) => {
   await t.exception(a.view.append('append outside apply'))
 })
 
-test.solo('basic - add 5 writers', async (t) => {
+test('basic - add 5 writers', async (t) => {
   const { bases } = await create(5, t)
 
   const [a, b, c, d, e] = bases
