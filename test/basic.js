@@ -138,6 +138,36 @@ test('basic - wait for writable', async (t) => {
   t.pass('resolved')
 })
 
+test('basic - teardown rugpull works', async (t) => {
+  const { bases } = await create(3, t, {
+    open: (store) => store.get('test'),
+    close: (c) => c.close()
+  })
+
+  const [a, b, c] = bases
+
+  await addWriter(a, b)
+  await confirm([a, b, c])
+
+  await addWriter(b, c)
+
+  const all = []
+
+  for (let i = 0; i < 10; i++) {
+    const s1 = a._applyState.view.session()
+    all.push(s1)
+  }
+
+  all[5].on('close', function () {
+    all[0].session()
+    for (const s of all) s.close()
+  })
+
+  await confirm([a, b, c])
+
+  t.pass('resolved')
+})
+
 test('basic - no truncates when history is linear', async (t) => {
   const { bases } = await create(3, t)
   const [a, b, c] = bases
