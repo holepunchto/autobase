@@ -1489,6 +1489,8 @@ module.exports = class Autobase extends ReadyResource {
 
   // TODO: not atomic in regards to the ff, fix that
   async _applyFastForwardMigration(ref, v) {
+    await ref.batch.ready()
+
     const next = this.store.get(v.key)
     await next.ready()
 
@@ -1525,6 +1527,7 @@ module.exports = class Autobase extends ReadyResource {
     manifestData
   ) {
     const ref = this._viewStore.byName.get(name)
+    await ref.batch.ready()
 
     const prologue =
       indexedLength === 0
