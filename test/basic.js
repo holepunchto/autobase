@@ -21,6 +21,56 @@ const {
   compareViews
 } = require('./helpers')
 
+test.solo('repair borked batches', async (t) => {
+  const tmp = await tmpDir(t)
+  const store = new Corestore(tmp)
+  const base = createBase(store, null, t)
+
+  await base.append('hello')
+  t.is(base.view.length, 1, 'appended')
+  const batchOnlyState = base.view.core.sessionStates.find((s) => s.name === 'batch' && !s.atomized)
+  const viewKey = base.view.key
+
+  t.comment('before borking')
+  {
+    await batchOnlyState.mutex.lock()
+    const batch1 = await base.view.core.storage.createSession('batch', null)
+
+    const tx = batch1.write()
+    // Set a nonsense dependency to force all tree nodes (from the parent) to fail
+    tx.setDependency({
+      dataPointer: 1337,
+      length: 3
+    })
+    const flushed = await tx.flush()
+    batchOnlyState._unlock()
+    t.ok(flushed)
+  }
+
+  t.comment('verify its borked')
+  {
+    await batchOnlyState.mutex.lock()
+    const rx = batchOnlyState.storage.read()
+    const tree = rx.getTreeNode(1)
+    rx.tryFlush()
+    t.is(await tree, null, 'tree node gone')
+    batchOnlyState._unlock()
+  }
+  await base.close()
+  await store.close()
+
+  const store2 = new Corestore(tmp)
+  await store2.ready()
+
+  // Reload
+  const baseReloaded = createBase(store2, base.key, t)
+  await baseReloaded.ready()
+  await baseReloaded.append('boop')
+  t.is(baseReloaded.view.length, 2, 'appended after recovery')
+  await baseReloaded.close()
+  await store2.close()
+})
+
 test('basic - single writer', async (t) => {
   const { bases } = await create(1, t)
   const [base] = bases
