@@ -740,6 +740,10 @@ module.exports = class Autobase extends ReadyResource {
     try {
       await this._applyState.ready()
     } catch (err) {
+      if (isViewCorruption(err)) {
+        await ApplyState.clearViewBatches(this)
+      }
+
       if (this.closing) return
 
       try {
@@ -2211,6 +2215,10 @@ function toKey(k) {
 
 function isAutobaseMessage(msg) {
   return msg.checkpoint ? msg.checkpoint.length > 0 : msg.checkpoint === null
+}
+
+function isViewCorruption(err) {
+  return err.code === 'INVALID_OPERATION'
 }
 
 function compareNodes(a, b) {
