@@ -1341,11 +1341,11 @@ module.exports = class Autobase extends ReadyResource {
     assert(this._applyState.closed)
     for (const ref of this._viewStore.byName.values()) {
       if (!ref.moveTo) continue
-      const batch = ref.moveTo
+      const [batch, next] = ref.moveTo
       ref.moveTo = null
       await ref.batch.state.moveTo(batch, batch.length)
       await batch.close()
-      // await ref.release()
+      ref.migrated(this, next)
     }
   }
 
@@ -1465,7 +1465,7 @@ module.exports = class Autobase extends ReadyResource {
       if (--this._flushing === 0) this._flushSignal.notify()
     }
 
-    for (const ref of ffed) await ref.release()
+    for (const ref of this._viewStore.byName.values()) await ref.release()
 
     this.recoveries = RECOVERIES
     this.fastForwardTo = null
@@ -1522,8 +1522,7 @@ module.exports = class Autobase extends ReadyResource {
     // remake the batch, reset from our prologue in case it replicated inbetween
     // TODO: we should really have an HC function for this
 
-    ref.moveTo = batch
-    ref.migrated(this, next)
+    ref.moveTo = [batch, next]
   }
 
   async _migrateView(
@@ -1574,8 +1573,7 @@ module.exports = class Autobase extends ReadyResource {
       }
     }
 
-    ref.moveTo = batch
-    ref.migrated(this, next)
+    ref.moveTo = [batch, next]
 
     return ref
   }
