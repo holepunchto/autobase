@@ -21,7 +21,7 @@ const {
   compareViews
 } = require('./helpers')
 
-test.solo('repair borked batches', async (t) => {
+test('repair borked batches', async (t) => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
   const base = createBase(store, null, t)
@@ -61,6 +61,12 @@ test.solo('repair borked batches', async (t) => {
 
   const store2 = new Corestore(tmp)
   await store2.ready()
+
+  // Repair broken batch on view core
+  const repairViewCore = store2.get(viewKey)
+  await repairViewCore.ready()
+  await repairViewCore.core.storage.purgeBatches()
+  await repairViewCore.close()
 
   // Reload
   const baseReloaded = createBase(store2, base.key, t)
