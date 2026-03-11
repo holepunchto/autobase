@@ -640,8 +640,11 @@ module.exports = class Autobase extends ReadyResource {
     const core = this.store.get({ key: boot.key, encryption: null, active: false })
     await core.ready()
 
+    console.log('core.length', core.length)
     const batch = core.session({ name: 'batch' })
+    console.log('batch.length before', batch.length)
     const encCore = await EncryptionView.setSystemEncryption(this, batch)
+    console.log('batch.length after', batch.length)
 
     const info = await SystemView.getIndexedInfo(batch, indexedLength)
 
