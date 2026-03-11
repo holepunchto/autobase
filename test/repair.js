@@ -8,6 +8,7 @@ test.solo('repair borked batches', async (t) => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
   const base = createBase(store, null, t)
+  await base.ready()
 
   await base.append('hello')
   t.is(base.view.length, 1, 'appended')
