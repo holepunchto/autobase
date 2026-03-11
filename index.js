@@ -372,9 +372,9 @@ module.exports = class Autobase extends ReadyResource {
     if (this.nukeTip) await this._nukeTip()
 
     // Detect & Repair
-    if (!(await ApplyState.verifyBoot(this, result.boot))) {
+    // if (!(await ApplyState.verifyBoot(this, result.boot))) {
       // await ApplyState.clearViewBatches(this, result.boot.key)
-    }
+    // }
 
     this.local.on('append', this._onlocalwriterchangeBound)
 
