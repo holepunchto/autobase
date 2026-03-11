@@ -381,6 +381,7 @@ module.exports = class Autobase extends ReadyResource {
       let batch
       let viewCore
       let viewBatch
+      let system
       try {
         core = this.store.get({ key: result.boot.key, active: false, encryption: null })
         encCore = await EncryptionView.setSystemEncryption(this, core)
@@ -389,10 +390,10 @@ module.exports = class Autobase extends ReadyResource {
         await batch.ready()
         await Hypercore.treeHashFromStorage(batch)
 
-        const info = new SystemView(batch)
-        await info.ready()
+        system = new SystemView(batch)
+        await system.ready()
 
-        for (const view of info.views) {
+        for (const view of system.views) {
           viewCore = this.store.get(view.key)
           await viewCore.ready()
 
@@ -411,6 +412,7 @@ module.exports = class Autobase extends ReadyResource {
       } finally {
         await core.close()
         if (encCore) await encCore.close()
+        if (system) await system.close()
         if (batch) await batch.close()
         if (viewBatch) await viewBatch.close()
         if (viewCore) await viewCore.close()
