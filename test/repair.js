@@ -46,14 +46,20 @@ test('repair borked batches', async (t) => {
 
   const base2 = createBase(store2, null, t)
   await t.execution(base2.ready())
+  await base2.append('boop')
 
+  await base2.close()
   await store2.close()
 
   const store3 = new Corestore(tmp)
   await store3.ready()
 
   const base3 = createBase(store3, null, t)
-  await t.execution(base3.ready())
+  await t.execution(base3.ready(), 'reloading from storage works')
+  await base3.append('beep')
+
+  t.is(base3.view.length, 3, 'all appends on view')
+  await base3.close()
 })
 
 test('repair system core borked batch', async (t) => {
@@ -102,6 +108,8 @@ test('repair system core borked batch', async (t) => {
   const base2 = createBase(store2, null, t)
   await t.execution(base2.ready())
 
+  // does waiting mean its fine?
+  await base2.close()
   await store2.close()
 
   const store3 = new Corestore(tmp)
@@ -109,4 +117,5 @@ test('repair system core borked batch', async (t) => {
 
   const base3 = createBase(store3, null, t)
   await t.execution(base3.ready())
+  await base3.close()
 })

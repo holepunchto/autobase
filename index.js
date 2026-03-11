@@ -10,7 +10,6 @@ const CoreCoupler = require('core-coupler')
 const ProtomuxWakeup = require('protomux-wakeup')
 const rrp = require('resolve-reject-promise')
 const Hypercore = require('hypercore')
-const { MerkleTree } = require('hypercore/lib/merkle-tree')
 const ScopeLock = require('scope-lock')
 const encryptionEncoding = require('encryption-encoding')
 
