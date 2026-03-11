@@ -626,7 +626,6 @@ module.exports = class Autobase extends ReadyResource {
 
   // called by view-store for bootstrapping
   async _getSystemInfo() {
-    console.log('here _getSystemInfo')
     const boot = await this._getBootRecord()
     if (!boot.key) return null
 
@@ -680,7 +679,6 @@ module.exports = class Autobase extends ReadyResource {
     await this._preopen
 
     const pointer = await this.local.getUserData('autobase/boot')
-    console.log('pointer', pointer)
 
     const boot = pointer
       ? c.decode(messages.BootRecord, pointer)
@@ -694,7 +692,6 @@ module.exports = class Autobase extends ReadyResource {
           heads: null
         }
 
-    console.log('after decode boot.systemLength', boot.systemLength)
     if (boot.heads) {
       const len = await this._getMigrationPointer(boot.key, boot.systemLength)
       if (len !== boot.systemLength)
@@ -703,11 +700,9 @@ module.exports = class Autobase extends ReadyResource {
             'Invalid pointer in migration, correcting (' + len + ' vs ' + boot.systemLength + ')'
           )
         )
-      console.log('set systemLength', len)
       boot.systemLength = len
     }
 
-    console.log('final boot.systemLength', boot.systemLength)
     return boot
   }
 
