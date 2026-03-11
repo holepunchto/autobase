@@ -389,7 +389,8 @@ module.exports = class Autobase extends ReadyResource {
         await batch.ready()
         await Hypercore.treeHashFromStorage(batch)
 
-        const info = await SystemView.getIndexedInfo(batch, result.boot.systemLength)
+        const info = new SystemView(batch)
+        await info.ready()
 
         for (const view of info.views) {
           viewCore = this.store.get(view.key)
