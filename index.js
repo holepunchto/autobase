@@ -387,7 +387,7 @@ module.exports = class Autobase extends ReadyResource {
 
         batch = core.session({ name: 'batch' })
         await batch.ready()
-        await Hypercore.verifyMerkle(batch, batch.length)
+        await Hypercore.treeHashFromStorage(batch)
 
         const info = await SystemView.getIndexedInfo(batch, result.boot.systemLength)
 
@@ -397,7 +397,7 @@ module.exports = class Autobase extends ReadyResource {
 
           viewBatch = viewCore.session({ name: 'batch' })
           await viewBatch.ready()
-          await Hypercore.verifyMerkle(viewBatch, viewBatch.length)
+          await Hypercore.treeHashFromStorage(viewBatch)
 
           await viewBatch.close()
           await viewCore.close()
