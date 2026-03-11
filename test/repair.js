@@ -5,7 +5,7 @@ const tmpDir = require('test-tmp')
 const { createBase } = require('./helpers')
 
 test.solo('repair borked batches', async (t) => {
-  const tmp = await tmpDir(t)
+  const tmp = await t.tmp()
   const store = new Corestore(tmp)
   const base = createBase(store, null, t)
   await base.ready()
