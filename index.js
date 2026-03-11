@@ -418,6 +418,7 @@ module.exports = class Autobase extends ReadyResource {
         if (viewCore) await viewCore.close()
       }
     }
+    console.log('viewCorrupt', viewCorrupt)
     if (viewCorrupt) {
       await ApplyState.clearViewBatches(this.store, result.boot.key)
     }
