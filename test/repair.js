@@ -15,22 +15,22 @@ test('repair borked batches', async (t) => {
   const batchOnlyState = base.view.core.sessionStates.find((s) => s.name === 'batch' && !s.atomized)
 
   t.comment('before borking')
-  // {
-  //   await batchOnlyState.mutex.lock()
-  //   const batch1 = await base.view.core.storage.createSession('batch', null)
+  {
+    await batchOnlyState.mutex.lock()
+    const batch1 = await base.view.core.storage.createSession('batch', null)
 
-  //   const tx = batch1.write()
-  //   // Set a nonsense dependency to force all tree nodes (from the parent) to fail
-  //   tx.setDependency({
-  //     dataPointer: 1337,
-  //     length: 3
-  //   })
-  //   const flushed = await tx.flush()
-  //   batchOnlyState._unlock()
-  //   t.ok(flushed)
-  // }
+    const tx = batch1.write()
+    // Set a nonsense dependency to force all tree nodes (from the parent) to fail
+    tx.setDependency({
+      dataPointer: 1337,
+      length: 3
+    })
+    const flushed = await tx.flush()
+    batchOnlyState._unlock()
+    t.ok(flushed)
+  }
 
-  console.log('BASE CORE LENGTH', base.core.key, base.core.length)
+  console.log('BASE CORE LENGTH', base.core.manifest, base.core.length)
 
   t.comment('verify its borked')
   // {
