@@ -43,7 +43,7 @@
     "debounceify": "^1.0.0",
     "encryption-encoding": "^1.0.3",
     "hyperbee": "^2.22.0",
-    "hypercore": "^11.4.0",
+    "hypercore": "github:holepunchto/hypercore#add-merkle-tree-verify",
     "hypercore-crypto": "^3.4.0",
     "hypercore-id-encoding": "^1.2.0",
     "hypercore-storage": "github:holepunchto/hypercore-storage#nuke-batches",
