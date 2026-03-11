@@ -1640,7 +1640,7 @@ module.exports = class Autobase extends ReadyResource {
         null
       )
 
-      return ref.core.key
+      return ref.moveTo[0].key
     } finally {
       if (--this._flushing === 0) this._flushSignal.notify()
     }
