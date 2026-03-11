@@ -61,6 +61,7 @@ test.solo('repair borked batches', async (t) => {
 
   t.is(base3.view.length, 3, 'all appends on view')
   await base3.close()
+  await store3.close()
 })
 
 test('repair system core borked batch', async (t) => {
