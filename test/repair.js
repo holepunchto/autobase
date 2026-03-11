@@ -4,7 +4,7 @@ const tmpDir = require('test-tmp')
 
 const { createBase } = require('./helpers')
 
-test('repair borked batches', async (t) => {
+test.solo('repair borked batches', async (t) => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
   const base = createBase(store, null, t)
@@ -62,7 +62,7 @@ test('repair borked batches', async (t) => {
   await base3.close()
 })
 
-test('repair system core borked batch', async (t) => {
+test.solo('repair system core borked batch', async (t) => {
   const tmp = await tmpDir(t)
   const store = new Corestore(tmp)
   const base = createBase(store, null, t)
