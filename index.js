@@ -1640,7 +1640,12 @@ module.exports = class Autobase extends ReadyResource {
         null
       )
 
-      return ref.core.key
+      const sysKey = ref.getNextKey()
+      if (sysKey === null) {
+        throw new Error('Migration failed, expected core to be moved')
+      }
+
+      return sysKey
     } finally {
       if (--this._flushing === 0) this._flushSignal.notify()
     }
