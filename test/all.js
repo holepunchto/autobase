@@ -19,6 +19,7 @@ async function runTests() {
   await import('./messages.js')
   await import('./node-buffer.js')
   await import('./optimistic.js')
+  await import('./repair.js')
   await import('./snapshots.js')
   await import('./suspend.js')
   await import('./timer.js')

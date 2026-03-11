@@ -371,6 +371,11 @@ module.exports = class Autobase extends ReadyResource {
 
     if (this.nukeTip) await this._nukeTip()
 
+    // Detect & Repair
+    if (!(await ApplyState.verifyBoot(this, result.boot))) {
+      await ApplyState.clearViewBatches(this, result.boot.key)
+    }
+
     this.local.on('append', this._onlocalwriterchangeBound)
 
     this.wakeupCapability = (await this._handlers.wakeupCapability) || {
@@ -590,6 +595,9 @@ module.exports = class Autobase extends ReadyResource {
 
     const batch = core.session({ name: 'batch' })
     const encCore = await EncryptionView.setSystemEncryption(this, batch)
+
+    await batch.ready()
+    if (encCore) await encCore.ready()
 
     const info = await SystemView.getIndexedInfo(batch, indexedLength)
 
