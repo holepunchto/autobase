@@ -410,10 +410,10 @@ module.exports = class Autobase extends ReadyResource {
           viewCorrupt = true
         }
       } finally {
-        await core.close()
-        if (encCore) await encCore.close()
         if (system) await system.close()
+        if (encCore) await encCore.close()
         if (batch) await batch.close()
+        await core.close()
         if (viewBatch) await viewBatch.close()
         if (viewCore) await viewCore.close()
       }
