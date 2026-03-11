@@ -10,6 +10,7 @@ const CoreCoupler = require('core-coupler')
 const ProtomuxWakeup = require('protomux-wakeup')
 const rrp = require('resolve-reject-promise')
 const Hypercore = require('hypercore')
+const { MerkleTree } = require('hypercore/lib/merkle-tree')
 const ScopeLock = require('scope-lock')
 const encryptionEncoding = require('encryption-encoding')
 
@@ -370,6 +371,54 @@ module.exports = class Autobase extends ReadyResource {
     }
 
     if (this.nukeTip) await this._nukeTip()
+
+    // Detect & Repair
+    let viewCorrupt = false
+    // Can only check when there is a boot record as new bases can't be corrupt
+    if (result.boot) {
+      // Scope so that finally can close sessions
+      let core
+      let encCore
+      let batch
+      let viewCore
+      let viewBatch
+      try {
+        core = this.store.get({ key: result.boot.key, active: false, encryption: null })
+        encCore = await EncryptionView.setSystemEncryption(this, core)
+
+        batch = core.session({ name: 'batch' })
+        await batch.ready()
+        await Hypercore.verifyMerkle(batch, batch.length)
+
+        const info = await SystemView.getIndexedInfo(batch, result.boot.systemLength)
+
+        for (const view of info.views) {
+          viewCore = this.store.get(view.key)
+          await viewCore.ready()
+
+          viewBatch = viewCore.session({ name: 'batch' })
+          await viewBatch.ready()
+          await Hypercore.verifyMerkle(viewBatch, viewBatch.length)
+
+          await viewBatch.close()
+          await viewCore.close()
+        }
+      } catch (err) {
+        safetyCatch(err)
+        if (isViewCorruption(err)) {
+          viewCorrupt = true
+        }
+      } finally {
+        await core.close()
+        if (encCore) await encCore.close()
+        if (batch) await batch.close()
+        if (viewBatch) await viewBatch.close()
+        if (viewCore) await viewCore.close()
+      }
+    }
+    if (viewCorrupt) {
+      await ApplyState.clearViewBatches(this.store, result.boot.key)
+    }
 
     this.local.on('append', this._onlocalwriterchangeBound)
 
@@ -740,10 +789,6 @@ module.exports = class Autobase extends ReadyResource {
     try {
       await this._applyState.ready()
     } catch (err) {
-      if (isViewCorruption(err)) {
-        await ApplyState.clearViewBatches(this)
-      }
-
       if (this.closing) return
 
       try {

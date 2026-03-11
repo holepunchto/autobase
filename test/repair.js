@@ -12,7 +12,6 @@ test('repair borked batches', async (t) => {
   await base.append('hello')
   t.is(base.view.length, 1, 'appended')
   const batchOnlyState = base.view.core.sessionStates.find((s) => s.name === 'batch' && !s.atomized)
-  const viewKey = base.view.key
 
   t.comment('before borking')
   {
@@ -46,7 +45,7 @@ test('repair borked batches', async (t) => {
   await store2.ready()
 
   const base2 = createBase(store2, null, t)
-  await t.exception(base2.ready())
+  await t.execution(base2.ready())
 
   await store2.close()
 
@@ -101,7 +100,7 @@ test('repair system core borked batch', async (t) => {
   await store2.ready()
 
   const base2 = createBase(store2, null, t)
-  await t.exception(base2.ready())
+  await t.execution(base2.ready())
 
   await store2.close()
 
