@@ -600,6 +600,7 @@ module.exports = class Autobase extends ReadyResource {
     await batch.ready()
     if (encCore) await encCore.ready()
 
+    console.log('core', core.length)
     console.log('batch', batch.length)
     console.log('enc', encCore && encCore.length)
 
