@@ -372,55 +372,7 @@ module.exports = class Autobase extends ReadyResource {
     if (this.nukeTip) await this._nukeTip()
 
     // Detect & Repair
-    let viewCorrupt = false
-    // Can only check when there is a boot record as new bases can't be corrupt
-    if (result.boot) {
-      // Scope so that finally can close sessions
-      let core
-      let encCore
-      let batch
-      let viewCore
-      let viewBatch
-      let system
-      try {
-        core = this.store.get({ key: result.boot.key, active: false, encryption: null })
-        await core.ready()
-
-        batch = core.session({ name: 'batch' })
-        await batch.ready()
-        await Hypercore.treeHashFromStorage(batch)
-
-        encCore = await EncryptionView.setSystemEncryption(this, core)
-
-        system = new SystemView(batch)
-        await system.ready()
-
-        for (const view of system.views) {
-          viewCore = this.store.get(view.key)
-          await viewCore.ready()
-
-          viewBatch = viewCore.session({ name: 'batch' })
-          await viewBatch.ready()
-          await Hypercore.treeHashFromStorage(viewBatch)
-
-          await viewBatch.close()
-          await viewCore.close()
-        }
-      } catch (err) {
-        safetyCatch(err)
-        if (isViewCorruption(err)) {
-          viewCorrupt = true
-        }
-      } finally {
-        if (system) await system.close()
-        if (encCore) await encCore.close()
-        if (batch) await batch.close()
-        await core.close()
-        if (viewBatch) await viewBatch.close()
-        if (viewCore) await viewCore.close()
-      }
-    }
-    if (viewCorrupt) {
+    if (!(await ApplyState.verifyBoot(this, result.boot))) {
       await ApplyState.clearViewBatches(this.store, result.boot.key)
     }
 
@@ -2264,10 +2216,6 @@ function toKey(k) {
 
 function isAutobaseMessage(msg) {
   return msg.checkpoint ? msg.checkpoint.length > 0 : msg.checkpoint === null
-}
-
-function isViewCorruption(err) {
-  return err.code === 'INVALID_OPERATION'
 }
 
 function compareNodes(a, b) {
