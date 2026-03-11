@@ -373,7 +373,7 @@ module.exports = class Autobase extends ReadyResource {
 
     // Detect & Repair
     // if (!(await ApplyState.verifyBoot(this, result.boot))) {
-      // await ApplyState.clearViewBatches(this, result.boot.key)
+    // await ApplyState.clearViewBatches(this, result.boot.key)
     // }
 
     this.local.on('append', this._onlocalwriterchangeBound)
