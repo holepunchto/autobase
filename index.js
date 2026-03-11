@@ -372,10 +372,7 @@ module.exports = class Autobase extends ReadyResource {
     if (this.nukeTip) await this._nukeTip()
 
     // Detect & Repair
-    const validBoot = await ApplyState.verifyBoot(this, result.boot)
-    console.log(validBoot)
-    if (!validBoot) {
-      console.log('VIEWS CORRUPT!')
+    if (!(await ApplyState.verifyBoot(this, result.boot))) {
       await ApplyState.clearViewBatches(this.store, result.boot.key)
     }
 
@@ -601,10 +598,6 @@ module.exports = class Autobase extends ReadyResource {
 
     await batch.ready()
     if (encCore) await encCore.ready()
-
-    console.log('core', core.key, core.length)
-    console.log('batch', batch.key, batch.length)
-    console.log('enc', encCore && encCore.length)
 
     const info = await SystemView.getIndexedInfo(batch, indexedLength)
 
@@ -1674,7 +1667,6 @@ module.exports = class Autobase extends ReadyResource {
     await this._clearWriters()
     await this._makeLinearizerFromViewState()
 
-    console.log('FINALIZE', key)
     await this._applyState.finalize(key)
     await this._moveTo()
 

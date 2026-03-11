@@ -30,17 +30,15 @@ test('repair borked batches', async (t) => {
     t.ok(flushed)
   }
 
-  console.log('BASE CORE LENGTH', base.core.key, base.core.length)
-
   t.comment('verify its borked')
-  // {
-  //   await batchOnlyState.mutex.lock()
-  //   const rx = batchOnlyState.storage.read()
-  //   const tree = rx.getTreeNode(1)
-  //   rx.tryFlush()
-  //   t.is(await tree, null, 'tree node gone')
-  //   batchOnlyState._unlock()
-  // }
+  {
+    await batchOnlyState.mutex.lock()
+    const rx = batchOnlyState.storage.read()
+    const tree = rx.getTreeNode(1)
+    rx.tryFlush()
+    t.is(await tree, null, 'tree node gone')
+    batchOnlyState._unlock()
+  }
   await base.close()
   await store.close()
 
