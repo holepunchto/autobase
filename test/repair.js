@@ -30,7 +30,7 @@ test('repair borked batches', async (t) => {
     t.ok(flushed)
   }
 
-  console.log('BASE CORE LENGTH', base.core.manifest, base.core.length)
+  console.log('BASE CORE LENGTH', base.core.key, base.core.length)
 
   t.comment('verify its borked')
   // {

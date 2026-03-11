@@ -1674,6 +1674,7 @@ module.exports = class Autobase extends ReadyResource {
     await this._clearWriters()
     await this._makeLinearizerFromViewState()
 
+    console.log('FINALIZE', key)
     await this._applyState.finalize(key)
     await this._moveTo()
 
