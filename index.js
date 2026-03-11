@@ -348,6 +348,7 @@ module.exports = class Autobase extends ReadyResource {
       keyPair: this.keyPair,
       blindEncryption: this.blindEncryption
     })
+    console.log('CLEARED VIEW BATCHES')
 
     this._primaryBootstrap = result.bootstrap
     this.local = result.local
@@ -595,6 +596,12 @@ module.exports = class Autobase extends ReadyResource {
 
     const batch = core.session({ name: 'batch' })
     const encCore = await EncryptionView.setSystemEncryption(this, batch)
+
+    await batch.ready()
+    if (encCore) await encCore.ready()
+
+    console.log('batch', batch.length)
+    console.log('enc', encCore && encCore.length)
 
     const info = await SystemView.getIndexedInfo(batch, indexedLength)
 
