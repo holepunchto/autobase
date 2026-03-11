@@ -384,11 +384,13 @@ module.exports = class Autobase extends ReadyResource {
       let system
       try {
         core = this.store.get({ key: result.boot.key, active: false, encryption: null })
-        encCore = await EncryptionView.setSystemEncryption(this, core)
+        await core.ready()
 
         batch = core.session({ name: 'batch' })
         await batch.ready()
         await Hypercore.treeHashFromStorage(batch)
+
+        encCore = await EncryptionView.setSystemEncryption(this, core)
 
         system = new SystemView(batch)
         await system.ready()
