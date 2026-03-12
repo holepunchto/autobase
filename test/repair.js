@@ -126,6 +126,7 @@ test('repair system core borked batch', async (t) => {
 })
 
 test('append while borked', async (t) => {
+  t.plan(7)
   const tmp = await t.tmp()
   const store = new Corestore(tmp)
   const base = createBase(store, null, t)
@@ -164,11 +165,11 @@ test('append while borked', async (t) => {
     batchOnlyState._unlock()
   }
 
-  t.comment('write while you shouldnt induce')
-  await base.append('world')
-  t.comment('write while you shouldnt done')
-  t.is(await base.view.get(base.view.length - 1), 'world', 'didnt append to view')
-  t.comment('get newly written')
+  t.comment('write while borked')
+  base.on('error', (err) => {
+    t.is(err.message, 'Cannot commit across cores', 'throws commit across cores error')
+  })
+  t.is(await base.view.get(base.view.length - 1), 'hello', 'didnt append to view')
 
   await base.close()
   await store.close()
