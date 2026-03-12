@@ -126,7 +126,7 @@ test('repair system core borked batch', async (t) => {
 })
 
 test('append while borked', async (t) => {
-  t.plan(7)
+  t.plan(8)
   const tmp = await t.tmp()
   const store = new Corestore(tmp)
   const base = createBase(store, null, t)
@@ -182,6 +182,7 @@ test('append while borked', async (t) => {
 
   const boot = await base2._getBootRecord()
   t.is(boot.systemLength, sysLengthBeforeBork, 'system didnt progress')
+  t.is(base2.system.core.length, sysLengthBeforeBork, 'system is correct length')
 
   t.ok(await base2.view.get(0, { wait: false }))
 
