@@ -113,6 +113,7 @@ test('encryption - expect encryption key', async (t) => {
   await store.close()
 
   await closing
+  await new Promise((resolve) => setImmediate(resolve))
   uncaughts.off(getUncaught)
   function getUncaught(err) {
     t.is(err.message, 'Encryption key is expected', 'got uncaught version')
