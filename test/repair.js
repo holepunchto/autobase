@@ -124,3 +124,68 @@ test('repair system core borked batch', async (t) => {
   await base3.close()
   await store3.close()
 })
+
+test('append while borked', async (t) => {
+  t.plan(8)
+  const tmp = await t.tmp()
+  const store = new Corestore(tmp)
+  const base = createBase(store, null, t)
+  await base.ready()
+
+  await base.append('hello')
+
+  t.is(base.view.length, 1, 'appended')
+  const batchOnlyState = base.view.core.sessionStates.find((s) => s.name === 'batch' && !s.atomized)
+
+  const sysLengthBeforeBork = base.system.core.length
+
+  t.comment('before borking')
+  {
+    await batchOnlyState.mutex.lock()
+    // const tx = batchOnlyState.createWriteBatch()
+    const batch1 = await base.view.core.storage.createSession('batch', null)
+    const tx = batch1.write()
+    // Set a nonsense dependency to force all tree nodes (from the parent) to fail
+    tx.setDependency({
+      dataPointer: 1337,
+      length: 0
+    })
+    const flushed = await tx.flush()
+    batchOnlyState._unlock()
+    t.ok(flushed)
+  }
+
+  t.comment('verify its borked')
+  {
+    await batchOnlyState.mutex.lock()
+    const rx = batchOnlyState.storage.read()
+    const tree = rx.getTreeNode(1)
+    rx.tryFlush()
+    t.is(await tree, null, 'tree node gone')
+    batchOnlyState._unlock()
+  }
+
+  t.comment('write while borked')
+  base.on('error', (err) => {
+    t.is(err.message, 'Cannot commit across cores', 'throws commit across cores error')
+  })
+  t.is(await base.view.get(base.view.length - 1), 'hello', 'didnt append to view')
+
+  await base.close()
+  await store.close()
+
+  const store2 = new Corestore(tmp)
+  await store2.ready()
+
+  const base2 = createBase(store2, null, t)
+  await t.execution(base2.ready())
+
+  const boot = await base2._getBootRecord()
+  t.is(boot.systemLength, sysLengthBeforeBork, 'system didnt progress')
+  t.is(base2.system.core.length, sysLengthBeforeBork, 'system is correct length')
+
+  t.ok(await base2.view.get(0, { wait: false }))
+
+  await base2.close()
+  await store2.close()
+})

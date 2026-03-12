@@ -2,6 +2,7 @@ const test = require('brittle')
 const tmpDir = require('test-tmp')
 const Corestore = require('corestore')
 const b4a = require('b4a')
+const uncaughts = require('uncaughts')
 const BlindEncryptionSodium = require('blind-encryption-sodium')
 
 const Autobase = require('..')
@@ -91,6 +92,7 @@ test('encryption - restart', async (t) => {
 
 test('encryption - expect encryption key', async (t) => {
   const storage = await tmpDir(t)
+  uncaughts.on(getUncaught)
   const store = new Corestore(storage)
   const base = new Autobase(store, {
     apply,
@@ -111,6 +113,11 @@ test('encryption - expect encryption key', async (t) => {
   await store.close()
 
   await closing
+  await new Promise((resolve) => setImmediate(resolve))
+  uncaughts.off(getUncaught)
+  function getUncaught(err) {
+    t.is(err.message, 'Encryption key is expected', 'got uncaught version')
+  }
 })
 
 test('encryption - pass as promise', async (t) => {
