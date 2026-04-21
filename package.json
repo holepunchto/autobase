@@ -5,10 +5,10 @@
   "main": "index.js",
   "scripts": {
     "format": "prettier . --write",
-    "test": "prettier . --check && brittle-node test/all.js",
-    "test:encrypted": "prettier . --check && brittle-node test/all.js --encrypt-all",
+    "test": "prettier . --check && brittle-node test/all.mjs",
+    "test:encrypted": "prettier . --check && brittle-node test/all.mjs --encrypt-all",
     "test:fixtures": "prettier . --check && brittle-node test/fixtures/tests/*.js",
-    "test:bare": "brittle-bare test/all.js",
+    "test:bare": "brittle-bare test/all.mjs",
     "fuzz:generated": "brittle test/reference/fuzz/generated/*.js",
     "fuzz:main": "node test/fuzz/index.js",
     "fuzz": "node test/reference/fuzz/fuzz.js",
