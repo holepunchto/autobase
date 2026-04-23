@@ -5,9 +5,9 @@
   "main": "index.js",
   "scripts": {
     "format": "prettier . --write",
-    "test": "prettier . --check && brittle-node -j 4 test/all.mjs",
-    "test:encrypted": "prettier . --check && brittle-node -j 4 test/all.mjs --encrypt-all",
-    "test:fixtures": "prettier . --check && brittle-node -j 4 test/fixtures/tests/*.js",
+    "test": "prettier . --check && brittle-node test/all.mjs",
+    "test:encrypted": "prettier . --check && brittle-node test/all.mjs --encrypt-all",
+    "test:fixtures": "prettier . --check && brittle-node test/fixtures/tests/*.js",
     "test:bare": "brittle-bare -j 4 test/all.mjs",
     "fuzz:generated": "brittle test/reference/fuzz/generated/*.js",
     "fuzz:main": "node test/fuzz/index.js",
