@@ -25,8 +25,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.platform }}-${{ matrix.arch }}
     steps:
-      - name: Install bare
-        run: npm i -g bare
+      - uses: holepunchto/actions/checkout@v1
+      - uses: holepunchto/actions/setup-node@v1
+      - uses: holepunchto/actions/setup-bare@v1
 
       - name: Run tests
         run: npm run test:bare
