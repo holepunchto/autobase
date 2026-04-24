@@ -27,6 +27,7 @@ jobs:
     steps:
       - uses: holepunchto/actions/checkout@v1
       - uses: holepunchto/actions/setup-node@v1
+      - run: npm install --ignore-scripts --foreground-scripts
 
       - name: Run tests
         run: npm run test:node
