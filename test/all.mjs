@@ -27,6 +27,5 @@ async function runTests() {
   await test.load(import.meta.resolve('./trace.js'))
   await test.load(import.meta.resolve('./updates.js'))
 
-  console.log('resuming')
   test.resume()
 }
