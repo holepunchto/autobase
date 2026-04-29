@@ -1,0 +1,34 @@
+name: Test with Bare
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+
+          - os: macos-latest
+            platform: darwin
+            arch: x64
+
+          - os: windows-latest
+            platform: win32
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.platform }}-${{ matrix.arch }}
+    steps:
+      - uses: holepunchto/actions/node-base@v1
+        with:
+          allow-git: true
+      - uses: holepunchto/actions/setup-bare@v1
+
+      - name: Run tests
+        run: npm run test:bare

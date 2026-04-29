@@ -1,0 +1,39 @@
+name: Test with Node
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+
+          - os: macos-latest
+            platform: darwin
+            arch: x64
+
+          - os: windows-latest
+            platform: win32
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.platform }}-${{ matrix.arch }}
+    steps:
+      - uses: holepunchto/actions/node-base@v1
+        with:
+          allow-git: true
+
+      - name: Run tests
+        run: npm run test:node
+
+      - name: Run tests (encrypt all)
+        run: npm run test:node -- --encrypt-all
+
+      - name: Run tests (fixtures)
+        run: npm run test:fixtures
