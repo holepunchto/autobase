@@ -2,6 +2,7 @@
 // Schema Version: 1
 /* eslint-disable camelcase */
 /* eslint-disable quotes */
+/* eslint-disable space-before-function-paren */
 
 const { c } = require('hyperschema/runtime')
 const external0 = require('../../legacy.js')
@@ -149,7 +150,7 @@ const encoding6 = {
 // @autobase/checkpointer
 const encoding7 = {
   preencode(state, m) {
-    state.end++ // max flag is 2 so always one byte
+    state.end++ // flags are fixed size
 
     if (m.checkpointer) c.uint.preencode(state, m.checkpointer)
     if (m.checkpoint) encoding2.preencode(state, m.checkpoint)
@@ -235,17 +236,17 @@ const encoding10 = {
   preencode(state, m) {
     encoding1.preencode(state, m.heads)
     c.uint.preencode(state, m.batch)
-    c.buffer.preencode(state, m.value)
+    c.optionalBuffer.preencode(state, m.value)
   },
   encode(state, m) {
     encoding1.encode(state, m.heads)
     c.uint.encode(state, m.batch)
-    c.buffer.encode(state, m.value)
+    c.optionalBuffer.encode(state, m.value)
   },
   decode(state) {
     const r0 = encoding1.decode(state)
     const r1 = c.uint.decode(state)
-    const r2 = c.buffer.decode(state)
+    const r2 = c.optionalBuffer.decode(state)
 
     return {
       heads: r0,
@@ -591,15 +592,15 @@ const encoding21 = {
 const encoding22 = {
   preencode(state, m) {
     c.uint.preencode(state, m.type)
-    c.buffer.preencode(state, m.payload)
+    c.optionalBuffer.preencode(state, m.payload)
   },
   encode(state, m) {
     c.uint.encode(state, m.type)
-    c.buffer.encode(state, m.payload)
+    c.optionalBuffer.encode(state, m.payload)
   },
   decode(state) {
     const r0 = c.uint.decode(state)
-    const r1 = c.buffer.decode(state)
+    const r1 = c.optionalBuffer.decode(state)
 
     return {
       type: r0,

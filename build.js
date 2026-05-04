@@ -178,7 +178,7 @@ autobase.register({
     },
     {
       name: 'value',
-      type: 'buffer',
+      type: 'optionalBuffer',
       required: true
     }
   ]
@@ -443,7 +443,7 @@ autobase.register({
     },
     {
       name: 'payload',
-      type: 'buffer',
+      type: 'optionalBuffer',
       required: true
     }
   ]
