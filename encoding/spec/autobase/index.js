@@ -79,14 +79,14 @@ const encoding5 = {
 
     if (m.recoveries) c.uint.encode(state, m.recoveries)
   },
-  decode(state, version) {
-    if (version === undefined) version = c.uint.decode(state)
+  decode(state) {
+    const v = c.uint.decode(state)
     const r0 = c.fixed32.decode(state)
     const r1 = c.uint.decode(state)
     const flags = c.uint.decode(state)
 
     return {
-      version,
+      version: v,
       key: r0,
       systemLength: r1,
       indexersUpdated: (flags & 1) !== 0,
@@ -129,16 +129,18 @@ const encoding6 = {
     }
   },
   decode(state) {
-    const version = c.uint.decode(state)
-    switch (version) {
+    const start = state.start
+    const v = c.uint.decode(state)
+    state.start = start
+    switch (v) {
       case 0: {
-        const decoded = encoding4.decode(state, version)
+        const decoded = encoding4.decode(state)
         return decoded
       }
       case 1:
       case 2:
       case 3: {
-        const decoded = encoding5.decode(state, version)
+        const decoded = encoding5.decode(state)
         return decoded
       }
       default:
@@ -158,13 +160,13 @@ const encoding7 = {
   encode(state, m) {
     const flags = (m.checkpointer ? 1 : 0) | (m.checkpoint ? 2 : 0)
 
-    c.uint.encode(state, flags)
+    c.uint8.encode(state, flags)
 
     if (m.checkpointer) c.uint.encode(state, m.checkpointer)
     if (m.checkpoint) encoding2.encode(state, m.checkpoint)
   },
   decode(state) {
-    const flags = c.uint.decode(state)
+    const flags = c.uint8.decode(state)
 
     return {
       checkpointer: (flags & 1) !== 0 ? c.uint.decode(state) : 0,
@@ -318,13 +320,13 @@ const encoding14 = {
     if (m.digest) encoding14_2.encode(state, m.digest)
     if (m.trace) encoding14_4.encode(state, m.trace)
   },
-  decode(state, version) {
-    if (version === undefined) version = c.uint.decode(state)
+  decode(state) {
+    const v = c.uint.decode(state)
     const r0 = encoding10.decode(state)
     const flags = c.uint.decode(state)
 
     return {
-      version,
+      version: v,
       node: r0,
       checkpoint: (flags & 1) !== 0 ? encoding14_1.decode(state) : null,
       digest: (flags & 2) !== 0 ? encoding14_2.decode(state) : null,
@@ -369,18 +371,20 @@ const encoding15 = {
     }
   },
   decode(state) {
-    const version = c.uint.decode(state)
-    switch (version) {
+    const start = state.start
+    const v = c.uint.decode(state)
+    state.start = start
+    switch (v) {
       case 0: {
-        const decoded = encoding12.decode(state, version)
+        const decoded = encoding12.decode(state)
         return decoded
       }
       case 1: {
-        const decoded = encoding13.decode(state, version)
+        const decoded = encoding13.decode(state)
         return decoded
       }
       case 2: {
-        const decoded = encoding14.decode(state, version)
+        const decoded = encoding14.decode(state)
         return decoded
       }
       default:
@@ -408,8 +412,8 @@ const encoding16 = {
     encoding1.encode(state, m.heads)
     encoding1.encode(state, m.views)
   },
-  decode(state, version) {
-    if (version === undefined) version = c.uint.decode(state)
+  decode(state) {
+    const v = c.uint.decode(state)
     const r0 = c.uint.decode(state)
     const r1 = encoding16_1.decode(state)
     const r2 = encoding1.decode(state)
@@ -417,7 +421,7 @@ const encoding16 = {
     const r4 = encoding1.decode(state)
 
     return {
-      version,
+      version: v,
       members: r0,
       pendingIndexers: r1,
       indexers: r2,
@@ -456,8 +460,8 @@ const encoding17 = {
 
     if (m.entropy) c.fixed32.encode(state, m.entropy)
   },
-  decode(state, version) {
-    if (version === undefined) version = c.uint.decode(state)
+  decode(state) {
+    const v = c.uint.decode(state)
     const r0 = c.uint.decode(state)
     const r1 = encoding17_1.decode(state)
     const r2 = encoding1.decode(state)
@@ -467,7 +471,7 @@ const encoding17 = {
     const flags = c.uint.decode(state)
 
     return {
-      version,
+      version: v,
       members: r0,
       pendingIndexers: r1,
       indexers: r2,
@@ -510,16 +514,18 @@ const encoding18 = {
     }
   },
   decode(state) {
-    const version = c.uint.decode(state)
-    switch (version) {
+    const start = state.start
+    const v = c.uint.decode(state)
+    state.start = start
+    switch (v) {
       case 0:
       case 1: {
-        const decoded = encoding16.decode(state, version)
+        const decoded = encoding16.decode(state)
         const map = external0.infoLegacyMap
         return map(decoded)
       }
       case 2: {
-        const decoded = encoding17.decode(state, version)
+        const decoded = encoding17.decode(state)
         return decoded
       }
       default:
