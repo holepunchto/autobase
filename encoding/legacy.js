@@ -246,18 +246,18 @@ const Node = {
   preencode(state, m) {
     Clock.preencode(state, m.heads)
     c.uint.preencode(state, m.batch)
-    c.buffer.preencode(state, m.value)
+    c.optionalBuffer.preencode(state, m.value)
   },
   encode(state, m) {
     Clock.encode(state, m.heads)
     c.uint.encode(state, m.batch)
-    c.buffer.encode(state, m.value)
+    c.optionalBuffer.encode(state, m.value)
   },
   decode(state, m) {
     return {
       heads: Clock.decode(state),
       batch: c.uint.decode(state),
-      value: c.buffer.decode(state)
+      value: c.optionalBuffer.decode(state)
     }
   }
 }
