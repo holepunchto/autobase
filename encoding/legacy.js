@@ -137,6 +137,7 @@ const BootRecordV0 = {
     throw new Error('version 0 records cannot be encoded')
   },
   decode(state) {
+    c.uint.decode(state)
     const indexed = Checkout.decode(state)
     const heads = Clock.decode(state)
 
@@ -246,18 +247,18 @@ const Node = {
   preencode(state, m) {
     Clock.preencode(state, m.heads)
     c.uint.preencode(state, m.batch)
-    c.buffer.preencode(state, m.value)
+    c.optionalBuffer.preencode(state, m.value)
   },
   encode(state, m) {
     Clock.encode(state, m.heads)
     c.uint.encode(state, m.batch)
-    c.buffer.encode(state, m.value)
+    c.optionalBuffer.encode(state, m.value)
   },
   decode(state, m) {
     return {
       heads: Clock.decode(state),
       batch: c.uint.decode(state),
-      value: c.buffer.decode(state)
+      value: c.optionalBuffer.decode(state)
     }
   }
 }
@@ -308,6 +309,7 @@ const OplogMessageV1 = {
     throw new Error('Encoding not supported')
   },
   decode(state) {
+    c.uint.decode(state) // version
     const maxSupportedVersion = c.uint.decode(state)
 
     const flags = c.uint.decode(state)
@@ -338,6 +340,7 @@ const OplogMessageV0 = {
     throw new Error('Encoding not supported')
   },
   decode(state) {
+    c.uint.decode(state) // version
     const flags = c.uint.decode(state)
 
     const isCheckpointer = (flags & 1) !== 0

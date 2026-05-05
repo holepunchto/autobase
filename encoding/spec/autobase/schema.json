@@ -199,7 +199,28 @@
         {
           "name": "value",
           "required": true,
-          "type": "buffer",
+          "type": "optionalBuffer",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "name": "user-view-trace",
+      "namespace": "autobase",
+      "compact": true,
+      "flagsPosition": -1,
+      "fields": [
+        {
+          "name": "view",
+          "required": true,
+          "type": "uint",
+          "version": 1
+        },
+        {
+          "name": "blocks",
+          "required": true,
+          "array": true,
+          "type": "uint",
           "version": 1
         }
       ]
@@ -492,7 +513,7 @@
         {
           "name": "payload",
           "required": true,
-          "type": "buffer",
+          "type": "optionalBuffer",
           "version": 1
         }
       ]
@@ -519,27 +540,6 @@
           "name": "namespace",
           "required": false,
           "type": "fixed32",
-          "version": 1
-        }
-      ]
-    },
-    {
-      "name": "user-view-trace",
-      "namespace": "autobase",
-      "compact": true,
-      "flagsPosition": -1,
-      "fields": [
-        {
-          "name": "view",
-          "required": true,
-          "type": "uint",
-          "version": 1
-        },
-        {
-          "name": "blocks",
-          "required": true,
-          "array": true,
-          "type": "uint",
           "version": 1
         }
       ]
