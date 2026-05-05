@@ -6,7 +6,7 @@ const test = require('brittle')
 const tmpDir = require('test-tmp')
 const b4a = require('b4a')
 
-const skip = os.platform() !== 'linux' && os.platform() !== 'darwin' // fixture was generated on linux
+const skip = os.platform() !== 'linux' // fixture was generated on linux
 
 const { createBase, replicateAndSync } = require('../../helpers')
 
