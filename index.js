@@ -93,7 +93,6 @@ module.exports = class Autobase extends ReadyResource {
 
     this.keyPair = null
     this.valueEncoding = c.from(handlers.valueEncoding || 'binary')
-    console.log('[Autobase.constructor] handlers.valueEncoding', handlers.valueEncoding)
     this.store = store
     this.globalCache = store.globalCache || null
     this.migrated = false
