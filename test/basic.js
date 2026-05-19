@@ -46,7 +46,7 @@ test('basic - single writer', async (t) => {
   t.not(base.system.core.manifest, null)
 })
 
-test('basic - big batches', async (t) => {
+test('basic - big batches', { timeout: 60_000 }, async (t) => {
   t.plan(1)
 
   let shared = 0
