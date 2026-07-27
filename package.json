@@ -3,6 +3,7 @@
   "version": "7.28.1",
   "description": "A multiwriter data structure for Hypercore",
   "main": "index.js",
+  "types": "index.d.ts",
   "scripts": {
     "format": "prettier . --write",
     "test": "prettier . --check && brittle test/all.js",
@@ -17,7 +18,8 @@
   "files": [
     "index.js",
     "lib/**",
-    "encoding/**"
+    "encoding/**",
+    "index.d.ts"
   ],
   "imports": {
     "events": {
