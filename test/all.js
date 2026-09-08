@@ -10,6 +10,7 @@ async function runTests() {
   await import('./apply.js')
   await import('./autoack.js')
   await import('./basic.js')
+  await import('./close.js')
   await import('./core.js')
   await import('./dags.js')
   await import('./encryption.js')

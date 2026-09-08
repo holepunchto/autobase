@@ -789,6 +789,29 @@ module.exports = class Autobase extends ReadyResource {
     this._interrupting = true
     await Promise.resolve() // defer one tick
 
+    // the local core holds the exclusive lock but it is closed early in the
+    // teardown, so hand the lock to a detached session that outlives the
+    // teardown and only release it once everything is down
+    let lock = null
+
+    if (this.local && this.local.exclusive) {
+      lock = this.store.session()
+      const local = lock.get({ key: this.local.key, active: false })
+      await local.ready()
+
+      // transfer exclusiveness, the detached session now unlocks on close
+      local.exclusive = true
+      this.local.exclusive = false
+    }
+
+    try {
+      await this._teardown()
+    } finally {
+      if (lock) await lock.close()
+    }
+  }
+
+  async _teardown() {
     if (this.wakeupSession) this.wakeupSession.destroy()
     if (this.wakeupOwner) this.wakeupProtocol.destroy()
 
