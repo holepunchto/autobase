@@ -2326,3 +2326,15 @@ test('basic - append rejects when the local writer is frozen', async (t) => {
 
   await t.exception(base.append('hello'), /frozen/)
 })
+
+test('basic - append rejects when the local writer core was closed by a conflict', async (t) => {
+  const { bases } = await create(1, t)
+  const [base] = bases
+
+  await base.append('a')
+
+  // a hypercore conflict closes every session of the core
+  await base.local.core.closeAllSessions(new Error('conflict'))
+
+  await t.exception(base.append('b'), /frozen/)
+})
