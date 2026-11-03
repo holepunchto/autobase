@@ -2269,7 +2269,11 @@ test('basic - indexer list transition [a, b, c, d, e] -> [b, c, d, e, f]', async
 })
 
 test('basic - get last error', async (t) => {
-  const { bases } = await create(1, t)
+  const { bases } = await create(1, t, {
+    apply: async function (batch) {
+      for (const { value } of batch) value.missing.add
+    }
+  })
   const [base] = bases
 
   t.plan(4)
@@ -2279,7 +2283,7 @@ test('basic - get last error', async (t) => {
     t.pass()
   })
 
-  await t.exception(() => base.append())
+  await t.exception(() => base.append('a'))
 
   t.is(base.getLastError().message, "Cannot read properties of undefined (reading 'add')")
 })
@@ -2300,7 +2304,34 @@ test('basic - get last error', async (t) => {
     t.pass()
   })
 
-  await t.exception(() => base.append())
+  await t.exception(() => base.append('a'))
 
   t.is(base.getLastError().message, 'This is the last error!')
+})
+
+test('basic - invalid append value rejects without closing the base', async (t) => {
+  const [store, binaryStore] = await createStores(2, t)
+
+  const base = createBase(store, null, t)
+  await base.ready()
+
+  await t.exception.all(base.append(undefined))
+  await t.exception.all(base.append(['a', undefined]))
+
+  await base.append('a')
+  t.is(base.view.length, 1)
+  t.absent(base.closing)
+
+  const binary = createBase(binaryStore, null, t, {
+    valueEncoding: 'binary',
+    open: (store) => store.get('view')
+  })
+  await binary.ready()
+
+  await t.exception.all(binary.append(1))
+  await t.exception.all(binary.append([b4a.from('a'), {}]))
+
+  await binary.append([b4a.from('a'), 'b'])
+  t.is(binary.view.length, 2)
+  t.absent(binary.closing)
 })

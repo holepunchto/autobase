@@ -1039,8 +1039,9 @@ module.exports = class Autobase extends ReadyResource {
 
   async _appendBatch(value, opts) {
     if (this._interrupting) throw new Error('Autobase is closing')
-    if (value && this.valueEncoding !== BINARY_ENCODING)
-      value = normalize(this.valueEncoding, value)
+    // validate before queueing, a value that fails to encode on flush is fatal
+    if (Array.isArray(value)) value = value.map((v) => this._normalize(v))
+    else value = this._normalize(value)
 
     const optimistic = !!opts && !!opts.optimistic && !!value
 
@@ -1082,6 +1083,12 @@ module.exports = class Autobase extends ReadyResource {
     if (this._interrupting) throw new Error('Autobase is closing')
 
     return localLength + len
+  }
+
+  _normalize(value) {
+    if (value === null) return null
+    if (this.valueEncoding === BINARY_ENCODING && b4a.isBuffer(value)) return value
+    return normalize(this.valueEncoding, value)
   }
 
   _append(value) {
