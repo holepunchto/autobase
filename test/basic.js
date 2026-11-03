@@ -2304,3 +2304,25 @@ test('basic - get last error', async (t) => {
 
   t.is(base.getLastError().message, 'This is the last error!')
 })
+
+test('basic - append rejects when the local writer is frozen', async (t) => {
+  const stores = await createStores(2, t)
+  const a = createBase(stores[0], null, t)
+  await a.ready()
+
+  // seed a block that does not decode into the core b will use as its local writer
+  const local = stores[1].get({ name: 'local' })
+  await local.append(b4a.from('not an oplog message'))
+  await local.close()
+
+  const base = createBase(stores[1], a.local.key, t)
+  await base.ready()
+
+  await addWriter(a, base)
+  await replicateAndSync([a, base])
+  await base.update().catch(() => {})
+  t.ok(base.writable, 'joined as a writer')
+  t.ok(base.localWriter.frozen, 'writer froze on the bad block')
+
+  await t.exception(base.append('hello'), /frozen/)
+})

@@ -1073,6 +1073,10 @@ module.exports = class Autobase extends ReadyResource {
 
     // bump until we've flushed the nodes
     while (this._appended < target && !this._interrupting) {
+      // the local writer can never advance
+      if (this.localWriter && (this.localWriter.frozen || !this.localWriter.core.opened)) {
+        throw new Error('Local writer is frozen')
+      }
       await this._bump()
       // safety
       if (runs++ >= 16 && this.localWriter && this.localWriter.idle()) break
