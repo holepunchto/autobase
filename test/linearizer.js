@@ -520,6 +520,34 @@ test('linearizer - all voted', async (t) => {
   t.alike(await getIndexedViewLength(c), 1)
 })
 
+test('linearizer - non-indexer write is indexed with one of three indexers offline', async (t) => {
+  const { bases } = await create(4, t)
+
+  const [a, b, c, w] = bases
+
+  await addWriterAndSync(a, b, true, [a, b])
+  await addWriterAndSync(a, c, true, [a, b, c])
+  await addWriterAndSync(a, w, false, bases)
+
+  await confirm(bases)
+
+  // c goes offline
+  const live = [a, b, w]
+
+  await w.append('w0')
+  await replicateAndSync(live)
+
+  for (let i = 0; i < 2; i++) {
+    for (const base of [a, b]) {
+      await base.ack()
+      await replicateAndSync(live)
+    }
+  }
+
+  t.is(a.view.signedLength, 1)
+  t.is(b.view.signedLength, 1)
+})
+
 async function getIndexedViewLength(base, index = -1) {
   const info = await base.getIndexedInfo()
   if (index === -1) index = info.views.length - 1
